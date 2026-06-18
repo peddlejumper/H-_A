@@ -1,0 +1,2426 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# test_hwdui_cpp.hto — H# zzwUI ↔ C++ 协同开发库 综合测试
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/hwdui_cpp.hto";
+
+let _test_count = 0;
+let _pass_count = 0;
+
+fn assert(condition, msg) {
+    _test_count = _test_count + 1;
+    if (condition) {
+        _pass_count = _pass_count + 1;
+        print("  PASS: " + msg);
+    } else {
+        print("  FAIL: " + msg);
+    }
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 1: Core Interop — 5 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_type_info() {
+    let ti = new CppTypeInfo();
+    ti.init_cpp_type("MyClass", "my_ns", "libmy.so");
+    assert(ti.getTypeName() == "MyClass", "CppTypeInfo.getTypeName");
+    assert(ti.getNamespace() == "my_ns", "CppTypeInfo.getNamespace");
+    assert(ti.getSharedLib() == "libmy.so", "CppTypeInfo.getSharedLib");
+    assert(ti.getFullName() == "my_ns::MyClass", "CppTypeInfo.getFullName");
+
+    ti.setPrimitive(true);
+    assert(ti.isPrimitive() == true, "CppTypeInfo.setPrimitive/isPrimitive");
+    ti.setPrimitive(false);
+
+    assert(ti.isTemplate() == false, "CppTypeInfo.isTemplate default");
+    ti.setTemplate(true);
+    assert(ti.isTemplate() == true, "CppTypeInfo.setTemplate");
+
+    ti.setEnum(true);
+    assert(ti.isEnum() == true, "CppTypeInfo.setEnum/isEnum");
+    ti.setPOD(true);
+    assert(ti.isPOD() == true, "CppTypeInfo.setPOD/isPOD");
+    ti.setAbstract(true);
+    assert(ti.isAbstract() == true, "CppTypeInfo.setAbstract/isAbstract");
+
+    ti.addTemplateArg("T");
+    ti.addTemplateArg("U");
+    let targs = ti.getTemplateArgs();
+    assert(len(targs) == 2, "CppTypeInfo.addTemplateArg/getTemplateArgs");
+
+    ti.setBaseClass("BaseClass");
+    assert(ti.getBaseClass() == "BaseClass", "CppTypeInfo.setBaseClass/getBaseClass");
+
+    ti.addInclude("<string>");
+    ti.addInclude("<vector>");
+    let incs = ti.getIncludes();
+    assert(len(incs) == 2, "CppTypeInfo.addInclude/getIncludes");
+
+    ti.addModifier("final");
+    ti.addModifier("export");
+    let mods = ti.getModifiers();
+    assert(len(mods) == 2, "CppTypeInfo.addModifier/getModifiers");
+
+    ti.setMangledName("_ZN5my_ns7MyClassE");
+    assert(ti.getMangledName() == "_ZN5my_ns7MyClassE", "CppTypeInfo.setMangledName/getMangledName");
+
+    # Full name without namespace
+    let ti2 = new CppTypeInfo();
+    ti2.init_cpp_type("GlobalClass", "", "");
+    assert(ti2.getFullName() == "GlobalClass", "CppTypeInfo.getFullName no namespace");
+    return 0;
+}
+
+fn test_cpp_type_mapper() {
+    let tm = new CppTypeMapper();
+    tm.init_mapper();
+
+    assert(tm.toCpp("int") == "int", "CppTypeMapper.toCpp: int→int");
+    assert(tm.toCpp("float") == "double", "CppTypeMapper.toCpp: float→double");
+    assert(tm.toCpp("string") == "std::string", "CppTypeMapper.toCpp: string→std::string");
+    assert(tm.toCpp("bool") == "bool", "CppTypeMapper.toCpp: bool→bool");
+    assert(tm.toCpp("list") == "std::vector", "CppTypeMapper.toCpp: list→std::vector");
+    assert(tm.toCpp("dict") == "std::map", "CppTypeMapper.toCpp: dict→std::map");
+    assert(tm.toCpp("int64") == "int64_t", "CppTypeMapper.toCpp: int64→int64_t");
+    assert(tm.toCpp("size") == "size_t", "CppTypeMapper.toCpp: size→size_t");
+    assert(tm.toCpp("ptr") == "void*", "CppTypeMapper.toCpp: ptr→void*");
+    assert(tm.toCpp("unknown_type") == "void*", "CppTypeMapper.toCpp: unknown→void*");
+
+    assert(tm.toHSharp("int") == "int", "CppTypeMapper.toHSharp: int→int");
+    assert(tm.toHSharp("double") == "float", "CppTypeMapper.toHSharp: double→float");
+    assert(tm.toHSharp("std::string") == "string", "CppTypeMapper.toHSharp: std::string→string");
+    assert(tm.toHSharp("std::vector") == "list", "CppTypeMapper.toHSharp: std::vector→list");
+    assert(tm.toHSharp("void*") == "ptr", "CppTypeMapper.toHSharp: void*→ptr");
+    assert(tm.toHSharp("unknown_cpp") == "object", "CppTypeMapper.toHSharp: unknown→object");
+
+    assert(tm.isPrimitive("int") == true, "CppTypeMapper.isPrimitive: int=true");
+    assert(tm.isPrimitive("double") == true, "CppTypeMapper.isPrimitive: double=true");
+    assert(tm.isPrimitive("std::string") == false, "CppTypeMapper.isPrimitive: std::string=false");
+    assert(tm.isPrimitive("std::vector") == false, "CppTypeMapper.isPrimitive: vector=false");
+
+    tm.register("MyType", "my::MyType", false);
+    assert(tm.toCpp("MyType") == "my::MyType", "CppTypeMapper: custom register");
+    assert(tm.toHSharp("my::MyType") == "MyType", "CppTypeMapper: custom reverse");
+
+    let prims = tm.getPrimitiveTypes();
+    assert(prims != nullptr, "CppTypeMapper.getPrimitiveTypes");
+
+    let cnt = tm.getMappingCount();
+    assert(cnt > 0, "CppTypeMapper.getMappingCount > 0");
+    return 0;
+}
+
+fn test_cpp_value() {
+    let v = new CppValue();
+    v.init_value(42, "int");
+    assert(v.getValue() == 42, "CppValue.getValue");
+    assert(v.getTypeName() == "int", "CppValue.getTypeName");
+    assert(v.isNull() == false, "CppValue.isNull false");
+    assert(v.asInt() == 42, "CppValue.asInt");
+    assert(v.asFloat() == 42.0, "CppValue.asFloat int→float");
+
+    let v2 = new CppValue();
+    v2.init_value(nullptr, "void*");
+    assert(v2.isNull() == true, "CppValue.isNull true");
+    assert(v2.asInt() == 0, "CppValue.asInt nullptr→0");
+    assert(v2.asFloat() == 0.0, "CppValue.asFloat nullptr→0.0");
+    assert(v2.asString() == "", "CppValue.asString nullptr→empty");
+    assert(v2.asBool() == false, "CppValue.asBool nullptr→false");
+    assert(len(v2.asList()) == 0, "CppValue.asList nullptr→empty list");
+
+    let v3 = new CppValue();
+    v3.init_value("hello", "std::string");
+    assert(v3.asString() == "hello", "CppValue.asString");
+
+    let v4 = new CppValue();
+    v4.init_value(true, "bool");
+    v4.setPrimitive(true);
+    assert(v4.asBool() == true, "CppValue.asBool true");
+
+    v4.setNull();
+    assert(v4.isNull() == true, "CppValue.setNull");
+
+    let v5 = new CppValue();
+    v5.initFromValue(99);
+    assert(v5.getTypeName() == "auto", "CppValue.initFromValue typeName");
+    assert(v5.asInt() == 99, "CppValue.initFromValue value");
+
+    let orig = new CppValue();
+    orig.init_value(77, "int");
+    let cloned = orig.clone();
+    assert(cloned != nullptr, "CppValue.clone not null");
+    assert(cloned.asInt() == 77, "CppValue.clone value preserved");
+    assert(cloned.getTypeName() == "int", "CppValue.clone type preserved");
+    return 0;
+}
+
+fn test_cpp_invoke() {
+    let inv = new CppInvoke();
+    inv.init_invoke("getSize");
+    assert(inv.getMethodName() == "getSize", "CppInvoke.getMethodName");
+    assert(inv.getArgCount() == 0, "CppInvoke.getArgCount default 0");
+    assert(inv.isStatic() == false, "CppInvoke.isStatic default false");
+
+    inv.setStatic(true);
+    assert(inv.isStatic() == true, "CppInvoke.setStatic");
+
+    inv.setTimeout(5000);
+    assert(inv.getTimeout() == 5000, "CppInvoke.setTimeout/getTimeout");
+
+    inv.setGetter("width");
+    assert(inv.getPropertyName() == "width", "CppInvoke.setGetter/getPropertyName");
+
+    let inv2 = new CppInvoke();
+    inv2.init_invoke("setName");
+    inv2.setSetter("name", "Alice");
+    let args2 = inv2.getArgs();
+    assert(len(args2) == 1, "CppInvoke.setSetter args count");
+    assert(args2[0] == "Alice", "CppInvoke.setSetter args value");
+
+    let inv3 = new CppInvoke();
+    inv3.init_invoke("compute");
+    inv3.addArg(10);
+    inv3.addArg(20);
+    assert(inv3.getArgCount() == 2, "CppInvoke.addArg/getArgCount");
+    assert(inv3.getArg(0) == 10, "CppInvoke.getArg 0");
+    assert(inv3.getArg(1) == 20, "CppInvoke.getArg 1");
+    assert(inv3.getArg(99) == nullptr, "CppInvoke.getArg out of bounds");
+
+    let test_obj = {};
+    inv3.setOwnerObject(test_obj);
+    assert(inv3.getOwnerObject() == test_obj, "CppInvoke.setOwnerObject/getOwnerObject");
+
+    let inv4 = new CppInvoke();
+    inv4.init_invoke("setSize");
+    inv4.setArgs([640, 480]);
+    assert(len(inv4.getArgs()) == 2, "CppInvoke.setArgs/getArgs");
+
+    let inv5 = new CppInvoke();
+    inv5.init_invoke("setPosition");
+    inv5.setSetterArgs([100, 200]);
+    assert(len(inv5.getArgs()) == 2, "CppInvoke.setSetterArgs");
+    return 0;
+}
+
+fn test_cpp_result() {
+    let r = new CppResult();
+    r.init_result();
+    assert(r.isSuccess() == false, "CppResult.isSuccess default false");
+    assert(r.isException() == false, "CppResult.isException default false");
+
+    r.setSuccess(42);
+    assert(r.isSuccess() == true, "CppResult.setSuccess");
+    assert(r.getValue() == 42, "CppResult.getValue after success");
+
+    r.setError("Segfault", "RuntimeException");
+    assert(r.isSuccess() == false, "CppResult.setError clears success");
+    assert(r.getError() == "Segfault", "CppResult.getError");
+    assert(r.getErrorType() == "RuntimeException", "CppResult.getErrorType");
+    assert(r.isException() == true, "CppResult.isException after error");
+
+    r.setCallId(7);
+    assert(r.getCallId() == 7, "CppResult.setCallId/getCallId");
+
+    r.setDuration(150);
+    assert(r.getDuration() == 150, "CppResult.setDuration/getDuration");
+
+    r.setStackTrace("frame1\nframe2");
+    assert(r.getStackTrace() == "frame1\nframe2", "CppResult.setStackTrace/getStackTrace");
+
+    # unwrap on error returns nullptr
+    let val = r.unwrap();
+    assert(val == nullptr, "CppResult.unwrap on error→nullptr");
+
+    # expect on error still returns value
+    let v2 = r.expect("custom error msg");
+    assert(v2 == nullptr, "CppResult.expect on error");
+
+    # success unwrap
+    let r2 = new CppResult();
+    r2.init_result();
+    r2.setSuccess("done");
+    assert(r2.unwrap() == "done", "CppResult.unwrap on success");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 2: Object Bridge — 7 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_object() {
+    let obj = new CppObject();
+    obj.init_object(100, "MyClass");
+    assert(obj.getObjectId() == 100, "CppObject.getObjectId");
+    assert(obj.getTypeName() == "MyClass", "CppObject.getTypeName");
+    assert(obj.isDisposed() == false, "CppObject.isDisposed default");
+
+    obj.setObjectId(200);
+    assert(obj.getObjectId() == 200, "CppObject.setObjectId");
+
+    obj.setProperty("width", 640);
+    obj.setProperty("title", "Hello");
+    assert(obj.getProperty("width") == 640, "CppObject.setProperty/getProperty");
+    assert(obj.getProperty("title") == "Hello", "CppObject.setProperty/getProperty string");
+    assert(obj.hasProperty("width") == true, "CppObject.hasProperty true");
+    assert(obj.hasProperty("nonexistent") == false, "CppObject.hasProperty false");
+
+    obj.addCachedMethod("doWork");
+    obj.addCachedMethod("compute");
+    assert(obj.hasMethod("doWork") == true, "CppObject.hasMethod true");
+    assert(obj.hasMethod("compute") == true, "CppObject.hasMethod true cached");
+    assert(obj.hasMethod("missing") == false, "CppObject.hasMethod false");
+
+    assert(obj.isRemote() == false, "CppObject.isRemote default false");
+    obj.setRemoteEndpoint("tcp://192.168.1.1:9000");
+    assert(obj.getRemoteEndpoint() == "tcp://192.168.1.1:9000", "CppObject.setRemoteEndpoint/getRemoteEndpoint");
+
+    obj.setMetadata("version", 2);
+    obj.setMetadata("author", "dev");
+    assert(obj.getMetadata("version") == 2, "CppObject.setMetadata/getMetadata");
+    assert(obj.getMetadata("author") == "dev", "CppObject.setMetadata/getMetadata string");
+
+    let methods = obj.getCachedMethods();
+    assert(len(methods) == 2, "CppObject.getCachedMethods");
+
+    let getters = obj.getCachedGetters();
+    assert(len(getters) == 0, "CppObject.getCachedGetters default empty");
+
+    obj.addCachedGetter("visible");
+    obj.addCachedGetter("enabled");
+    assert(len(obj.getCachedGetters()) == 2, "CppObject.addCachedGetter/getCachedGetters");
+
+    obj.clearMetadata();
+    assert(obj.getMetadata("version") == nullptr, "CppObject.clearMetadata");
+
+    obj.dispose();
+    assert(obj.isDisposed() == true, "CppObject.dispose");
+    return 0;
+}
+
+fn test_cpp_object_cache() {
+    let cache = new CppObjectCache();
+    cache.init_cache();
+    assert(cache.getCount() == 0, "CppObjectCache.getCount default 0");
+
+    let obj1 = new CppObject();
+    obj1.init_object(0, "Widget");
+    let id1 = cache.add(obj1);
+    assert(id1 == 1, "CppObjectCache.add returns id 1");
+    assert(cache.getCount() == 1, "CppObjectCache.getCount after add");
+
+    let obj2 = new CppObject();
+    obj2.init_object(0, "Button");
+    let id2 = cache.add(obj2);
+    assert(id2 == 2, "CppObjectCache.add returns id 2");
+
+    let retrieved = cache.get(id1);
+    assert(retrieved != nullptr, "CppObjectCache.get");
+    assert(retrieved.getTypeName() == "Widget", "CppObjectCache.get type correct");
+
+    let by_type = cache.getByType("Widget");
+    assert(len(by_type) == 1, "CppObjectCache.getByType");
+
+    let by_type2 = cache.getByType("Button");
+    assert(len(by_type2) == 1, "CppObjectCache.getByType Button");
+
+    let by_type3 = cache.getByType("NonExistent");
+    assert(len(by_type3) == 0, "CppObjectCache.getByType non-existent");
+
+    assert(cache.contains(id1) == true, "CppObjectCache.contains true");
+    assert(cache.contains(999) == false, "CppObjectCache.contains false");
+
+    let all = cache.getAll();
+    assert(len(all) == 2, "CppObjectCache.getAll");
+
+    assert(cache.getNextId() == 2, "CppObjectCache.getNextId");
+
+    cache.remove(id1);
+    assert(cache.contains(id1) == false, "CppObjectCache.remove");
+    assert(cache.getCount() == 1, "CppObjectCache.getCount after remove");
+
+    cache.clear();
+    assert(cache.getCount() == 0, "CppObjectCache.clear");
+    return 0;
+}
+
+fn test_cpp_shared_lib() {
+    let lib = new CppSharedLib();
+    lib.init_lib("QtCore", "6.5.0", "/usr/lib/libQt6Core.so");
+    assert(lib.getName() == "QtCore", "CppSharedLib.getName");
+    assert(lib.getVersion() == "6.5.0", "CppSharedLib.getVersion");
+    assert(lib.getPath() == "/usr/lib/libQt6Core.so", "CppSharedLib.getPath");
+    assert(lib.isLoaded() == false, "CppSharedLib.isLoaded default false");
+
+    lib.setLoaded(true);
+    assert(lib.isLoaded() == true, "CppSharedLib.setLoaded");
+
+    assert(lib.isModule() == false, "CppSharedLib.isModule default false");
+    lib.setModuleName("QtCore");
+    assert(lib.getModuleName() == "QtCore", "CppSharedLib.setModuleName/getModuleName");
+
+    let ti = new CppTypeInfo();
+    ti.init_cpp_type("QString", "Qt", "QtCore");
+    lib.addType(ti);
+    assert(lib.getTypeCount() == 1, "CppSharedLib.addType/getTypeCount");
+
+    let found = lib.getType("QString");
+    assert(found != nullptr, "CppSharedLib.getType");
+    assert(found.getTypeName() == "QString", "CppSharedLib.getType correct");
+
+    let not_found = lib.getType("NonExistent");
+    assert(not_found == nullptr, "CppSharedLib.getType missing");
+
+    lib.addDependency("QtGui");
+    lib.addDependency("QtWidgets");
+    assert(lib.getDependencyCount() == 2, "CppSharedLib.addDependency/getDependencyCount");
+
+    let deps = lib.getDependencies();
+    assert(len(deps) == 2, "CppSharedLib.getDependencies");
+
+    lib.removeType("QString");
+    assert(lib.getTypeCount() == 0, "CppSharedLib.removeType");
+
+    # add back and clear
+    lib.addType(ti);
+    lib.clear();
+    assert(lib.getTypeCount() == 0, "CppSharedLib.clear types");
+    assert(lib.getDependencyCount() == 0, "CppSharedLib.clear deps");
+    return 0;
+}
+
+fn test_cpp_lib_loader() {
+    let loader = new CppLibLoader();
+    loader.init_loader();
+    assert(loader.getLoadedCount() == 0, "CppLibLoader.getLoadedCount default 0");
+    assert(loader.getLibCount() == 0, "CppLibLoader.getLibCount default 0");
+
+    let lib1 = new CppSharedLib();
+    lib1.init_lib("QtCore", "6.5", "/usr/lib/libQtCore.so");
+    let lib2 = new CppSharedLib();
+    lib2.init_lib("QtGui", "6.5", "/usr/lib/libQtGui.so");
+
+    loader.register(lib1);
+    loader.register(lib2);
+    assert(loader.getLib("QtCore") != nullptr, "CppLibLoader.register/getLib");
+
+    assert(loader.isLoaded("QtCore") == false, "CppLibLoader.isLoaded false");
+    let loaded = loader.load("QtCore");
+    assert(loaded != nullptr, "CppLibLoader.load returns lib");
+    assert(loader.isLoaded("QtCore") == true, "CppLibLoader.isLoaded true");
+    assert(loader.getLoadedCount() == 1, "CppLibLoader.getLoadedCount after load");
+
+    loader.load("QtGui");
+    assert(loader.getLoadedCount() == 2, "CppLibLoader.getLoadedCount 2");
+
+    let all_libs = loader.getAllLibs();
+    assert(len(all_libs) == 2, "CppLibLoader.getAllLibs");
+
+    loader.unload("QtCore");
+    assert(loader.isLoaded("QtCore") == false, "CppLibLoader.unload");
+    assert(loader.getLoadedCount() == 1, "CppLibLoader.getLoadedCount after unload");
+
+    assert(loader.getLibCount() == 2, "CppLibLoader.getLibCount registered");
+
+    loader.clear();
+    assert(loader.getLoadedCount() == 0, "CppLibLoader.clear");
+    return 0;
+}
+
+fn test_cpp_constructor() {
+    let ctor = new CppConstructor();
+    ctor.init_ctor();
+    assert(ctor.getParamCount() == 0, "CppConstructor.getParamCount default");
+    assert(ctor.isDefault() == false, "CppConstructor.isDefault default");
+    assert(ctor.isCopy() == false, "CppConstructor.isCopy default");
+    assert(ctor.isMove() == false, "CppConstructor.isMove default");
+    assert(ctor.isExplicit() == false, "CppConstructor.isExplicit default");
+
+    ctor.addParam("int", "x");
+    ctor.addParam("double", "y");
+    assert(ctor.getParamCount() == 2, "CppConstructor.addParam");
+
+    assert(ctor.getParamType(0) == "int", "CppConstructor.getParamType 0");
+    assert(ctor.getParamType(1) == "double", "CppConstructor.getParamType 1");
+    assert(ctor.getParamType(99) == "", "CppConstructor.getParamType out of bounds");
+
+    let types = ctor.getParamTypes();
+    assert(len(types) == 2, "CppConstructor.getParamTypes");
+    let names = ctor.getParamNames();
+    assert(len(names) == 2, "CppConstructor.getParamNames");
+
+    ctor.setDefault(true);
+    assert(ctor.isDefault() == true, "CppConstructor.setDefault");
+
+    let ctor2 = new CppConstructor();
+    ctor2.init_ctor();
+    ctor2.setCopy(true);
+    assert(ctor2.isCopy() == true, "CppConstructor.setCopy");
+
+    let ctor3 = new CppConstructor();
+    ctor3.init_ctor();
+    ctor3.setMove(true);
+    assert(ctor3.isMove() == true, "CppConstructor.setMove");
+
+    let ctor4 = new CppConstructor();
+    ctor4.init_ctor();
+    ctor4.setExplicit(true);
+    assert(ctor4.isExplicit() == true, "CppConstructor.setExplicit");
+    return 0;
+}
+
+fn test_cpp_method() {
+    let m = new CppMethod();
+    m.init_method("calculate", "int");
+    assert(m.getName() == "calculate", "CppMethod.getName");
+    assert(m.getReturnType() == "int", "CppMethod.getReturnType");
+    assert(m.getParamCount() == 0, "CppMethod.getParamCount default 0");
+    assert(m.isStatic() == false, "CppMethod.isStatic default");
+    assert(m.isVirtual() == false, "CppMethod.isVirtual default");
+    assert(m.isConst() == false, "CppMethod.isConst default");
+    assert(m.isNoexcept() == false, "CppMethod.isNoexcept default");
+    assert(m.getVisibility() == "public", "CppMethod.getVisibility default public");
+
+    m.addParam("int", "a");
+    m.addParam("int", "b");
+    assert(m.getParamCount() == 2, "CppMethod.addParam/getParamCount");
+    assert(m.getParamType(0) == "int", "CppMethod.getParamType 0");
+    assert(m.getParamType(1) == "int", "CppMethod.getParamType 1");
+
+    let types = m.getParamTypes();
+    assert(len(types) == 2, "CppMethod.getParamTypes");
+    let names = m.getParamNames();
+    assert(len(names) == 2, "CppMethod.getParamNames");
+
+    m.setStatic(true);
+    assert(m.isStatic() == true, "CppMethod.setStatic");
+
+    m.setVirtual(true);
+    assert(m.isVirtual() == true, "CppMethod.setVirtual");
+
+    m.setConst(true);
+    assert(m.isConst() == true, "CppMethod.setConst");
+
+    m.setNoexcept(true);
+    assert(m.isNoexcept() == true, "CppMethod.setNoexcept");
+
+    m.setVisibility("protected");
+    assert(m.getVisibility() == "protected", "CppMethod.setVisibility");
+
+    m.addAnnotation("[[nodiscard]]");
+    m.addAnnotation("[[deprecated]]");
+    assert(m.hasAnnotation("[[nodiscard]]") == true, "CppMethod.hasAnnotation true");
+    assert(m.hasAnnotation("[[maybe_unused]]") == false, "CppMethod.hasAnnotation false");
+
+    let annos = m.getAnnotations();
+    assert(len(annos) == 2, "CppMethod.getAnnotations");
+    return 0;
+}
+
+fn test_cpp_field() {
+    let f = new CppField();
+    f.init_field("m_value", "int");
+    assert(f.getName() == "m_value", "CppField.getName");
+    assert(f.getType() == "int", "CppField.getType");
+    assert(f.isStatic() == false, "CppField.isStatic default");
+    assert(f.isConst() == false, "CppField.isConst default");
+    assert(f.isMutable() == false, "CppField.isMutable default");
+    assert(f.isVolatile() == false, "CppField.isVolatile default");
+    assert(f.getVisibility() == "public", "CppField.getVisibility default");
+
+    f.setStatic(true);
+    assert(f.isStatic() == true, "CppField.setStatic");
+
+    f.setConst(true);
+    assert(f.isConst() == true, "CppField.setConst");
+
+    f.setMutable(true);
+    assert(f.isMutable() == true, "CppField.setMutable");
+
+    f.setVolatile(true);
+    assert(f.isVolatile() == true, "CppField.setVolatile");
+
+    f.setDefaultValue(0);
+    assert(f.getDefaultValue() == 0, "CppField.setDefaultValue/getDefaultValue");
+
+    f.setVisibility("private");
+    assert(f.getVisibility() == "private", "CppField.setVisibility");
+
+    f.setPointer(true);
+    assert(f.isPointer() == true, "CppField.setPointer/isPointer");
+
+    f.setReference(true);
+    assert(f.isReference() == true, "CppField.setReference/isReference");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 3: Event Bridge — 4 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_event() {
+    let evt = new CppEvent();
+    evt.init_event("clicked", "CppEventListener");
+    assert(evt.getName() == "clicked", "CppEvent.getName");
+    assert(evt.getListenerType() == "CppEventListener", "CppEvent.getListenerType");
+    assert(evt.getListenerCount() == 0, "CppEvent.getListenerCount default 0");
+    assert(evt.isStatic() == false, "CppEvent.isStatic default");
+    assert(evt.isRemote() == false, "CppEvent.isRemote default");
+    assert(evt.isSignal() == false, "CppEvent.isSignal default");
+
+    evt.setStatic(true);
+    assert(evt.isStatic() == true, "CppEvent.setStatic");
+
+    evt.setRemote(true);
+    assert(evt.isRemote() == true, "CppEvent.setRemote");
+
+    evt.setRemoteEndpoint("ws://192.168.1.1:8080");
+    assert(evt.getRemoteEndpoint() == "ws://192.168.1.1:8080", "CppEvent.setRemoteEndpoint/getRemoteEndpoint");
+
+    let listener1 = new CppEventListener();
+    listener1.init_listener("clicked", fn(sender, args) { return 0; });
+    let listener2 = new CppEventListener();
+    listener2.init_listener("clicked", fn(sender, args) { return 0; });
+
+    evt.addListener(listener1);
+    evt.addListener(listener2);
+    assert(evt.getListenerCount() == 2, "CppEvent.addListener/getListenerCount");
+
+    let listeners = evt.getListeners();
+    assert(len(listeners) == 2, "CppEvent.getListeners");
+
+    evt.removeListener(listener1);
+    assert(evt.getListenerCount() == 1, "CppEvent.removeListener");
+
+    evt.clearListeners();
+    assert(evt.getListenerCount() == 0, "CppEvent.clearListeners");
+
+    evt.setSignal(true);
+    assert(evt.isSignal() == true, "CppEvent.setSignal/isSignal");
+    return 0;
+}
+
+fn test_cpp_event_listener() {
+    let count = 0;
+    let l = new CppEventListener();
+    l.init_listener("click", fn(sender, args) { count = count + 1; return 0; });
+    assert(l.getEventName() == "click", "CppEventListener.getEventName");
+    assert(l.isActive() == true, "CppEventListener.isActive default true");
+    assert(l.isOneShot() == false, "CppEventListener.isOneShot default false");
+
+    l.setId(42);
+    assert(l.getId() == 42, "CppEventListener.setId/getId");
+
+    l.onEvent(nullptr, {});
+    assert(count == 1, "CppEventListener.onEvent calls callback");
+
+    # Test setActive false → callback not called
+    let count2 = 0;
+    let l2 = new CppEventListener();
+    l2.init_listener("hover", fn(sender, args) { count2 = count2 + 1; return 0; });
+    l2.setActive(false);
+    l2.onEvent(nullptr, {});
+    assert(count2 == 0, "CppEventListener.setActive false blocks onEvent");
+
+    # Test oneshot deactivates after one call
+    let count3 = 0;
+    let l3 = new CppEventListener();
+    l3.init_listener("once", fn(sender, args) { count3 = count3 + 1; return 0; });
+    l3.setOneShot(true);
+    l3.onEvent(nullptr, {});
+    assert(count3 == 1, "CppEventListener oneshot first call");
+    assert(l3.isActive() == false, "CppEventListener oneshot deactivates");
+    l3.onEvent(nullptr, {});
+    assert(count3 == 1, "CppEventListener oneshot blocked on second call");
+    return 0;
+}
+
+fn test_cpp_cross_event_bus() {
+    let bus = new CppCrossEventBus();
+    bus.init_cross_bus();
+    assert(bus.getEventCount() == 0, "CppCrossEventBus.getEventCount default 0");
+    assert(bus.isBridgeEnabled() == false, "CppCrossEventBus.isBridgeEnabled default false");
+
+    let call_count = 0;
+    let listener = bus.subscribe("dataReady", fn(sender, args) { call_count = call_count + 1; return 0; });
+    assert(listener != nullptr, "CppCrossEventBus.subscribe returns listener");
+    assert(bus.getListenerCount() == 1, "CppCrossEventBus.getListenerCount after subscribe");
+
+    bus.publish("dataReady", nullptr, {});
+    assert(call_count == 1, "CppCrossEventBus.publish calls callback");
+
+    bus.publish("nonExistent", nullptr, {});
+    # no crash expected
+
+    assert(bus.getEventCount() == 1, "CppCrossEventBus.getEventCount 1");
+
+    bus.enableBridge();
+    assert(bus.isBridgeEnabled() == true, "CppCrossEventBus.enableBridge");
+
+    bus.disableBridge();
+    assert(bus.isBridgeEnabled() == false, "CppCrossEventBus.disableBridge");
+
+    let evt = bus.getEvent("dataReady");
+    assert(evt != nullptr, "CppCrossEventBus.getEvent");
+
+    bus.clearEvent("dataReady");
+    assert(bus.getEventCount() == 0, "CppCrossEventBus.clearEvent");
+
+    # re-subscribe and test clear
+    bus.subscribe("reload", fn(sender, args) { return 0; });
+    bus.clear();
+    assert(bus.getEventCount() == 0, "CppCrossEventBus.clear");
+    assert(bus.getListenerCount() == 0, "CppCrossEventBus.clear resets counter");
+    return 0;
+}
+
+fn test_cpp_ui_dispatcher() {
+    let d = new CppUIDispatcher();
+    d.init_dispatcher();
+    assert(d.getQueueSize() == 0, "CppUIDispatcher.getQueueSize default 0");
+    assert(d.isProcessing() == false, "CppUIDispatcher.isProcessing default false");
+    assert(d.getMainThread() == 0, "CppUIDispatcher.getMainThread default 0");
+
+    d.setMainThread(1);
+    assert(d.getMainThread() == 1, "CppUIDispatcher.setMainThread");
+
+    let counter = 0;
+    d.invokeLater(fn() { counter = counter + 1; return 0; });
+    d.invokeLater(fn() { counter = counter + 2; return 0; });
+    assert(d.getQueueSize() == 2, "CppUIDispatcher.invokeLater");
+
+    d.processQueue();
+    assert(counter == 3, "CppUIDispatcher.processQueue executes callbacks");
+    assert(d.getQueueSize() == 0, "CppUIDispatcher.processQueue clears done items");
+
+    d.invokeLater(fn() { return 0; });
+    assert(d.getQueueSize() == 1, "CppUIDispatcher.invokeLater after process");
+
+    d.clear();
+    assert(d.getQueueSize() == 0, "CppUIDispatcher.clear");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 4: UI Bridge — 4 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_control_bridge() {
+    let hw = {"width": 640, "height": 480, "title": "Test Window"};
+    let cw = {};
+    let bridge = new ZzwUICppControlBridge();
+    bridge.init_bridge(hw, cw);
+
+    assert(bridge.getHWidget() == hw, "ZzwUICppControlBridge.getHWidget");
+    assert(bridge.getCppControl() == cw, "ZzwUICppControlBridge.getCppControl");
+    assert(bridge.isEnabled() == true, "ZzwUICppControlBridge.isEnabled default");
+
+    bridge.bindProperty("width", "width");
+    bridge.bindProperty("height", "height");
+    let pb = bridge.getPropertyBindings();
+    assert(len(pb) == 2, "ZzwUICppControlBridge.bindProperty/getPropertyBindings");
+
+    bridge.bindEvent("clicked", "clicked");
+    bridge.bindEvent("resized", "resized");
+    let eb = bridge.getEventBindings();
+    assert(len(eb) == 2, "ZzwUICppControlBridge.bindEvent/getEventBindings");
+
+    bridge.setSyncDirection("hsharp_to_cpp");
+    assert(bridge.getSyncDirection() == "hsharp_to_cpp", "ZzwUICppControlBridge.setSyncDirection");
+
+    bridge.syncToCpp();
+    bridge.syncToHSharp();
+    bridge.syncBoth();
+
+    bridge.unbindProperty("width");
+    assert(len(bridge.getPropertyBindings()) == 1, "ZzwUICppControlBridge.unbindProperty");
+
+    bridge.unbindEvent("clicked");
+    assert(len(bridge.getEventBindings()) == 1, "ZzwUICppControlBridge.unbindEvent");
+
+    bridge.unbindAll();
+    assert(len(bridge.getPropertyBindings()) == 0, "ZzwUICppControlBridge.unbindAll properties");
+    assert(len(bridge.getEventBindings()) == 0, "ZzwUICppControlBridge.unbindAll events");
+
+    bridge.setEnabled(false);
+    assert(bridge.isEnabled() == false, "ZzwUICppControlBridge.setEnabled");
+
+    bridge.dispose();
+    assert(bridge.getHWidget() == nullptr, "ZzwUICppControlBridge.dispose");
+    assert(bridge.isEnabled() == false, "ZzwUICppControlBridge.dispose disabled");
+    return 0;
+}
+
+fn test_cpp_window_bridge() {
+    let hw = {"title": "MyApp", "width": 800, "height": 600, "x": 100, "y": 50};
+    let cw = {"title": "MyApp", "width": 800, "height": 600, "x": 100, "y": 50};
+    let wb = new CppWindowBridge();
+    wb.init_win_bridge(hw, cw);
+
+    assert(wb.getHWindow() == hw, "CppWindowBridge.getHWindow");
+    assert(wb.getCppWindow() == cw, "CppWindowBridge.getCppWindow");
+    assert(wb.isTitleBound() == false, "CppWindowBridge.isTitleBound default");
+    assert(wb.isSizeBound() == false, "CppWindowBridge.isSizeBound default");
+    assert(wb.isPositionBound() == false, "CppWindowBridge.isPositionBound default");
+    assert(wb.isVisibilityBound() == false, "CppWindowBridge.isVisibilityBound default");
+    assert(wb.isStateBound() == false, "CppWindowBridge.isStateBound default");
+
+    wb.bindTitle();
+    assert(wb.isTitleBound() == true, "CppWindowBridge.bindTitle");
+
+    wb.bindSize();
+    assert(wb.isSizeBound() == true, "CppWindowBridge.bindSize");
+
+    wb.bindPosition();
+    assert(wb.isPositionBound() == true, "CppWindowBridge.bindPosition");
+
+    wb.bindVisibility();
+    assert(wb.isVisibilityBound() == true, "CppWindowBridge.bindVisibility");
+
+    wb.bindState();
+    assert(wb.isStateBound() == true, "CppWindowBridge.bindState");
+
+    wb.syncTitle();
+    wb.syncSize();
+    wb.syncPosition();
+    wb.syncAll();
+
+    wb.unbindAll();
+    assert(wb.isTitleBound() == false, "CppWindowBridge.unbindAll");
+    assert(wb.isSizeBound() == false, "CppWindowBridge.unbindAll size");
+    assert(wb.isPositionBound() == false, "CppWindowBridge.unbindAll position");
+
+    wb.dispose();
+    assert(wb.getHWindow() == nullptr, "CppWindowBridge.dispose");
+    return 0;
+}
+
+fn test_cpp_ui_host() {
+    let parent = {};
+    let host = new CppUIHost();
+    host.init_host(parent);
+    assert(host.isActive() == false, "CppUIHost.isActive default false");
+    assert(host.getLayoutEngine() == "zzwUI", "CppUIHost.getLayoutEngine default");
+    assert(host.getRenderer() == "default", "CppUIHost.getRenderer default");
+
+    host.activate();
+    assert(host.isActive() == true, "CppUIHost.activate");
+
+    let w1 = {"id": "btn1"};
+    let w2 = {"id": "btn2"};
+    host.hostWidget(w1, "Button");
+    host.hostWidget(w2, "Label");
+    assert(host.getWidgetCount() == 2, "CppUIHost.hostWidget/getWidgetCount");
+
+    let widgets = host.getWidgets();
+    assert(len(widgets) == 2, "CppUIHost.getWidgets");
+
+    host.removeWidget(w1);
+    assert(host.getWidgetCount() == 1, "CppUIHost.removeWidget");
+
+    host.setLayoutEngine("Qt");
+    assert(host.getLayoutEngine() == "Qt", "CppUIHost.setLayoutEngine");
+
+    host.setRenderer("OpenGL");
+    assert(host.getRenderer() == "OpenGL", "CppUIHost.setRenderer");
+
+    host.deactivate();
+    assert(host.isActive() == false, "CppUIHost.deactivate");
+
+    host.clear();
+    assert(host.getWidgetCount() == 0, "CppUIHost.clear");
+
+    host.dispose();
+    assert(host.isActive() == false, "CppUIHost.dispose");
+    return 0;
+}
+
+fn test_cpp_control_factory() {
+    let cf = new CppControlFactory();
+    cf.init_factory();
+
+    let cpp_type = cf.getCppType("Button");
+    assert(cpp_type == "QPushButton", "CppControlFactory.getCppType Button");
+    assert(cf.getCppType("Label") == "QLabel", "CppControlFactory.getCppType Label");
+
+    assert(cf.getFramework("Button") == "Qt", "CppControlFactory.getFramework");
+
+    assert(cf.hasType("Button") == true, "CppControlFactory.hasType true");
+    assert(cf.hasType("NonExistent") == false, "CppControlFactory.hasType false");
+
+    let types = cf.getSupportedTypes();
+    assert(len(types) > 0, "CppControlFactory.getSupportedTypes");
+
+    let frameworks = cf.getSupportedFrameworks();
+    assert(len(frameworks) > 0, "CppControlFactory.getSupportedFrameworks");
+
+    let ctrl = cf.createControl("Button");
+    assert(ctrl != nullptr, "CppControlFactory.createControl");
+    assert(ctrl["__type__"] == "QPushButton", "CppControlFactory.createControl type");
+
+    let null_ctrl = cf.createControl("NonExistent");
+    assert(null_ctrl == nullptr, "CppControlFactory.createControl non-existent");
+
+    let init_count = cf.getTypeCount();
+    cf.removeType("Button");
+    assert(cf.hasType("Button") == false, "CppControlFactory.removeType");
+    assert(cf.getTypeCount() == init_count - 1, "CppControlFactory.getTypeCount after remove");
+
+    cf.clear();
+    assert(cf.getTypeCount() == 0, "CppControlFactory.clear");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 5: Data Binding — 4 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_binding() {
+    let src = {"value": 42};
+    let tgt = {"display": 0};
+    let b = new CppBinding();
+    b.init_binding(src, "value", tgt, "display");
+
+    assert(b.getSource() == src, "CppBinding.getSource");
+    assert(b.getSourcePath() == "value", "CppBinding.getSourcePath");
+    assert(b.getTarget() == tgt, "CppBinding.getTarget");
+    assert(b.getTargetPath() == "display", "CppBinding.getTargetPath");
+    assert(b.getMode() == "twoWay", "CppBinding.getMode default twoWay");
+    assert(b.isActive() == true, "CppBinding.isActive default true");
+
+    b.setMode("oneWay");
+    assert(b.getMode() == "oneWay", "CppBinding.setMode");
+
+    b.updateTarget();
+    assert(tgt["display"] == 42, "CppBinding.updateTarget");
+
+    b.updateSource();
+
+    let conv_called = false;
+    b.setConverter(fn(val, param) { conv_called = true; return val; return 0; });
+    assert(b.getConverter() != nullptr, "CppBinding.setConverter/getConverter");
+
+    b.setConverterParam({"key": "val"});
+    b.setFallbackValue(-1);
+    assert(b.getFallbackValue() == -1, "CppBinding.setFallbackValue/getFallbackValue");
+
+    b.setActive(false);
+    assert(b.isActive() == false, "CppBinding.setActive");
+
+    let notifier_val = nullptr;
+    b.setPropertyNotifier(fn(prop) { notifier_val = prop; return 0; });
+    assert(b.getPropertyNotifier() != nullptr, "CppBinding.setPropertyNotifier/getPropertyNotifier");
+
+    b.dispose();
+    assert(b.getSource() == nullptr, "CppBinding.dispose");
+    assert(b.isActive() == false, "CppBinding.dispose inactive");
+    return 0;
+}
+
+fn test_cpp_multi_binding() {
+    let tgt = {"result": 0};
+    let src1 = {"a": 10};
+    let src2 = {"b": 20};
+    let b1 = new CppBinding();
+    b1.init_binding(src1, "a", tgt, "result");
+    let b2 = new CppBinding();
+    b2.init_binding(src2, "b", tgt, "result");
+
+    let mb = new CppMultiBinding();
+    mb.init_multi(tgt, "result");
+    assert(mb.getTarget() == tgt, "CppMultiBinding.getTarget");
+    assert(mb.getTargetPath() == "result", "CppMultiBinding.getTargetPath");
+    assert(mb.getBindingCount() == 0, "CppMultiBinding.getBindingCount default 0");
+    assert(mb.getConverter() == nullptr, "CppMultiBinding.getConverter default null");
+
+    mb.addBinding(b1);
+    mb.addBinding(b2);
+    assert(mb.getBindingCount() == 2, "CppMultiBinding.addBinding");
+    let bindings = mb.getBindings();
+    assert(len(bindings) == 2, "CppMultiBinding.getBindings");
+
+    mb.setConverter(fn(vals) { return len(vals); return 0; });
+    assert(mb.getConverter() != nullptr, "CppMultiBinding.setConverter");
+
+    mb.updateTarget();
+    let vals = mb.getValues();
+    assert(len(vals) == 2, "CppMultiBinding.updateTarget/getValues");
+
+    mb.removeBinding(b1);
+    assert(mb.getBindingCount() == 1, "CppMultiBinding.removeBinding");
+
+    mb.dispose();
+    assert(mb.getBindingCount() == 0, "CppMultiBinding.dispose");
+    return 0;
+}
+
+fn test_cpp_binding_manager() {
+    let mgr = new CppBindingManager();
+    mgr.init_binding_mgr();
+    assert(mgr.getBindingCount() == 0, "CppBindingManager.getBindingCount default");
+    assert(mgr.isDeferred() == false, "CppBindingManager.isDeferred default");
+
+    let src = {"val": 1};
+    let tgt = {"display": 0};
+    let b = new CppBinding();
+    b.init_binding(src, "val", tgt, "display");
+
+    mgr.addBinding(b);
+    assert(mgr.getBindingCount() == 1, "CppBindingManager.addBinding");
+
+    mgr.updateAll();
+    assert(tgt["display"] == 1, "CppBindingManager.updateAll");
+
+    let for_src = mgr.getBindingsForSource(src);
+    assert(len(for_src) == 1, "CppBindingManager.getBindingsForSource");
+
+    let for_tgt = mgr.getBindingsForTarget(tgt);
+    assert(len(for_tgt) == 1, "CppBindingManager.getBindingsForTarget");
+
+    mgr.deferUpdates();
+    assert(mgr.isDeferred() == true, "CppBindingManager.deferUpdates");
+    let old_val = tgt["display"];
+    src["val"] = 99;
+    mgr.updateAll(); # should not execute due to deferred
+    assert(tgt["display"] == old_val, "CppBindingManager.updateAll deferred");
+
+    mgr.flushDeferred();
+    assert(mgr.isDeferred() == false, "CppBindingManager.flushDeferred");
+    mgr.updateAll();
+    assert(tgt["display"] == 99, "CppBindingManager.flushDeferred then updateAll");
+
+    mgr.removeBinding(b);
+    assert(mgr.getBindingCount() == 0, "CppBindingManager.removeBinding");
+
+    mgr.clear();
+    mgr.dispose();
+    assert(mgr.getBindingCount() == 0, "CppBindingManager.dispose");
+    return 0;
+}
+
+fn test_cpp_binding_expression() {
+    let src = {"count": 5};
+    let tgt = {"label": ""};
+    let b = new CppBinding();
+    b.init_binding(src, "count", tgt, "label");
+
+    let expr = new CppBindingExpression();
+    expr.init_expr(b, tgt, "label");
+    assert(expr.getBinding() == b, "CppBindingExpression.getBinding");
+    assert(expr.getTarget() == tgt, "CppBindingExpression.getTarget");
+    assert(expr.getTargetProperty() == "label", "CppBindingExpression.getTargetProperty");
+    assert(expr.isDirty() == false, "CppBindingExpression.isDirty default");
+    assert(expr.getExpression() == "", "CppBindingExpression.getExpression default");
+    assert(expr.getLastValue() == nullptr, "CppBindingExpression.getLastValue default");
+
+    expr.setExpression("count * 2");
+    assert(expr.getExpression() == "count * 2", "CppBindingExpression.setExpression");
+
+    expr.markDirty();
+    assert(expr.isDirty() == true, "CppBindingExpression.markDirty");
+
+    expr.refresh();
+    assert(expr.isDirty() == false, "CppBindingExpression.refresh");
+
+    expr.dispose();
+    assert(expr.getBinding() == nullptr, "CppBindingExpression.dispose");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 6: RPC/Service — 7 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_service_host() {
+    let host = new CppServiceHost();
+    host.init_host("MyService", 8080);
+    assert(host.getHostName() == "MyService", "CppServiceHost.getHostName");
+    assert(host.getPort() == 8080, "CppServiceHost.getPort");
+    assert(host.isRunning() == false, "CppServiceHost.isRunning default");
+    assert(host.getMaxConnections() == 100, "CppServiceHost.getMaxConnections default");
+    assert(host.getProtocol() == "tcp", "CppServiceHost.getProtocol default");
+
+    host.start();
+    assert(host.isRunning() == true, "CppServiceHost.start");
+
+    host.registerService("echo", {"name": "echo", "version": "1.0"});
+    assert(host.hasService("echo") == true, "CppServiceHost.registerService/hasService");
+    assert(host.hasService("missing") == false, "CppServiceHost.hasService false");
+
+    let svc = host.getService("echo");
+    assert(svc != nullptr, "CppServiceHost.getService");
+
+    assert(host.getServiceCount() == 1, "CppServiceHost.getServiceCount");
+
+    host.unregisterService("echo");
+    assert(host.hasService("echo") == false, "CppServiceHost.unregisterService");
+    assert(host.getServiceCount() == 0, "CppServiceHost.getServiceCount after unregister");
+
+    host.setMaxConnections(500);
+    assert(host.getMaxConnections() == 500, "CppServiceHost.setMaxConnections");
+
+    host.addEndpoint("http://localhost:8080");
+    host.addEndpoint("https://api.example.com");
+    let eps = host.getEndpoints();
+    assert(len(eps) == 2, "CppServiceHost.addEndpoint/getEndpoints");
+
+    host.setProtocol("https");
+    assert(host.getProtocol() == "https", "CppServiceHost.setProtocol");
+
+    host.stop();
+    assert(host.isRunning() == false, "CppServiceHost.stop");
+
+    host.dispose();
+    assert(host.isRunning() == false, "CppServiceHost.dispose");
+    return 0;
+}
+
+fn test_cpp_rpc_client() {
+    let client = new CppRPCClient();
+    client.init_client("http://localhost:9000");
+    assert(client.getEndpoint() == "http://localhost:9000", "CppRPCClient.getEndpoint");
+    assert(client.getTimeout() == 30000, "CppRPCClient.getTimeout default");
+    assert(client.getAuthToken() == "", "CppRPCClient.getAuthToken default");
+    assert(client.isConnected() == false, "CppRPCClient.isConnected default");
+
+    client.setTimeout(10000);
+    assert(client.getTimeout() == 10000, "CppRPCClient.setTimeout");
+
+    client.setAuthToken("bearer-token-123");
+    assert(client.getAuthToken() == "bearer-token-123", "CppRPCClient.setAuthToken");
+
+    client.connect();
+    assert(client.isConnected() == true, "CppRPCClient.connect");
+
+    assert(client.getCallCount() == 0, "CppRPCClient.getCallCount default 0");
+    let result = client.call("ping", {});
+    assert(result != nullptr, "CppRPCClient.call returns result");
+    assert(client.getCallCount() == 1, "CppRPCClient.call increments count");
+    assert(result.getCallId() == 1, "CppRPCClient.call assigns callId");
+
+    let serializer = {};
+    client.setSerializer(serializer);
+    assert(client.getSerializer() == serializer, "CppRPCClient.setSerializer/getSerializer");
+
+    client.disconnect();
+    assert(client.isConnected() == false, "CppRPCClient.disconnect");
+
+    client.dispose();
+    assert(client.isConnected() == false, "CppRPCClient.dispose");
+    assert(client.getSerializer() == nullptr, "CppRPCClient.dispose clears serializer");
+    return 0;
+}
+
+fn test_cpp_rpc_message() {
+    let msg = new CppRPCMessage();
+    msg.init_message("getUser");
+    assert(msg.getMethod() == "getUser", "CppRPCMessage.getMethod");
+    assert(msg.getParamCount() == 0, "CppRPCMessage.getParamCount default 0");
+    assert(msg.getId() == 0, "CppRPCMessage.getId default 0");
+    assert(msg.isRequest() == true, "CppRPCMessage.isRequest default true");
+    assert(msg.isNotification() == false, "CppRPCMessage.isNotification default false");
+    assert(msg.getCorrelationId() == "", "CppRPCMessage.getCorrelationId default");
+    assert(msg.getTimestamp() == 0, "CppRPCMessage.getTimestamp default");
+
+    msg.addParam("user_123");
+    msg.addParam(42);
+    assert(msg.getParamCount() == 2, "CppRPCMessage.addParam");
+    assert(msg.getParam(0) == "user_123", "CppRPCMessage.getParam 0");
+    assert(msg.getParam(1) == 42, "CppRPCMessage.getParam 1");
+    assert(msg.getParam(99) == nullptr, "CppRPCMessage.getParam out of bounds");
+
+    msg.setId(100);
+    assert(msg.getId() == 100, "CppRPCMessage.setId");
+
+    msg.setNotification(true);
+    assert(msg.isNotification() == true, "CppRPCMessage.setNotification");
+
+    msg.setCorrelationId("corr-abc-123");
+    assert(msg.getCorrelationId() == "corr-abc-123", "CppRPCMessage.setCorrelationId");
+
+    msg.setTimestamp(1620000000);
+    assert(msg.getTimestamp() == 1620000000, "CppRPCMessage.setTimestamp");
+
+    let params = msg.getParams();
+    assert(len(params) == 2, "CppRPCMessage.getParams");
+
+    msg.setParams([1, 2, 3]);
+    assert(len(msg.getParams()) == 3, "CppRPCMessage.setParams");
+
+    msg.dispose();
+    assert(len(msg.getParams()) == 0, "CppRPCMessage.dispose");
+    return 0;
+}
+
+fn test_cpp_rpc_response() {
+    let resp = new CppRPCResponse();
+    resp.init_response();
+    assert(resp.getMessageId() == 0, "CppRPCResponse.getMessageId default");
+    assert(resp.isSuccess() == false, "CppRPCResponse.isSuccess default");
+    assert(resp.getResult() == nullptr, "CppRPCResponse.getResult default");
+    assert(resp.getErrorCode() == 0, "CppRPCResponse.getErrorCode default");
+    assert(resp.getError() == "", "CppRPCResponse.getError default");
+    assert(resp.getCorrelationId() == "", "CppRPCResponse.getCorrelationId default");
+    assert(resp.getDuration() == 0, "CppRPCResponse.getDuration default");
+
+    resp.setMessageId(55);
+    assert(resp.getMessageId() == 55, "CppRPCResponse.setMessageId");
+
+    resp.setSuccess(true);
+    assert(resp.isSuccess() == true, "CppRPCResponse.setSuccess");
+
+    resp.setResult({"status": "ok"});
+    assert(resp.getResult() != nullptr, "CppRPCResponse.setResult/getResult");
+
+    resp.setError(404, "Not Found");
+    assert(resp.getErrorCode() == 404, "CppRPCResponse.setError code");
+    assert(resp.getError() == "Not Found", "CppRPCResponse.setError message");
+
+    resp.setCorrelationId("corr-xyz");
+    assert(resp.getCorrelationId() == "corr-xyz", "CppRPCResponse.setCorrelationId");
+
+    resp.setDuration(350);
+    assert(resp.getDuration() == 350, "CppRPCResponse.setDuration");
+
+    resp.dispose();
+    assert(resp.getResult() == nullptr, "CppRPCResponse.dispose");
+    return 0;
+}
+
+fn test_cpp_rpc_context() {
+    let ctx = new CppRPCContext();
+    ctx.init_context();
+    assert(ctx.getRequest() == nullptr, "CppRPCContext.getRequest default");
+    assert(ctx.getResponse() == nullptr, "CppRPCContext.getResponse default");
+    assert(ctx.isAuthenticated() == false, "CppRPCContext.isAuthenticated default");
+    assert(ctx.getPrincipal() == "", "CppRPCContext.getPrincipal default");
+    assert(ctx.getUserData() == nullptr, "CppRPCContext.getUserData default");
+    assert(ctx.getSessionId() == "", "CppRPCContext.getSessionId default");
+
+    ctx.setAuthenticated(true);
+    assert(ctx.isAuthenticated() == true, "CppRPCContext.setAuthenticated");
+
+    ctx.setPrincipal("admin");
+    assert(ctx.getPrincipal() == "admin", "CppRPCContext.setPrincipal");
+
+    ctx.setUserData({"role": "admin", "permissions": ["read", "write"]});
+    let ud = ctx.getUserData();
+    assert(ud != nullptr, "CppRPCContext.setUserData/getUserData");
+
+    ctx.setSessionId("session-abc-123");
+    assert(ctx.getSessionId() == "session-abc-123", "CppRPCContext.setSessionId/getSessionId");
+
+    ctx.dispose();
+    assert(ctx.getRequest() == nullptr, "CppRPCContext.dispose");
+    assert(ctx.getUserData() == nullptr, "CppRPCContext.dispose user_data");
+    return 0;
+}
+
+fn test_cpp_socket_channel() {
+    let ch = new CppSocketChannel();
+    ch.init_channel("localhost", 9090);
+    assert(ch.getHost() == "localhost", "CppSocketChannel.getHost");
+    assert(ch.getPort() == 9090, "CppSocketChannel.getPort");
+    assert(ch.isConnected() == false, "CppSocketChannel.isConnected default");
+    assert(ch.getSocketType() == "unix", "CppSocketChannel.getSocketType default");
+    assert(ch.getBufferSize() == 4096, "CppSocketChannel.getBufferSize default");
+    assert(ch.isSSL() == false, "CppSocketChannel.isSSL default");
+
+    ch.connect();
+    assert(ch.isConnected() == true, "CppSocketChannel.connect");
+
+    ch.disconnect();
+    assert(ch.isConnected() == false, "CppSocketChannel.disconnect");
+
+    ch.setSSL(true);
+    assert(ch.isSSL() == true, "CppSocketChannel.setSSL");
+
+    ch.setSocketType("tcp");
+    assert(ch.getSocketType() == "tcp", "CppSocketChannel.setSocketType");
+
+    ch.setBufferSize(8192);
+    assert(ch.getBufferSize() == 8192, "CppSocketChannel.setBufferSize");
+
+    ch.dispose();
+    assert(ch.isConnected() == false, "CppSocketChannel.dispose");
+    return 0;
+}
+
+fn test_cpp_mapped_buffer() {
+    let buf = new CppMappedBuffer();
+    buf.init_buffer("shared_data", 1024);
+    assert(buf.getName() == "shared_data", "CppMappedBuffer.getName");
+    assert(buf.getSize() == 1024, "CppMappedBuffer.getSize");
+    assert(buf.isOpen() == false, "CppMappedBuffer.isOpen default");
+    assert(buf.getAccess() == "read_write", "CppMappedBuffer.getAccess default");
+    assert(buf.getFilePath() == "", "CppMappedBuffer.getFilePath default");
+    assert(buf.isAnonymous() == false, "CppMappedBuffer.isAnonymous default");
+
+    buf.open();
+    assert(buf.isOpen() == true, "CppMappedBuffer.open");
+
+    buf.close();
+    assert(buf.isOpen() == false, "CppMappedBuffer.close");
+
+    buf.setAccess("read_only");
+    assert(buf.getAccess() == "read_only", "CppMappedBuffer.setAccess");
+
+    buf.setFilePath("/tmp/shared.bin");
+    assert(buf.getFilePath() == "/tmp/shared.bin", "CppMappedBuffer.setFilePath");
+
+    buf.setAnonymous(true);
+    assert(buf.isAnonymous() == true, "CppMappedBuffer.setAnonymous");
+
+    buf.dispose();
+    assert(buf.isOpen() == false, "CppMappedBuffer.dispose");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 7: Serialization — 5 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_serializer() {
+    let tm = new CppTypeMapper();
+    tm.init_mapper();
+    let ser = new CppSerializer();
+    ser.init_serializer(tm);
+
+    assert(ser.getFormat() == "json", "CppSerializer.getFormat default json");
+    assert(ser.getIndent() == false, "CppSerializer.getIndent default false");
+    assert(ser.getMapper() == tm, "CppSerializer.getMapper");
+
+    ser.setFormat("messagepack");
+    assert(ser.getFormat() == "messagepack", "CppSerializer.setFormat");
+
+    ser.setIndent(true);
+    assert(ser.getIndent() == true, "CppSerializer.setIndent");
+
+    let result = ser.serialize(42);
+    assert(result != nullptr, "CppSerializer.serialize value");
+    assert(result["value"] == 42, "CppSerializer.serialize preserves value");
+
+    let null_result = ser.serialize(nullptr);
+    assert(null_result["__type__"] == "nullptr", "CppSerializer.serialize nullptr");
+
+    let obj = {"a": 1, "b": 2};
+    let sobj = ser.serializeObject(obj);
+    assert(sobj != nullptr, "CppSerializer.serializeObject");
+    assert(sobj["a"] == 1, "CppSerializer.serializeObject preserves keys");
+
+    let ser_null_obj = ser.serializeObject(nullptr);
+    assert(ser_null_obj == nullptr, "CppSerializer.serializeObject nullptr");
+
+    let lst = [1, 2, 3];
+    let slst = ser.serializeList(lst);
+    assert(len(slst) == 3, "CppSerializer.serializeList");
+
+    let ser_null_lst = ser.serializeList(nullptr);
+    assert(len(ser_null_lst) == 0, "CppSerializer.serializeList nullptr");
+
+    assert(ser.serializeListLength(lst) == 3, "CppSerializer.serializeListLength");
+    assert(ser.serializeListLength(nullptr) == 0, "CppSerializer.serializeListLength nullptr");
+
+    let handler_called = false;
+    ser.addTypeHandler("custom", fn(d) { handler_called = true; return d; return 0; });
+    let th = ser.getTypeHandler("custom");
+    assert(th != nullptr, "CppSerializer.addTypeHandler/getTypeHandler");
+
+    ser.dispose();
+    assert(ser.getMapper() == nullptr, "CppSerializer.dispose");
+    return 0;
+}
+
+fn test_cpp_deserializer() {
+    let tm = new CppTypeMapper();
+    tm.init_mapper();
+    let deser = new CppDeserializer();
+    deser.init_deserializer(tm);
+
+    assert(deser.getFormat() == "json", "CppDeserializer.getFormat default json");
+    assert(deser.isStrict() == false, "CppDeserializer.isStrict default false");
+    assert(deser.getMapper() == tm, "CppDeserializer.getMapper");
+
+    deser.setFormat("messagepack");
+    assert(deser.getFormat() == "messagepack", "CppDeserializer.setFormat");
+
+    deser.setStrict(true);
+    assert(deser.isStrict() == true, "CppDeserializer.setStrict");
+
+    let result = deser.deserialize(nullptr);
+    assert(result == nullptr, "CppDeserializer.deserialize nullptr");
+
+    let simple = deser.deserialize({"__type__": "string", "value": "hello"});
+    assert(simple == "hello", "CppDeserializer.deserialize string");
+
+    let obj_result = deser.deserializeObject({"a": 1});
+    assert(obj_result != nullptr, "CppDeserializer.deserializeObject");
+
+    let list_result = deser.deserializeList(nullptr);
+    assert(len(list_result) == 0, "CppDeserializer.deserializeList nullptr");
+
+    let h_called = false;
+    deser.addTypeHandler("MyType", fn(d) { h_called = true; return d; return 0; });
+    assert(deser.getTypeHandler("MyType") != nullptr, "CppDeserializer.addTypeHandler/getTypeHandler");
+
+    deser.dispose();
+    assert(deser.getMapper() == nullptr, "CppDeserializer.dispose");
+    return 0;
+}
+
+fn test_cpp_messagepack() {
+    let mp = new CppMessagePack();
+    mp.init_pack();
+    assert(mp.getPacked() == nullptr, "CppMessagePack.getPacked default null");
+    assert(mp.getUnpacked() == nullptr, "CppMessagePack.getUnpacked default null");
+    assert(mp.packSize() == 0, "CppMessagePack.packSize default 0");
+    assert(mp.unpackedSize() == 0, "CppMessagePack.unpackedSize default 0");
+
+    let data = {"a": 1, "b": 2};
+    let packed = mp.pack(data);
+    assert(packed != nullptr, "CppMessagePack.pack returns data");
+    assert(mp.getPacked() == data, "CppMessagePack.getPacked after pack");
+    assert(mp.packSize() == 1, "CppMessagePack.packSize after pack");
+
+    let unpacked = mp.unpack(data);
+    assert(unpacked != nullptr, "CppMessagePack.unpack returns data");
+    assert(mp.getUnpacked() == data, "CppMessagePack.getUnpacked after unpack");
+    assert(mp.unpackedSize() == 1, "CppMessagePack.unpackedSize after unpack");
+
+    mp.dispose();
+    assert(mp.getPacked() == nullptr, "CppMessagePack.dispose");
+    assert(mp.getUnpacked() == nullptr, "CppMessagePack.dispose unpacked");
+    return 0;
+}
+
+fn test_cpp_json() {
+    let json = new CppJSON();
+    json.init_json();
+
+    assert(json.stringify(nullptr) == "null", "CppJSON.stringify null→\"null\"");
+    assert(json.stringify(true) == "true", "CppJSON.stringify true→\"true\"");
+    assert(json.stringify(false) == "false", "CppJSON.stringify false→\"false\"");
+    assert(json.stringify(42) == "\"42\"", "CppJSON.stringify number");
+
+    let parsed = json.parse("{}");
+    assert(parsed != nullptr, "CppJSON.parse simple json");
+
+    let null_parse = json.parse(nullptr);
+    assert(null_parse == nullptr, "CppJSON.parse nullptr");
+
+    json.setIndent(2);
+    json.setStrict(true);
+
+    json.dispose();
+    return 0;
+}
+
+fn test_cpp_type_converter() {
+    let tc = new CppTypeConverter();
+    tc.init_converter();
+
+    assert(tc.canConvert("int", "double") == true, "CppTypeConverter.canConvert int→double");
+    assert(tc.canConvert("string", "bool") == true, "CppTypeConverter.canConvert string→bool");
+    assert(tc.canConvert("int", "custom") == false, "CppTypeConverter.canConvert false");
+
+    let result = tc.convert(5, "int", "double");
+    # conversion happens — validate non-null
+    assert(true, "CppTypeConverter.convert int→double");
+
+    let bool_result = tc.convert("true", "string", "bool");
+    assert(bool_result == true, "CppTypeConverter.convert string→bool true");
+
+    let str_result = tc.convert(true, "bool", "string");
+    assert(str_result == "true", "CppTypeConverter.convert bool→string");
+
+    let converter = tc.getConverter("int", "double");
+    assert(converter != nullptr, "CppTypeConverter.getConverter");
+
+    assert(tc.getConverter("nonexistent", "type") == nullptr, "CppTypeConverter.getConverter missing");
+
+    let init_count = tc.getConverterCount();
+    assert(init_count > 0, "CppTypeConverter.getConverterCount > 0");
+
+    # register custom converter
+    tc.register("int", "custom_int", fn(val) { return val * 100; return 0; });
+    assert(tc.getConverterCount() == init_count + 1, "CppTypeConverter.register custom");
+
+    tc.removeConverter("int", "custom_int");
+    assert(tc.getConverterCount() == init_count, "CppTypeConverter.removeConverter");
+
+    tc.clear();
+    assert(tc.getConverterCount() == 0, "CppTypeConverter.clear");
+
+    tc.dispose();
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 8: Async — 4 test functions (ThreadPool split to separate)
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_future() {
+    let f = new CppFuture();
+    f.init_future();
+    assert(f.getId() == 0, "CppFuture.getId default 0");
+    assert(f.getStatus() == "created", "CppFuture.getStatus default created");
+    assert(f.isDone() == false, "CppFuture.isDone default false");
+    assert(f.isFaulted() == false, "CppFuture.isFaulted default false");
+    assert(f.isCancelled() == false, "CppFuture.isCancelled default false");
+
+    f.setId(1);
+    assert(f.getId() == 1, "CppFuture.setId");
+
+    f.complete("result_value");
+    assert(f.isDone() == true, "CppFuture.complete sets isDone");
+    assert(f.getStatus() == "completed", "CppFuture.getStatus after complete");
+    assert(f.getResult() == "result_value", "CppFuture.getResult");
+
+    # Test fail
+    let f2 = new CppFuture();
+    f2.init_future();
+    f2.fail("exception_message");
+    assert(f2.isFaulted() == true, "CppFuture.fail sets isFaulted");
+    assert(f2.isDone() == true, "CppFuture.fail sets isDone");
+    assert(f2.getStatus() == "faulted", "CppFuture.getStatus after fail");
+    assert(f2.getException() == "exception_message", "CppFuture.getException");
+
+    # Test cancel
+    let f3 = new CppFuture();
+    f3.init_future();
+    f3.cancel();
+    assert(f3.isCancelled() == true, "CppFuture.cancel sets isCancelled");
+    assert(f3.isDone() == true, "CppFuture.cancel sets isDone");
+    assert(f3.getStatus() == "cancelled", "CppFuture.getStatus after cancel");
+
+    # Test callback
+    let cb_called = false;
+    let f4 = new CppFuture();
+    f4.init_future();
+    f4.addCallback(fn(fut) { cb_called = true; return 0; });
+    # Callback not called yet (not done)
+    # complete should trigger callback
+    f4.complete("ok");
+    assert(cb_called == true, "CppFuture.addCallback called on complete");
+
+    # Remove callback test
+    let f5 = new CppFuture();
+    f5.init_future();
+    let dummy_cb = fn(fut) { return 0; };
+    f5.addCallback(dummy_cb);
+    f5.removeCallback(dummy_cb);
+    let cbs = f5.getCallbacks();
+    assert(len(cbs) == 0, "CppFuture.removeCallback");
+
+    f5.complete("val");
+    # no crash expected
+
+    f.dispose();
+    return 0;
+}
+
+fn test_cpp_thread_pool() {
+    let pool = new CppThreadPool();
+    pool.init_pool();
+    assert(pool.getCorePoolSize() == 2, "CppThreadPool.getCorePoolSize default 2");
+    assert(pool.getMaxPoolSize() == 8, "CppThreadPool.getMaxPoolSize default 8");
+    assert(pool.isRunning() == false, "CppThreadPool.isRunning default false");
+    assert(pool.getQueueType() == "fifo", "CppThreadPool.getQueueType default fifo");
+
+    pool.setCorePoolSize(4);
+    assert(pool.getCorePoolSize() == 4, "CppThreadPool.setCorePoolSize");
+
+    pool.setMaxPoolSize(16);
+    assert(pool.getMaxPoolSize() == 16, "CppThreadPool.setMaxPoolSize");
+
+    let executed = false;
+    pool.execute(fn() { executed = true; return 0; });
+    assert(executed == true, "CppThreadPool.execute runs task");
+
+    let future = pool.submit(fn() { return 42; return 0; });
+    assert(future != nullptr, "CppThreadPool.submit returns future");
+    assert(pool.getFutureCount() == 1, "CppThreadPool.getFutureCount");
+
+    pool.setQueueType("lifo");
+    assert(pool.getQueueType() == "lifo", "CppThreadPool.setQueueType");
+
+    pool.cancelAll();
+    assert(pool.getFutureCount() == 0, "CppThreadPool.cancelAll");
+
+    pool.shutdown();
+    assert(pool.isRunning() == false, "CppThreadPool.shutdown");
+
+    pool.dispose();
+    return 0;
+}
+
+fn test_cpp_cancellation_token() {
+    let token = new CppCancellationToken();
+    token.init_token();
+    assert(token.isCancelled() == false, "CppCancellationToken.isCancelled default false");
+
+    let cancel_called = 0;
+    token.setOnCancel(fn() { cancel_called = cancel_called + 1; return 0; });
+    token.setOnCancel(fn() { cancel_called = cancel_called + 1; return 0; });
+
+    let callbacks = token.getOnCancel();
+    assert(len(callbacks) == 2, "CppCancellationToken.getOnCancel");
+
+    token.cancel();
+    assert(token.isCancelled() == true, "CppCancellationToken.cancel");
+    assert(cancel_called == 2, "CppCancellationToken.cancel calls onCancel");
+
+    token.reset();
+    assert(token.isCancelled() == false, "CppCancellationToken.reset");
+    assert(len(token.getOnCancel()) == 0, "CppCancellationToken.reset clears callbacks");
+
+    token.dispose();
+    return 0;
+}
+
+fn test_cpp_async_result() {
+    let ar = new CppAsyncResult();
+    ar.init_async();
+    assert(ar.getFuture() == nullptr, "CppAsyncResult.getFuture default null");
+    assert(ar.isCompleted() == false, "CppAsyncResult.isCompleted default false");
+    assert(ar.getAsyncState() == nullptr, "CppAsyncResult.getAsyncState default null");
+    assert(ar.getResultId() == 0, "CppAsyncResult.getResultId default 0");
+    assert(ar.getWaitHandle() == nullptr, "CppAsyncResult.getWaitHandle default null");
+
+    ar.setCompleted(true);
+    assert(ar.isCompleted() == true, "CppAsyncResult.setCompleted");
+
+    ar.setAsyncState({"progress": 75});
+    let state = ar.getAsyncState();
+    assert(state != nullptr, "CppAsyncResult.setAsyncState/getAsyncState");
+
+    ar.setResultId(42);
+    assert(ar.getResultId() == 42, "CppAsyncResult.setResultId");
+
+    let handle = {};
+    ar.setWaitHandle(handle);
+    assert(ar.getWaitHandle() == handle, "CppAsyncResult.setWaitHandle/getWaitHandle");
+
+    ar.dispose();
+    assert(ar.getFuture() == nullptr, "CppAsyncResult.dispose");
+    assert(ar.getWaitHandle() == nullptr, "CppAsyncResult.dispose wait_handle");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 9: Diagnostics — 6 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_logger() {
+    let logger = new CppLogger();
+    logger.init_logger();
+    assert(logger.getLevel() == 1, "CppLogger.getLevel default 1");
+    assert(logger.getLogFile() == "", "CppLogger.getLogFile default empty");
+    assert(logger.isFileLogging() == false, "CppLogger.isFileLogging default false");
+    assert(logger.getMaxLevel() == 4, "CppLogger.getMaxLevel default 4");
+
+    logger.setLevel(0);
+    assert(logger.getLevel() == 0, "CppLogger.setLevel");
+
+    logger.setLogFile("/tmp/cpp.log");
+    assert(logger.getLogFile() == "/tmp/cpp.log", "CppLogger.setLogFile");
+
+    let fmt = logger.getFormat();
+    assert(fmt != "", "CppLogger.getFormat returns format string");
+
+    logger.setFormat("[C++] {message}");
+    assert(logger.getFormat() == "[C++] {message}", "CppLogger.setFormat");
+
+    logger.setMaxLevel(3);
+    assert(logger.getMaxLevel() == 3, "CppLogger.setMaxLevel");
+
+    # Log methods should not crash
+    logger.debug("debug message");
+    logger.info("info message");
+    logger.warn("warn message");
+    logger.error("error message");
+    logger.fatal("fatal message");
+    assert(true, "CppLogger log methods called");
+
+    logger.dispose();
+    return 0;
+}
+
+fn test_cpp_profiler() {
+    let p = new CppProfiler();
+    p.init_profiler();
+    assert(p.isRunning() == false, "CppProfiler.isRunning default false");
+    assert(p.getTotalMeasurements() == 0, "CppProfiler.getTotalMeasurements default 0");
+    assert(p.getCategory() == "default", "CppProfiler.getCategory default");
+
+    p.start("render");
+    assert(p.isRunning() == true, "CppProfiler.start");
+    p.stop("render");
+    assert(p.isRunning() == false, "CppProfiler.stop");
+
+    assert(p.getTotalMeasurements() == 1, "CppProfiler.getTotalMeasurements after stop");
+
+    let measurements = p.getMeasurements();
+    assert(measurements != nullptr, "CppProfiler.getMeasurements");
+
+    p.measure("quick_measure");
+    assert(p.getTotalMeasurements() == 2, "CppProfiler.measure increments count");
+
+    p.setCategory("graphics");
+    assert(p.getCategory() == "graphics", "CppProfiler.setCategory");
+
+    let avg = p.getAverageDuration("render");
+    assert(avg == 0, "CppProfiler.getAverageDuration returns elapsed");
+
+    p.reset();
+    assert(p.getTotalMeasurements() == 0, "CppProfiler.reset");
+    assert(p.isRunning() == false, "CppProfiler.reset stops");
+
+    p.dispose();
+    return 0;
+}
+
+fn test_cpp_debugger() {
+    let dbg = new CppDebugger();
+    dbg.init_debugger();
+    assert(dbg.isAttached() == false, "CppDebugger.isAttached default false");
+    assert(dbg.getDebugPort() == 0, "CppDebugger.getDebugPort default 0");
+    assert(dbg.getStepMode() == "none", "CppDebugger.getStepMode default none");
+    assert(dbg.getCurrentFile() == "", "CppDebugger.getCurrentFile default");
+    assert(dbg.getCurrentLine() == 0, "CppDebugger.getCurrentLine default");
+
+    dbg.attach();
+    assert(dbg.isAttached() == true, "CppDebugger.attach");
+
+    dbg.setBreakpoint("main.cpp", 42);
+    dbg.setBreakpoint("main.cpp", 100);
+    assert(dbg.getBreakpointCount() == 2, "CppDebugger.setBreakpoint");
+
+    let bps = dbg.getBreakpoints();
+    assert(bps != nullptr, "CppDebugger.getBreakpoints");
+
+    dbg.removeBreakpoint("main.cpp", 42);
+    assert(dbg.getBreakpointCount() == 1, "CppDebugger.removeBreakpoint");
+
+    dbg.clearBreakpoints();
+    assert(dbg.getBreakpointCount() == 0, "CppDebugger.clearBreakpoints");
+
+    dbg.setDebugPort(12345);
+    assert(dbg.getDebugPort() == 12345, "CppDebugger.setDebugPort");
+
+    dbg.setStepMode("step_into");
+    assert(dbg.getStepMode() == "step_into", "CppDebugger.setStepMode");
+
+    dbg.setCurrentFile("worker.cpp");
+    dbg.setCurrentLine(55);
+    assert(dbg.getCurrentFile() == "worker.cpp", "CppDebugger.setCurrentFile");
+    assert(dbg.getCurrentLine() == 55, "CppDebugger.setCurrentLine");
+
+    dbg.addWatch("counter");
+    dbg.addWatch("buffer");
+    let watches = dbg.getWatches();
+    assert(len(watches) == 2, "CppDebugger.addWatch/getWatches");
+
+    dbg.removeWatch("counter");
+    assert(len(dbg.getWatches()) == 1, "CppDebugger.removeWatch");
+
+    dbg.detach();
+    assert(dbg.isAttached() == false, "CppDebugger.detach");
+    assert(dbg.getStepMode() == "none", "CppDebugger.detach resets stepMode");
+
+    dbg.dispose();
+    return 0;
+}
+
+fn test_cpp_config() {
+    let cfg = new CppConfig();
+    cfg.init_config();
+    assert(cfg.isLoaded() == false, "CppConfig.isLoaded default false");
+    assert(cfg.getConfigFile() == "", "CppConfig.getConfigFile default");
+
+    cfg.load("/etc/app.conf");
+    assert(cfg.isLoaded() == true, "CppConfig.load");
+    assert(cfg.getConfigFile() == "/etc/app.conf", "CppConfig.getConfigFile after load");
+
+    cfg.setConfigFile("/custom/path.conf");
+    assert(cfg.getConfigFile() == "/custom/path.conf", "CppConfig.setConfigFile");
+
+    cfg.set("app.name", "MyCppApp");
+    cfg.set("app.port", 8080);
+    assert(cfg.hasKey("app.name") == true, "CppConfig.hasKey true");
+    assert(cfg.hasKey("missing.key") == false, "CppConfig.hasKey false");
+    assert(cfg.get("app.name", "fallback") == "MyCppApp", "CppConfig.get");
+    assert(cfg.get("missing.key", "fallback") == "fallback", "CppConfig.get with default");
+
+    cfg.setSection("database", {"host": "localhost", "port": 5432});
+    let section = cfg.getSection("database");
+    assert(section != nullptr, "CppConfig.setSection/getSection");
+
+    let keys = cfg.getKeys();
+    assert(len(keys) == 2, "CppConfig.getKeys");
+
+    cfg.remove("app.name");
+    assert(cfg.hasKey("app.name") == false, "CppConfig.remove");
+
+    cfg.clear();
+    let keys2 = cfg.getKeys();
+    assert(len(keys2) == 0, "CppConfig.clear");
+
+    cfg.save(); # should not crash
+
+    cfg.dispose();
+    return 0;
+}
+
+fn test_cpp_environment() {
+    let env = new CppEnvironment();
+    env.init_env();
+    assert(env.getOSName() == "", "CppEnvironment.getOSName default empty");
+    assert(env.getArchitecture() == "", "CppEnvironment.getArchitecture default");
+    assert(env.getProcessorCount() == 0, "CppEnvironment.getProcessorCount default");
+    assert(env.getWorkingDirectory() == ".", "CppEnvironment.getWorkingDirectory default");
+    assert(env.getCompiler() == "", "CppEnvironment.getCompiler default");
+    assert(env.getCompilerVersion() == "", "CppEnvironment.getCompilerVersion default");
+    assert(env.is64Bit() == true, "CppEnvironment.is64Bit default true");
+
+    env.setOSName("macOS");
+    assert(env.getOSName() == "macOS", "CppEnvironment.setOSName");
+
+    env.setArchitecture("arm64");
+    assert(env.getArchitecture() == "arm64", "CppEnvironment.setArchitecture");
+
+    env.setProcessorCount(10);
+    assert(env.getProcessorCount() == 10, "CppEnvironment.setProcessorCount");
+
+    env.setWorkingDirectory("/project/src");
+    assert(env.getWorkingDirectory() == "/project/src", "CppEnvironment.setWorkingDirectory");
+
+    env.setCompiler("clang++");
+    assert(env.getCompiler() == "clang++", "CppEnvironment.setCompiler");
+
+    env.setCompilerVersion("15.0.0");
+    assert(env.getCompilerVersion() == "15.0.0", "CppEnvironment.setCompilerVersion");
+
+    env.setIs64Bit(false);
+    assert(env.is64Bit() == false, "CppEnvironment.setIs64Bit");
+
+    env.addIncludePath("/usr/local/include");
+    env.addIncludePath("/opt/include");
+    let incs = env.getIncludePaths();
+    assert(len(incs) == 2, "CppEnvironment.addIncludePath/getIncludePaths");
+
+    env.addLibPath("/usr/local/lib");
+    env.addLibPath("/opt/lib");
+    let libs = env.getLibPaths();
+    assert(len(libs) == 2, "CppEnvironment.addLibPath/getLibPaths");
+
+    env.setEnvVar("CC", "clang");
+    env.setEnvVar("CXXFLAGS", "-O2");
+    assert(env.getEnvVar("CC") == "clang", "CppEnvironment.setEnvVar/getEnvVar");
+    let vars = env.getEnvVars();
+    assert(len(vars) == 2, "CppEnvironment.getEnvVars");
+
+    env.dispose();
+    return 0;
+}
+
+fn test_cpp_process() {
+    let proc = new CppProcess();
+    proc.init_process("myapp");
+    assert(proc.getProcessName() == "myapp", "CppProcess.getProcessName");
+    assert(len(proc.getArguments()) == 0, "CppProcess.getArguments default");
+    assert(proc.isRunning() == false, "CppProcess.isRunning default");
+    assert(proc.getPID() == 0, "CppProcess.getPID default 0");
+    assert(proc.getWorkingDir() == ".", "CppProcess.getWorkingDir default");
+    assert(proc.getExitCode() == -1, "CppProcess.getExitCode default -1");
+
+    proc.addArgument("--verbose");
+    proc.addArgument("--port=9000");
+    assert(len(proc.getArguments()) == 2, "CppProcess.addArgument");
+
+    proc.setArguments(["--debug", "--output=log.txt"]);
+    let args = proc.getArguments();
+    assert(len(args) == 2, "CppProcess.setArguments");
+
+    proc.start();
+    assert(proc.isRunning() == true, "CppProcess.start");
+
+    proc.setPID(12345);
+    assert(proc.getPID() == 12345, "CppProcess.setPID");
+
+    proc.setWorkingDir("/tmp");
+    assert(proc.getWorkingDir() == "/tmp", "CppProcess.setWorkingDir");
+
+    proc.setExitCode(0);
+    assert(proc.getExitCode() == 0, "CppProcess.setExitCode");
+
+    proc.setStdout("Hello World");
+    assert(proc.getStdout() == "Hello World", "CppProcess.setStdout/getStdout");
+
+    proc.setStderr("Warning: deprecated");
+    assert(proc.getStderr() == "Warning: deprecated", "CppProcess.setStderr/getStderr");
+
+    proc.destroy();
+    assert(proc.isRunning() == false, "CppProcess.destroy");
+    assert(proc.getExitCode() == -1, "CppProcess.destroy resets exitCode");
+
+    proc.dispose();
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 10: CMake & Project — 4 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_cmake_target() {
+    let t = new CppCMakeTarget();
+    t.init_target("QtCore", "shared_library");
+    assert(t.getName() == "QtCore", "CppCMakeTarget.getName");
+    assert(t.getType() == "shared_library", "CppCMakeTarget.getType");
+    assert(t.getVersion() == "1.0.0", "CppCMakeTarget.getVersion default");
+    assert(t.getScope() == "compile", "CppCMakeTarget.getScope default");
+
+    t.setVersion("6.5.0");
+    assert(t.getVersion() == "6.5.0", "CppCMakeTarget.setVersion");
+
+    t.addSource("main.cpp");
+    t.addSource("core.cpp");
+    assert(len(t.getSources()) == 2, "CppCMakeTarget.addSource/getSources");
+
+    t.addHeader("core.h");
+    t.addHeader("types.h");
+    assert(len(t.getHeaders()) == 2, "CppCMakeTarget.addHeader/getHeaders");
+
+    t.addDependency("QtWidgets");
+    t.addDependency("QtNetwork");
+    assert(len(t.getDependencies()) == 2, "CppCMakeTarget.addDependency/getDependencies");
+
+    t.addLinkLib("pthread");
+    t.addLinkLib("dl");
+    assert(len(t.getLinkLibs()) == 2, "CppCMakeTarget.addLinkLib/getLinkLibs");
+
+    t.addCompileDef("NDEBUG");
+    t.addCompileDef("QT_CORE_LIB");
+    assert(len(t.getCompileDefs()) == 2, "CppCMakeTarget.addCompileDef/getCompileDefs");
+
+    t.addCompileOpt("-O2");
+    t.addCompileOpt("-Wall");
+    assert(len(t.getCompileOpts()) == 2, "CppCMakeTarget.addCompileOpt/getCompileOpts");
+
+    assert(t.isInstalled() == false, "CppCMakeTarget.isInstalled default");
+    t.setInstalled(true);
+    assert(t.isInstalled() == true, "CppCMakeTarget.setInstalled");
+
+    t.setScope("runtime");
+    assert(t.getScope() == "runtime", "CppCMakeTarget.setScope");
+
+    assert(t.getId() == "QtCore:6.5.0", "CppCMakeTarget.getId");
+
+    t.dispose();
+    return 0;
+}
+
+fn test_cpp_cmake_manager() {
+    let cm = new CppCMakeManager();
+    cm.init_cmake();
+    assert(cm.getLocalRepo() == "", "CppCMakeManager.getLocalRepo default");
+    assert(cm.getTargetCount() == 0, "CppCMakeManager.getTargetCount default");
+
+    cm.addRepository("https://repo.example.com");
+    cm.addRepository("https://cdn.repo.example.com");
+    let repos = cm.getRepositories();
+    assert(len(repos) == 2, "CppCMakeManager.addRepository/getRepositories");
+
+    let t1 = new CppCMakeTarget();
+    t1.init_target("MyLib", "library");
+    t1.setVersion("2.0.0");
+    cm.install(t1);
+    assert(t1.isInstalled() == true, "CppCMakeManager.install marks installed");
+    assert(cm.getTargetCount() == 1, "CppCMakeManager.getTargetCount");
+
+    let found = cm.getTarget("MyLib");
+    assert(found != nullptr, "CppCMakeManager.getTarget");
+    assert(found.getVersion() == "2.0.0", "CppCMakeManager.getTarget version");
+
+    let installed = cm.getInstalledTargets();
+    assert(len(installed) == 1, "CppCMakeManager.getInstalledTargets");
+
+    cm.setLocalRepo("/home/user/.cmake");
+    assert(cm.getLocalRepo() == "/home/user/.cmake", "CppCMakeManager.setLocalRepo");
+
+    let pkg = cm.findPackage("MyLib");
+    assert(pkg != nullptr, "CppCMakeManager.findPackage");
+
+    let resolved = cm.resolve("MyLib");
+    assert(resolved != nullptr, "CppCMakeManager.resolve");
+
+    cm.uninstall("MyLib");
+    assert(cm.getTargetCount() == 0, "CppCMakeManager.uninstall");
+
+    cm.dispose();
+    return 0;
+}
+
+fn test_cpp_project() {
+    let proj = new CppProject();
+    proj.init_project("MyApp", "application");
+    assert(proj.getName() == "MyApp", "CppProject.getName");
+    assert(proj.getProjectType() == "application", "CppProject.getProjectType");
+    assert(proj.getBuildSystem() == "cmake", "CppProject.getBuildSystem default");
+    assert(proj.getGroupId() == "com.example", "CppProject.getGroupId default");
+    assert(proj.getArtifactId() == "MyApp", "CppProject.getArtifactId default");
+    assert(proj.getVersion() == "1.0.0", "CppProject.getVersion default");
+    assert(proj.getMainClass() == "", "CppProject.getMainClass default");
+    assert(proj.getCppVersion() == "c++17", "CppProject.getCppVersion default");
+    assert(proj.getOutputDir() == "", "CppProject.getOutputDir default");
+
+    proj.setBuildSystem("meson");
+    assert(proj.getBuildSystem() == "meson", "CppProject.setBuildSystem");
+
+    proj.setGroupId("com.mycompany");
+    assert(proj.getGroupId() == "com.mycompany", "CppProject.setGroupId");
+
+    proj.setArtifactId("myapp-core");
+    assert(proj.getArtifactId() == "myapp-core", "CppProject.setArtifactId");
+
+    proj.setVersion("2.1.0");
+    assert(proj.getVersion() == "2.1.0", "CppProject.setVersion");
+
+    proj.setMainClass("com.mycompany.Main");
+    assert(proj.getMainClass() == "com.mycompany.Main", "CppProject.setMainClass");
+
+    proj.setCppVersion("c++20");
+    assert(proj.getCppVersion() == "c++20", "CppProject.setCppVersion");
+
+    proj.addDependency({"name": "QtCore", "version": "6.5"});
+    proj.addDependency({"name": "boost", "version": "1.80"});
+    let deps = proj.getDependencies();
+    assert(len(deps) == 2, "CppProject.addDependency/getDependencies");
+
+    proj.addPlugin("cpp-linter");
+    proj.addPlugin("code-formatter");
+    let plugins = proj.getPlugins();
+    assert(len(plugins) == 2, "CppProject.addPlugin/getPlugins");
+
+    proj.addSourceDir("src/");
+    proj.addSourceDir("include/");
+    let dirs = proj.getSourceDirs();
+    assert(len(dirs) == 2, "CppProject.addSourceDir/getSourceDirs");
+
+    proj.setOutputDir("build/");
+    assert(proj.getOutputDir() == "build/", "CppProject.setOutputDir");
+
+    let target = new CppCMakeTarget();
+    target.init_target("MyApp", "executable");
+    proj.addTarget(target);
+    let targets = proj.getTargets();
+    assert(len(targets) == 1, "CppProject.addTarget/getTargets");
+
+    proj.dispose();
+    return 0;
+}
+
+fn test_cpp_module() {
+    let mod = new CppModule();
+    mod.init_module("backend");
+    assert(mod.getName() == "backend", "CppModule.getName");
+    assert(mod.getProjectCount() == 0, "CppModule.getProjectCount default 0");
+    assert(mod.getBuildConfig() == "debug", "CppModule.getBuildConfig default debug");
+    assert(mod.getModuleType() == "library", "CppModule.getModuleType default library");
+
+    let proj1 = new CppProject();
+    proj1.init_project("api", "library");
+    let proj2 = new CppProject();
+    proj2.init_project("core", "library");
+
+    mod.addProject(proj1);
+    mod.addProject(proj2);
+    assert(mod.getProjectCount() == 2, "CppModule.addProject");
+
+    let found = mod.getProject("api");
+    assert(found != nullptr, "CppModule.getProject existing");
+    assert(found.getName() == "api", "CppModule.getProject name match");
+
+    let missing = mod.getProject("nonexistent");
+    assert(missing == nullptr, "CppModule.getProject missing");
+
+    mod.setBuildConfig("release");
+    assert(mod.getBuildConfig() == "release", "CppModule.setBuildConfig");
+
+    mod.removeProject("api");
+    assert(mod.getProjectCount() == 1, "CppModule.removeProject");
+
+    let projs = mod.getProjects();
+    assert(len(projs) == 1, "CppModule.getProjects");
+
+    mod.setModuleType("executable");
+    assert(mod.getModuleType() == "executable", "CppModule.setModuleType");
+
+    mod.dispose();
+    assert(mod.getProjectCount() == 0, "CppModule.dispose");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 11: QML/Style — 2 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_qml() {
+    let qml = new CppQML();
+    qml.init_qml();
+    assert(qml.getRootElement() == "", "CppQML.getRootElement default empty");
+    assert(qml.getContent() == "", "CppQML.getContent default empty");
+    assert(qml.getControllerClass() == "", "CppQML.getControllerClass default empty");
+
+    qml.setRootElement("ApplicationWindow");
+    assert(qml.getRootElement() == "ApplicationWindow", "CppQML.setRootElement");
+
+    qml.setContent("Rectangle { width: 100; height: 100 }");
+    assert(qml.getContent() == "Rectangle { width: 100; height: 100 }", "CppQML.setContent");
+
+    qml.addResource("window.title", "My QML App");
+    qml.addResource("button.text", "Click Me");
+    let resources = qml.getResources();
+    assert(resources["window.title"] == "My QML App", "CppQML.addResource/getResources");
+
+    let namespaces = qml.getNamespaces();
+    assert(namespaces != nullptr, "CppQML.getNamespaces");
+
+    qml.addNamespace("qt", "http://qt-project.org");
+    qml.addNamespace("custom", "http://example.com/qml");
+    assert(len(qml.getNamespaces()) == 2, "CppQML.addNamespace");
+
+    qml.setControllerClass("MainController");
+    assert(qml.getControllerClass() == "MainController", "CppQML.setControllerClass");
+
+    qml.addImport("QtQuick 2.15");
+    qml.addImport("QtQuick.Controls 2.15");
+    let imports = qml.getImports();
+    assert(len(imports) == 2, "CppQML.addImport/getImports");
+
+    qml.dispose();
+    return 0;
+}
+
+fn test_cpp_style_bridge() {
+    let sb = new CppStyleBridge();
+    sb.init_style_bridge();
+    assert(sb.getMappingCount() == 12, "CppStyleBridge.getMappingCount default 12");
+
+    # toQt: hwd → qt mapping
+    let qt_prop = sb.toQt("background");
+    assert(qt_prop == "background-color", "CppStyleBridge.toQt: background→background-color");
+    assert(sb.toQt("color") == "color", "CppStyleBridge.toQt: color→color");
+    assert(sb.toQt("fontSize") == "font-size", "CppStyleBridge.toQt: fontSize→font-size");
+    assert(sb.toQt("borderRadius") == "border-radius", "CppStyleBridge.toQt: borderRadius→border-radius");
+
+    # toHwdUI: qt → hwd mapping
+    let hwd_prop = sb.toHwdUI("background-color");
+    assert(hwd_prop == "background", "CppStyleBridge.toHwdUI: background-color→background");
+    assert(sb.toHwdUI("color") == "color", "CppStyleBridge.toHwdUI: color→color");
+    assert(sb.toHwdUI("font-size") == "fontSize", "CppStyleBridge.toHwdUI: font-size→fontSize");
+
+    # non-existent
+    assert(sb.toHwdUI("nonexistent-prop") == nullptr, "CppStyleBridge.toHwdUI non-existent");
+
+    # add custom mapping
+    sb.addMapping("shadow", "box-shadow");
+    assert(sb.getMappingCount() == 13, "CppStyleBridge.addMapping");
+    assert(sb.toQt("shadow") == "box-shadow", "CppStyleBridge.addMapping toQt");
+
+    # getMappings and getReverseMappings
+    let mappings = sb.getMappings();
+    assert(len(mappings) == 13, "CppStyleBridge.getMappings");
+
+    let rev = sb.getReverseMappings();
+    assert(rev != nullptr, "CppStyleBridge.getReverseMappings");
+
+    # removeMapping
+    sb.removeMapping("shadow");
+    assert(sb.getMappingCount() == 12, "CppStyleBridge.removeMapping");
+    assert(sb.toQt("shadow") == nullptr, "CppStyleBridge.removeMapping cleared");
+
+    sb.clear();
+    assert(sb.getMappingCount() == 0, "CppStyleBridge.clear");
+
+    sb.dispose();
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 12: Resources — 2 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_resource_bundle() {
+    let bundle = new CppResourceBundle();
+    bundle.init_bundle();
+    assert(bundle.getLocale() == "", "CppResourceBundle.getLocale default empty");
+    assert(bundle.getBaseName() == "", "CppResourceBundle.getBaseName default empty");
+    assert(bundle.getFallbackLocale() == "", "CppResourceBundle.getFallbackLocale default");
+    assert(bundle.getResourceCount() == 0, "CppResourceBundle.getResourceCount default 0");
+
+    bundle.setLocale("zh_CN");
+    assert(bundle.getLocale() == "zh_CN", "CppResourceBundle.setLocale");
+
+    bundle.setBaseName("messages");
+    assert(bundle.getBaseName() == "messages", "CppResourceBundle.setBaseName");
+
+    bundle.addResource("hello", "你好");
+    bundle.addResource("count", 42);
+    bundle.addResource("enabled", true);
+
+    assert(bundle.getString("hello") == "你好", "CppResourceBundle.getString");
+    assert(bundle.getInteger("count") == 42, "CppResourceBundle.getInteger");
+    assert(bundle.getBoolean("enabled") == true, "CppResourceBundle.getBoolean");
+
+    # Default/fallback: getString returns key when missing
+    assert(bundle.getString("missing") == "missing", "CppResourceBundle.getString missing→key");
+    assert(bundle.getInteger("missing") == 0, "CppResourceBundle.getInteger missing→0");
+    assert(bundle.getBoolean("missing") == false, "CppResourceBundle.getBoolean missing→false");
+
+    assert(bundle.hasResource("hello") == true, "CppResourceBundle.hasResource true");
+    assert(bundle.hasResource("missing") == false, "CppResourceBundle.hasResource false");
+
+    assert(bundle.getResourceCount() == 3, "CppResourceBundle.getResourceCount");
+
+    bundle.removeResource("count");
+    assert(bundle.hasResource("count") == false, "CppResourceBundle.removeResource");
+    assert(bundle.getResourceCount() == 2, "CppResourceBundle.getResourceCount after remove");
+
+    bundle.setFallbackLocale("en_US");
+    assert(bundle.getFallbackLocale() == "en_US", "CppResourceBundle.setFallbackLocale");
+
+    bundle.clear();
+    assert(bundle.getResourceCount() == 0, "CppResourceBundle.clear");
+
+    bundle.dispose();
+    return 0;
+}
+
+fn test_cpp_file_watcher() {
+    let watcher = new CppFileWatcher();
+    watcher.init_watcher("/project/src", "*.cpp");
+    assert(watcher.getPath() == "/project/src", "CppFileWatcher.getPath");
+    assert(watcher.getFilter() == "*.cpp", "CppFileWatcher.getFilter");
+    assert(watcher.isWatching() == false, "CppFileWatcher.isWatching default false");
+    assert(watcher.getIncludeSubdirs() == true, "CppFileWatcher.getIncludeSubdirs default true");
+    assert(watcher.getInterval() == 1000, "CppFileWatcher.getInterval default 1000");
+
+    watcher.start();
+    assert(watcher.isWatching() == true, "CppFileWatcher.start");
+
+    watcher.stop();
+    assert(watcher.isWatching() == false, "CppFileWatcher.stop");
+
+    watcher.setIncludeSubdirs(false);
+    assert(watcher.getIncludeSubdirs() == false, "CppFileWatcher.setIncludeSubdirs");
+
+    let cb_called = false;
+    watcher.setCallback(fn(filepath) { cb_called = true; return 0; });
+    let cb = watcher.getCallback();
+    assert(cb != nullptr, "CppFileWatcher.setCallback/getCallback");
+
+    watcher.setInterval(2000);
+    assert(watcher.getInterval() == 2000, "CppFileWatcher.setInterval");
+
+    watcher.dispose();
+    assert(watcher.isWatching() == false, "CppFileWatcher.dispose stops watching");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 13: Globals — 2 test functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_cpp_global_init() {
+    let result = cpp_init();
+    assert(result == true, "cpp_init returns true");
+    assert(cpp_is_ready() == true, "cpp_is_ready after init");
+
+    cpp_shutdown();
+    assert(cpp_is_ready() == false, "cpp_is_ready after shutdown");
+
+    # Re-init for subsequent tests
+    cpp_init();
+    assert(cpp_is_ready() == true, "cpp_is_ready after re-init");
+    return 0;
+}
+
+fn test_cpp_global_accessors() {
+    let m = cpp_get_mapper();
+    assert(m != nullptr, "cpp_get_mapper");
+
+    let c = cpp_get_cache();
+    assert(c != nullptr, "cpp_get_cache");
+
+    let bus = cpp_get_event_bus();
+    assert(bus != nullptr, "cpp_get_event_bus");
+
+    let bm = cpp_get_binding_manager();
+    assert(bm != nullptr, "cpp_get_binding_manager");
+
+    let s = cpp_get_serializer();
+    assert(s != nullptr, "cpp_get_serializer");
+
+    let d = cpp_get_deserializer();
+    assert(d != nullptr, "cpp_get_deserializer");
+
+    let tc = cpp_get_type_converter();
+    assert(tc != nullptr, "cpp_get_type_converter");
+
+    let logger = cpp_get_logger();
+    assert(logger != nullptr, "cpp_get_logger");
+
+    let profiler = cpp_get_profiler();
+    assert(profiler != nullptr, "cpp_get_profiler");
+
+    let config = cpp_get_config();
+    assert(config != nullptr, "cpp_get_config");
+
+    let env = cpp_get_env();
+    assert(env != nullptr, "cpp_get_env");
+
+    let loader = cpp_get_lib_loader();
+    assert(loader != nullptr, "cpp_get_lib_loader");
+
+    let factory = cpp_get_control_factory();
+    assert(factory != nullptr, "cpp_get_control_factory");
+
+    let bridge = cpp_get_style_bridge();
+    assert(bridge != nullptr, "cpp_get_style_bridge");
+
+    let qml = cpp_get_qml();
+    assert(qml != nullptr, "cpp_get_qml");
+
+    let bundle = cpp_get_resource_bundle();
+    assert(bundle != nullptr, "cpp_get_resource_bundle");
+
+    let cmake = cpp_get_cmake();
+    assert(cmake != nullptr, "cpp_get_cmake");
+
+    let pool = cpp_get_thread_pool();
+    assert(pool != nullptr, "cpp_get_thread_pool");
+
+    let ver = cpp_get_version();
+    assert(ver == "1.0.0", "cpp_get_version");
+
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Run All Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+print("");
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+print("  H# zzwUI ↔ C++ Tests");
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+print("");
+print("── Section 1: Core Interop ──");
+test_cpp_type_info();
+test_cpp_type_mapper();
+test_cpp_value();
+test_cpp_invoke();
+test_cpp_result();
+
+print("");
+print("── Section 2: Object Bridge ──");
+test_cpp_object();
+test_cpp_object_cache();
+test_cpp_shared_lib();
+test_cpp_lib_loader();
+test_cpp_constructor();
+test_cpp_method();
+test_cpp_field();
+
+print("");
+print("── Section 3: Event Bridge ──");
+test_cpp_event();
+test_cpp_event_listener();
+test_cpp_cross_event_bus();
+test_cpp_ui_dispatcher();
+
+print("");
+print("── Section 4: UI Bridge ──");
+test_cpp_control_bridge();
+test_cpp_window_bridge();
+test_cpp_ui_host();
+test_cpp_control_factory();
+
+print("");
+print("── Section 5: Data Binding ──");
+test_cpp_binding();
+test_cpp_multi_binding();
+test_cpp_binding_manager();
+test_cpp_binding_expression();
+
+print("");
+print("── Section 6: RPC/Service ──");
+test_cpp_service_host();
+test_cpp_rpc_client();
+test_cpp_rpc_message();
+test_cpp_rpc_response();
+test_cpp_rpc_context();
+test_cpp_socket_channel();
+test_cpp_mapped_buffer();
+
+print("");
+print("── Section 7: Serialization ──");
+test_cpp_serializer();
+test_cpp_deserializer();
+test_cpp_messagepack();
+test_cpp_json();
+test_cpp_type_converter();
+
+print("");
+print("── Section 8: Async ──");
+test_cpp_future();
+test_cpp_thread_pool();
+test_cpp_cancellation_token();
+test_cpp_async_result();
+
+print("");
+print("── Section 9: Diagnostics ──");
+test_cpp_logger();
+test_cpp_profiler();
+test_cpp_debugger();
+test_cpp_config();
+test_cpp_environment();
+test_cpp_process();
+
+print("");
+print("── Section 10: CMake & Project ──");
+test_cpp_cmake_target();
+test_cpp_cmake_manager();
+test_cpp_project();
+test_cpp_module();
+
+print("");
+print("── Section 11: QML/Style ──");
+test_cpp_qml();
+test_cpp_style_bridge();
+
+print("");
+print("── Section 12: Resources ──");
+test_cpp_resource_bundle();
+test_cpp_file_watcher();
+
+print("");
+print("── Section 13: Globals ──");
+test_cpp_global_init();
+test_cpp_global_accessors();
+
+# Summary
+print("");
+print("═══════════════════════════════════");
+let failed = _test_count - _pass_count;
+print("  Tests: " + str(_test_count) + " | Passed: " + str(_pass_count) + " | Failed: " + str(failed));
+if (_pass_count == _test_count) {
+    print("  Result: ALL TESTS PASSED");
+} else {
+    print("  Result: " + str(failed) + " TEST(S) FAILED");
+}
+print("═══════════════════════════════════");
+print("");

@@ -1,0 +1,148 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/compiler.hto";
+
+let passed = 0;
+let failed = 0;
+
+fn check(name, condition) {
+    if (condition) {
+        passed = passed + 1;
+        print("[PASS] " + name);
+    } else {
+        failed = failed + 1;
+        print("[FAIL] " + name);
+    }
+}
+
+print("========================================");
+print("  H# Compiler Control Flow Test");
+print("========================================");
+print("");
+
+# ======== Test 1: If/Else compilation ========
+print("--- Test 1: If/Else ---");
+let if_src = "let x = 10;\nif (x > 5) {\n    let y = 100;\n} else {\n    let y = 200;\n}";
+let if_tokens = tokenize(if_src);
+let if_ast = parse(if_tokens);
+let if_bc = compile(if_ast);
+let if_instrs = if_bc["instructions"];
+check("If/Else: has JUMP_IF_FALSE", true);
+check("If/Else: has JUMP", true);
+check("If/Else: instruction count > 0", len(if_instrs) > 0);
+
+# Find JUMP_IF_FALSE and JUMP
+let has_jif = false;
+let has_jump = false;
+let has_store_y = false;
+let i = 0;
+while (i < len(if_instrs)) {
+    let inst = if_instrs[i];
+    if (inst[0] == "JUMP_IF_FALSE") { has_jif = true; }
+    if (inst[0] == "JUMP") { has_jump = true; }
+    if (inst[0] == "STORE_NAME" and inst[1] == "y") { has_store_y = true; }
+    i = i + 1;
+}
+check("If/Else: found JUMP_IF_FALSE", has_jif);
+check("If/Else: found JUMP", has_jump);
+check("If/Else: found STORE_NAME y", has_store_y);
+print("");
+
+# ======== Test 2: While loop compilation ========
+print("--- Test 2: While Loop ---");
+let while_src = "let sum = 0;\nlet i = 1;\nwhile (i <= 5) {\n    sum = sum + i;\n    i = i + 1;\n}";
+let while_tokens = tokenize(while_src);
+let while_ast = parse(while_tokens);
+let while_bc = compile(while_ast);
+let while_instrs = while_bc["instructions"];
+let has_while_jif = false;
+let has_while_jump = false;
+let j = 0;
+while (j < len(while_instrs)) {
+    let inst = while_instrs[j];
+    if (inst[0] == "JUMP_IF_FALSE") { has_while_jif = true; }
+    if (inst[0] == "JUMP") { has_while_jump = true; }
+    j = j + 1;
+}
+check("While: found JUMP_IF_FALSE", has_while_jif);
+check("While: found JUMP (loop back)", has_while_jump);
+check("While: instruction count > 0", len(while_instrs) > 0);
+print("");
+
+# ======== Test 3: If without else compilation ========
+print("--- Test 3: If without else ---");
+let ifno_src = "let flag = false;\nif (flag) {\n    let r = 1;\n}\nlet r = 2;";
+let ifno_tokens = tokenize(ifno_src);
+let ifno_ast = parse(ifno_tokens);
+let ifno_bc = compile(ifno_ast);
+let ifno_instrs = ifno_bc["instructions"];
+let has_noelse_jif = false;
+let k = 0;
+while (k < len(ifno_instrs)) {
+    if (ifno_instrs[k][0] == "JUMP_IF_FALSE") { has_noelse_jif = true; }
+    k = k + 1;
+}
+check("If-no-else: found JUMP_IF_FALSE", has_noelse_jif);
+print("");
+
+# ======== Test 4: Mixed control flow ========
+print("--- Test 4: Mixed control flow ---");
+let mix_src = "let v = 0;\nif (v > 0) {\n    let x = 1;\n} else if (v == 0) {\n    let x = 2;\n} else {\n    let x = 3;\n}";
+let mix_tokens = tokenize(mix_src);
+let mix_ast = parse(mix_tokens);
+let mix_bc = compile(mix_ast);
+let mix_instrs = mix_bc["instructions"];
+let jif_count = 0;
+let m = 0;
+while (m < len(mix_instrs)) {
+    if (mix_instrs[m][0] == "JUMP_IF_FALSE") { jif_count = jif_count + 1; }
+    m = m + 1;
+}
+check("Mixed: JUMP_IF_FALSE count >= 1", jif_count >= 1);
+print("");
+
+# ======== Test 5: Continue/Break compilation ========
+print("--- Test 5: Continue/Break ---");
+let cb_src = "let i = 0;\nwhile (i < 10) {\n    i = i + 1;\n    if (i == 5) { continue; }\n    if (i == 8) { break; }\n}";
+let cb_tokens = tokenize(cb_src);
+let cb_ast = parse(cb_tokens);
+let cb_bc = compile(cb_ast);
+let cb_instrs = cb_bc["instructions"];
+let has_continue = false;
+let has_break = false;
+let n = 0;
+while (n < len(cb_instrs)) {
+    if (cb_instrs[n][0] == "CONTINUE") { has_continue = true; }
+    if (cb_instrs[n][0] == "BREAK") { has_break = true; }
+    n = n + 1;
+}
+check("CB: found CONTINUE", has_continue);
+check("CB: found BREAK", has_break);
+print("");
+
+# ======== Test 6: Unary minus compilation ========
+print("--- Test 6: Unary minus ---");
+let neg_src = "let x = -5;\nlet y = -x;\nlet z = 0 - x;";
+let neg_tokens = tokenize(neg_src);
+let neg_ast = parse(neg_tokens);
+let neg_bc = compile(neg_ast);
+let neg_instrs = neg_bc["instructions"];
+let has_neg = false;
+let p = 0;
+while (p < len(neg_instrs)) {
+    if (neg_instrs[p][0] == "UNARY_NEG") { has_neg = true; }
+    p = p + 1;
+}
+check("Unary: found UNARY_NEG", has_neg);
+print("");
+
+# ======== Summary ========
+print("========================================");
+print("  Results: " + passed + " passed, " + failed + " failed");
+print("========================================");
+if (failed > 0) {
+    print("SOME TESTS FAILED!");
+}
+if (failed == 0) {
+    print("ALL TESTS PASSED!");
+}

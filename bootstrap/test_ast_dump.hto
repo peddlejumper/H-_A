@@ -1,0 +1,58 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+
+# B: closure write
+let sB = "fn fB() { let p = 0; fn g() { p = p + 1; } g(); return p; } let rB = fB();";
+let tB = tokenize(sB);
+print("Tokens:");
+let ti = 0;
+while (ti < len(tB)) { print("  " + tB[ti]["type"] + ":" + tB[ti]["value"]); ti = ti + 1; }
+print("");
+
+let aB = parse(tB);
+print("AST:");
+# recursive print
+fn pr(n, d) {
+    let sp = "";
+    let i = 0;
+    while (i < d) { sp = sp + "  "; i = i + 1; }
+    if (n == nullptr or n[0] == nullptr) { print(sp + "NULL"); return; }
+    let t = n[0];
+    if (t == "Program") {
+        print(sp + "Program:");
+        i = 0;
+        while (i < len(n[1])) { pr(n[1][i], d + 1); i = i + 1; }
+    } else if (t == "LetStatement") {
+        print(sp + "Let: " + n[1] + " = ");
+        pr(n[2], d + 1);
+    } else if (t == "Function") {
+        print(sp + "Function: " + n[1]);
+        print(sp + "  params: " + n[2]);
+        pr(n[3], d + 1);
+    } else if (t == "BlockStatement") {
+        print(sp + "Block:");
+        i = 0;
+        while (i < len(n[1])) { pr(n[1][i], d + 1); i = i + 1; }
+    } else if (t == "ReturnStatement") {
+        print(sp + "Return:");
+        pr(n[1], d + 1);
+    } else if (t == "CallExpression") {
+        print(sp + "Call:");
+        pr(n[1], d + 1);
+    } else if (t == "Identifier") {
+        print(sp + "ID: " + n[1]);
+    } else if (t == "NumberLiteral") {
+        print(sp + "NUM: " + n[1]);
+    } else if (t == "BinaryOp") {
+        print(sp + "BinOp: " + n[2]);
+        pr(n[1], d + 1);
+        pr(n[3], d + 1);
+    } else if (t == "AssignmentIdentifier") {
+        print(sp + "Assign: " + n[1] + " = ");
+        pr(n[2], d + 1);
+    } else {
+        print(sp + "???: " + t);
+    }
+}
+
+pr(aB, 0);

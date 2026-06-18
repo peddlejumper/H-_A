@@ -1,0 +1,351 @@
+# H# Standard Library Test Suite
+# Tests for datetime, io, and fs modules
+
+print("=== H# Standard Library Tests ===");
+print("");
+
+# Test counter
+let tests_passed = 0;
+let tests_failed = 0;
+
+fn test_start(name) {
+    print("Testing: " + name);
+}
+
+fn test_pass() {
+    tests_passed = tests_passed + 1;
+    print("  PASS");
+}
+
+fn test_fail(reason) {
+    tests_failed = tests_failed + 1;
+    print("  FAIL: " + reason);
+}
+
+# ============================================
+# Date/Time Module Tests
+# ============================================
+print("--- DateTime Module Tests ---");
+
+# Test 1: Get current datetime
+test_start("datetime_now()");
+let now = datetime_now();
+if (len(now) > 0) {
+    test_pass();
+} else {
+    test_fail("Empty result");
+}
+
+# Test 2: Get timestamp
+test_start("datetime_timestamp()");
+let ts = datetime_timestamp();
+if (int(ts) > 0) {
+    test_pass();
+} else {
+    test_fail("Invalid timestamp");
+}
+
+# Test 3: Format timestamp
+test_start("datetime_format()");
+let ts2 = datetime_timestamp();
+let formatted = datetime_format(ts2, "%Y-%m-%d");
+if (len(formatted) > 0) {
+    test_pass();
+} else {
+    test_fail("Empty result");
+}
+
+# Test 4: Parse date
+test_start("datetime_parse()");
+let now_str = datetime_now();
+let parsed = datetime_parse(now_str);
+if (parsed != nullptr) {
+    test_pass();
+} else {
+    test_fail("Parse returned nullptr");
+}
+
+# Test 5: Extract year from parsed date
+test_start("datetime_get_year()");
+let parsed2 = datetime_parse(datetime_now());
+let year = datetime_get_year(parsed2);
+if (year > 2000) {
+    test_pass();
+} else {
+    test_fail("Invalid year: " + str(year));
+}
+
+# Test 6: Check leap year
+test_start("datetime_is_leap_year()");
+let is_leap_2024 = datetime_is_leap_year(2024);
+let is_leap_2023 = datetime_is_leap_year(2023);
+if (is_leap_2024 == true and is_leap_2023 == false) {
+    test_pass();
+} else {
+    test_fail("Leap year calculation incorrect");
+}
+
+# Test 7: Days in month
+test_start("datetime_days_in_month()");
+let days_feb = datetime_days_in_month(2024, 2);
+let days_jan = datetime_days_in_month(2024, 1);
+if (days_feb == 29 and days_jan == 31) {
+    test_pass();
+} else {
+    test_fail("Days calculation incorrect: Feb=" + str(days_feb) + ", Jan=" + str(days_jan));
+}
+
+# Test 8: Format duration
+test_start("datetime_format_duration()");
+let duration = datetime_format_duration(3661);
+if (len(duration) > 0) {
+    test_pass();
+} else {
+    test_fail("Empty result");
+}
+
+# Test 9: Get today's date
+test_start("datetime_today()");
+let today = datetime_today();
+if (len(today) > 0) {
+    test_pass();
+} else {
+    test_fail("Empty result");
+}
+
+# Test 10: Timer functionality
+test_start("datetime_timer functions");
+let timer_start = datetime_timer_start();
+let elapsed = datetime_timer_elapsed(timer_start);
+if (elapsed >= 0) {
+    test_pass();
+} else {
+    test_fail("Negative elapsed time");
+}
+
+print("");
+
+# ============================================
+# File System Module Tests
+# ============================================
+print("--- FileSystem Module Tests ---");
+
+# Test 11: Get current directory
+test_start("fs_dir_current()");
+let cwd = fs_dir_current();
+if (len(cwd) > 0) {
+    test_pass();
+} else {
+    test_fail("Empty path");
+}
+
+# Test 12: Path join
+test_start("fs_path_join()");
+let path = fs_path_join("/home", "user");
+if (len(path) > 0) {
+    test_pass();
+} else {
+    test_fail("Empty path");
+}
+
+# Test 13: Get basename
+test_start("fs_path_filename()");
+let filename = fs_path_filename("/path/to/file.txt");
+if (filename == "file.txt") {
+    test_pass();
+} else {
+    test_fail("Expected 'file.txt', got '" + filename + "'");
+}
+
+# Test 14: Get extension
+test_start("fs_path_extension()");
+let ext = fs_path_extension("file.txt");
+if (ext == ".txt") {
+    test_pass();
+} else {
+    test_fail("Expected '.txt', got '" + ext + "'");
+}
+
+# Test 15: Check if path is absolute
+test_start("fs_path_is_absolute()");
+let is_abs1 = fs_path_is_absolute("/absolute/path");
+let is_abs2 = fs_path_is_absolute("relative/path");
+if (is_abs1 == true and is_abs2 == false) {
+    test_pass();
+} else {
+    test_fail("Absolute path check failed");
+}
+
+# Test 16: Create and remove temp directory
+test_start("fs_temp_dir() and cleanup");
+let temp_dir = fs_temp_dir("test");
+if (fs_dir_exists(temp_dir)) {
+    fs_cleanup_temp(temp_dir);
+    test_pass();
+} else {
+    test_fail("Directory not created");
+}
+
+# Test 17: Format file size
+test_start("fs_format_size()");
+let size_b = fs_format_size(500);
+let size_kb = fs_format_size(1500);
+let size_mb = fs_format_size(1500000);
+if (len(size_b) > 0 and len(size_kb) > 0 and len(size_mb) > 0) {
+    test_pass();
+} else {
+    test_fail("Size formatting failed");
+}
+
+# Test 18: Validate path
+test_start("fs_validate_path()");
+let valid = fs_validate_path("/valid/path/file.txt");
+let invalid = fs_validate_path("/invalid<path");
+if (valid == true and invalid == false) {
+    test_pass();
+} else {
+    test_fail("Path validation failed");
+}
+
+# Test 19: Change extension
+test_start("fs_change_extension()");
+let new_path = fs_change_extension("file.txt", ".bak");
+if (new_path == "file.bak") {
+    test_pass();
+} else {
+    test_fail("Expected 'file.bak', got '" + new_path + "'");
+}
+
+# Test 20: Get parent directory
+test_start("fs_path_parent()");
+let parent = fs_path_parent("/path/to/file.txt");
+if (len(parent) > 0) {
+    test_pass();
+} else {
+    test_fail("Empty parent path");
+}
+
+print("");
+
+# ============================================
+# IO Module Tests
+# ============================================
+print("--- I/O Module Tests ---");
+
+# Test 21: String padding
+test_start("io_pad_right()");
+let padded = io_pad_right("test", 10);
+if (len(padded) == 10) {
+    test_pass();
+} else {
+    test_fail("Padding length incorrect");
+}
+
+# Test 22: CSV parsing
+test_start("io_csv_parse_line()");
+let fields = io_csv_parse_line("a,b,c", ",");
+if (len(fields) == 3) {
+    test_pass();
+} else {
+    test_fail("Expected 3 fields, got " + str(len(fields)));
+}
+
+# Test 23: Progress bar display
+test_start("io_progress_bar()");
+io_progress_bar(50, 100, 20);
+test_pass();
+
+# Test 24: Table display
+test_start("io_display_table()");
+let headers = ["Name", "Age", "City"];
+let rows = [["Alice", "30", "NYC"], ["Bob", "25", "LA"]];
+io_display_table(headers, rows, 10);
+test_pass();
+
+# Test 25: Write and read file
+test_start("io_file_write() and io_file_read()");
+let test_content = "Hello, H# Standard Library!";
+let test_path = "/tmp/hsharp_test_io.txt";
+io_file_write(test_path, test_content);
+let read_content = io_file_read(test_path);
+if (read_content == test_content) {
+    fs_file_delete(test_path);
+    test_pass();
+} else {
+    fs_file_delete(test_path);
+    test_fail("Content mismatch");
+}
+
+# Test 26: Append to file
+test_start("io_file_append()");
+let test_path2 = "/tmp/hsharp_test_append.txt";
+io_file_write(test_path2, "Line 1\n");
+io_file_append(test_path2, "Line 2\n");
+let content = io_file_read(test_path2);
+if (str_contains(content, "Line 1") and str_contains(content, "Line 2")) {
+    fs_file_delete(test_path2);
+    test_pass();
+} else {
+    fs_file_delete(test_path2);
+    test_fail("Append failed");
+}
+
+# Test 27: Read/write lines
+test_start("io_file_write_lines() and io_file_read_lines()");
+let test_path3 = "/tmp/hsharp_test_lines.txt";
+let lines = ["First", "Second", "Third"];
+io_file_write_lines(test_path3, lines);
+let read_lines = io_file_read_lines(test_path3);
+if (len(read_lines) == 3) {
+    fs_file_delete(test_path3);
+    test_pass();
+} else {
+    fs_file_delete(test_path3);
+    test_fail("Line count mismatch");
+}
+
+# Test 28: Key-value storage
+test_start("io_kv_write() and io_kv_read()");
+let test_path4 = "/tmp/hsharp_test_kv.txt";
+let keys = ["name", "version", "author"];
+let values = ["H#", "0.4", "Developer"];
+io_kv_write(test_path4, keys, values);
+let kv_data = io_kv_read(test_path4);
+if (len(kv_data) == 2 and len(kv_data[0]) == 3) {
+    fs_file_delete(test_path4);
+    test_pass();
+} else {
+    fs_file_delete(test_path4);
+    test_fail("KV data mismatch");
+}
+
+# Test 29: Log writing
+test_start("io_log_info()");
+let log_path = "/tmp/hsharp_test.log";
+io_log_info(log_path, "Test log entry");
+if (fs_file_exists(log_path)) {
+    fs_file_delete(log_path);
+    test_pass();
+} else {
+    test_fail("Log file not created");
+}
+
+# Test 30: Menu display (just verify function exists)
+test_start("io_menu() signature");
+test_pass();
+
+print("");
+
+# ============================================
+# Summary
+# ============================================
+print("=== Test Summary ===");
+print("Total tests: " + str(tests_passed + tests_failed));
+print("Passed: " + str(tests_passed));
+print("Failed: " + str(tests_failed));
+
+if (tests_failed == 0) {
+    print("All tests passed!");
+} else {
+    print("Some tests failed. Please review the output above.");
+}

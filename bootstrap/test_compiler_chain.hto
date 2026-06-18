@@ -1,0 +1,35 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/compiler.hto";
+
+let src = "let x = 42;\nlet y = x + 8;\nprint(y);\n\nfn square(n) {\n    return n * n;\n}\n\nlet r = square(5);\nprint(r);";
+
+print("=== Source ===");
+print(src);
+print("");
+
+let tokens = tokenize(src);
+print("Tokens: " + len(tokens));
+
+let ast = parse(tokens);
+print("AST root: " + ast[0]);
+
+let bc = compile(ast);
+print("Bytecode:");
+let instrs = bc["instructions"];
+let i = 0;
+while (i < len(instrs)) {
+    print("  " + instrs[i][0] + " " + instrs[i][1]);
+    i = i + 1;
+}
+
+print("");
+print("Consts: " + len(bc["consts"]));
+let ci = 0;
+while (ci < len(bc["consts"])) {
+    print("  [" + ci + "] " + bc["consts"][ci]);
+    ci = ci + 1;
+}
+
+print("");
+print("Compiler chain OK!");

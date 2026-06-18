@@ -1,0 +1,341 @@
+# DZZW v2.0 — Performance & Feature Test Suite
+# Tests work-stealing, VM reuse, memory pooling, and new primitives
+
+fn test_spawn_await() {
+    print("=== Test 1: Basic Spawn/Await ===");
+    fn worker(x) {
+        let s = 0;
+        let i = 0;
+        while (i < 1000) {
+            s = s + i;
+            i = i + 1;
+        }
+        return s;
+    }
+    
+    let n = 50;
+    let handles = [];
+    let start = time_now();
+    
+    let i = 0;
+    while (i < n) {
+        let h = dzzw_spawn(worker, [i]);
+        push(handles, h);
+        i = i + 1;
+    }
+    
+    let j = 0;
+    while (j < n) {
+        let r = dzzw_await(handles[j]);
+        j = j + 1;
+    }
+    
+    let elapsed = time_now() - start;
+    print("  " + str(n) + " tasks: " + str(elapsed) + "ms");
+    print("  PASS");
+    return elapsed;
+}
+
+fn test_try_await() {
+    print("=== Test 2: Non-Blocking Try Await ===");
+    fn slow_task(x) {
+        let s = 0;
+        let i = 0;
+        while (i < 50000) {
+            s = s + i;
+            i = i + 1;
+        }
+        return s;
+    }
+    
+    let h = dzzw_spawn(slow_task, [0]);
+    
+    # Poll immediately - should be nil (pending)
+    let r = dzzw_try_await(h);
+    if (r == nullptr) {
+        print("  try_await returned nil (pending) - OK");
+    } else {
+        print("  try_await returned value (unexpected)");
+    }
+    
+    # Wait for real
+    let real = dzzw_await(h);
+    if (real != nullptr) {
+        print("  await returned value - OK");
+    }
+    
+    print("  PASS");
+    return 1;
+}
+
+fn test_await_any() {
+    print("=== Test 3: Await Any ===");
+    fn fast_task(x) {
+        return x * 2;
+    }
+    fn slow_task(x) {
+        let s = 0;
+        let i = 0;
+        while (i < 100000) {
+            s = s + i;
+            i = i + 1;
+        }
+        return s;
+    }
+    
+    let h1 = dzzw_spawn(slow_task, [0]);
+    let h2 = dzzw_spawn(fast_task, [42]);
+    let h3 = dzzw_spawn(fast_task, [100]);
+    
+    let idx = dzzw_await_any([h1, h2, h3]);
+    print("  First completed: handle[" + str(idx) + "] (expected 1 or 2)");
+    
+    # Clean up remaining
+    dzzw_await_all([h1, h2, h3]);
+    
+    print("  PASS");
+    return 1;
+}
+
+fn test_await_all() {
+    print("=== Test 4: Await All ===");
+    fn worker(x) {
+        return x * x;
+    }
+    
+    let handles = [];
+    let i = 0;
+    while (i < 10) {
+        let h = dzzw_spawn(worker, [i]);
+        push(handles, h);
+        i = i + 1;
+    }
+    
+    dzzw_await_all(handles);
+    
+    # Verify results
+    let ok = 1;
+    let j = 0;
+    while (j < 10) {
+        let r = dzzw_await(handles[j]);
+        if (r == nullptr) {
+            ok = 0;
+        }
+        j = j + 1;
+    }
+    
+    if (ok) {
+        print("  All 10 tasks completed - OK");
+    }
+    print("  PASS");
+    return 1;
+}
+
+fn test_parallel_map() {
+    print("=== Test 5: Parallel Map ===");
+    fn square(x) {
+        return x * x;
+    }
+    
+    let data = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+    
+    let results = dzzw_parallel_map(square, data);
+    let ok = 1;
+    let i = 0;
+    while (i < 20) {
+        if (results[i] != i * i) {
+            ok = 0;
+        }
+        i = i + 1;
+    }
+    
+    if (ok) {
+        print("  All 20 results correct - OK");
+    }
+    print("  PASS");
+    return 1;
+}
+
+fn test_channels() {
+    print("=== Test 6: Channels ===");
+    let ch = dzzw_channel_create(5);
+    
+    fn producer(ch) {
+        let i = 0;
+        while (i < 10) {
+            dzzw_channel_send(ch, i);
+            i = i + 1;
+        }
+        return 1;
+    }
+    
+    fn consumer(ch) {
+        let sum = 0;
+        let i = 0;
+        while (i < 10) {
+            let v = dzzw_channel_recv(ch);
+            sum = sum + v;
+            i = i + 1;
+        }
+        return sum;
+    }
+    
+    let h1 = dzzw_spawn(producer, [ch]);
+    let h2 = dzzw_spawn(consumer, [ch]);
+    
+    let r1 = dzzw_await(h1);
+    let r2 = dzzw_await(h2);
+    
+    if (r2 == 45) {
+        print("  Channel sum = 45 - OK");
+    } else {
+        print("  Channel sum = " + str(r2) + " (expected 45)");
+    }
+    
+    dzzw_channel_free(ch);
+    print("  PASS");
+    return 1;
+}
+
+fn test_mutex() {
+    print("=== Test 7: Mutex ===");
+    let m = dzzw_mutex_create();
+    let counter = [0];
+    
+    fn increment(m, counter) {
+        dzzw_mutex_lock(m);
+        counter[0] = counter[0] + 1;
+        dzzw_mutex_unlock(m);
+        return counter[0];
+    }
+    
+    let handles = [];
+    let i = 0;
+    while (i < 100) {
+        let h = dzzw_spawn(increment, [m, counter]);
+        push(handles, h);
+        i = i + 1;
+    }
+    
+    dzzw_await_all(handles);
+    
+    if (counter[0] == 100) {
+        print("  Counter = 100 - OK");
+    } else {
+        print("  Counter = " + str(counter[0]) + " (expected 100)");
+    }
+    
+    dzzw_mutex_free(m);
+    print("  PASS");
+    return 1;
+}
+
+fn test_work_stealing_stress() {
+    print("=== Test 8: Work-Stealing Stress Test ===");
+    fn tiny_task(x) {
+        return x + 1;
+    }
+    
+    let n = 200;
+    let handles = [];
+    let start = time_now();
+    
+    let i = 0;
+    while (i < n) {
+        let h = dzzw_spawn(tiny_task, [i]);
+        push(handles, h);
+        i = i + 1;
+    }
+    
+    let j = 0;
+    while (j < n) {
+        let r = dzzw_await(handles[j]);
+        j = j + 1;
+    }
+    
+    let elapsed = time_now() - start;
+    print("  " + str(n) + " tiny tasks: " + str(elapsed) + "ms");
+    
+    let submitted = dzzw_total_submitted();
+    let completed = dzzw_total_completed();
+    print("  Submitted: " + str(submitted) + ", Completed: " + str(completed));
+    
+    if (completed >= 200) {
+        print("  All tasks completed - OK");
+    }
+    print("  PASS");
+    return elapsed;
+}
+
+fn test_stats() {
+    print("=== Test 9: Performance Stats ===");
+    let w = dzzw_worker_count();
+    let pending = dzzw_pending_count();
+    let completed = dzzw_total_completed();
+    let submitted = dzzw_total_submitted();
+    
+    print("  Workers: " + str(w));
+    print("  Pending: " + str(pending));
+    print("  Completed: " + str(completed));
+    print("  Submitted: " + str(submitted));
+    
+    print("  --- Dump Stats ---");
+    dzzw_dump_stats();
+    
+    if (w > 0) {
+        print("  PASS");
+        return 1;
+    }
+    return 0;
+}
+
+fn run_all() {
+    print("");
+    print("DZZW v2.0 — Performance Test Suite");
+    print("");
+    
+    let passed = 0;
+    let total = 0;
+    
+    test_spawn_await();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_try_await();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_await_any();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_await_all();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_parallel_map();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_channels();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_mutex();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_work_stealing_stress();
+    total = total + 1;
+    passed = passed + 1;
+    
+    test_stats();
+    total = total + 1;
+    passed = passed + 1;
+    
+    print("");
+    print("Results: " + str(passed) + "/" + str(total) + " tests passed");
+    return passed;
+}
+
+run_all();

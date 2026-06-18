@@ -1,0 +1,760 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# H#ML Test Suite
+# ═══════════════════════════════════════════════════════════════════════════
+import "bootstrap/hsharpmyl.hto";
+
+let _test_count = 0;
+let _pass_count = 0;
+
+fn assert(condition, msg) {
+    _test_count = _test_count + 1;
+    if (condition) {
+        _pass_count = _pass_count + 1;
+        print("  PASS: " + msg);
+    } else {
+        print("  FAIL: " + msg);
+    }
+    return 0;
+}
+
+fn test_summary() {
+    print("");
+    print("Test Results: " + _pass_count + "/" + _test_count + " passed");
+    if (_pass_count == _test_count) {
+        print("ALL TESTS PASSED ✓");
+    } else {
+        let failed = _test_count - _pass_count;
+        print("FAILED: " + failed + " tests");
+    }
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 1: Random Number Generation
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 1: Random Number Generation ──");
+hml_set_seed(42);
+let r1 = hml_random();
+assert(r1 >= 0.0 and r1 < 1.0, "hml_random in [0,1)");
+
+let r2 = hml_random();
+assert(r2 != r1, "hml_random produces different values");
+
+hml_set_seed(42);
+let r3 = hml_random();
+assert(r3 == r1, "hml_set_seed reproducible");
+
+let ri = hml_randint(0, 10);
+assert(ri >= 0 and ri <= 10, "hml_randint in range");
+
+let arr = [1, 2, 3, 4, 5];
+let shuffled = hml_shuffle(arr);
+assert(len(shuffled) == 5, "hml_shuffle preserves length");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 2: Vector Operations
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 2: Vector Operations ──");
+let va = [1.0, 2.0, 3.0];
+let vb = [4.0, 5.0, 6.0];
+
+let v_add = hml_vector_add(va, vb);
+assert(v_add[0] == 5.0, "vector_add");
+assert(v_add[1] == 7.0, "vector_add");
+assert(v_add[2] == 9.0, "vector_add");
+
+let v_sub = hml_vector_sub(va, vb);
+assert(v_sub[0] == -3.0, "vector_sub");
+
+let v_scale = hml_vector_scale(va, 2.0);
+assert(v_scale[0] == 2.0, "vector_scale");
+assert(v_scale[1] == 4.0, "vector_scale");
+
+let v_dot = hml_vector_dot(va, vb);
+assert(v_dot == 32.0, "vector_dot 1*4+2*5+3*6=32");
+
+let v_norm = hml_vector_norm([3.0, 4.0]);
+assert(v_norm == 5.0, "vector_norm 3-4-5 triangle");
+
+let v_mean = hml_vector_mean([1.0, 2.0, 3.0]);
+assert(v_mean == 2.0, "vector_mean");
+
+let v_amax = hml_vector_argmax([1.0, 5.0, 3.0]);
+assert(v_amax == 1, "vector_argmax");
+
+let v_amin = hml_vector_argmin([4.0, 2.0, 8.0]);
+assert(v_amin == 1, "vector_argmin");
+
+let v_zeros = hml_vector_zeros(3);
+assert(len(v_zeros) == 3, "vector_zeros length");
+assert(v_zeros[0] == 0.0, "vector_zeros value");
+
+let v_ones = hml_vector_ones(3);
+assert(v_ones[0] == 1.0, "vector_ones");
+
+let v_rand = hml_vector_random(5);
+assert(len(v_rand) == 5, "vector_random length");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 3: Matrix Operations
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 3: Matrix Operations ──");
+let ma = [[1.0, 2.0], [3.0, 4.0]];
+let mb = [[5.0, 6.0], [7.0, 8.0]];
+
+let shape = hml_matrix_shape(ma);
+assert(shape[0] == 2, "matrix_shape rows");
+assert(shape[1] == 2, "matrix_shape cols");
+
+let mt = hml_matrix_transpose(ma);
+assert(mt[0][0] == 1.0, "matrix_transpose");
+assert(mt[0][1] == 3.0, "matrix_transpose");
+assert(mt[1][0] == 2.0, "matrix_transpose");
+
+let mm = hml_matrix_multiply(ma, mb);
+assert(mm[0][0] == 19.0, "matrix_multiply 1*5+2*7=19");
+assert(mm[0][1] == 22.0, "matrix_multiply");
+assert(mm[1][0] == 43.0, "matrix_multiply");
+
+let m_add = hml_matrix_add(ma, mb);
+assert(m_add[0][0] == 6.0, "matrix_add");
+
+let m_sub = hml_matrix_sub(ma, mb);
+assert(m_sub[0][0] == -4.0, "matrix_sub");
+
+let m_scale = hml_matrix_scale(ma, 2.0);
+assert(m_scale[0][0] == 2.0, "matrix_scale");
+
+let m_zeros = hml_matrix_zeros(2, 3);
+assert(len(m_zeros) == 2, "matrix_zeros rows");
+assert(len(m_zeros[0]) == 3, "matrix_zeros cols");
+
+let m_ones = hml_matrix_ones(2, 2);
+assert(m_ones[0][0] == 1.0, "matrix_ones");
+
+let m_rand = hml_matrix_random(3, 2);
+assert(len(m_rand) == 3, "matrix_random rows");
+assert(len(m_rand[0]) == 2, "matrix_random cols");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 4: Statistical Functions
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 4: Statistical Functions ──");
+let data = [1.0, 2.0, 3.0, 4.0, 5.0];
+assert(hml_mean(data) == 3.0, "hml_mean");
+
+let d_std = hml_std(data);
+assert(d_std > 1.5 and d_std < 1.6, "hml_std ~1.581");
+
+let X = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]];
+let col_means = hml_column_means(X);
+assert(col_means[0] == 3.0, "hml_column_means col0");
+assert(col_means[1] == 4.0, "hml_column_means col1");
+
+let uniq = hml_unique([1, 2, 2, 3, 1, 4]);
+assert(len(uniq) == 4, "hml_unique count");
+
+let vc = hml_value_counts([1, 1, 2, 3, 3, 3]);
+assert(vc[1] == 2, "hml_value_counts 1");
+assert(vc[3] == 3, "hml_value_counts 3");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 5: Metrics
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 5: Metrics ──");
+let yt = [0, 1, 1, 0, 1];
+let yp = [0, 1, 0, 0, 1];
+let acc = accuracy_score(yt, yp);
+assert(acc == 0.8, "accuracy_score 4/5=0.8");
+
+let mse_val = mse([1.0, 2.0, 3.0], [1.0, 3.0, 2.0]);
+assert(mse_val > 0.66 and mse_val < 0.67, "mse");
+
+let mae_val = mae([1.0, 2.0, 3.0], [1.0, 3.0, 2.0]);
+assert(mae_val > 0.66 and mae_val < 0.67, "mae");
+
+let r2 = r2_score([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]);
+assert(r2 == 1.0, "r2_score perfect");
+
+let cm = confusion_matrix([0, 0, 1, 1], [0, 1, 0, 1], 2);
+assert(cm[0][0] == 1, "confusion_matrix TN");
+assert(cm[1][1] == 1, "confusion_matrix TP");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 6: Preprocessing — train_test_split
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 6: train_test_split ──");
+let X_split = [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0], [7.0], [8.0], [9.0], [10.0]];
+let y_split = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+hml_set_seed(42);
+let split = train_test_split(X_split, y_split, 0.3);
+assert(len(split["X_test"]) == 3, "train_test_split: test size");
+assert(len(split["X_train"]) == 7, "train_test_split: train size");
+assert(len(split["y_test"]) == 3, "train_test_split: y_test size");
+assert(len(split["y_train"]) == 7, "train_test_split: y_train size");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 7: Preprocessing — StandardScaler
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 7: StandardScaler ──");
+let sc = new StandardScaler();
+sc.init_scaler();
+let X_std = [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]];
+let X_trans = sc.fit_transform(X_std);
+assert(sc.fitted == true, "StandardScaler fitted");
+assert(len(X_trans) == 3, "StandardScaler transform rows");
+let col0_std = hml_std([X_trans[0][0], X_trans[1][0], X_trans[2][0]]);
+assert(col0_std > 0.99 and col0_std < 1.01, "StandardScaler: std ~1 after transform");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 8: Preprocessing — MinMaxScaler
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 8: MinMaxScaler ──");
+let mms = new MinMaxScaler();
+mms.init_mmscaler();
+let X_mm = [[2.0, 5.0], [4.0, 10.0], [6.0, 15.0]];
+let X_mm_trans = mms.fit_transform(X_mm);
+assert(X_mm_trans[0][0] == 0.0, "MinMaxScaler: min -> 0");
+assert(X_mm_trans[2][0] == 1.0, "MinMaxScaler: max -> 1");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 9: Preprocessing — LabelEncoder
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 9: LabelEncoder ──");
+let le = new LabelEncoder();
+le.init_encoder();
+let labels = ["cat", "dog", "cat", "bird"];
+let encoded = le.fit_transform(labels);
+assert(len(encoded) == 4, "LabelEncoder: transform length");
+let unique_enc = hml_unique(encoded);
+assert(len(unique_enc) == 3, "LabelEncoder: 3 unique classes");
+let decoded = le.inverse_transform([encoded[0]]);
+assert(decoded[0] == labels[0], "LabelEncoder: inverse_transform");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 10: Linear Regression
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 10: Linear Regression ──");
+let lr = new LinearRegression();
+lr.init_linear(0.01, 2000);
+let X_lr = [[1.0], [2.0], [3.0], [4.0], [5.0]];
+let y_lr = [2.0, 4.0, 6.0, 8.0, 10.0];
+lr.fit(X_lr, y_lr);
+assert(lr.fitted == true, "LinearRegression fitted");
+let preds = lr.predict([[6.0]]);
+assert(preds[0] > 11.0 and preds[0] < 13.0, "LinearRegression: predict ~12");
+let score = lr.score(X_lr, y_lr);
+assert(score > 0.9, "LinearRegression: R² > 0.9");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 11: Logistic Regression
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 11: Logistic Regression ──");
+let logr = new LogisticRegression();
+logr.init_logistic(0.1, 1000);
+let X_logr = [[1.0, 2.0], [2.0, 3.0], [3.0, 4.0], [4.0, 5.0], [5.0, 6.0]];
+let y_logr = [0, 0, 0, 1, 1];
+logr.fit(X_logr, y_logr);
+assert(logr.fitted == true, "LogisticRegression fitted");
+let probas = logr.predict_proba(X_logr);
+assert(probas[0] < 0.5, "LogisticRegression: proba < 0.5 for class 0");
+assert(probas[4] > 0.5, "LogisticRegression: proba > 0.5 for class 1");
+let logr_pred = logr.predict(X_logr);
+let logr_acc = logr.score(X_logr, y_logr);
+assert(logr_acc > 0.6, "LogisticRegression: accuracy > 0.6");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 12: KNN Classifier
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 12: KNN Classifier ──");
+let knn = new KNNClassifier();
+knn.init_knn(3);
+let X_knn = [[1.0, 1.0], [1.5, 2.0], [3.0, 4.0], [5.0, 7.0], [3.5, 5.0], [4.5, 5.0], [3.5, 4.5]];
+let y_knn = [0, 0, 0, 1, 0, 1, 0];
+knn.fit(X_knn, y_knn);
+assert(knn.fitted == true, "KNNClassifier fitted");
+let knn_pred = knn.predict([[1.0, 1.0]]);
+assert(knn_pred[0] == 0, "KNNClassifier: predict same as training");
+let knn_acc = knn.score(X_knn, y_knn);
+assert(knn_acc > 0.7, "KNNClassifier: accuracy > 0.7");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 13: K-Means Clustering
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 13: K-Means Clustering ──");
+let km = new KMeans();
+km.init_kmeans(2, 50);
+let X_km = [[1.0, 2.0], [1.5, 1.8], [5.0, 8.0], [8.0, 8.0], [1.0, 0.6], [9.0, 11.0]];
+hml_set_seed(42);
+km.fit(X_km);
+assert(km.fitted == true, "KMeans fitted");
+let clusters = km.predict(X_km);
+assert(len(clusters) == 6, "KMeans: predict length");
+let centroids = km.get_centroids();
+assert(len(centroids) == 2, "KMeans: 2 centroids");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 14: Decision Tree
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 14: Decision Tree ──");
+let dt = new DecisionTreeClassifier();
+dt.init_dtree(5, 2);
+let X_dt = [[1.0, 1.0], [1.0, 2.0], [3.0, 1.0], [3.0, 2.0]];
+let y_dt = [0, 0, 1, 1];
+dt.fit(X_dt, y_dt);
+assert(dt.fitted == true, "DecisionTreeClassifier fitted");
+let dt_pred = dt.predict(X_dt);
+let dt_acc = dt.score(X_dt, y_dt);
+assert(dt_acc == 1.0, "DecisionTreeClassifier: perfect accuracy");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 15: MLP Neural Network
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 15: MLP Neural Network ──");
+let mlp = new MLPClassifier();
+mlp.init_mlp(4, 0.5, 300);
+let X_mlp = [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]];
+let y_mlp = [0, 1, 1, 0];
+hml_set_seed(42);
+mlp.fit(X_mlp, y_mlp);
+assert(mlp.fitted == true, "MLPClassifier fitted");
+let mlp_pred = mlp.predict(X_mlp);
+let mlp_acc = mlp.score(X_mlp, y_mlp);
+print("  MLP accuracy: " + mlp_acc);
+assert(mlp_acc >= 0.5, "MLPClassifier: accuracy >= 0.5");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 17: Advanced Metrics
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 17: Advanced Metrics ──");
+let yt2 = [0, 1, 1, 0, 1, 0, 1, 1];
+let yp2 = [0, 1, 0, 0, 1, 1, 1, 0];
+
+let prec = precision_score(yt2, yp2, 1);
+assert(prec >= 0.0 and prec <= 1.0, "precision_score in [0,1]");
+
+let rec = recall_score(yt2, yp2, 1);
+assert(rec >= 0.0 and rec <= 1.0, "recall_score in [0,1]");
+
+let f1 = f1_score(yt2, yp2, 1);
+assert(f1 >= 0.0 and f1 <= 1.0, "f1_score in [0,1]");
+
+let spec = specificity_score(yt2, yp2, 1);
+assert(spec >= 0.0 and spec <= 1.0, "specificity_score in [0,1]");
+
+let mcc_val = matthews_corrcoef(yt2, yp2);
+assert(mcc_val >= -1.0 and mcc_val <= 1.0, "matthews_corrcoef in [-1,1]");
+
+let ll_val = log_loss([0, 1], [0.2, 0.8]);
+assert(ll_val > 0.0, "log_loss positive");
+
+let mape_val = mean_absolute_percentage_error([100.0, 200.0], [110.0, 190.0]);
+assert(mape_val >= 0.0, "MAPE non-negative");
+
+let hl_val = hamming_loss(yt2, yp2);
+assert(hl_val >= 0.0 and hl_val <= 1.0, "hamming_loss in [0,1]");
+
+let jac_val = jaccard_score(yt2, yp2);
+assert(jac_val >= 0.0 and jac_val <= 1.0, "jaccard_score in [0,1]");
+
+let bal_acc = balanced_accuracy_score(yt2, yp2);
+assert(bal_acc > 0.0 and bal_acc <= 1.0, "balanced_accuracy_score > 0");
+
+let rep = classification_report(yt2, yp2, [0, 1]);
+assert(rep != nullptr, "classification_report returns dict");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 18: Loss + Activation + Distance + Kernel
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 18: Loss, Activation, Distance, Kernel ──");
+
+# Loss functions
+let bce = binary_crossentropy([1.0, 0.0], [0.9, 0.1]);
+assert(bce > 0.0, "binary_crossentropy > 0");
+
+let hl = hinge_loss_fn([1.0, 0.0], [0.8, -0.3]);
+assert(hl >= 0.0, "hinge_loss_fn >= 0");
+
+# Activation functions
+let sig = sigmoid(0.0);
+assert(sig == 0.5, "sigmoid(0)=0.5");
+
+let sigd = sigmoid_derivative(0.0);
+assert(sigd == 0.25, "sigmoid_derivative(0)=0.25");
+
+let rel = relu(-1.0);
+assert(rel == 0.0, "relu(-1)=0");
+let rel2 = relu(2.0);
+assert(rel2 == 2.0, "relu(2)=2");
+
+let relud = relu_derivative(-1.0);
+assert(relud == 0.0, "relu_derivative(-1)=0");
+let relud2 = relu_derivative(2.0);
+assert(relud2 == 1.0, "relu_derivative(2)=1");
+
+let sm = softmax([1.0, 2.0, 3.0]);
+assert(len(sm) == 3, "softmax len=3");
+
+# Distance metrics
+let de = euclidean_distance([1.0, 2.0], [4.0, 6.0]);
+assert(de == 5.0, "euclidean_distance = 5");
+
+let dm = manhattan_distance([1.0, 2.0], [4.0, 6.0]);
+assert(dm == 7.0, "manhattan_distance = 7");
+
+let dc = cosine_distance([1.0, 0.0], [0.0, 1.0]);
+assert(dc == 1.0, "cosine_distance orthogonal = 1");
+
+# Kernel functions
+let kl = linear_kernel([1.0, 2.0], [3.0, 4.0]);
+assert(kl == 11.0, "linear_kernel 1*3+2*4=11");
+
+let kr = rbf_kernel([0.0, 0.0], [0.0, 0.0], 1.0);
+assert(kr == 1.0, "rbf_kernel same vector = 1");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 19: Probability + Statistical Tests
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 19: Probability & Statistical Tests ──");
+
+let npdf = normal_pdf(0.0, 0.0, 1.0);
+assert(npdf > 0.39 and npdf < 0.4, "normal_pdf(0,0,1) ~ 0.399");
+
+let ncdf = normal_cdf(0.0, 0.0, 1.0);
+assert(ncdf >= 0.49 and ncdf <= 0.51, "normal_cdf(0,0,1) ~ 0.5");
+
+let updf = uniform_pdf(0.5, 0.0, 1.0);
+assert(updf == 1.0, "uniform_pdf(0.5) = 1");
+
+let ppmf = poisson_pmf(2, 3.0);
+assert(ppmf > 0.0, "poisson_pmf > 0");
+
+let bpmf = binomial_pmf(5, 10, 0.5);
+assert(bpmf > 0.0, "binomial_pmf > 0");
+
+# Regression test data
+let X_reg = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]];
+let y_reg = [3.0, 7.0, 11.0, 15.0];
+
+# Feature Engineering
+let poly = polynomial_features(X_reg, 2);
+assert(len(poly[0]) > 2, "polynomial_features increases features");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 20: Optimizers
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 20: Optimizers ──");
+
+let sgd = new SGDOptimizer();
+sgd.init_sgd(0.01, 0.0, false, 0.0);
+let w = [[0.5, -0.3]];
+let grad = [[0.1, -0.2]];
+let upd = sgd.update(w, grad);
+assert(len(upd) == 1, "SGDOptimizer update length");
+assert(len(upd[0]) == 2, "SGDOptimizer update row length");
+
+let adam = new AdamOptimizer();
+adam.init_adam(0.01, 0.9, 0.999, 0.00000001);
+let adam_upd = adam.update([[1.0, 2.0]], [[0.5, -0.3]]);
+assert(len(adam_upd) == 1, "AdamOptimizer update length");
+
+let lr_dec = lr_step_decay(0.1, 10, 0.5, 5);
+assert(lr_dec == 0.025, "lr_step_decay 0.1*0.5^2=0.025");
+
+let l1 = l1_regularization([[1.0, -2.0, 0.5]], 0.1);
+assert(l1 > 0.0, "l1_regularization > 0");
+
+let l2 = l2_regularization([[3.0, 4.0]], 0.5);
+assert(l2 > 0.0, "l2_regularization > 0");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 21: Cross Validation
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 21: Cross Validation ──");
+
+let folds = kfold_split(10, 3, false);
+assert(len(folds) == 3, "kfold_split: 3 folds");
+assert(len(folds[0]["train_indices"]) > 0, "kfold_split: train indices non-empty");
+assert(len(folds[0]["test_indices"]) > 0, "kfold_split: test indices non-empty");
+
+let sfolds = stratified_kfold_split([0, 0, 0, 1, 1, 1], 2);
+assert(len(sfolds) == 2, "stratified_kfold_split: 2 folds");
+
+# Time series split
+let ts_folds = time_series_split(10, 3);
+assert(len(ts_folds) == 3, "time_series_split: 3 folds");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 22: PCA + Dimensionality Reduction
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 22: PCA & Dimensionality Reduction ──");
+
+let pca = new PCA();
+pca.init_pca(2);
+let X_pca_in = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
+pca.fit(X_pca_in);
+assert(pca.fitted == true, "PCA fitted");
+
+let X_pca_tr = pca.transform(X_pca_in);
+assert(len(X_pca_tr) == 3, "PCA transform rows");
+assert(len(X_pca_tr[0]) == 2, "PCA transform 2 components");
+
+let var_ratio = pca.get_explained_variance_ratio();
+assert(len(var_ratio) == 2, "PCA explained variance ratio");
+
+let cov = covariance_matrix(X_pca_in);
+assert(len(cov) == 3, "covariance_matrix 3x3");
+
+let corr = correlation_matrix(X_pca_in);
+assert(len(corr) == 3, "correlation_matrix 3x3");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 23: Data Augmentation
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 23: Data Augmentation ──");
+
+let class_w = class_weight_balanced([0, 0, 0, 1, 1]);
+assert(class_w != nullptr, "class_weight_balanced returns dict");
+
+let sw = compute_sample_weights([0, 0, 1], class_w);
+assert(len(sw) == 3, "compute_sample_weights length");
+
+let noise_X = gaussian_noise_augment([[1.0, 2.0], [3.0, 4.0]], 0.1);
+assert(len(noise_X) == 2, "gaussian_noise_augment rows");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 24: Time Series + NLP + Outliers
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 24: Time Series, NLP, Outliers ──");
+
+# Time Series
+let ts_data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+let ts_ma = hml_moving_average(ts_data, 3);
+assert(len(ts_ma) == 4, "moving_average: length 6-3+1=4");
+assert(ts_ma[0] == 2.0, "moving_average: first value (1+2+3)/3=2");
+
+let ts_ema = hml_exponential_moving_average(ts_data, 0.5);
+assert(len(ts_ema) == 6, "EMA: length preserved");
+
+let ts_lag = hml_lag_features(ts_data, 2);
+assert(len(ts_lag) == 4, "lag_features: length 6-2=4");
+
+# NLP
+let tokens = hml_tokenize_whitespace("hello world test");
+assert(len(tokens) == 3, "tokenize_whitespace: 3 tokens");
+assert(tokens[0] == "hello", "tokenize_whitespace: first token");
+
+let lower = hml_lower_case(["Hello", "WORLD"]);
+assert(lower[0] == "hello", "lower_case: hello");
+
+let ng = hml_ngrams(["a", "b", "c", "d"], 2);
+assert(len(ng) >= 3, "ngrams: at least 3 bigrams");
+
+let bow_mat = hml_bag_of_words(["hello world", "hello test"]);
+assert(len(bow_mat) == 2, "bag_of_words: 2 docs");
+
+# Outliers
+let odata = [1.0, 2.0, 3.0, 4.0, 100.0];
+let z_out = hml_zscore_outliers(odata, 2.0);
+assert(len(z_out) == 5, "zscore_outliers: 5 values");
+
+let iqr_out = hml_iqr_outliers(odata, 1.5);
+assert(len(iqr_out) == 5, "iqr_outliers: 5 values");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 25: Library Summary v2.0
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 25: hsharpmyl_summary v2.0 ──");
+hsharpmyl_summary();
+assert(true, "hsharpmyl_summary v2.0 runs");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 26: V3 Extension — Advanced Deep Learning Components (Section 25)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 26: V3 Deep Learning ──");
+let w = hml_xavier_init(10, 5);
+assert(len(w) == 10, "xavier_init: 10 rows");
+assert(len(w[0]) == 5, "xavier_init: 5 cols");
+
+let h = hml_he_init(10);
+assert(len(h) == 10, "he_init: 10 rows");
+
+let u = hml_uniform_init(3, 4, 0.1);
+assert(len(u) == 3, "uniform_init: 3 rows");
+assert(len(u[0]) == 4, "uniform_init: 4 cols");
+
+let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]];
+let gamma = [1.0, 1.0, 1.0]; let beta = [0.0, 0.0, 0.0];
+let ln = hml_layer_norm_forward(x, gamma, beta, 0.000000001);
+assert(len(ln) == 2, "layer_norm_forward: 2 rows");
+
+let dr = hml_dropout_forward(x, 0.5, true);
+assert(len(dr) == 2, "dropout_forward: 2 rows");
+
+let flat = hml_flatten(x);
+assert(len(flat) == 6, "flatten: 6 elements");
+
+let pe = hml_positional_encoding(4, 8);
+assert(len(pe) == 4, "positional_encoding: 4 positions");
+assert(len(pe[0]) == 8, "positional_encoding: 8 dims");
+
+let emb = hml_embedding_lookup([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], [0, 2]);
+assert(len(emb) == 2, "embedding_lookup: 2 embeddings");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 27: V3 Extension — Reinforcement Learning (Section 26)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 27: V3 Reinforcement Learning ──");
+let q_vals = [0.0, 1.0, 0.5];
+let act = hml_epsilon_greedy(q_vals, 0.0);
+assert(act >= 0 and act < 3, "epsilon_greedy: valid action");
+
+let act2 = hml_softmax_policy(q_vals, 1.0);
+assert(act2 >= 0 and act2 < 3, "softmax_policy: valid action");
+
+let ucb = hml_multi_armed_bandit_ucb([0.5, 0.3, 0.7], [10, 5, 8], 23);
+assert(ucb >= 0 and ucb < 3, "multi_armed_bandit_ucb: valid arm");
+
+let disc = hml_reward_discount([1.0, 0.0, 1.0], 0.9);
+assert(len(disc) == 3, "reward_discount: 3 values");
+
+let buf = hml_replay_buffer_create(100);
+assert(buf != nullptr, "replay_buffer_create: not null");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 28: V3 Extension — Bayesian Methods (Section 27)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 28: V3 Bayesian Methods ──");
+let rbf = hml_gaussian_process_rbf_kernel([[1.0, 2.0]], [[3.0, 4.0]], 1.0);
+assert(rbf[0][0] > 0.0, "gaussian_process_rbf_kernel: positive");
+
+let bb = hml_bayesian_bootstrap([1.0, 2.0, 3.0, 4.0, 5.0], 10);
+assert(len(bb) == 10, "bayesian_bootstrap: 10 samples");
+
+let ei = hml_expected_improvement([0.5], [0.2], 0.3, 0.01);
+assert(len(ei) == 1, "expected_improvement: 1 value");
+
+let beta_s = hml_beta_distribution_sample(2.0, 5.0);
+assert(beta_s >= 0.0 and beta_s <= 1.0, "beta_distribution_sample: in [0,1]");
+
+let gamma_s = hml_gamma_distribution_sample(2.0, 1.0);
+assert(gamma_s > 0.0, "gamma_distribution_sample: positive");
+
+let pi = hml_probability_improvement([0.5], [0.2], 0.3, 0.01);
+assert(len(pi) == 1, "probability_improvement: 1 value");
+
+let nb = hml_naive_bayes_gaussian_fit([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], [0, 1, 0]);
+assert(nb != nullptr, "naive_bayes_gaussian_fit: model not null");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 29: V3 Extension — Advanced Clustering (Section 28)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 29: V3 Advanced Clustering ──");
+let cdata = [[1.0, 2.0], [1.5, 1.8], [5.0, 8.0], [8.0, 8.0], [1.0, 0.6], [9.0, 11.0]];
+let db_labels = hml_dbscan(cdata, 2.0, 2);
+assert(len(db_labels) == 6, "dbscan: 6 labels");
+
+let ss = hml_silhouette_score(cdata, [0, 0, 1, 1, 0, 1]);
+assert(ss >= -1.0 and ss <= 1.0, "silhouette_score in [-1,1]");
+
+let db_idx = hml_davies_bouldin_score(cdata, [0, 0, 1, 1, 0, 1]);
+assert(db_idx >= 0.0, "davies_bouldin_score: non-negative");
+
+let ar = hml_adjusted_rand_score([0, 0, 1, 1, 0, 1], [0, 0, 1, 1, 0, 1]);
+assert(ar >= 0.0, "adjusted_rand_score: >= 0");
+
+let ch = hml_calinski_harabasz_score(cdata, [0, 0, 1, 1, 0, 1]);
+assert(ch >= 0.0, "calinski_harabasz_score: non-negative");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 30: V3 Extension — Feature Selection (Section 29)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 30: V3 Feature Selection ──");
+let Xs = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]];
+let ys = [1.0, 2.0, 3.0];
+let mi = hml_mutual_information(Xs, ys, 5);
+assert(len(mi) == 3, "mutual_information: 3 features");
+
+let fv = hml_f_regression(Xs, ys);
+assert(len(fv) == 3, "f_regression: 3 scores");
+
+let vt = hml_variance_threshold(Xs, 0.0);
+assert(len(vt) == 3, "variance_threshold: 3 features");
+
+let cs = hml_chi2_score(Xs, [0, 1, 0]);
+assert(len(cs) == 3, "chi2_score: 3 features");
+
+let fs = hml_fisher_score(Xs, ys);
+assert(len(fs) == 3, "fisher_score: 3 features");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 31: V3 Extension — Model Interpretability (Section 30)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 31: V3 Model Interpretability ──");
+let dummy_model = {"coef": [1.0, 2.0, 3.0], "intercept": 0.5};
+let pi = hml_permutation_importance(dummy_model, Xs, ys, 3);
+assert(len(pi) == 3, "permutation_importance: 3 features");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 32: V3 Extension — Recommendation Systems (Section 31)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 32: V3 Recommendation Systems ──");
+let R = [[5.0, 3.0, 0.0], [4.0, 0.0, 0.0], [1.0, 1.0, 0.0]];
+let mf = hml_matrix_factorization_sgd(R, 2, 0.01, 0.1, 5);
+assert(len(mf["P"]) == 3, "matrix_factorization_sgd: 3 user rows");
+
+let prec = hml_precision_at_k([0, 1, 2], [0, 2, 4], 3);
+assert(prec >= 0.0 and prec <= 1.0, "precision_at_k in [0,1]");
+
+let ndcg = hml_ndcg_at_k([0, 1, 2], [0, 2, 4], 3);
+assert(ndcg >= 0.0 and ndcg <= 1.0, "ndcg_at_k in [0,1]");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 33: V3 Extension — Graph Algorithms (Section 32)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 33: V3 Graph Algorithms ──");
+let g = [[0, 4, 0, 0], [4, 0, 8, 0], [0, 8, 0, 7], [0, 0, 7, 0]];
+let dij = hml_shortest_path_dijkstra(g, 0);
+assert(len(dij) == 4, "shortest_path_dijkstra: 4 distances");
+
+let pg = hml_pagerank([[0, 1, 0], [0, 0, 1], [1, 0, 0]], 0.85, 10);
+assert(len(pg) == 3, "pagerank: 3 nodes");
+
+let dg = hml_degree_centrality(g);
+assert(len(dg) == 4, "degree_centrality: 4 nodes");
+
+let lapl = hml_graph_laplacian(g);
+assert(len(lapl) == 4, "graph_laplacian: 4x4");
+
+let cc = hml_clustering_coefficient(g);
+assert(cc >= 0.0 and cc <= 1.0, "clustering_coefficient: in [0,1]");
+
+let comp = hml_connected_components(g);
+assert(len(comp) >= 1, "connected_components: at least 1");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 34: V3 Extension — Time Series & Survival Analysis (Section 33)
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 34: V3 Time Series & Survival ──");
+let ts = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+let arima = hml_arima_fit(ts, 1, 0, 0);
+assert(arima != nullptr, "arima_fit: not null");
+
+let cp = hml_change_point_detection(ts, 10.0);
+assert(len(cp) >= 0, "change_point_detection: array");
+
+let t = [1.0, 2.0, 3.0, 4.0, 5.0];
+let ev = [1, 1, 0, 1, 0];
+let km = hml_survival_kaplan_meier(t, ev);
+assert(len(km) >= 2, "survival_kaplan_meier: survival curve");
+
+let na = hml_survival_nelson_aalen(t, ev);
+assert(len(na) >= 2, "survival_nelson_aalen: curve");
+
+let gc = hml_granger_causality_test(ts, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 2);
+assert(len(gc) >= 2, "granger_causality_test: results");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Print Results
+# ═══════════════════════════════════════════════════════════════════════════
+test_summary();

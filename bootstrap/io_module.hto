@@ -1,0 +1,494 @@
+# H# Input/Output Module
+# Provides comprehensive I/O operations for console and file handling
+
+# Constants (using let)
+let IO_BUFFER_SIZE = 4096;
+let IO_LINE_ENDING = "\n";
+
+# Console Output Functions
+
+# Print with newline (wrapper around built-in print)
+fn io_print(message) {
+    print(message);
+    return nullptr;
+}
+
+# Print without newline
+fn io_write(message) {
+    # Use string concatenation to avoid newline
+    print(str(message));
+    return nullptr;
+}
+
+# Print formatted message with multiple arguments
+fn io_printf(format_str, args_array) {
+    let result = "";
+    let arg_idx = 0;
+    let i = 0;
+    while (i < len(format_str)) {
+        if (format_str[i] == "{" and i + 1 < len(format_str) and format_str[i + 1] == "}") {
+            if (arg_idx < len(args_array)) {
+                result = result + str(args_array[arg_idx]);
+                arg_idx = arg_idx + 1;
+            }
+            i = i + 2;
+        } else {
+            result = result + format_str[i];
+            i = i + 1;
+        }
+    }
+    print(result);
+    return nullptr;
+}
+
+# Print error message (prefixed with "Error: ")
+fn io_print_error(message) {
+    print("Error: " + str(message));
+    return nullptr;
+}
+
+# Print warning message (prefixed with "Warning: ")
+fn io_print_warning(message) {
+    print("Warning: " + str(message));
+    return nullptr;
+}
+
+# Print info message (prefixed with "Info: ")
+fn io_print_info(message) {
+    print("Info: " + str(message));
+    return nullptr;
+}
+
+# Print debug message (only if debug mode is enabled)
+fn io_print_debug(message, debug_enabled) {
+    if (debug_enabled) {
+        print("[DEBUG] " + str(message));
+    }
+    return nullptr;
+}
+
+# Print separator line
+fn io_print_separator(char, length) {
+    if (char == nullptr) {
+        char = "-";
+    }
+    if (length == nullptr) {
+        length = 50;
+    }
+    let line = "";
+    let i = 0;
+    while (i < length) {
+        line = line + char;
+        i = i + 1;
+    }
+    print(line);
+    return nullptr;
+}
+
+# Print centered text
+fn io_print_centered(text, width) {
+    if (width == nullptr) {
+        width = 50;
+    }
+    let text_len = len(str(text));
+    let padding = int((width - text_len) / 2);
+    let spaces = "";
+    let i = 0;
+    while (i < padding) {
+        spaces = spaces + " ";
+        i = i + 1;
+    }
+    print(spaces + str(text));
+    return nullptr;
+}
+
+# Console Input Functions
+
+# Read a line from stdin with optional prompt
+fn io_read_line(prompt) {
+    if (prompt != nullptr) {
+        return input(str(prompt));
+    } else {
+        return input();
+    }
+}
+
+# Read integer from stdin
+fn io_read_int(prompt) {
+    let input_str = io_read_line(prompt);
+    return int(input_str);
+}
+
+# Read float from stdin
+fn io_read_float(prompt) {
+    let input_str = io_read_line(prompt);
+    return float(input_str);
+}
+
+# Read yes/no response
+fn io_read_yes_no(prompt) {
+    let response = io_read_line(prompt + " (y/n): ");
+    let lower_response = str_lowercase(response);
+    return lower_response == "y" or lower_response == "yes";
+}
+
+# Read choice from list of options
+fn io_read_choice(prompt, options) {
+    io_print(prompt);
+    let i = 0;
+    while (i < len(options)) {
+        io_print("  " + str(i + 1) + ". " + str(options[i]));
+        i = i + 1;
+    }
+    let choice = io_read_int("Enter choice (1-" + str(len(options)) + "): ");
+    if (choice >= 1 and choice <= len(options)) {
+        return options[choice - 1];
+    }
+    return nullptr;
+}
+
+# File Reading Functions
+
+# Read entire file content as string
+fn io_file_read(path) {
+    return read_file(path);
+}
+
+# Read file as array of lines
+fn io_file_read_lines(path) {
+    return io_read_lines(path);
+}
+
+# Read first N lines from file
+fn io_file_read_first_n_lines(path, n) {
+    let all_lines = io_file_read_lines(path);
+    let result = [];
+    let i = 0;
+    while (i < n and i < len(all_lines)) {
+        push(result, all_lines[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+# Read last N lines from file
+fn io_file_read_last_n_lines(path, n) {
+    let all_lines = io_file_read_lines(path);
+    let total = len(all_lines);
+    let start = total - n;
+    if (start < 0) {
+        start = 0;
+    }
+    let result = [];
+    let i = start;
+    while (i < total) {
+        push(result, all_lines[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+# Count lines in file
+fn io_file_count_lines(path) {
+    let lines = io_file_read_lines(path);
+    return len(lines);
+}
+
+# Check if file exists and is readable
+fn io_file_exists(path) {
+    return fs_exists(path) and fs_is_file(path);
+}
+
+# Get file size (approximate, by reading content)
+fn io_file_size(path) {
+    let content = io_file_read(path);
+    return len(content);
+}
+
+# File Writing Functions
+
+# Write string to file (overwrite)
+fn io_file_write(path, content) {
+    return write_file(path, content);
+}
+
+# Append string to file
+fn io_file_append(path, content) {
+    return io_append_file(path, content);
+}
+
+# Write array of lines to file
+fn io_file_write_lines(path, lines) {
+    return io_write_lines(path, lines);
+}
+
+# Append array of lines to file
+fn io_file_append_lines(path, lines) {
+    let i = 0;
+    while (i < len(lines)) {
+        io_file_append(path, str(lines[i]) + IO_LINE_ENDING);
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# Create empty file
+fn io_file_create(path) {
+    return io_file_write(path, "");
+}
+
+# Copy file content from source to destination
+fn io_file_copy(source_path, dest_path) {
+    let content = io_file_read(source_path);
+    return io_file_write(dest_path, content);
+}
+
+# Clear file content (make it empty)
+fn io_file_clear(path) {
+    return io_file_write(path, "");
+}
+
+# CSV Helper Functions
+
+# Parse CSV line into array of fields
+fn io_csv_parse_line(line, delimiter) {
+    if (delimiter == nullptr) {
+        delimiter = ",";
+    }
+    let fields = [];
+    let current_field = "";
+    let i = 0;
+    while (i < len(line)) {
+        if (line[i] == delimiter) {
+            push(fields, current_field);
+            current_field = "";
+        } else {
+            current_field = current_field + line[i];
+        }
+        i = i + 1;
+    }
+    push(fields, current_field);
+    return fields;
+}
+
+# Read CSV file into array of arrays
+fn io_csv_read(path, delimiter) {
+    if (delimiter == nullptr) {
+        delimiter = ",";
+    }
+    let lines = io_file_read_lines(path);
+    let result = [];
+    let i = 0;
+    while (i < len(lines)) {
+        let line = str_trim(lines[i]);
+        if (len(line) > 0) {
+            let fields = io_csv_parse_line(line, delimiter);
+            push(result, fields);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# Write array of arrays to CSV file
+fn io_csv_write(path, data, delimiter) {
+    if (delimiter == nullptr) {
+        delimiter = ",";
+    }
+    let lines = [];
+    let i = 0;
+    while (i < len(data)) {
+        let row = data[i];
+        let line = "";
+        let j = 0;
+        while (j < len(row)) {
+            if (j > 0) {
+                line = line + delimiter;
+            }
+            line = line + str(row[j]);
+            j = j + 1;
+        }
+        push(lines, line);
+        i = i + 1;
+    }
+    return io_file_write_lines(path, lines);
+}
+
+# JSON-like Helper Functions (simple key-value pairs)
+
+# Write simple key-value pairs to file
+fn io_kv_write(path, keys, values) {
+    let lines = [];
+    let i = 0;
+    while (i < len(keys)) {
+        let line = str(keys[i]) + "=" + str(values[i]);
+        push(lines, line);
+        i = i + 1;
+    }
+    return io_file_write_lines(path, lines);
+}
+
+# Read simple key-value pairs from file
+fn io_kv_read(path) {
+    let lines = io_file_read_lines(path);
+    let keys = [];
+    let values = [];
+    let i = 0;
+    while (i < len(lines)) {
+        let line = str_trim(lines[i]);
+        if (len(line) > 0) {
+            let parts = io_csv_parse_line(line, "=");
+            if (len(parts) >= 2) {
+                push(keys, parts[0]);
+                push(values, parts[1]);
+            }
+        }
+        i = i + 1;
+    }
+    return [keys, values];
+}
+
+# Progress and Status Functions
+
+# Show progress bar
+fn io_progress_bar(current, total, width) {
+    if (width == nullptr) {
+        width = 30;
+    }
+    let percentage = int((current * 100) / total);
+    let filled = int((current * width) / total);
+    let bar = "";
+    let i = 0;
+    while (i < filled) {
+        bar = bar + "#";
+        i = i + 1;
+    }
+    while (i < width) {
+        bar = bar + "-";
+        i = i + 1;
+    }
+    print("[" + bar + "] " + str(percentage) + " pct");
+    return nullptr;
+}
+
+# Show loading spinner (simplified)
+fn io_loading_spinner(message, iteration) {
+    let spinners = ["|", "/", "-", "\\"];
+    let idx = int(iteration / 4) - (int(iteration / 4) * 4);  # Use division instead of modulo
+    let spinner = spinners[idx];
+    print("\r" + spinner + " " + str(message));
+    return nullptr;
+}
+
+# Logging Functions
+
+# Write log entry with timestamp
+fn io_log_write(log_file, level, message) {
+    let timestamp = datetime_now();
+    let log_entry = "[" + timestamp + "] [" + level + "] " + message + IO_LINE_ENDING;
+    return io_file_append(log_file, log_entry);
+}
+
+# Write info log
+fn io_log_info(log_file, message) {
+    return io_log_write(log_file, "INFO", message);
+}
+
+# Write error log
+fn io_log_error(log_file, message) {
+    return io_log_write(log_file, "ERROR", message);
+}
+
+# Write warning log
+fn io_log_warning(log_file, message) {
+    return io_log_write(log_file, "WARNING", message);
+}
+
+# Write debug log
+fn io_log_debug(log_file, message, debug_enabled) {
+    if (debug_enabled) {
+        return io_log_write(log_file, "DEBUG", message);
+    }
+    return nullptr;
+}
+
+# Table Display Functions
+
+# Display simple table from headers and rows
+fn io_display_table(headers, rows, column_width) {
+    if (column_width == nullptr) {
+        column_width = 15;
+    }
+
+    # Print headers
+    let header_line = "";
+    let i = 0;
+    while (i < len(headers)) {
+        let cell = str(headers[i]);
+        header_line = header_line + io_pad_right(cell, column_width);
+        i = i + 1;
+    }
+    print(header_line);
+    io_print_separator("-", len(header_line));
+
+    # Print rows
+    let r = 0;
+    while (r < len(rows)) {
+        let row = rows[r];
+        let row_line = "";
+        let j = 0;
+        while (j < len(row) and j < len(headers)) {
+            let cell = str(row[j]);
+            row_line = row_line + io_pad_right(cell, column_width);
+            j = j + 1;
+        }
+        print(row_line);
+        r = r + 1;
+    }
+    return nullptr;
+}
+
+# String Padding Helpers
+
+# Pad string to the right
+fn io_pad_right(text, width) {
+    let result = str(text);
+    while (len(result) < width) {
+        result = result + " ";
+    }
+    return result;
+}
+
+# Pad string to the left
+fn io_pad_left(text, width) {
+    let result = str(text);
+    while (len(result) < width) {
+        result = " " + result;
+    }
+    return result;
+}
+
+# Interactive Menu Function
+
+# Display menu and get user selection
+fn io_menu(title, options) {
+    io_print_separator("=", 40);
+    io_print_centered(title, 40);
+    io_print_separator("=", 40);
+
+    let i = 0;
+    while (i < len(options)) {
+        io_print("  " + str(i + 1) + ". " + str(options[i]));
+        i = i + 1;
+    }
+
+    io_print_separator("=", 40);
+    let choice = io_read_int("Select option (1-" + str(len(options)) + "): ");
+
+    if (choice >= 1 and choice <= len(options)) {
+        return choice;
+    } else {
+        io_print_error("Invalid choice");
+        return 0;
+    }
+}

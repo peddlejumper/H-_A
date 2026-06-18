@@ -1,0 +1,216 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/interpreter.hto";
+
+let passed = 0;
+let failed = 0;
+
+fn check(name, condition) {
+    if (condition) {
+        passed = passed + 1;
+        print("[PASS] " + name);
+    } else {
+        failed = failed + 1;
+        print("[FAIL] " + name);
+    }
+}
+
+fn run_hsharp(src, expected_outputs) {
+    let tokens = tokenize(src);
+    let ast = parse(tokens);
+    let env = [];
+    let result = eval_node(ast, env);
+    print("Expected outputs:");
+    let i = 0;
+    while (i < len(expected_outputs)) {
+        print("  -> " + expected_outputs[i]);
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+print("========================================");
+print("  H# Bootstrap Self-Hosting Test Suite");
+print("========================================");
+print("");
+
+# ======== Test 1: Tokenizer basics ========
+print("--- Test 1: Tokenizer ---");
+let tok_src = "let x = 42;\nfn add(a, b) { return a + b; }";
+let tok_result = tokenize(tok_src);
+check("Tokenizer returns tokens", tok_result != nullptr);
+check("Tokenizer: LET token", tok_result[0]["type"] == "LET");
+check("Tokenizer: IDENTIFIER token", tok_result[1]["type"] == "IDENTIFIER");
+check("Tokenizer: EQ token", tok_result[2]["type"] == "EQ");
+check("Tokenizer: NUMBER token", tok_result[3]["type"] == "NUMBER");
+check("Tokenizer: FN token", tok_result[5]["type"] == "FN");
+check("Tokenizer: has EOF", tok_result[len(tok_result) - 1]["type"] == "EOF");
+print("");
+
+# ======== Test 2: Parser basics ========
+print("--- Test 2: Parser ---");
+let par_src = "let x = 42;\nlet y = x + 8;\nprint(y);";
+let par_tokens = tokenize(par_src);
+let par_ast = parse(par_tokens);
+check("Parser: Program root type", par_ast[0] == "Program");
+check("Parser: 3 statements", len(par_ast[1]) == 3);
+check("Parser: LetStatement[0]", par_ast[1][0][0] == "LetStatement");
+check("Parser: LetStatement[1]", par_ast[1][1][0] == "LetStatement");
+check("Parser: PrintStatement", par_ast[1][2][0] == "PrintStatement");
+check("Parser: BinaryOp in let y", par_ast[1][1][2][0] == "BinaryOp");
+check("Parser: BinaryOp op is PLUS", par_ast[1][1][2][2] == "PLUS");
+print("");
+
+# ======== Test 3: Arithmetic via interpreter ========
+print("--- Test 3: Arithmetic ---");
+let arith_src = "let a = 42;\nlet b = 8;\nlet c = a + b;\nprint(c);";
+let arith_tokens = tokenize(arith_src);
+let arith_ast = parse(arith_tokens);
+let arith_env = [];
+eval_node(arith_ast, arith_env);
+let c_val = _env_get(arith_env, "c");
+check("42 + 8 = 50", c_val == 50);
+print("");
+
+# ======== Test 4: Subtraction, multiplication, division ========
+print("--- Test 4: More Arithmetic ---");
+let math_src = "let s = 100 - 25;\nlet m = 6 * 7;\nlet d = 100 / 4;\nlet mix = s + m * 2 - d;";
+let math_tokens = tokenize(math_src);
+let math_ast = parse(math_tokens);
+let math_env = [];
+eval_node(math_ast, math_env);
+check("100 - 25 = 75", _env_get(math_env, "s") == 75);
+check("6 * 7 = 42", _env_get(math_env, "m") == 42);
+check("100 / 4 = 25", _env_get(math_env, "d") == 25);
+check("75 + 42*2 - 25 = 134", _env_get(math_env, "mix") == 134);
+print("");
+
+# ======== Test 5: Comparisons ========
+print("--- Test 5: Comparisons ---");
+let cmp_src = "let eq = 10 == 10;\nlet neq = 10 != 5;\nlet gt = 10 > 5;\nlet lt = 5 < 10;\nlet gte = 10 >= 10;\nlet lte = 5 <= 10;";
+let cmp_tokens = tokenize(cmp_src);
+let cmp_ast = parse(cmp_tokens);
+let cmp_env = [];
+eval_node(cmp_ast, cmp_env);
+check("10 == 10 true", _env_get(cmp_env, "eq") == true);
+check("10 != 5 true", _env_get(cmp_env, "neq") == true);
+check("10 > 5 true", _env_get(cmp_env, "gt") == true);
+check("5 < 10 true", _env_get(cmp_env, "lt") == true);
+check("10 >= 10 true", _env_get(cmp_env, "gte") == true);
+check("5 <= 10 true", _env_get(cmp_env, "lte") == true);
+print("");
+
+# ======== Test 6: Boolean logic ========
+print("--- Test 6: Boolean Logic ---");
+let bool_src = "let t1 = true and true;\nlet t2 = true or false;\nlet t3 = not false;\nlet f1 = true and false;\nlet f2 = false or false;";
+let bool_tokens = tokenize(bool_src);
+let bool_ast = parse(bool_tokens);
+let bool_env = [];
+eval_node(bool_ast, bool_env);
+check("true and true", _env_get(bool_env, "t1") == true);
+check("true or false", _env_get(bool_env, "t2") == true);
+check("not false", _env_get(bool_env, "t3") == true);
+check("true and false -> false", _env_get(bool_env, "f1") == false);
+check("false or false -> false", _env_get(bool_env, "f2") == false);
+print("");
+
+# ======== Test 7: If/Else ========
+print("--- Test 7: If/Else ---");
+let if_src = "let v = 10;\nif (v > 5) {\n    let r = 100;\n} else {\n    let r = 200;\n}\n\nlet w = 3;\nif (w > 5) {\n    let s = 100;\n} else {\n    let s = 200;\n}";
+let if_tokens = tokenize(if_src);
+let if_ast = parse(if_tokens);
+let if_env = [];
+eval_node(if_ast, if_env);
+check("if true branch", _env_get(if_env, "r") == 100);
+check("if false branch", _env_get(if_env, "s") == 200);
+print("");
+
+# ======== Test 8: While loop ========
+print("--- Test 8: While Loop ---");
+let while_src = "let sum = 0;\nlet n = 1;\nwhile (n <= 5) {\n    sum = sum + n;\n    n = n + 1;\n}";
+let while_tokens = tokenize(while_src);
+let while_ast = parse(while_tokens);
+let while_env = [];
+eval_node(while_ast, while_env);
+check("sum of 1..5 = 15", _env_get(while_env, "sum") == 15);
+check("n after loop = 6", _env_get(while_env, "n") == 6);
+print("");
+
+# ======== Test 9: Functions ========
+print("--- Test 9: Functions ---");
+let fn_src = "fn square(x) {\n    return x * x;\n}\n\nfn add3(a, b, c) {\n    return a + b + c;\n}\n\nlet s5 = square(5);\nlet s7 = square(7);\nlet a3 = add3(1, 2, 3);";
+let fn_tokens = tokenize(fn_src);
+let fn_ast = parse(fn_tokens);
+let fn_env = [];
+eval_node(fn_ast, fn_env);
+check("square(5) = 25", _env_get(fn_env, "s5") == 25);
+check("square(7) = 49", _env_get(fn_env, "s7") == 49);
+check("add3(1,2,3) = 6", _env_get(fn_env, "a3") == 6);
+print("");
+
+# ======== Test 10: Recursion (factorial) ========
+print("--- Test 10: Recursion ---");
+let fact_src = "fn fact(n) {\n    if (n <= 1) {\n        return 1;\n    }\n    return n * fact(n - 1);\n}\n\nlet f0 = fact(1);\nlet f5 = fact(5);\nlet f10 = fact(10);";
+let fact_tokens = tokenize(fact_src);
+let fact_ast = parse(fact_tokens);
+let fact_env = [];
+eval_node(fact_ast, fact_env);
+check("fact(1) = 1", _env_get(fact_env, "f0") == 1);
+check("fact(5) = 120", _env_get(fact_env, "f5") == 120);
+check("fact(10) = 3628800", _env_get(fact_env, "f10") == 3628800);
+print("");
+
+# ======== Test 11: While loop with print ========
+print("--- Test 11: While/Print ---");
+# This test verifies that print inside while works (__PRINT__ handling)
+let wp_src = "let x = 0;\nwhile (x < 3) {\n    let t = x * 10;\n    x = x + 1;\n}";
+let wp_tokens = tokenize(wp_src);
+let wp_ast = parse(wp_tokens);
+let wp_env = [];
+eval_node(wp_ast, wp_env);
+check("while/print final x = 3", _env_get(wp_env, "x") == 3);
+print("");
+
+# ======== Test 12: Self-hosting - tokenize rich H# syntax ========
+print("--- Test 12: Tokenize Self ---");
+# A comprehensive H# code snippet to test the tokenizer's coverage
+let self_src = "let x = 42;\nfn add(a, b) { return a + b; }\nif (x > 10) { print(x); } else { let y = 5; }\nwhile (x < 100) { x = x + 1; }\nlet ok = true and false;\nlet check = a or b;\nlet inv = not ok;\nfor (i in arr) { print(i); }\nlet n = nullptr;\nlet cmp = a == b;\nlet neq = a != b;";
+let self_tokens = tokenize(self_src);
+check("Self-tokenize: has tokens", self_tokens != nullptr);
+check("Self-tokenize: token count > 50", len(self_tokens) > 50);
+check("Self-tokenize: first is LET", self_tokens[0]["type"] == "LET");
+let found_fn = false;
+let found_if = false;
+let found_while = false;
+let found_and = false;
+let found_or = false;
+let found_not = false;
+let i = 0;
+while (i < len(self_tokens)) {
+    let t = self_tokens[i];
+    if (t["type"] == "FN") { found_fn = true; }
+    if (t["type"] == "IF") { found_if = true; }
+    if (t["type"] == "WHILE") { found_while = true; }
+    if (t["type"] == "AND") { found_and = true; }
+    if (t["type"] == "OR") { found_or = true; }
+    if (t["type"] == "NOT") { found_not = true; }
+    i = i + 1;
+}
+check("Self-tokenize: found FN", found_fn);
+check("Self-tokenize: found IF", found_if);
+check("Self-tokenize: found WHILE", found_while);
+check("Self-tokenize: found AND", found_and);
+check("Self-tokenize: found OR", found_or);
+check("Self-tokenize: found NOT", found_not);
+print("");
+
+# ======== Summary ========
+print("========================================");
+print("  Results: " + passed + " passed, " + failed + " failed");
+print("========================================");
+if (failed > 0) {
+    print("SOME TESTS FAILED!");
+}
+if (failed == 0) {
+    print("ALL TESTS PASSED!");
+}

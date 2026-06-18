@@ -1,0 +1,513 @@
+# H# Math Utility Library
+# Mathematical functions and constants implemented in H#
+
+# Constants
+let MATH_PI = 3.141592653589793;
+let MATH_E = 2.718281828459045;
+let MATH_SQRT2 = 1.4142135623730951;
+let MATH_SQRT1_2 = 0.7071067811865476;
+let MATH_LN2 = 0.6931471805599453;
+let MATH_LN10 = 2.302585092994046;
+let MATH_LOG2E = 1.4426950408889634;
+let MATH_LOG10E = 0.4342944819032518;
+
+fn math_abs(x) {
+    # Absolute value
+    if (x < 0) {
+        return -x;
+    }
+    return x;
+}
+
+fn math_min(a, b) {
+    # Minimum of two numbers
+    if (a < b) {
+        return a;
+    }
+    return b;
+}
+
+fn math_max(a, b) {
+    # Maximum of two numbers
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+fn math_clamp(value, min_val, max_val) {
+    # Clamp value between min and max
+    if (value < min_val) {
+        return min_val;
+    }
+    if (value > max_val) {
+        return max_val;
+    }
+    return value;
+}
+
+fn math_sign(x) {
+    # Sign of number: -1, 0, or 1
+    if (x > 0) {
+        return 1;
+    }
+    if (x < 0) {
+        return -1;
+    }
+    return 0;
+}
+
+fn math_floor(x) {
+    # Floor function - round down to nearest integer
+    let int_part = int(x);
+    if (x >= 0 or int_part == x) {
+        return int_part;
+    }
+    return int_part - 1;
+}
+
+fn math_ceil(x) {
+    # Ceiling function - round up to nearest integer
+    let int_part = int(x);
+    if (x <= 0 or int_part == x) {
+        return int_part;
+    }
+    return int_part + 1;
+}
+
+fn math_round(x) {
+    # Round to nearest integer
+    let int_part = int(x);
+    let frac = x - int_part;
+    
+    if (frac >= 0.5) {
+        return int_part + 1;
+    }
+    if (frac <= -0.5) {
+        return int_part - 1;
+    }
+    return int_part;
+}
+
+fn math_trunc(x) {
+    # Truncate decimal part
+    return int(x);
+}
+
+fn math_pow(base, exponent) {
+    # Power function
+    if (exponent == 0) {
+        return 1;
+    }
+    
+    if (exponent < 0) {
+        return 1 / math_pow(base, -exponent);
+    }
+    
+    if (exponent == int(exponent)) {
+        # Integer exponent - use fast exponentiation
+        let result = 1;
+        let exp = int(exponent);
+        let b = base;
+        
+        while (exp > 0) {
+            let remainder = exp - int(exp / 2) * 2;
+            if (remainder == 1) {
+                result = result * b;
+            }
+            exp = exp / 2;
+            b = b * b;
+        }
+        
+        return result;
+    }
+    
+    # For non-integer exponents, would need more complex implementation
+    # This is a simplified version
+    return 0;
+}
+
+fn math_sqrt(x) {
+    # Square root using Newton's method
+    if (x < 0) {
+        return nullptr;  # No real square root for negative numbers
+    }
+    
+    if (x == 0) {
+        return 0;
+    }
+    
+    let guess = x / 2;
+    let epsilon = 0.0000001;
+    let i = 0;
+    let max_iterations = 100;
+    
+    while (i < max_iterations) {
+        let new_guess = (guess + x / guess) / 2;
+        let diff = new_guess - guess;
+        
+        if (math_abs(diff) < epsilon) {
+            return new_guess;
+        }
+        
+        guess = new_guess;
+        i = i + 1;
+    }
+    
+    return guess;
+}
+
+fn math_cbrt(x) {
+    # Cube root using Newton's method
+    if (x == 0) {
+        return 0;
+    }
+    
+    let negative = x < 0;
+    if (negative) {
+        x = -x;
+    }
+    
+    let guess = x / 3;
+    let epsilon = 0.0000001;
+    let i = 0;
+    let max_iterations = 100;
+    
+    while (i < max_iterations) {
+        let new_guess = (2 * guess + x / (guess * guess)) / 3;
+        let diff = new_guess - guess;
+        
+        if (math_abs(diff) < epsilon) {
+            if (negative) {
+                return -new_guess;
+            }
+            return new_guess;
+        }
+        
+        guess = new_guess;
+        i = i + 1;
+    }
+    
+    if (negative) {
+        return -guess;
+    }
+    return guess;
+}
+
+fn math_factorial(n) {
+    # Factorial function
+    if (n < 0) {
+        return nullptr;
+    }
+    
+    if (n == 0 or n == 1) {
+        return 1;
+    }
+    
+    let result = 1;
+    let i = 2;
+    while (i <= n) {
+        result = result * i;
+        i = i + 1;
+    }
+    
+    return result;
+}
+
+fn math_gcd(a, b) {
+    # Greatest common divisor using Euclidean algorithm
+    a = math_abs(a);
+    b = math_abs(b);
+    
+    while (b != 0) {
+        let temp = b;
+        # Use division-based modulo: a % b = a - (a / b) * b
+        let quotient = int(a / b);
+        b = a - quotient * b;
+        a = temp;
+    }
+    
+    return a;
+}
+
+fn math_lcm(a, b) {
+    # Least common multiple
+    if (a == 0 or b == 0) {
+        return 0;
+    }
+    return math_abs(a * b) / math_gcd(a, b);
+}
+
+fn math_is_prime(n) {
+    # Check if number is prime
+    if (n <= 1) {
+        return false;
+    }
+    if (n <= 3) {
+        return true;
+    }
+    # Check divisibility by 2 and 3
+    let div2 = int(n / 2);
+    let div3 = int(n / 3);
+    if (n == div2 * 2 or n == div3 * 3) {
+        return false;
+    }
+    
+    let i = 5;
+    while (i * i <= n) {
+        let div_i = int(n / i);
+        let div_i2 = int(n / (i + 2));
+        if (n == div_i * i or n == div_i2 * (i + 2)) {
+            return false;
+        }
+        i = i + 6;
+    }
+    
+    return true;
+}
+
+fn math_primes_up_to(limit) {
+    # Generate all prime numbers up to limit using Sieve of Eratosthenes
+    if (limit < 2) {
+        return [];
+    }
+    
+    # Initialize sieve array
+    let sieve = [];
+    let i = 0;
+    while (i <= limit) {
+        push(sieve, true);
+        i = i + 1;
+    }
+    
+    sieve[0] = false;
+    sieve[1] = false;
+    
+    # Mark non-primes
+    i = 2;
+    while (i * i <= limit) {
+        if (sieve[i]) {
+            let j = i * i;
+            while (j <= limit) {
+                sieve[j] = false;
+                j = j + i;
+            }
+        }
+        i = i + 1;
+    }
+    
+    # Collect primes
+    let primes = [];
+    i = 2;
+    while (i <= limit) {
+        if (sieve[i]) {
+            push(primes, i);
+        }
+        i = i + 1;
+    }
+    
+    return primes;
+}
+
+fn math_fibonacci(n) {
+    # Calculate nth Fibonacci number
+    if (n <= 0) {
+        return 0;
+    }
+    if (n == 1) {
+        return 1;
+    }
+    
+    let prev = 0;
+    let curr = 1;
+    let i = 2;
+    while (i <= n) {
+        let temp = curr;
+        curr = prev + curr;
+        prev = temp;
+        i = i + 1;
+    }
+    
+    return curr;
+}
+
+fn math_fibonacci_sequence(n) {
+    # Generate Fibonacci sequence up to nth number
+    let seq = [];
+    
+    if (n <= 0) {
+        return seq;
+    }
+    
+    push(seq, 0);
+    
+    if (n == 1) {
+        return seq;
+    }
+    
+    push(seq, 1);
+    
+    let i = 2;
+    while (i < n) {
+        let next = seq[i - 1] + seq[i - 2];
+        push(seq, next);
+        i = i + 1;
+    }
+    
+    return seq;
+}
+
+fn math_average(numbers) {
+    # Calculate average of array of numbers
+    if (len(numbers) == 0) {
+        return 0;
+    }
+    
+    let sum = 0;
+    let i = 0;
+    while (i < len(numbers)) {
+        sum = sum + numbers[i];
+        i = i + 1;
+    }
+    
+    return sum / len(numbers);
+}
+
+fn math_median(numbers) {
+    # Calculate median of array of numbers
+    if (len(numbers) == 0) {
+        return 0;
+    }
+    
+    # Sort a copy of the array
+    let sorted = [];
+    let i = 0;
+    while (i < len(numbers)) {
+        push(sorted, numbers[i]);
+        i = i + 1;
+    }
+    
+    # Simple bubble sort
+    let n = len(sorted);
+    let swapped = true;
+    while (swapped) {
+        swapped = false;
+        i = 0;
+        while (i < n - 1) {
+            if (sorted[i] > sorted[i + 1]) {
+                let temp = sorted[i];
+                sorted[i] = sorted[i + 1];
+                sorted[i + 1] = temp;
+                swapped = true;
+            }
+            i = i + 1;
+        }
+        n = n - 1;
+    }
+    
+    let mid = len(sorted) / 2;
+    
+    let is_even = len(sorted) - int(len(sorted) / 2) * 2;
+    if (is_even == 0) {
+        return (sorted[mid - 1] + sorted[mid]) / 2;
+    } else {
+        return sorted[mid];
+    }
+}
+
+fn math_mode(numbers) {
+    # Find mode (most frequent value) in array
+    if (len(numbers) == 0) {
+        return nullptr;
+    }
+    
+    # Count frequencies
+    let freq_map = [];
+    let i = 0;
+    while (i < len(numbers)) {
+        let found = false;
+        let j = 0;
+        while (j < len(freq_map)) {
+            if (freq_map[j][0] == numbers[i]) {
+                freq_map[j][1] = freq_map[j][1] + 1;
+                found = true;
+                break;
+            }
+            j = j + 1;
+        }
+        if (not found) {
+            push(freq_map, [numbers[i], 1]);
+        }
+        i = i + 1;
+    }
+    
+    # Find maximum frequency
+    let max_count = 0;
+    let mode_value = nullptr;
+    
+    i = 0;
+    while (i < len(freq_map)) {
+        if (freq_map[i][1] > max_count) {
+            max_count = freq_map[i][1];
+            mode_value = freq_map[i][0];
+        }
+        i = i + 1;
+    }
+    
+    return mode_value;
+}
+
+fn math_variance(numbers) {
+    # Calculate variance of array of numbers
+    if (len(numbers) < 2) {
+        return 0;
+    }
+    
+    let avg = math_average(numbers);
+    let sum_sq_diff = 0;
+    
+    let i = 0;
+    while (i < len(numbers)) {
+        let diff = numbers[i] - avg;
+        sum_sq_diff = sum_sq_diff + diff * diff;
+        i = i + 1;
+    }
+    
+    return sum_sq_diff / (len(numbers) - 1);
+}
+
+fn math_std_dev(numbers) {
+    # Calculate standard deviation
+    return math_sqrt(math_variance(numbers));
+}
+
+fn math_degrees_to_radians(degrees) {
+    # Convert degrees to radians
+    return degrees * MATH_PI / 180;
+}
+
+fn math_radians_to_degrees(radians) {
+    # Convert radians to degrees
+    return radians * 180 / MATH_PI;
+}
+
+fn math_distance(x1, y1, x2, y2) {
+    # Calculate distance between two points
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    return math_sqrt(dx * dx + dy * dy);
+}
+
+fn math_random_int(min_val, max_val) {
+    # Generate random integer in range [min, max]
+    # This would need host support for random number generation
+    # Placeholder implementation
+    return min_val;
+}
+
+fn math_random_float() {
+    # Generate random float in range [0, 1)
+    # This would need host support for random number generation
+    # Placeholder implementation
+    return 0;
+}

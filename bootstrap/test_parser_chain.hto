@@ -1,0 +1,32 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+
+let src = "let x = 42;\nlet y = x + 8;\nprint(y);\n\nfn square(n) {\n    return n * n;\n}\n\nlet result = square(5);\nprint(result);";
+
+print("=== Source ===");
+print(src);
+print("");
+
+let tokens = tokenize(src);
+print("=== Tokens (" + len(tokens) + ") ===");
+
+let ast = parse(tokens);
+print("=== AST ===");
+print(ast);
+print("");
+
+print("=== AST Structure ===");
+print("Root type: " + ast[0]);
+let stmts = ast[1];
+print("Statement count: " + len(stmts));
+
+let i = 0;
+while (i < len(stmts)) {
+    let s = stmts[i];
+    print("  " + s[0]);
+    i = i + 1;
+}
+
+print("");
+print("=== Tokenizer self-check ===");
+print("Parsed OK!");

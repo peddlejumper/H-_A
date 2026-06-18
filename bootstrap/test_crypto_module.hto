@@ -1,0 +1,436 @@
+# H# Cryptography Module Test Suite
+# Tests for hash functions, encoding, and cipher operations
+
+# Import the crypto module
+import "bootstrap/crypto_module";
+
+print("========================================");
+print("H# Cryptography Module Test Suite");
+print("========================================");
+print("");
+
+let tests_passed = 0;
+let tests_failed = 0;
+
+# Helper function to check equality
+fn assert_equals(test_name, actual, expected) {
+    if (actual == expected) {
+        print("[PASS] " + test_name);
+        return true;
+    } else {
+        print("[FAIL] " + test_name);
+        print("  Expected: " + str(expected));
+        print("  Actual:   " + str(actual));
+        return false;
+    }
+}
+
+# ============================================
+# Hash Function Tests
+# ============================================
+print("--- Hash Functions ---");
+
+# Test DJB2 hash
+let hash1 = crypto_hash_djb2("hello");
+if (hash1 != 0) {
+    print("[PASS] crypto_hash_djb2 returns non-zero value");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_hash_djb2 returns zero");
+    tests_failed = tests_failed + 1;
+}
+
+# Test SDBM hash
+let hash2 = crypto_hash_sdbm("hello");
+if (hash2 != 0) {
+    print("[PASS] crypto_hash_sdbm returns non-zero value");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_hash_sdbm returns zero");
+    tests_failed = tests_failed + 1;
+}
+
+# Test LoseLose hash
+let hash3 = crypto_hash_loselose("hello");
+if (hash3 != 0) {
+    print("[PASS] crypto_hash_loselose returns non-zero value");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_hash_loselose returns zero");
+    tests_failed = tests_failed + 1;
+}
+
+# Test hash consistency
+let hash_a1 = crypto_hash_djb2("test");
+let hash_a2 = crypto_hash_djb2("test");
+if (assert_equals("crypto_hash_djb2 is consistent", hash_a1, hash_a2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test different strings produce different hashes
+let hash_b1 = crypto_hash_djb2("hello");
+let hash_b2 = crypto_hash_djb2("world");
+if (hash_b1 != hash_b2) {
+    print("[PASS] Different strings produce different hashes");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] Different strings produce same hash");
+    tests_failed = tests_failed + 1;
+}
+
+# Test hash to hex conversion
+let hex_val = crypto_hash_to_hex(255);
+if (assert_equals("crypto_hash_to_hex converts correctly", hex_val, "000000ff")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test hash string function
+let hash_str = crypto_hash_string("test");
+if (len(hash_str) == 8) {
+    print("[PASS] crypto_hash_string returns 8-char hex");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_hash_string length incorrect");
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# XOR Cipher Tests
+# ============================================
+print("");
+print("--- XOR Cipher ---");
+
+# Test XOR encryption/decryption
+let original = "Hello World";
+let key = "secret";
+let encrypted = crypto_xor_cipher(original, key);
+let decrypted = crypto_xor_cipher(encrypted, key);
+if (assert_equals("XOR cipher decrypts correctly", decrypted, original)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test XOR with empty string
+let xor_empty = crypto_xor_cipher("", "key");
+if (assert_equals("XOR cipher handles empty string", xor_empty, "")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Caesar Cipher Tests
+# ============================================
+print("");
+print("--- Caesar Cipher ---");
+
+# Test Caesar encryption
+let caesar_enc = crypto_caesar_encrypt("ABC", 3);
+if (assert_equals("Caesar encrypt ABC+3", caesar_enc, "DEF")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Caesar decryption
+let caesar_dec = crypto_caesar_decrypt("DEF", 3);
+if (assert_equals("Caesar decrypt DEF-3", caesar_dec, "ABC")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Caesar wrap-around
+let caesar_wrap = crypto_caesar_encrypt("XYZ", 3);
+if (assert_equals("Caesar wrap XYZ+3", caesar_wrap, "ABC")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Caesar with lowercase
+let caesar_lower = crypto_caesar_encrypt("abc", 1);
+if (assert_equals("Caesar lowercase abc+1", caesar_lower, "bcd")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Caesar roundtrip
+let caesar_orig = "Test Message";
+let caesar_enc2 = crypto_caesar_encrypt(caesar_orig, 5);
+let caesar_dec2 = crypto_caesar_decrypt(caesar_enc2, 5);
+if (assert_equals("Caesar roundtrip", caesar_dec2, caesar_orig)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# ROT13 Tests
+# ============================================
+print("");
+print("--- ROT13 ---");
+
+# Test ROT13 encryption/decryption (symmetric)
+let rot13_text = "Hello World";
+let rot13_enc = crypto_rot13(rot13_text);
+let rot13_dec = crypto_rot13(rot13_enc);
+if (assert_equals("ROT13 is symmetric", rot13_dec, rot13_text)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test ROT13 specific values
+let rot13_a = crypto_rot13("A");
+if (assert_equals("ROT13 A->N", rot13_a, "N")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Base64 Encoding Tests
+# ============================================
+print("");
+print("--- Base64 Encoding ---");
+
+# Test Base64 encode
+let b64_encoded = crypto_base64_encode("Hello");
+if (assert_equals("Base64 encode Hello", b64_encoded, "SGVsbG8=")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Base64 decode
+let b64_decoded = crypto_base64_decode("SGVsbG8=");
+if (assert_equals("Base64 decode SGVsbG8=", b64_decoded, "Hello")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Base64 roundtrip
+let b64_original = "Test String 123!";
+let b64_enc = crypto_base64_encode(b64_original);
+let b64_dec = crypto_base64_decode(b64_enc);
+if (assert_equals("Base64 roundtrip", b64_dec, b64_original)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Base64 empty string
+let b64_empty_enc = crypto_base64_encode("");
+let b64_empty_dec = crypto_base64_decode(b64_empty_enc);
+if (assert_equals("Base64 empty string", b64_empty_dec, "")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test Base64 single character
+let b64_single_enc = crypto_base64_encode("A");
+let b64_single_dec = crypto_base64_decode(b64_single_enc);
+if (assert_equals("Base64 single char", b64_single_dec, "A")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Hex Encoding Tests
+# ============================================
+print("");
+print("--- Hex Encoding ---");
+
+# Test hex encode
+let hex_encoded = crypto_to_hex("AB");
+if (assert_equals("Hex encode AB", hex_encoded, "4142")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test hex decode
+let hex_decoded = crypto_from_hex("4142");
+if (assert_equals("Hex decode 4142", hex_decoded, "AB")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test hex roundtrip
+let hex_original = "Hello World";
+let hex_enc = crypto_to_hex(hex_original);
+let hex_dec = crypto_from_hex(hex_enc);
+if (assert_equals("Hex roundtrip", hex_dec, hex_original)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# URL Encoding Tests
+# ============================================
+print("");
+print("--- URL Encoding ---");
+
+# Test URL encode space
+let url_enc_space = crypto_url_encode("hello world");
+if (assert_equals("URL encode space", url_enc_space, "hello%20world")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test URL decode space
+let url_dec_space = crypto_url_decode("hello%20world");
+if (assert_equals("URL decode space", url_dec_space, "hello world")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test URL encode special chars
+let url_special = crypto_url_encode("a&b=c");
+if (url_special != "a&b=c") {
+    print("[PASS] URL encode special characters");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] URL encode special characters");
+    tests_failed = tests_failed + 1;
+}
+
+# Test URL roundtrip
+let url_original = "test@example.com?foo=bar&baz=qux";
+let url_enc = crypto_url_encode(url_original);
+let url_dec = crypto_url_decode(url_enc);
+if (assert_equals("URL roundtrip", url_dec, url_original)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test URL decode plus sign
+let url_plus = crypto_url_decode("hello+world");
+if (assert_equals("URL decode plus as space", url_plus, "hello world")) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Checksum Tests
+# ============================================
+print("");
+print("--- Checksum ---");
+
+# Test checksum returns value
+let checksum_val = crypto_checksum("test");
+if (checksum_val >= 0 and checksum_val < 65536) {
+    print("[PASS] crypto_checksum returns valid 16-bit value");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_checksum returns invalid value");
+    tests_failed = tests_failed + 1;
+}
+
+# Test checksum consistency
+let ck1 = crypto_checksum("hello");
+let ck2 = crypto_checksum("hello");
+if (assert_equals("crypto_checksum is consistent", ck1, ck2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test checksum hex
+let ck_hex = crypto_checksum_hex("test");
+if (len(ck_hex) > 0) {
+    print("[PASS] crypto_checksum_hex returns value");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_checksum_hex returns empty");
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Password Hashing Tests
+# ============================================
+print("");
+print("--- Password Hashing ---");
+
+# Test password hash
+let salt = "randomsalt123";
+let pwd_hash = crypto_password_hash("mypassword", salt);
+if (len(pwd_hash) == 8) {
+    print("[PASS] crypto_password_hash returns 8-char hex");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_password_hash length incorrect: " + str(len(pwd_hash)));
+    tests_failed = tests_failed + 1;
+}
+
+# Test password verify success
+let pwd_verify_ok = crypto_password_verify("mypassword", salt, pwd_hash);
+if (assert_equals("crypto_password_verify correct password", pwd_verify_ok, true)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test password verify failure
+let pwd_verify_fail = crypto_password_verify("wrongpassword", salt, pwd_hash);
+if (assert_equals("crypto_password_verify wrong password", pwd_verify_fail, false)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test salt generation
+let gen_salt = crypto_generate_salt(16);
+if (len(gen_salt) == 16) {
+    print("[PASS] crypto_generate_salt generates correct length");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] crypto_generate_salt length: " + str(len(gen_salt)));
+    tests_failed = tests_failed + 1;
+}
+
+# Test different salts produce different hashes
+let hash1_pwd = crypto_password_hash("password", "salt1");
+let hash2_pwd = crypto_password_hash("password", "salt2");
+if (hash1_pwd != hash2_pwd) {
+    print("[PASS] Different salts produce different hashes");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] Different salts produce same hash");
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Summary
+# ============================================
+print("");
+print("========================================");
+print("Test Results Summary");
+print("========================================");
+print("Total Tests: " + str(tests_passed + tests_failed));
+print("Passed:      " + str(tests_passed));
+print("Failed:      " + str(tests_failed));
+
+if (tests_failed == 0) {
+    print("");
+    print("All tests passed!");
+} else {
+    print("");
+    print("Some tests failed. Please review.");
+}

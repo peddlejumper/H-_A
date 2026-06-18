@@ -1,0 +1,139 @@
+# Ternary & Quaternary Operator Tests for H#
+# Tests ? (ternary) and ?^ (quaternary cascade) operators
+
+let _passed = 0;
+let _total = 0;
+
+fn _assert(cond, msg) {
+    if (cond) {
+        _passed = _passed + 1;
+        print("  PASS: " + msg);
+    } else {
+        print("  FAIL: " + msg);
+    }
+    _total = _total + 1;
+}
+
+# ── Ternary Operator Tests ──
+
+print("=== Ternary Operator (?) ===");
+
+# Test 1: basic true condition
+let a1 = true ? 1 : 0;
+_assert(a1 == 1, "true ? 1 : 0 -> 1");
+
+# Test 2: basic false condition
+let a2 = false ? 1 : 0;
+_assert(a2 == 0, "false ? 1 : 0 -> 0");
+
+# Test 3: numeric comparison
+let a3 = (5 > 3) ? 100 : 200;
+_assert(a3 == 100, "(5 > 3) ? 100 : 200 -> 100");
+
+# Test 4: false comparison
+let a4 = (5 < 3) ? 100 : 200;
+_assert(a4 == 200, "(5 < 3) ? 100 : 200 -> 200");
+
+# Test 5: string ternary
+let a5 = (1 == 1) ? "yes" : "no";
+_assert(a5 == "yes", "(1==1) ? \"yes\" : \"no\" -> \"yes\"");
+
+# Test 6: nested ternary
+let a6 = (10 > 5) ? ((1 > 0) ? "inner_true" : "inner_false") : "outer_false";
+_assert(a6 == "inner_true", "nested ternary -> \"inner_true\"");
+
+# Test 7: ternary with function call
+fn get_ten() {
+    return 10;
+}
+fn get_twenty() {
+    return 20;
+}
+let a7 = (5 > 0) ? get_ten() : get_twenty();
+_assert(a7 == 10, "ternary with function calls -> 10");
+
+# Test 8: ternary in assignment
+let x = 0;
+let a8 = (x == 0) ? "zero" : "nonzero";
+_assert(a8 == "zero", "ternary in assignment -> \"zero\"");
+
+# Test 9: complex condition
+let a9 = (3 * 4 == 12 and 5 - 2 == 3) ? 42 : -1;
+_assert(a9 == 42, "complex condition -> 42");
+
+# Test 10: short-circuit true
+let counter = 0;
+fn inc_return_true() {
+    counter = counter + 1;
+    return true;
+}
+fn inc_return_false() {
+    counter = counter + 1;
+    return false;
+}
+let a10 = inc_return_true() ? 1 : 0;
+_assert(a10 == 1, "short-circuit: only true branch evaluated");
+
+# ── Quaternary Operator Tests ──
+
+print("");
+print("=== Quaternary Operator (?^) ===");
+
+# Test 11: first condition true
+let a11 = true ?^ 1 : false : 0;
+_assert(a11 == 1, "true ?^ 1 : false : 0 -> 1");
+
+# Test 12: second condition true
+let a12 = false ?^ 0 : true : 1;
+_assert(a12 == 1, "false ?^ 0 : true : 1 -> 1");
+
+# Test 13: both false -> nullptr
+let a13 = false ?^ 0 : false : 0;
+_assert(a13 == nullptr, "false ?^ 0 : false : 0 -> nullptr");
+
+# Test 14: nested quaternary with parentheses
+let a14 = (1 > 10) ?^ "none" : ( (5 > 10) ?^ "none" : (3 > 2) : "third" ) : "none";
+_assert(a14 == "none", "nested quaternary -> \"none\"");
+
+# Test 15: first of two true -> first wins
+let a15 = true ?^ "A" : true : "B";
+_assert(a15 == "A", "first true wins -> \"A\"");
+
+# Test 16: quaternary with comparisons
+let score = 85;
+let grade = (score >= 90) ?^ "A" : (score >= 80) : "B";
+_assert(grade == "B", "grade detection -> \"B\"");
+
+# Test 17: quaternary with function calls
+fn is_positive(n) {
+    return n > 0;
+}
+fn is_negative(n) {
+    return n < 0;
+}
+let val = -5;
+let sign = is_positive(val) ?^ 1 : is_negative(val) : -1;
+_assert(sign == -1, "sign detection -> -1");
+
+# Test 18: zero case (neither positive nor negative)
+let val2 = 0;
+let sign2 = is_positive(val2) ?^ 1 : is_negative(val2) : -1;
+_assert(sign2 == nullptr, "zero case -> nullptr");
+
+# Test 19: mixed ternary and quaternary
+let a19 = (1 > 0) ? (true ?^ "yes" : false : "no") : nullptr;
+_assert(a19 == "yes", "mixed ternary+quaternary -> \"yes\"");
+
+# Test 20: quaternary with strings
+let lang = "H#";
+let msg = (lang == "Python") ?^ "py" : (lang == "H#") : "hs";
+_assert(msg == "hs", "language check -> \"hs\"");
+
+# ── Summary ──
+print("");
+print("Results: " + str(_passed) + "/" + str(_total) + " tests passed");
+if (_passed == _total) {
+    print("ALL TESTS PASSED!");
+} else {
+    print("SOME TESTS FAILED!");
+}

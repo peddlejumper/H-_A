@@ -1,0 +1,30 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/interpreter.hto";
+
+let src = "let x = 42;\nlet y = x + 8;\nprint(y);\n\nfn triple(z) {\n    return z * 3;\n}\n\nlet r = triple(10);\nprint(r);";
+
+print("=== Source ===");
+print(src);
+print("");
+
+let tokens = tokenize(src);
+let ast = parse(tokens);
+
+print("=== AST Evaluation ===");
+
+let env = [];
+let results = eval_node(ast, env);
+
+print("");
+print("=== Results ===");
+if (results != nullptr) {
+    let i = 0;
+    while (i < len(results)) {
+        print(results[i]);
+        i = i + 1;
+    }
+}
+
+print("");
+print("Done!");

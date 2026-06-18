@@ -1,0 +1,974 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# H# zzwUI ↔ .NET 协同开发库测试
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/hwdui_dotnet.hto";
+
+let _test_count = 0;
+let _pass_count = 0;
+
+fn assert(condition, msg) {
+    _test_count = _test_count + 1;
+    if (condition) {
+        _pass_count = _pass_count + 1;
+        print("  PASS: " + msg);
+    } else {
+        print("  FAIL: " + msg);
+    }
+    return 0;
+}
+
+fn test_summary() {
+    print("");
+    print("═══════════════════════════════════");
+    let failed = _test_count - _pass_count;
+    print("  Tests: " + _test_count + " | Passed: " + _pass_count + " | Failed: " + failed);
+    if (failed == 0) {
+        print("  Result: ALL TESTS PASSED");
+    } else {
+        print("  Result: " + failed + " TEST(S) FAILED");
+    }
+    print("═══════════════════════════════════");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 1: Core Interop Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_dotnet_type_info() {
+    let ti = new DotNetTypeInfo();
+    ti.init_dn_type("String", "System", "mscorlib");
+    assert(ti.name == "String", "DotNetTypeInfo.name");
+    assert(ti.namespace == "System", "DotNetTypeInfo.namespace");
+    assert(ti.assembly == "mscorlib", "DotNetTypeInfo.assembly");
+    assert(ti.getFullName() == "System.String", "DotNetTypeInfo.getFullName");
+    ti.setValueType(true);
+    assert(ti.isValueType() == true, "DotNetTypeInfo.setValueType");
+    ti.setGeneric(true);
+    assert(ti.isGeneric() == true, "DotNetTypeInfo.isGeneric");
+    ti.setPrimitive(false);
+    assert(ti.isPrimitive() == false, "DotNetTypeInfo.isPrimitive");
+    return 0;
+}
+
+fn test_dotnet_type_mapper() {
+    let m = new DotNetTypeMapper();
+    m.init_mapper();
+    let dn_type = m.toDotNet("int");
+    assert(dn_type == "System.Int32", "TypeMapper: int → Int32");
+    dn_type = m.toDotNet("float");
+    assert(dn_type == "System.Double", "TypeMapper: float → Double");
+    dn_type = m.toDotNet("string");
+    assert(dn_type == "System.String", "TypeMapper: string → String");
+    dn_type = m.toDotNet("bool");
+    assert(dn_type == "System.Boolean", "TypeMapper: bool → Boolean");
+    let hs_type = m.toHSharp("System.Int32");
+    assert(hs_type == "int", "TypeMapper: Int32 → int");
+    hs_type = m.toHSharp("System.Double");
+    assert(hs_type == "float", "TypeMapper: Double → float");
+    hs_type = m.toHSharp("System.String");
+    assert(hs_type == "string", "TypeMapper: String → string");
+    m.register("MyType", "MyNamespace.MyType", false);
+    let mapped = m.toDotNet("MyType");
+    assert(mapped == "MyNamespace.MyType", "TypeMapper: custom mapping");
+    return 0;
+}
+
+fn test_dotnet_value() {
+    let v = new DotNetValue();
+    v.init_dnval(42, "int");
+    assert(v.asInt() == 42, "DotNetValue.asInt");
+    assert(v.asFloat() == 42.0, "DotNetValue.asFloat");
+    assert(v.asBool() == 42, "DotNetValue.asBool (non-zero)");
+    assert(v.getTypeName() == "int", "DotNetValue.getTypeName");
+    let v2 = new DotNetValue();
+    v2.init_dnval(0, "int");
+    assert(v2.asBool() == 0, "DotNetValue.asBool (zero)");
+    let v3 = new DotNetValue();
+    v3.init_dnval("hello", "string");
+    assert(v3.asString() == "hello", "DotNetValue.asString");
+    return 0;
+}
+
+fn test_dotnet_invoke() {
+    let inv = new DotNetInvoke();
+    inv.init_invoke("ToString", []);
+    assert(inv.method_name == "ToString", "DotNetInvoke.method_name");
+    assert(inv.getArgCount() == 0, "DotNetInvoke.getArgCount");
+    inv.setTimeout(5000);
+    assert(inv.getTimeout() == 5000, "DotNetInvoke.getTimeout");
+    inv.setStatic(true);
+    assert(inv.is_static == true, "DotNetInvoke.setStatic");
+    inv.setPropertyGet("MyProp");
+    assert(inv.is_property_get == true, "DotNetInvoke.setPropertyGet");
+    assert(inv.getPropertyName() == "MyProp", "DotNetInvoke.getPropertyName");
+    inv.setPropertySet("MyProp", 42);
+    assert(inv.is_property_set == true, "DotNetInvoke.setPropertySet");
+    return 0;
+}
+
+fn test_dotnet_result() {
+    let ok = new DotNetResult();
+    ok.init_result();
+    ok.setSuccess(42);
+    assert(ok.isSuccess() == true, "DotNetResult.isSuccess");
+    assert(ok.getValue() == 42, "DotNetResult.getValue");
+    assert(ok.unwrap() == 42, "DotNetResult.unwrap (success)");
+    let err = new DotNetResult();
+    err.init_result();
+    err.setError("Something went wrong", "TestError");
+    assert(err.isSuccess() == false, "DotNetResult.isSuccess (error)");
+    assert(err.getError() == "Something went wrong", "DotNetResult.getError");
+    assert(err.getErrorType() == "TestError", "DotNetResult.getErrorType");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 2: Object Bridge Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_dotnet_object() {
+    let obj = new DotNetObject();
+    obj.init_dnobj(1, "System.String");
+    assert(obj.getObjectId() == 1, "DotNetObject.getObjectId");
+    assert(obj.getTypeName() == "System.String", "DotNetObject.getTypeName");
+    obj.setRemote("tcp://server:9999");
+    assert(obj.isRemote() == true, "DotNetObject.isRemote");
+    assert(obj.getRemoteEndpoint() == "tcp://server:9999", "DotNetObject.getRemoteEndpoint");
+    assert(obj.isDisposed() == false, "DotNetObject.isDisposed");
+    obj.setProperty("Length", "10");
+    let prop = obj.getProperty("Length");
+    assert(prop == "10", "DotNetObject.getProperty");
+    assert(obj.hasProperty("Length") == true, "DotNetObject.hasProperty");
+    obj.cacheMethod("Substring");
+    assert(obj.hasMethod("Substring") == true, "DotNetObject.hasMethod");
+    obj.cacheProperty("Length");
+    obj.setMetadata("key1", "val1");
+    assert(obj.getMetadata("key1") == "val1", "DotNetObject.setMetadata");
+    obj.dispose();
+    assert(obj.isDisposed() == true, "DotNetObject.dispose");
+    return 0;
+}
+
+fn test_dotnet_object_cache() {
+    let cache = new DotNetObjectCache();
+    cache.init_cache();
+    let obj = new DotNetObject();
+    obj.init_dnobj(0, "System.String");
+    let obj_id = cache.add(obj);
+    assert(obj_id > 0, "DotNetObjectCache.add returns id");
+    let cached = cache.get(obj_id);
+    assert(cached != nullptr, "DotNetObjectCache.get");
+    assert(cache.getCount() == 1, "DotNetObjectCache.getCount");
+    assert(cache.contains(obj_id) == true, "DotNetObjectCache.contains");
+    cache.remove(obj_id);
+    assert(cache.getCount() == 0, "DotNetObjectCache.remove");
+    return 0;
+}
+
+fn test_dotnet_assembly() {
+    let assm = new DotNetAssembly();
+    assm.init_assembly("TestLib", "1.0.0.0", "/lib/TestLib.dll");
+    assert(assm.getName() == "TestLib", "DotNetAssembly.getName");
+    assert(assm.getVersion() == "1.0.0.0", "DotNetAssembly.getVersion");
+    assert(assm.getPath() == "/lib/TestLib.dll", "DotNetAssembly.getPath");
+    assm.setLoaded(true);
+    assert(assm.isLoaded() == true, "DotNetAssembly.isLoaded");
+    assert(assm.getTypeCount() == 0, "DotNetAssembly.getTypeCount default");
+    let ti = new DotNetTypeInfo();
+    ti.init_dn_type("MyClass", "TestLib", "TestLib");
+    assm.addType(ti);
+    assert(assm.getTypeCount() == 1, "DotNetAssembly.addType");
+    assert(assm.getReferenceCount() == 0, "DotNetAssembly.getReferenceCount default");
+    assm.addReference("mscorlib");
+    assert(assm.getReferenceCount() == 1, "DotNetAssembly.addReference");
+    return 0;
+}
+
+fn test_dotnet_assembly_loader() {
+    let loader = new DotNetAssemblyLoader();
+    loader.init_loader();
+    let assm = new DotNetAssembly();
+    assm.init_assembly("TestLib", "1.0.0.0", "/lib/TestLib.dll");
+    loader.register(assm);
+    assert(loader.getAssemblyCount() == 1, "DotNetAssemblyLoader.getAssemblyCount");
+    let loaded = loader.load("TestLib");
+    assert(loaded != nullptr, "DotNetAssemblyLoader.load");
+    assert(loader.isLoaded("TestLib") == true, "DotNetAssemblyLoader.isLoaded");
+    assert(loader.getLoadedCount() == 1, "DotNetAssemblyLoader.getLoadedCount");
+    loader.unload("TestLib");
+    assert(loader.isLoaded("TestLib") == false, "DotNetAssemblyLoader.unload");
+    return 0;
+}
+
+fn test_dotnet_method() {
+    let m = new DotNetMethod();
+    m.init_method("ToString", "string");
+    assert(m.name == "ToString", "DotNetMethod.name");
+    assert(m.return_type == "string", "DotNetMethod.returnType");
+    assert(m.getParamCount() == 0, "DotNetMethod.getParamCount");
+    m.addParam("int", "value");
+    assert(m.getParamCount() == 1, "DotNetMethod.addParam");
+    m.setStatic(true);
+    assert(m.is_static == true, "DotNetMethod.setStatic");
+    assert(m.isStatic() == true, "DotNetMethod.isStatic");
+    m.setAsync(true);
+    assert(m.is_async == true, "DotNetMethod.setAsync");
+    assert(m.isAsync() == true, "DotNetMethod.isAsync");
+    m.setVisibility("protected");
+    assert(m.getVisibility() == "protected", "DotNetMethod.getVisibility");
+    m.addAttribute("Obsolete");
+    assert(m.hasAttribute("Obsolete") == true, "DotNetMethod.hasAttribute");
+    return 0;
+}
+
+fn test_dotnet_property() {
+    let p = new DotNetProperty();
+    p.init_prop("Length", "int");
+    assert(p.name == "Length", "DotNetProperty.name");
+    assert(p.type_name == "int", "DotNetProperty.typeName");
+    p.setReadable(true);
+    assert(p.can_read == true, "DotNetProperty.setReadable");
+    assert(p.canRead() == true, "DotNetProperty.canRead");
+    p.setWritable(false);
+    assert(p.can_write == false, "DotNetProperty.setWritable");
+    assert(p.canWrite() == false, "DotNetProperty.canWrite");
+    p.setStatic(true);
+    assert(p.is_static == true, "DotNetProperty.setStatic");
+    assert(p.isStatic() == true, "DotNetProperty.isStatic");
+    return 0;
+}
+
+fn test_dotnet_field() {
+    let f = new DotNetField();
+    f.init_field("MaxValue", "int");
+    assert(f.name == "MaxValue", "DotNetField.name");
+    assert(f.type_name == "int", "DotNetField.typeName");
+    f.setStatic(true);
+    assert(f.is_static == true, "DotNetField.setStatic");
+    assert(f.isStatic() == true, "DotNetField.isStatic");
+    f.setReadonly(true);
+    assert(f.is_readonly == true, "DotNetField.setReadonly");
+    assert(f.isReadonly() == true, "DotNetField.isReadonly");
+    f.setConst(true);
+    assert(f.is_const == true, "DotNetField.setConst");
+    assert(f.isConst() == true, "DotNetField.isConst");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 3: Event Bridge Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_dotnet_event() {
+    let evt = new DotNetEvent();
+    evt.init_event("Clicked", "System.EventHandler");
+    assert(evt.name == "Clicked", "DotNetEvent.name");
+    assert(evt.getHandlerType() == "System.EventHandler", "DotNetEvent.getHandlerType");
+    assert(evt.getSubscriberCount() == 0, "DotNetEvent.getSubscriberCount");
+    let handler = new DotNetEventHandler();
+    handler.init_handler("Clicked", nullptr);
+    evt.addSubscriber(handler);
+    assert(evt.getSubscriberCount() == 1, "DotNetEvent.addSubscriber");
+    evt.removeSubscriber(handler);
+    assert(evt.getSubscriberCount() == 0, "DotNetEvent.removeSubscriber");
+    return 0;
+}
+
+fn test_dotnet_event_handler() {
+    let h = new DotNetEventHandler();
+    h.init_handler("h_1", nullptr);
+    h.setId(100);
+    assert(h.getId() == 100, "DotNetEventHandler.getId");
+    assert(h.getEventName() == "h_1", "DotNetEventHandler.getEventName");
+    h.setOneShot(true);
+    assert(h.is_oneshot == true, "DotNetEventHandler.setOneShot");
+    assert(h.isOneShot() == true, "DotNetEventHandler.isOneShot");
+    h.setFilter(nullptr);
+    assert(h.filter == nullptr, "DotNetEventHandler.filter");
+    h.setActive(true);
+    assert(h.is_active == true, "DotNetEventHandler.setActive");
+    assert(h.isActive() == true, "DotNetEventHandler.isActive");
+    return 0;
+}
+
+fn test_dotnet_cross_event_bus() {
+    let bus = new DotNetCrossEventBus();
+    bus.init_cross_bus();
+    let handler = bus.subscribe("User.Login", nullptr);
+    assert(handler != nullptr, "CrossEventBus.subscribe returns handler");
+    assert(bus.getEventCount() == 1, "CrossEventBus.getEventCount");
+    bus.unsubscribe("User.Login", handler);
+    bus.publish("System.Startup", nullptr, nullptr);
+    bus.clear();
+    assert(bus.getEventCount() == 0, "CrossEventBus.clear");
+    return 0;
+}
+
+fn test_dotnet_ui_dispatcher() {
+    let d = new DotNetUIDispatcher();
+    d.init_dispatcher();
+    assert(d.getQueueSize() == 0, "DotNetUIDispatcher.getQueueSize default");
+    d.invoke(nullptr);
+    assert(d.getQueueSize() == 1, "DotNetUIDispatcher.invoke");
+    d.clear();
+    assert(d.getQueueSize() == 0, "DotNetUIDispatcher.clear");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 4: UI Bridge Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_control_bridge() {
+    let bridge = new ZzwUIControlBridge();
+    bridge.init_bridge(nullptr, nullptr);
+    assert(bridge.getHWidget() == nullptr, "ControlBridge.getHWidget");
+    assert(bridge.getDotNetControl() == nullptr, "ControlBridge.getDotNetControl");
+    assert(bridge.isEnabled() == true, "ControlBridge.isEnabled default");
+    bridge.bindProperty("Text", "Content");
+    let bindings = bridge.getPropertyBindings();
+    assert(len(bindings) == 1, "ControlBridge.bindProperty");
+    bridge.bindEvent("Click", "Click");
+    let events = bridge.getEventBindings();
+    assert(len(events) == 1, "ControlBridge.bindEvent");
+    bridge.setSyncDirection("hsharp_to_dotnet");
+    bridge.setEnabled(false);
+    assert(bridge.isEnabled() == false, "ControlBridge.setEnabled");
+    bridge.unbindAll();
+    bindings = bridge.getPropertyBindings();
+    assert(len(bindings) == 0, "ControlBridge.unbindAll");
+    return 0;
+}
+
+fn test_window_bridge() {
+    let wb = new DotNetWindowBridge();
+    wb.init_win_bridge(nullptr, nullptr);
+    assert(wb.getHWindow() == nullptr, "WindowBridge.getHWindow");
+    assert(wb.getDotNetWindow() == nullptr, "WindowBridge.getDotNetWindow");
+    wb.bindTitle();
+    assert(wb.isTitleBound() == true, "WindowBridge.bindTitle");
+    wb.bindSize();
+    assert(wb.isSizeBound() == true, "WindowBridge.bindSize");
+    wb.bindPosition();
+    assert(wb.isPositionBound() == true, "WindowBridge.bindPosition");
+    wb.bindVisibility();
+    wb.bindState();
+    wb.syncAll();
+    return 0;
+}
+
+fn test_control_factory() {
+    let f = new DotNetControlFactory();
+    f.init_factory();
+    let wpf = f.getDotNetType("Button");
+    assert(wpf == "System.Windows.Controls.Button", "ControlFactory: Button→WPF");
+    wpf = f.getDotNetType("TextBox");
+    assert(wpf == "System.Windows.Controls.TextBox", "ControlFactory: TextBox→WPF");
+    wpf = f.getDotNetType("CheckBox");
+    assert(wpf == "System.Windows.Controls.CheckBox", "ControlFactory: CheckBox→WPF");
+    assert(f.hasType("Button") == true, "ControlFactory.hasType");
+    assert(f.hasType("NonExistent") == false, "ControlFactory.hasType unknown");
+    let types = f.getSupportedTypes();
+    assert(len(types) > 0, "ControlFactory.getSupportedTypes");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 5: Data Binding Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_dotnet_binding() {
+    let b = new DotNetBinding();
+    b.init_binding(nullptr, "Name", nullptr, "ViewModel.Name");
+    assert(b.getSource() == nullptr, "DotNetBinding.getSource");
+    assert(b.getSourcePath() == "Name", "DotNetBinding.getSourcePath");
+    assert(b.getTargetPath() == "ViewModel.Name", "DotNetBinding.getTargetPath");
+    assert(b.getMode() == "twoWay", "DotNetBinding.getMode default");
+    b.setMode("oneWay");
+    assert(b.getMode() == "oneWay", "DotNetBinding.setMode");
+    b.setConverter(nullptr);
+    assert(b.converter == nullptr, "DotNetBinding.converter");
+    b.setConverterParameter("Invert");
+    assert(b.converter_parameter == "Invert", "DotNetBinding.setConverterParameter");
+    b.setUpdateSourceTrigger("PropertyChanged");
+    assert(b.update_source_trigger == "PropertyChanged", "DotNetBinding.setUpdateSourceTrigger");
+    b.setFallbackValue("N/A");
+    assert(b.fallback_value == "N/A", "DotNetBinding.setFallbackValue");
+    b.setTargetNullValue("Empty");
+    assert(b.target_null_value == "Empty", "DotNetBinding.setTargetNullValue");
+    return 0;
+}
+
+fn test_multi_binding() {
+    let mb = new DotNetMultiBinding();
+    mb.init_multi_binding(nullptr, "FullName");
+    assert(mb.target == nullptr, "DotNetMultiBinding.target");
+    let b1 = new DotNetBinding();
+    b1.init_binding(nullptr, "FirstName", nullptr, "");
+    mb.addBinding(b1);
+    let b2 = new DotNetBinding();
+    b2.init_binding(nullptr, "LastName", nullptr, "");
+    mb.addBinding(b2);
+    assert(mb.getBindingCount() == 2, "DotNetMultiBinding.addBinding");
+    mb.setConverter(nullptr);
+    assert(mb.converter == nullptr, "DotNetMultiBinding.converter");
+    return 0;
+}
+
+fn test_binding_manager() {
+    let mgr = new DotNetBindingManager();
+    mgr.init_binding_mgr();
+    let b = new DotNetBinding();
+    b.init_binding(nullptr, "Text", nullptr, "VM.Text");
+    mgr.addBinding(b);
+    assert(mgr.getBindingCount() == 1, "BindingManager.addBinding");
+    assert(mgr.isUpdating() == false, "BindingManager.isUpdating");
+    mgr.removeBinding(b);
+    assert(mgr.getBindingCount() == 0, "BindingManager.removeBinding");
+    return 0;
+}
+
+fn test_binding_expression() {
+    let src = {"Name": "Alice"};
+    let tgt = {"Text": ""};
+    let b = new DotNetBinding();
+    b.init_binding(src, "Name", tgt, "Text");
+    let be = new DotNetBindingExpression();
+    be.init_expr(b, tgt, "Text");
+    assert(be.getTarget() == tgt, "BindingExpression.getTarget");
+    assert(be.getTargetProperty() == "Text", "BindingExpression.getTargetProperty");
+    be.markDirty();
+    assert(be.isDirty() == true, "BindingExpression.isDirty after markDirty");
+    be.refresh();
+    assert(be.isDirty() == false, "BindingExpression.isDirty after refresh");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 6: RPC Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_rpc_message() {
+    let msg = new DotNetRPCMessage();
+    msg.init_msg("GetUser", []);
+    msg.setId(1);
+    assert(msg.getMethod() == "GetUser", "RPCMessage.getMethod");
+    assert(msg.getParamCount() == 0, "RPCMessage.getParamCount");
+    assert(msg.getId() == 1, "RPCMessage.getId");
+    msg.setHeader("X-Custom", "value");
+    msg.setCorrelationId("corr_1");
+    assert(msg.getCorrelationId() == "corr_1", "RPCMessage.getCorrelationId");
+    return 0;
+}
+
+fn test_rpc_response() {
+    let resp = new DotNetRPCResponse();
+    resp.init_response(1);
+    resp.setSuccess("{\"name\":\"Alice\"}");
+    assert(resp.isSuccess() == true, "RPCResponse.isSuccess");
+    assert(resp.getResult() == "{\"name\":\"Alice\"}", "RPCResponse.getResult");
+    let err_resp = new DotNetRPCResponse();
+    err_resp.init_response(2);
+    err_resp.setError(404, "Not found");
+    assert(err_resp.isSuccess() == false, "RPCResponse.isSuccess (error)");
+    assert(err_resp.getError() == "Not found", "RPCResponse.getError");
+    assert(err_resp.getErrorCode() == 404, "RPCResponse.getErrorCode");
+    return 0;
+}
+
+fn test_rpc_context() {
+    let ctx = new DotNetRPCContext();
+    ctx.init_context(nullptr, nullptr);
+    ctx.setAuthenticated(true);
+    assert(ctx.isAuthenticated() == true, "RPCContext.isAuthenticated");
+    ctx.setPrincipal("user_1");
+    assert(ctx.getPrincipal() == "user_1", "RPCContext.getPrincipal");
+    ctx.setUserData("token_abc");
+    assert(ctx.getUserData() == "token_abc", "RPCContext.getUserData");
+    return 0;
+}
+
+fn test_service_host() {
+    let host = new DotNetServiceHost();
+    host.init_host("MyService", 9999);
+    assert(host.getHostName() == "MyService", "ServiceHost.getHostName");
+    assert(host.getPort() == 9999, "ServiceHost.getPort");
+    assert(host.getMaxConnections() == 100, "ServiceHost.getMaxConnections default");
+    host.setMaxConnections(50);
+    assert(host.getMaxConnections() == 50, "ServiceHost.setMaxConnections");
+    host.registerService("GetUser", "handler_get_user");
+    assert(host.getServiceCount() == 1, "ServiceHost.registerService");
+    host.addEndpoint("tcp://localhost:9999");
+    let endpoints = host.getEndpoints();
+    assert(len(endpoints) == 1, "ServiceHost.addEndpoint");
+    return 0;
+}
+
+fn test_rpc_client() {
+    let client = new DotNetRPCClient();
+    client.init_client("tcp://localhost:9999");
+    assert(client.getEndpoint() == "tcp://localhost:9999", "RPCClient.getEndpoint");
+    client.setTimeout(30000);
+    assert(client.getTimeout() == 30000, "RPCClient.getTimeout");
+    client.setAuthToken("token_xyz");
+    assert(client.auth_token == "token_xyz", "RPCClient.authToken");
+    client.setHeader("Accept", "application/json");
+    assert(client.isConnected() == false, "RPCClient.isConnected default");
+    client.connect();
+    assert(client.isConnected() == true, "RPCClient.connect");
+    client.disconnect();
+    assert(client.isConnected() == false, "RPCClient.disconnect");
+    return 0;
+}
+
+fn test_named_pipe() {
+    let pipe = new DotNetNamedPipe();
+    pipe.init_pipe("my_pipe", true);
+    assert(pipe.getPipeName() == "my_pipe", "NamedPipe.getPipeName");
+    assert(pipe.isServer() == true, "NamedPipe.isServer");
+    assert(pipe.isConnected() == false, "NamedPipe.isConnected default");
+    pipe.connect();
+    assert(pipe.isConnected() == true, "NamedPipe.connect");
+    pipe.disconnect();
+    assert(pipe.isConnected() == false, "NamedPipe.disconnect");
+    return 0;
+}
+
+fn test_memory_mapped_file() {
+    let mmf = new DotNetMemoryMappedFile();
+    mmf.init_mmf("shared_data", 1024);
+    assert(mmf.getName() == "shared_data", "MemoryMappedFile.getName");
+    assert(mmf.getSize() == 1024, "MemoryMappedFile.getSize");
+    assert(mmf.isOpen() == false, "MemoryMappedFile.isOpen default");
+    mmf.open();
+    assert(mmf.isOpen() == true, "MemoryMappedFile.open");
+    mmf.close();
+    assert(mmf.isOpen() == false, "MemoryMappedFile.close");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 7: Serialization Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_serializer() {
+    let s = new DotNetSerializer();
+    s.init_serializer(nullptr);
+    s.registerCustomSerializer("int", nullptr);
+    let result = s.serialize("hello", "string");
+    assert(result["__type__"] == "string", "DotNetSerializer.serialize");
+    s.setFormat("json");
+    assert(s.getFormat() == "json", "DotNetSerializer.getFormat");
+    return 0;
+}
+
+fn test_deserializer() {
+    let d = new DotNetDeserializer();
+    d.init_deserializer(nullptr);
+    d.registerCustomDeserializer("int", nullptr);
+    let result = d.deserialize({"__type__": "string", "value": "hello"});
+    assert(result == "hello", "DotNetDeserializer.deserialize");
+    d.setFormat("json");
+    assert(d.getFormat() == "json", "DotNetDeserializer.getFormat");
+    return 0;
+}
+
+fn test_dotnet_json() {
+    let json = new DotNetJSON();
+    json.init_json();
+    let obj = json.stringify("hello");
+    assert(obj == "\"hello\"", "DotNetJSON.stringify");
+    let parsed = json.parse("42");
+    assert(parsed != nullptr, "DotNetJSON.parse");
+    return 0;
+}
+
+fn test_type_converter() {
+    let tc = new DotNetTypeConverter();
+    tc.init_converter();
+    tc.registerConverter("int", "string", fn(val) { return str(val); });
+    assert(tc.canConvert("int", "string") == true, "TypeConverter.canConvert");
+    let result = tc.convert(42, "int", "string");
+    assert(result != nullptr, "TypeConverter.convert");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 8: Async Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_dotnet_task() {
+    let t = new DotNetTask();
+    t.init_task();
+    assert(t.getStatus() == "created", "DotNetTask.getStatus default");
+    t.setResult(42);
+    assert(t.getStatus() == "completed", "DotNetTask.setResult sets status");
+    assert(t.getResult() == 42, "DotNetTask.getResult");
+    assert(t.isCompleted() == true, "DotNetTask.isCompleted");
+    assert(t.getException() == nullptr, "DotNetTask.getException default");
+    t.setException("timeout");
+    assert(t.getException() == "timeout", "DotNetTask.setException");
+    assert(t.isFaulted() == true, "DotNetTask.isFaulted");
+    return 0;
+}
+
+fn test_task_scheduler() {
+    let s = new DotNetTaskScheduler();
+    s.init_scheduler();
+    assert(s.getMaxConcurrent() == 4, "TaskScheduler.getMaxConcurrent default");
+    s.setMaxConcurrent(8);
+    assert(s.getMaxConcurrent() == 8, "TaskScheduler.setMaxConcurrent");
+    let t = new DotNetTask();
+    t.init_task();
+    s.schedule(t);
+    assert(s.getPendingCount() == 1, "TaskScheduler.schedule");
+    s.cancelAll();
+    assert(s.getPendingCount() == 0, "TaskScheduler.cancelAll");
+    return 0;
+}
+
+fn test_cancellation_token() {
+    let ct = new DotNetCancellationToken();
+    ct.init_token();
+    assert(ct.isCancelled() == false, "CancellationToken.isCancelled default");
+    ct.cancel();
+    assert(ct.isCancelled() == true, "CancellationToken.cancel");
+    return 0;
+}
+
+fn test_async_result() {
+    let t = new DotNetTask();
+    t.init_task();
+    let ar = new DotNetAsyncResult();
+    ar.init_async_result(t);
+    assert(ar.getTask() != nullptr, "AsyncResult.getTask");
+    assert(ar.isCompleted() == false, "AsyncResult.isCompleted default");
+    ar.setCompleted(true);
+    assert(ar.isCompleted() == true, "AsyncResult.setCompleted");
+    ar.setAsyncState("done");
+    assert(ar.getAsyncState() == "done", "AsyncResult.getAsyncState");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 9: Diagnostics Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_logger() {
+    let log = new DotNetLogger();
+    log.init_logger();
+    assert(log.getLevel() == "info", "DotNetLogger.getLevel default");
+    log.setLevel("debug");
+    assert(log.getLevel() == "debug", "DotNetLogger.setLevel");
+    return 0;
+}
+
+fn test_profiler() {
+    let p = new DotNetProfiler();
+    p.init_profiler();
+    p.start("test_op");
+    assert(p.isRunning("test_op") == true, "DotNetProfiler.isRunning");
+    assert(p.getMeasurementCount() == 1, "DotNetProfiler.getMeasurementCount");
+    p.stop("test_op");
+    assert(p.isRunning("test_op") == false, "DotNetProfiler.stop");
+    assert(p.getTotalMeasurements() == 1, "DotNetProfiler.getTotalMeasurements");
+    return 0;
+}
+
+fn test_debugger() {
+    let dbg = new DotNetDebugger();
+    dbg.init_debugger();
+    assert(dbg.isAttached() == false, "DotNetDebugger.isAttached default");
+    dbg.attach();
+    assert(dbg.isAttached() == true, "DotNetDebugger.attach");
+    dbg.detach();
+    assert(dbg.isAttached() == false, "DotNetDebugger.detach");
+    dbg.setBreakpoint("main.hto", 42);
+    assert(dbg.getBreakpointCount() == 1, "DotNetDebugger.setBreakpoint");
+    dbg.setStepMode("Over");
+    assert(dbg.getStepMode() == "Over", "DotNetDebugger.getStepMode");
+    return 0;
+}
+
+fn test_config() {
+    let cfg = new DotNetConfig();
+    cfg.init_config();
+    cfg.set("App.Title", "My App");
+    let val = cfg.get("App.Title", "");
+    assert(val == "My App", "DotNetConfig.set/get");
+    let has = cfg.hasKey("App.Title");
+    assert(has == true, "DotNetConfig.hasKey");
+    cfg.remove("App.Title");
+    has = cfg.hasKey("App.Title");
+    assert(has == false, "DotNetConfig.remove");
+    cfg.setSection("Logging", "debug");
+    let section = cfg.getSection("Logging");
+    assert(section == "debug", "DotNetConfig.setSection/getSection");
+    return 0;
+}
+
+fn test_environment() {
+    let env = new DotNetEnvironment();
+    env.init_env();
+    let os_name = env.getOSVersion();
+    assert(os_name == "", "DotNetEnvironment.getOSVersion default");
+    let clr = env.getCLRVersion();
+    assert(clr == "", "DotNetEnvironment.getCLRVersion default");
+    let fw = env.getFramework();
+    assert(fw == "", "DotNetEnvironment.getFramework default");
+    env.setEnvVar("MY_VAR", "my_value");
+    let val = env.getEnvVar("MY_VAR");
+    assert(val == "my_value", "DotNetEnvironment.setEnvVar/getEnvVar");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 10: NuGet & Project Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_nuget_package() {
+    let pkg = new DotNetNuGetPackage();
+    pkg.init_pkg("Newtonsoft.Json", "13.0.0");
+    assert(pkg.getId() == "Newtonsoft.Json", "NuGetPackage.getId");
+    assert(pkg.getVersion() == "13.0.0", "NuGetPackage.getVersion");
+    assert(len(pkg.getDependencies()) == 0, "NuGetPackage.deps default");
+    pkg.addDependency("System.Text.Json", "6.0.0");
+    assert(len(pkg.getDependencies()) == 1, "NuGetPackage.addDependency");
+    pkg.addFramework("net6.0");
+    assert(len(pkg.getFrameworks()) == 1, "NuGetPackage.addFramework");
+    return 0;
+}
+
+fn test_nuget_manager() {
+    let mgr = new DotNetNuGetManager();
+    mgr.init_nuget();
+    mgr.addSource("https://api.nuget.org/v3/index.json");
+    assert(len(mgr.getSources()) == 2, "NuGetManager.addSource");
+    let pkg = mgr.install("TestPkg", "1.0.0");
+    assert(pkg != nullptr, "NuGetManager.install returns package");
+    assert(mgr.isInstalled("TestPkg") == true, "NuGetManager.isInstalled");
+    assert(mgr.getPackageCount() == 1, "NuGetManager.getPackageCount");
+    mgr.uninstall("TestPkg");
+    assert(mgr.getPackageCount() == 0, "NuGetManager.uninstall");
+    return 0;
+}
+
+fn test_dotnet_project() {
+    let proj = new DotNetProject();
+    proj.init_project("MyApp", "exe");
+    assert(proj.getName() == "MyApp", "DotNetProject.getName");
+    assert(proj.getTargetFramework() == "net8.0", "DotNetProject.getTargetFramework");
+    proj.addReference("System.Data");
+    assert(len(proj.getReferences()) == 1, "DotNetProject.addReference");
+    proj.addPackage("Newtonsoft.Json", "13.0.0");
+    assert(len(proj.getPackages()) == 1, "DotNetProject.addPackage");
+    proj.addSourceFile("Program.cs");
+    assert(len(proj.getSourceFiles()) == 1, "DotNetProject.addSourceFile");
+    return 0;
+}
+
+fn test_dotnet_solution() {
+    let sln = new DotNetSolution();
+    sln.init_sln("MySolution");
+    assert(sln.getName() == "MySolution", "DotNetSolution.getName");
+    let proj = new DotNetProject();
+    proj.init_project("MyApp", "exe");
+    sln.addProject(proj);
+    assert(sln.getProjectCount() == 1, "DotNetSolution.addProject");
+    sln.setConfig("Debug");
+    assert(sln.getConfig() == "Debug", "DotNetSolution.getConfig");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 11: XAML Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_xaml() {
+    let xaml = new DotNetXAML();
+    xaml.init_xaml();
+    xaml.addNamespace("local", "clr-namespace:MyApp");
+    xaml.setRootElement("Window");
+    xaml.addResource("ButtonStyle", "Style");
+    xaml.setContent("<Button Content=\"OK\"/>");
+    assert(xaml.getRootElement() == "Window", "DotNetXAML.getRootElement");
+    assert(xaml.getContent() == "<Button Content=\"OK\"/>", "DotNetXAML.getContent");
+    let resources = xaml.getResources();
+    assert(resources["ButtonStyle"] == "Style", "DotNetXAML.addResource");
+    return 0;
+}
+
+fn test_style_bridge() {
+    let sb = new DotNetStyleBridge();
+    sb.init_style_bridge();
+    sb.addMapping("color", "Foreground");
+    sb.addMapping("font-size", "FontSize");
+    sb.addMapping("background", "Background");
+    assert(sb.getMappingCount() == 10, "StyleBridge.getMappingCount");
+    let hwdui_styles = {"color": "#FF0000", "font-size": "14"};
+    let xaml = sb.toXAML(hwdui_styles);
+    assert(xaml["Foreground"] == "#FF0000", "StyleBridge: color→Foreground");
+    assert(xaml["FontSize"] == "14", "StyleBridge: fontSize→FontSize");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 12: Resource & File Watcher Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_resource_manager() {
+    let rm = new DotNetResourceManager();
+    rm.init_res_mgr();
+    rm.addResource("Welcome", "Hello {0}");
+    let s = rm.getString("Welcome");
+    assert(s == "Hello {0}", "ResourceManager.getString");
+    rm.addResource("MaxRetries", 3);
+    let i = rm.getInteger("MaxRetries");
+    assert(i == 3, "ResourceManager.getInteger");
+    rm.addResource("DebugMode", true);
+    let b = rm.getBoolean("DebugMode");
+    assert(b == true, "ResourceManager.getBoolean");
+    rm.setCulture("zh-CN");
+    assert(rm.getCulture() == "zh-CN", "ResourceManager.getCulture");
+    return 0;
+}
+
+fn test_file_watcher() {
+    let fw = new DotNetFileWatcher();
+    fw.init_watcher("/tmp/test_dir", "*.cs");
+    assert(fw.getPath() == "/tmp/test_dir", "DotNetFileWatcher.getPath");
+    assert(fw.getFilter() == "*.cs", "DotNetFileWatcher.getFilter");
+    fw.setIncludeSubdirs(true);
+    assert(fw.include_subdirs == true, "DotNetFileWatcher.setIncludeSubdirs");
+    fw.start();
+    assert(fw.isWatching() == true, "DotNetFileWatcher.start");
+    fw.stop();
+    assert(fw.isWatching() == false, "DotNetFileWatcher.stop");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 13: Global Functions & Init Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_global_init() {
+    dotnet_init();
+    let ready = dotnet_is_ready();
+    assert(ready == true, "dotnet_is_ready after init");
+    return 0;
+}
+
+fn test_global_getters() {
+    let m = dotnet_get_mapper();
+    assert(m != nullptr, "dotnet_get_mapper");
+    let c = dotnet_get_cache();
+    assert(c != nullptr, "dotnet_get_cache");
+    let eb = dotnet_get_event_bus();
+    assert(eb != nullptr, "dotnet_get_event_bus");
+    let bm = dotnet_get_binding_manager();
+    assert(bm != nullptr, "dotnet_get_binding_manager");
+    let s = dotnet_get_serializer();
+    assert(s != nullptr, "dotnet_get_serializer");
+    let d = dotnet_get_deserializer();
+    assert(d != nullptr, "dotnet_get_deserializer");
+    let tc = dotnet_get_type_converter();
+    assert(tc != nullptr, "dotnet_get_type_converter");
+    let log = dotnet_get_logger();
+    assert(log != nullptr, "dotnet_get_logger");
+    let prof = dotnet_get_profiler();
+    assert(prof != nullptr, "dotnet_get_profiler");
+    let cfg = dotnet_get_config();
+    assert(cfg != nullptr, "dotnet_get_config");
+    let env = dotnet_get_env();
+    assert(env != nullptr, "dotnet_get_env");
+    let al = dotnet_get_assembly_loader();
+    assert(al != nullptr, "dotnet_get_assembly_loader");
+    let cf = dotnet_get_control_factory();
+    assert(cf != nullptr, "dotnet_get_control_factory");
+    let sb = dotnet_get_style_bridge();
+    assert(sb != nullptr, "dotnet_get_style_bridge");
+    let xm = dotnet_get_xaml();
+    assert(xm != nullptr, "dotnet_get_xaml");
+    let rm = dotnet_get_resource_manager();
+    assert(rm != nullptr, "dotnet_get_resource_manager");
+    let ng = dotnet_get_nuget();
+    assert(ng != nullptr, "dotnet_get_nuget");
+    let ts = dotnet_get_task_scheduler();
+    assert(ts != nullptr, "dotnet_get_task_scheduler");
+    let ver = dotnet_get_version();
+    assert(ver == "1.0.0", "dotnet_get_version");
+    return 0;
+}
+
+fn test_global_shutdown() {
+    dotnet_shutdown();
+    let ready = dotnet_is_ready();
+    assert(ready == false, "dotnet_is_ready after shutdown");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Run
+# ═══════════════════════════════════════════════════════════════════════════
+
+print("H# zzwUI ↔ .NET 协同开发库 测试");
+print("");
+
+test_dotnet_type_info();
+test_dotnet_type_mapper();
+test_dotnet_value();
+test_dotnet_invoke();
+test_dotnet_result();
+test_dotnet_object();
+test_dotnet_object_cache();
+test_dotnet_assembly();
+test_dotnet_assembly_loader();
+test_dotnet_method();
+test_dotnet_property();
+test_dotnet_field();
+test_dotnet_event();
+test_dotnet_event_handler();
+test_dotnet_cross_event_bus();
+test_dotnet_ui_dispatcher();
+test_control_bridge();
+test_window_bridge();
+test_control_factory();
+test_dotnet_binding();
+test_multi_binding();
+test_binding_manager();
+test_binding_expression();
+test_rpc_message();
+test_rpc_response();
+test_rpc_context();
+test_service_host();
+test_rpc_client();
+test_named_pipe();
+test_memory_mapped_file();
+test_serializer();
+test_deserializer();
+test_dotnet_json();
+test_type_converter();
+test_dotnet_task();
+test_task_scheduler();
+test_cancellation_token();
+test_async_result();
+test_logger();
+test_profiler();
+test_debugger();
+test_config();
+test_environment();
+test_nuget_package();
+test_nuget_manager();
+test_dotnet_project();
+test_dotnet_solution();
+test_xaml();
+test_style_bridge();
+test_resource_manager();
+test_file_watcher();
+test_global_getters();
+test_global_init();
+test_global_shutdown();
+
+test_summary();

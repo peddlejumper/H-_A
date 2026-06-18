@@ -1,0 +1,57 @@
+import "bootstrap/d3system.hto";
+
+3dsizepower UniSpace {
+    public abs{T, T, size}
+    public size[auto{size=auto^3d}]
+
+    region_interface IInteractive {
+        fn on_enter(x, y, z);
+        fn on_exit(x, y, z);
+    }
+
+    region HomeWorld(0, 0, 0, 200, 200, 200) {
+        fn on_enter(x, y, z) {
+            print("Entered HomeWorld");
+        }
+        fn on_exit(x, y, z) {
+            print("Exited HomeWorld");
+        }
+    }
+
+    region ResourceZone(200, 0, 0, 500, 300, 300) {
+        fn collect(x, y, z) {
+            print("Collecting resource");
+        }
+    }
+}
+
+em3d ExtendedSpace extends UniSpace {
+    public extra_data[auto{capacity=1000}]
+
+    region WarpGate(600, 0, 0, 800, 200, 200) {
+        fn activate() {
+            print("WarpGate activated!");
+        }
+    }
+}
+
+print("=== 3D System Demo ===");
+print("");
+print("UniSpace Info:");
+d3_size_power_get_info(UniSpace);
+print("");
+print("ExtendedSpace Info:");
+d3_size_power_get_info(ExtendedSpace);
+print("");
+print("Find region at (50,50,50):");
+let found = d3_find_region_by_point(UniSpace, 50, 50, 50);
+print(found.name);
+print("");
+print("Summary:");
+let vol = d3_system_summary(UniSpace);
+print("Exported HomeWorld data:");
+let data = d3_export_region_data(UniSpace, "HomeWorld");
+print(data[0]);
+print(data[1]);
+print(data[3]);
+print("Demo complete!");

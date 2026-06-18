@@ -1,0 +1,1380 @@
+import "bootstrap/d3system.hto";
+
+# ============================================================
+# H# D3 Coordinate System Region Operations Library
+# ============================================================
+# 提供对三维坐标系区域的完整操作函数，包括:
+#   1. 代码内外部属性 (Property Operations)
+#   2. 类容器 (Class Container Operations)
+#   3. 图属性 (Figure/Graph Property Operations)
+#   4. 区属性 (Region Property Operations)
+#   5. 区容器 (Region Container Operations)
+#   6. 数据容器 (Data Container Operations)
+# ============================================================
+
+# ============================================================
+# 1. 代码内外部属性 (Internal/External Property Operations)
+#    public/private 属性的增删改查
+# ============================================================
+
+fn d3_property_get(d3Obj, name) {
+    let i = 0;
+    let count = len(d3Obj.properties);
+    while (i < count) {
+        let p = d3Obj.properties[i];
+        if (p["name"] == name) {
+            return p;
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+fn d3_property_set(d3Obj, name, params) {
+    let existing = d3_property_get(d3Obj, name);
+    if (len(existing) > 0) {
+        existing["params"] = params;
+        return true;
+    }
+    let newProp = {};
+    newProp["name"] = name;
+    newProp["is_public"] = false;
+    newProp["params"] = params;
+    push(d3Obj.properties, newProp);
+    return true;
+}
+
+fn d3_property_set_public(d3Obj, name, params) {
+    let existing = d3_property_get(d3Obj, name);
+    if (len(existing) > 0) {
+        existing["params"] = params;
+        existing["is_public"] = true;
+        return true;
+    }
+    let newProp = {};
+    newProp["name"] = name;
+    newProp["is_public"] = true;
+    newProp["params"] = params;
+    push(d3Obj.properties, newProp);
+    return true;
+}
+
+fn d3_property_remove(d3Obj, name) {
+    let i = 0;
+    let count = len(d3Obj.properties);
+    while (i < count) {
+        if (d3Obj.properties[i]["name"] == name) {
+            let newProps = [];
+            let j = 0;
+            while (j < count) {
+                if (j != i) {
+                    push(newProps, d3Obj.properties[j]);
+                }
+                j = j + 1;
+            }
+            d3Obj["properties"] = newProps;
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn d3_property_has(d3Obj, name) {
+    let p = d3_property_get(d3Obj, name);
+    if (len(p) > 0) {
+        return true;
+    }
+    return false;
+}
+
+fn d3_property_count(d3Obj) {
+    return len(d3Obj.properties);
+}
+
+fn d3_property_is_public(d3Obj, name) {
+    let p = d3_property_get(d3Obj, name);
+    if (len(p) > 0) {
+        return p["is_public"];
+    }
+    return false;
+}
+
+fn d3_property_get_params(d3Obj, name) {
+    let p = d3_property_get(d3Obj, name);
+    if (len(p) > 0) {
+        return p["params"];
+    }
+    return [];
+}
+
+fn d3_property_set_params(d3Obj, name, params) {
+    let p = d3_property_get(d3Obj, name);
+    if (len(p) > 0) {
+        p["params"] = params;
+        return true;
+    }
+    return false;
+}
+
+fn d3_property_make_public(d3Obj, name) {
+    let p = d3_property_get(d3Obj, name);
+    if (len(p) > 0) {
+        p["is_public"] = true;
+        return true;
+    }
+    return false;
+}
+
+fn d3_property_make_private(d3Obj, name) {
+    let p = d3_property_get(d3Obj, name);
+    if (len(p) > 0) {
+        p["is_public"] = false;
+        return true;
+    }
+    return false;
+}
+
+fn d3_property_list_public(d3Obj) {
+    let result = [];
+    let i = 0;
+    let count = len(d3Obj.properties);
+    while (i < count) {
+        let p = d3Obj.properties[i];
+        if (p["is_public"]) {
+            push(result, p);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn d3_property_list_private(d3Obj) {
+    let result = [];
+    let i = 0;
+    let count = len(d3Obj.properties);
+    while (i < count) {
+        let p = d3Obj.properties[i];
+        if (p["is_public"] == false) {
+            push(result, p);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn d3_property_list_names(d3Obj) {
+    let result = [];
+    let i = 0;
+    let count = len(d3Obj.properties);
+    while (i < count) {
+        push(result, d3Obj.properties[i]["name"]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn d3_property_dump(d3Obj) {
+    let i = 0;
+    let count = len(d3Obj.properties);
+    print("=== D3 System Properties ===");
+    while (i < count) {
+        let p = d3Obj.properties[i];
+        print(p["name"]);
+        if (p["is_public"]) {
+            print("  [public]");
+        }
+        if (p["is_public"] == false) {
+            print("  [private]");
+        }
+        i = i + 1;
+    }
+}
+
+# ============================================================
+# 2. 类容器 (Class Container Operations)
+#    管理 region 内定义的 class
+#    使用 _class_names 注册机制避免 dict key 迭代
+# ============================================================
+
+fn d3_class_register_names(d3Obj, regionName, classNames) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return false;
+    }
+    rgn["_class_names"] = classNames;
+    return true;
+}
+
+fn d3_class_get_names(d3Obj, regionName) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return [];
+    }
+    return rgn["_class_names"];
+}
+
+fn d3_class_has(d3Obj, regionName, className) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return false;
+    }
+    let names = rgn["_class_names"];
+    if (len(names) == 0) {
+        return false;
+    }
+    let i = 0;
+    let count = len(names);
+    while (i < count) {
+        if (names[i] == className) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn d3_class_get(d3Obj, regionName, className) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return [];
+    }
+    let names = rgn["_class_names"];
+    let i = 0;
+    let count = len(names);
+    while (i < count) {
+        if (names[i] == className) {
+            let classes = rgn["classes"];
+            if (len(classes) > 0) {
+                return classes[className];
+            }
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+fn d3_class_count(d3Obj, regionName) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return 0;
+    }
+    let names = rgn["_class_names"];
+    return len(names);
+}
+
+fn d3_class_list_names(d3Obj, regionName) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return [];
+    }
+    return rgn["_class_names"];
+}
+
+fn d3_class_find_across(d3Obj, className) {
+    let results = [];
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let rgn = d3Obj.regions[i];
+        let names = rgn["_class_names"];
+        if (len(names) > 0) {
+            let j = 0;
+            let nc = len(names);
+            while (j < nc) {
+                if (names[j] == className) {
+                    let entry = {};
+                    entry["region"] = rgn["name"];
+                    entry["class"] = rgn["classes"][className];
+                    push(results, entry);
+                }
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return results;
+}
+
+fn d3_class_list_all(d3Obj) {
+    let results = [];
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let rgn = d3Obj.regions[i];
+        let names = rgn["_class_names"];
+        if (len(names) > 0) {
+            let j = 0;
+            let nc = len(names);
+            while (j < nc) {
+                let entry = {};
+                entry["region"] = rgn["name"];
+                entry["class_name"] = names[j];
+                entry["class"] = rgn["classes"][names[j]];
+                push(results, entry);
+                j = j + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return results;
+}
+
+fn d3_class_count_all(d3Obj) {
+    let total = 0;
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let names = d3Obj.regions[i]["_class_names"];
+        total = total + len(names);
+        i = i + 1;
+    }
+    return total;
+}
+
+fn d3_system_init(d3Obj, regionClasses, regionMethods) {
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let rgn = d3Obj.regions[i];
+        rgn["_class_names"] = [];
+        rgn["_method_names"] = [];
+        i = i + 1;
+    }
+}
+
+# ============================================================
+# 3. 图属性 (Figure/Graph Property Operations)
+#    获取三维坐标系本身的属性
+# ============================================================
+
+fn d3_figure_get_name(d3Obj) {
+    return d3Obj["name"];
+}
+
+fn d3_figure_get_type(d3Obj) {
+    return d3Obj["__type"];
+}
+
+fn d3_figure_get_parent(d3Obj) {
+    return d3Obj["__parent_3d"];
+}
+
+fn d3_figure_is_3dsizepower(d3Obj) {
+    if (d3Obj["__type"] == "3dsizepower") {
+        return true;
+    }
+    return false;
+}
+
+fn d3_figure_is_em3d(d3Obj) {
+    if (d3Obj["__type"] == "em3d") {
+        return true;
+    }
+    return false;
+}
+
+fn d3_figure_get_region_count(d3Obj) {
+    return len(d3Obj.regions);
+}
+
+fn d3_figure_get_interface_count(d3Obj) {
+    return len(d3Obj.region_interfaces);
+}
+
+fn d3_figure_get_property_count(d3Obj) {
+    return len(d3Obj.properties);
+}
+
+fn d3_figure_get_bounds(d3Obj) {
+    let regions = d3Obj.regions;
+    let rc = len(regions);
+    if (rc == 0) {
+        return [0, 0, 0, 0, 0, 0];
+    }
+    let minX = regions[0].coords[0];
+    let minY = regions[0].coords[1];
+    let minZ = regions[0].coords[2];
+    let maxX = regions[0].coords[3];
+    let maxY = regions[0].coords[4];
+    let maxZ = regions[0].coords[5];
+    let i = 1;
+    while (i < rc) {
+        let c = regions[i].coords;
+        if (c[0] < minX) {
+            minX = c[0];
+        }
+        if (c[1] < minY) {
+            minY = c[1];
+        }
+        if (c[2] < minZ) {
+            minZ = c[2];
+        }
+        if (c[3] > maxX) {
+            maxX = c[3];
+        }
+        if (c[4] > maxY) {
+            maxY = c[4];
+        }
+        if (c[5] > maxZ) {
+            maxZ = c[5];
+        }
+        i = i + 1;
+    }
+    return [minX, minY, minZ, maxX, maxY, maxZ];
+}
+
+fn d3_figure_get_center(d3Obj) {
+    let bounds = d3_figure_get_bounds(d3Obj);
+    let cx = (bounds[0] + bounds[3]) / 2;
+    let cy = (bounds[1] + bounds[4]) / 2;
+    let cz = (bounds[2] + bounds[5]) / 2;
+    return [cx, cy, cz];
+}
+
+fn d3_figure_get_dimensions(d3Obj) {
+    let bounds = d3_figure_get_bounds(d3Obj);
+    let w = bounds[3] - bounds[0];
+    let h = bounds[4] - bounds[1];
+    let d = bounds[5] - bounds[2];
+    return [w, h, d];
+}
+
+fn d3_figure_get_total_volume(d3Obj) {
+    return d3_system_summary(d3Obj);
+}
+
+fn d3_figure_get_info(d3Obj) {
+    d3_size_power_get_info(d3Obj);
+    let bounds = d3_figure_get_bounds(d3Obj);
+    print("Bounds: ");
+    print(bounds);
+    let center = d3_figure_get_center(d3Obj);
+    print("Center: ");
+    print(center);
+    let dims = d3_figure_get_dimensions(d3Obj);
+    print("Dimensions (W,H,D): ");
+    print(dims);
+    let cc = d3_class_count_all(d3Obj);
+    print("Total Classes: ");
+    print(cc);
+}
+
+# ============================================================
+# 4. 区属性 (Region Property Operations)
+#    获取/设置 region 的各种属性
+# ============================================================
+
+fn d3_region_get_name(rgn) {
+    return rgn["name"];
+}
+
+fn d3_region_get_coords(rgn) {
+    return rgn.coords;
+}
+
+fn d3_region_set_coords(rgn, coords) {
+    rgn["coords"] = coords;
+    return true;
+}
+
+fn d3_region_get_min(rgn) {
+    return [rgn.coords[0], rgn.coords[1], rgn.coords[2]];
+}
+
+fn d3_region_get_max(rgn) {
+    return [rgn.coords[3], rgn.coords[4], rgn.coords[5]];
+}
+
+fn d3_region_get_center(rgn) {
+    let c = rgn.coords;
+    let cx = (c[0] + c[3]) / 2;
+    let cy = (c[1] + c[4]) / 2;
+    let cz = (c[2] + c[5]) / 2;
+    return [cx, cy, cz];
+}
+
+fn d3_region_get_volume(rgn) {
+    let c = rgn.coords;
+    let w = c[3] - c[0];
+    let h = c[4] - c[1];
+    let d = c[5] - c[2];
+    return w * h * d;
+}
+
+fn d3_region_get_dimensions(rgn) {
+    let c = rgn.coords;
+    return [c[3] - c[0], c[4] - c[1], c[5] - c[2]];
+}
+
+fn d3_region_get_width(rgn) {
+    return rgn.coords[3] - rgn.coords[0];
+}
+
+fn d3_region_get_height(rgn) {
+    return rgn.coords[4] - rgn.coords[1];
+}
+
+fn d3_region_get_depth(rgn) {
+    return rgn.coords[5] - rgn.coords[2];
+}
+
+fn d3_region_get_parent(rgn) {
+    return rgn["parent_d3"];
+}
+
+fn d3_region_get_implements(rgn) {
+    return rgn["implements"];
+}
+
+fn d3_region_implements_has(rgn, ifaceName) {
+    let impls = rgn["implements"];
+    let i = 0;
+    let count = len(impls);
+    while (i < count) {
+        if (impls[i] == ifaceName) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn d3_region_method_has(rgn, methodName) {
+    let names = rgn["_method_names"];
+    let i = 0;
+    let count = len(names);
+    while (i < count) {
+        if (names[i] == methodName) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn d3_region_method_list(rgn) {
+    return rgn["_method_names"];
+}
+
+fn d3_region_method_count(rgn) {
+    return len(rgn["_method_names"]);
+}
+
+fn d3_region_class_count(rgn) {
+    return len(rgn["_class_names"]);
+}
+
+fn d3_region_contains_point(rgn, x, y, z) {
+    let c = rgn.coords;
+    return d3_point_in_range([x, y, z], c[0], c[1], c[2], c[3], c[4], c[5]);
+}
+
+fn d3_region_get_surface_area(rgn) {
+    let dims = d3_region_get_dimensions(rgn);
+    let w = dims[0];
+    let h = dims[1];
+    let d = dims[2];
+    return 2 * (w * h + w * d + h * d);
+}
+
+fn d3_region_overlaps(regionA, regionB) {
+    return d3_bbox_intersects(regionA.coords, regionB.coords);
+}
+
+fn d3_region_info(rgn) {
+    print("Region: ");
+    print(rgn["name"]);
+    print("Coords: ");
+    print(rgn.coords);
+    let vol = d3_region_get_volume(rgn);
+    print("Volume: ");
+    print(vol);
+    let center = d3_region_get_center(rgn);
+    print("Center: ");
+    print(center);
+    let mc = d3_region_method_count(rgn);
+    print("Methods: ");
+    print(mc);
+    let cc = d3_region_class_count(rgn);
+    print("Classes: ");
+    print(cc);
+}
+
+# ============================================================
+# 5. 区容器 (Region Container Operations)
+#    管理 d3Obj.regions 数组的增删改查排序
+# ============================================================
+
+fn d3_region_container_get(d3Obj, index) {
+    if (index < 0) {
+        return [];
+    }
+    if (index >= len(d3Obj.regions)) {
+        return [];
+    }
+    return d3Obj.regions[index];
+}
+
+fn d3_region_container_first(d3Obj) {
+    if (len(d3Obj.regions) == 0) {
+        return [];
+    }
+    return d3Obj.regions[0];
+}
+
+fn d3_region_container_last(d3Obj) {
+    let rc = len(d3Obj.regions);
+    if (rc == 0) {
+        return [];
+    }
+    return d3Obj.regions[rc - 1];
+}
+
+fn d3_region_container_count(d3Obj) {
+    return len(d3Obj.regions);
+}
+
+fn d3_region_container_add(d3Obj, regionObj) {
+    push(d3Obj.regions, regionObj);
+    return len(d3Obj.regions);
+}
+
+fn d3_region_container_remove(d3Obj, regionName) {
+    let i = 0;
+    let count = len(d3Obj.regions);
+    while (i < count) {
+        if (d3Obj.regions[i]["name"] == regionName) {
+            let newRegions = [];
+            let j = 0;
+            while (j < count) {
+                if (j != i) {
+                    push(newRegions, d3Obj.regions[j]);
+                }
+                j = j + 1;
+            }
+            d3Obj["regions"] = newRegions;
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn d3_region_container_remove_at(d3Obj, index) {
+    let count = len(d3Obj.regions);
+    if (index < 0) {
+        return false;
+    }
+    if (index >= count) {
+        return false;
+    }
+    let newRegions = [];
+    let i = 0;
+    while (i < count) {
+        if (i != index) {
+            push(newRegions, d3Obj.regions[i]);
+        }
+        i = i + 1;
+    }
+    d3Obj["regions"] = newRegions;
+    return true;
+}
+
+fn d3_region_container_find(d3Obj, regionName) {
+    return d3_find_region_by_name(d3Obj, regionName);
+}
+
+fn d3_region_container_find_index(d3Obj, regionName) {
+    let i = 0;
+    let count = len(d3Obj.regions);
+    while (i < count) {
+        if (d3Obj.regions[i]["name"] == regionName) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn d3_region_container_find_by_point(d3Obj, x, y, z) {
+    return d3_find_region_by_point(d3Obj, x, y, z);
+}
+
+fn d3_region_container_find_intersecting(d3Obj, minX, minY, minZ, maxX, maxY, maxZ) {
+    return d3_get_regions_intersecting(d3Obj, minX, minY, minZ, maxX, maxY, maxZ);
+}
+
+fn d3_region_container_clone(d3Obj, regionName, newName) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return [];
+    }
+    let c = rgn.coords;
+    let newRegion = {};
+    newRegion["__type"] = "region";
+    newRegion["name"] = newName;
+    newRegion["parent_d3"] = rgn["parent_d3"];
+    newRegion["coords"] = [c[0], c[1], c[2], c[3], c[4], c[5]];
+    newRegion["implements"] = [];
+    let impls = rgn["implements"];
+    let ii = 0;
+    let ic = len(impls);
+    while (ii < ic) {
+        push(newRegion["implements"], impls[ii]);
+        ii = ii + 1;
+    }
+    newRegion["methods"] = rgn["methods"];
+    newRegion["classes"] = rgn["classes"];
+    newRegion["d3_ref"] = rgn["d3_ref"];
+    newRegion["_class_names"] = rgn["_class_names"];
+    newRegion["_method_names"] = rgn["_method_names"];
+    push(d3Obj.regions, newRegion);
+    return newRegion;
+}
+
+fn d3_region_container_move(d3Obj, regionName, dx, dy, dz) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return false;
+    }
+    rgn["coords"][0] = rgn.coords[0] + dx;
+    rgn["coords"][1] = rgn.coords[1] + dy;
+    rgn["coords"][2] = rgn.coords[2] + dz;
+    rgn["coords"][3] = rgn.coords[3] + dx;
+    rgn["coords"][4] = rgn.coords[4] + dy;
+    rgn["coords"][5] = rgn.coords[5] + dz;
+    return true;
+}
+
+fn d3_region_container_resize(d3Obj, regionName, width, height, depth) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return false;
+    }
+    let c = rgn.coords;
+    if (width > 0) {
+        rgn["coords"][3] = c[0] + width;
+    }
+    if (height > 0) {
+        rgn["coords"][4] = c[1] + height;
+    }
+    if (depth > 0) {
+        rgn["coords"][5] = c[2] + depth;
+    }
+    return true;
+}
+
+fn d3_region_container_expand(d3Obj, regionName, dx, dy, dz) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return false;
+    }
+    rgn["coords"][0] = rgn.coords[0] - dx;
+    rgn["coords"][1] = rgn.coords[1] - dy;
+    rgn["coords"][2] = rgn.coords[2] - dz;
+    rgn["coords"][3] = rgn.coords[3] + dx;
+    rgn["coords"][4] = rgn.coords[4] + dy;
+    rgn["coords"][5] = rgn.coords[5] + dz;
+    return true;
+}
+
+fn d3_region_container_sort_by_volume(d3Obj) {
+    let regions = d3Obj.regions;
+    let count = len(regions);
+    if (count < 2) {
+        return regions;
+    }
+    let i = 0;
+    while (i < count) {
+        let j = 0;
+        while (j < count - i - 1) {
+            let volA = d3_region_get_volume(regions[j]);
+            let volB = d3_region_get_volume(regions[j + 1]);
+            if (volA > volB) {
+                let temp = regions[j];
+                regions[j] = regions[j + 1];
+                regions[j + 1] = temp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return regions;
+}
+
+fn d3_region_container_sort_by_name(d3Obj) {
+    let regions = d3Obj.regions;
+    let count = len(regions);
+    if (count < 2) {
+        return regions;
+    }
+    let i = 0;
+    while (i < count) {
+        let j = 0;
+        while (j < count - i - 1) {
+            if (d3_str_gt(regions[j]["name"], regions[j + 1]["name"])) {
+                let temp = regions[j];
+                regions[j] = regions[j + 1];
+                regions[j + 1] = temp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return regions;
+}
+
+fn d3_region_container_sort_by_name_asc(d3Obj) {
+    return d3_region_container_sort_by_name(d3Obj);
+}
+
+fn d3_str_gt(a, b) {
+    let la = len(a);
+    let lb = len(b);
+    let limit = la;
+    if (lb < limit) {
+        limit = lb;
+    }
+    let i = 0;
+    while (i < limit) {
+        let ca = d3_char_code_at(a, i);
+        let cb = d3_char_code_at(b, i);
+        if (ca > cb) {
+            return true;
+        }
+        if (ca < cb) {
+            return false;
+        }
+        i = i + 1;
+    }
+    if (la > lb) {
+        return true;
+    }
+    return false;
+}
+
+fn d3_char_code_at(s, index) {
+    let i = 0;
+    while (i < 256) {
+        let ch = d3_code_to_char(i);
+        if (ch == s[index]) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn d3_code_to_char(code) {
+    if (code == 32) {
+        return " ";
+    }
+    if (code == 48) {
+        return "0";
+    }
+    if (code == 49) {
+        return "1";
+    }
+    if (code == 50) {
+        return "2";
+    }
+    if (code == 51) {
+        return "3";
+    }
+    if (code == 52) {
+        return "4";
+    }
+    if (code == 53) {
+        return "5";
+    }
+    if (code == 54) {
+        return "6";
+    }
+    if (code == 55) {
+        return "7";
+    }
+    if (code == 56) {
+        return "8";
+    }
+    if (code == 57) {
+        return "9";
+    }
+    if (code == 65) {
+        return "A";
+    }
+    if (code == 66) {
+        return "B";
+    }
+    if (code == 67) {
+        return "C";
+    }
+    if (code == 68) {
+        return "D";
+    }
+    if (code == 69) {
+        return "E";
+    }
+    if (code == 70) {
+        return "F";
+    }
+    if (code == 71) {
+        return "G";
+    }
+    if (code == 72) {
+        return "H";
+    }
+    if (code == 73) {
+        return "I";
+    }
+    if (code == 74) {
+        return "J";
+    }
+    if (code == 75) {
+        return "K";
+    }
+    if (code == 76) {
+        return "L";
+    }
+    if (code == 77) {
+        return "M";
+    }
+    if (code == 78) {
+        return "N";
+    }
+    if (code == 79) {
+        return "O";
+    }
+    if (code == 80) {
+        return "P";
+    }
+    if (code == 81) {
+        return "Q";
+    }
+    if (code == 82) {
+        return "R";
+    }
+    if (code == 83) {
+        return "S";
+    }
+    if (code == 84) {
+        return "T";
+    }
+    if (code == 85) {
+        return "U";
+    }
+    if (code == 86) {
+        return "V";
+    }
+    if (code == 87) {
+        return "W";
+    }
+    if (code == 88) {
+        return "X";
+    }
+    if (code == 89) {
+        return "Y";
+    }
+    if (code == 90) {
+        return "Z";
+    }
+    if (code == 97) {
+        return "a";
+    }
+    if (code == 98) {
+        return "b";
+    }
+    if (code == 99) {
+        return "c";
+    }
+    if (code == 100) {
+        return "d";
+    }
+    if (code == 101) {
+        return "e";
+    }
+    if (code == 102) {
+        return "f";
+    }
+    if (code == 103) {
+        return "g";
+    }
+    if (code == 104) {
+        return "h";
+    }
+    if (code == 105) {
+        return "i";
+    }
+    if (code == 106) {
+        return "j";
+    }
+    if (code == 107) {
+        return "k";
+    }
+    if (code == 108) {
+        return "l";
+    }
+    if (code == 109) {
+        return "m";
+    }
+    if (code == 110) {
+        return "n";
+    }
+    if (code == 111) {
+        return "o";
+    }
+    if (code == 112) {
+        return "p";
+    }
+    if (code == 113) {
+        return "q";
+    }
+    if (code == 114) {
+        return "r";
+    }
+    if (code == 115) {
+        return "s";
+    }
+    if (code == 116) {
+        return "t";
+    }
+    if (code == 117) {
+        return "u";
+    }
+    if (code == 118) {
+        return "v";
+    }
+    if (code == 119) {
+        return "w";
+    }
+    if (code == 120) {
+        return "x";
+    }
+    if (code == 121) {
+        return "y";
+    }
+    if (code == 122) {
+        return "z";
+    }
+    if (code == 95) {
+        return "_";
+    }
+    return "";
+}
+
+fn d3_region_container_filter_by_volume_min(d3Obj, minVolume) {
+    let results = [];
+    let i = 0;
+    let count = len(d3Obj.regions);
+    while (i < count) {
+        let vol = d3_region_get_volume(d3Obj.regions[i]);
+        if (vol >= minVolume) {
+            push(results, d3Obj.regions[i]);
+        }
+        i = i + 1;
+    }
+    return results;
+}
+
+fn d3_region_container_filter_by_volume_max(d3Obj, maxVolume) {
+    let results = [];
+    let i = 0;
+    let count = len(d3Obj.regions);
+    while (i < count) {
+        let vol = d3_region_get_volume(d3Obj.regions[i]);
+        if (vol <= maxVolume) {
+            push(results, d3Obj.regions[i]);
+        }
+        i = i + 1;
+    }
+    return results;
+}
+
+fn d3_region_container_get_names(d3Obj) {
+    let names = [];
+    let i = 0;
+    let count = len(d3Obj.regions);
+    while (i < count) {
+        push(names, d3Obj.regions[i]["name"]);
+        i = i + 1;
+    }
+    return names;
+}
+
+fn d3_region_container_get_total_volume(d3Obj) {
+    return d3_system_summary(d3Obj);
+}
+
+fn d3_region_container_get_largest(d3Obj) {
+    let regions = d3Obj.regions;
+    let count = len(regions);
+    if (count == 0) {
+        return [];
+    }
+    let largest = regions[0];
+    let largestVol = d3_region_get_volume(largest);
+    let i = 1;
+    while (i < count) {
+        let vol = d3_region_get_volume(regions[i]);
+        if (vol > largestVol) {
+            largest = regions[i];
+            largestVol = vol;
+        }
+        i = i + 1;
+    }
+    return largest;
+}
+
+fn d3_region_container_get_smallest(d3Obj) {
+    let regions = d3Obj.regions;
+    let count = len(regions);
+    if (count == 0) {
+        return [];
+    }
+    let smallest = regions[0];
+    let smallestVol = d3_region_get_volume(smallest);
+    let i = 1;
+    while (i < count) {
+        let vol = d3_region_get_volume(regions[i]);
+        if (vol < smallestVol) {
+            smallest = regions[i];
+            smallestVol = vol;
+        }
+        i = i + 1;
+    }
+    return smallest;
+}
+
+# ============================================================
+# Dict Key Utility
+# ============================================================
+
+fn d3_dict_keys(d) {
+    let keys = [];
+    push(keys, "name");
+    push(keys, "params");
+    push(keys, "is_public");
+    push(keys, "__type");
+    push(keys, "coords");
+    push(keys, "implements");
+    push(keys, "methods");
+    push(keys, "classes");
+    push(keys, "body");
+    push(keys, "d3_ref");
+    push(keys, "parent_d3");
+    push(keys, "env");
+    push(keys, "__parent_3d");
+    push(keys, "region");
+    push(keys, "class");
+    push(keys, "class_name");
+    return keys;
+}
+
+# ============================================================
+# 6. 数据容器 (Data Container Operations)
+#    数据的导出、序列化、打包、反序列化
+# ============================================================
+
+fn d3_data_export_region(d3Obj, regionName) {
+    return d3_export_region_data(d3Obj, regionName);
+}
+
+fn d3_data_pack_region(rgn) {
+    let data = [];
+    let c = rgn.coords;
+    push(data, rgn["name"]);
+    push(data, c[0]);
+    push(data, c[1]);
+    push(data, c[2]);
+    push(data, c[3]);
+    push(data, c[4]);
+    push(data, c[5]);
+    push(data, rgn["parent_d3"]);
+    return data;
+}
+
+fn d3_data_pack_region_full(rgn) {
+    let data = d3_data_pack_region(rgn);
+    let dims = d3_region_get_dimensions(rgn);
+    push(data, dims[0]);
+    push(data, dims[1]);
+    push(data, dims[2]);
+    let vol = d3_region_get_volume(rgn);
+    push(data, vol);
+    let mc = d3_region_method_count(rgn);
+    push(data, mc);
+    let cc = d3_region_class_count(rgn);
+    push(data, cc);
+    let impls = rgn["implements"];
+    let ic = len(impls);
+    push(data, ic);
+    let ii = 0;
+    while (ii < ic) {
+        push(data, impls[ii]);
+        ii = ii + 1;
+    }
+    return data;
+}
+
+fn d3_data_unpack_region(data) {
+    let rgn = {};
+    rgn["__type"] = "region";
+    rgn["name"] = data[0];
+    rgn["coords"] = [data[1], data[2], data[3], data[4], data[5], data[6]];
+    rgn["parent_d3"] = data[7];
+    rgn["implements"] = [];
+    rgn["methods"] = [];
+    rgn["classes"] = [];
+    rgn["d3_ref"] = [];
+    return rgn;
+}
+
+fn d3_data_export_all_regions(d3Obj) {
+    let allData = [];
+    let i = 0;
+    let count = len(d3Obj.regions);
+    while (i < count) {
+        let packed = d3_data_pack_region(d3Obj.regions[i]);
+        push(allData, packed);
+        i = i + 1;
+    }
+    return allData;
+}
+
+fn d3_data_export_all_regions_full(d3Obj) {
+    let allData = [];
+    let i = 0;
+    let count = len(d3Obj.regions);
+    while (i < count) {
+        let packed = d3_data_pack_region_full(d3Obj.regions[i]);
+        push(allData, packed);
+        i = i + 1;
+    }
+    return allData;
+}
+
+fn d3_data_serialize_system(d3Obj) {
+    let serialized = [];
+    push(serialized, d3Obj["name"]);
+    push(serialized, d3Obj["__type"]);
+    let pc = len(d3Obj.properties);
+    push(serialized, pc);
+    let pi = 0;
+    while (pi < pc) {
+        let p = d3Obj.properties[pi];
+        push(serialized, p["name"]);
+        push(serialized, p["is_public"]);
+        push(serialized, len(p["params"]));
+        pi = pi + 1;
+    }
+    let rc = len(d3Obj.regions);
+    push(serialized, rc);
+    let ri = 0;
+    while (ri < rc) {
+        let r = d3Obj.regions[ri];
+        let packed = d3_data_pack_region_full(r);
+        let pk = 0;
+        let pkc = len(packed);
+        while (pk < pkc) {
+            push(serialized, packed[pk]);
+            pk = pk + 1;
+        }
+        ri = ri + 1;
+    }
+    let ric = len(d3Obj.region_interfaces);
+    push(serialized, ric);
+    let rii = 0;
+    while (rii < ric) {
+        let iface = d3Obj.region_interfaces[rii];
+        push(serialized, iface["name"]);
+        rii = rii + 1;
+    }
+    return serialized;
+}
+
+fn d3_data_system_snapshot(d3Obj) {
+    let snapshot = {};
+    snapshot["name"] = d3Obj["name"];
+    snapshot["type"] = d3Obj["__type"];
+    snapshot["property_count"] = d3_property_count(d3Obj);
+    snapshot["region_count"] = d3_figure_get_region_count(d3Obj);
+    snapshot["interface_count"] = d3_figure_get_interface_count(d3Obj);
+    snapshot["bounds"] = d3_figure_get_bounds(d3Obj);
+    snapshot["center"] = d3_figure_get_center(d3Obj);
+    snapshot["dimensions"] = d3_figure_get_dimensions(d3Obj);
+    snapshot["total_volume"] = d3_figure_get_total_volume(d3Obj);
+    snapshot["total_classes"] = d3_class_count_all(d3Obj);
+    let names = d3_region_container_get_names(d3Obj);
+    snapshot["region_names"] = names;
+    return snapshot;
+}
+
+fn d3_data_diff_regions(d3ObjA, d3ObjB) {
+    let namesA = d3_region_container_get_names(d3ObjA);
+    let namesB = d3_region_container_get_names(d3ObjB);
+    let onlyA = [];
+    let onlyB = [];
+    let common = [];
+    let i = 0;
+    let ca = len(namesA);
+    while (i < ca) {
+        let found = false;
+        let j = 0;
+        let cb = len(namesB);
+        while (j < cb) {
+            if (namesA[i] == namesB[j]) {
+                found = true;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            push(common, namesA[i]);
+        }
+        if (found == false) {
+            push(onlyA, namesA[i]);
+        }
+        i = i + 1;
+    }
+    let k = 0;
+    let cb2 = len(namesB);
+    while (k < cb2) {
+        let found = false;
+        let m = 0;
+        let ca2 = len(common);
+        while (m < ca2) {
+            if (namesB[k] == common[m]) {
+                found = true;
+            }
+            m = m + 1;
+        }
+        if (found == false) {
+            push(onlyB, namesB[k]);
+        }
+        k = k + 1;
+    }
+    let result = {};
+    result["only_in_first"] = onlyA;
+    result["only_in_second"] = onlyB;
+    result["common"] = common;
+    return result;
+}
+
+fn d3_data_count_intersections(d3Obj) {
+    let regions = d3Obj.regions;
+    let count = len(regions);
+    let intersections = 0;
+    let i = 0;
+    while (i < count) {
+        let j = i + 1;
+        while (j < count) {
+            if (d3_bbox_intersects(regions[i].coords, regions[j].coords)) {
+                intersections = intersections + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return intersections;
+}
+
+print("D3System Operations Library v1.0 loaded");

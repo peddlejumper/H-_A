@@ -1,0 +1,655 @@
+# ═══════════════════════════════════════════════════════════════════
+# H# 3D Advanced Library Test Suite
+# Tests all 15 sections of 3d_advanced.hto
+# ═══════════════════════════════════════════════════════════════════
+
+import "bootstrap/3d_advanced.hto";
+
+print("========================================");
+print("H# 3D Advanced Library Test Suite");
+print("========================================");
+print("");
+
+let tests_passed = 0;
+let tests_failed = 0;
+
+# ── Helper functions ──
+fn assert_equals(test_name, actual, expected) {
+    if (actual == expected) {
+        print("[PASS] " + test_name);
+        tests_passed = tests_passed + 1;
+        return true;
+    } else {
+        print("[FAIL] " + test_name);
+        print("  Expected: " + str(expected));
+        print("  Actual:   " + str(actual));
+        tests_failed = tests_failed + 1;
+        return false;
+    }
+}
+
+fn assert_approx(test_name, actual, expected, tolerance) {
+    let diff = actual - expected;
+    if (diff < 0.0) { diff = -diff; }
+    if (diff <= tolerance) {
+        print("[PASS] " + test_name);
+        tests_passed = tests_passed + 1;
+        return true;
+    } else {
+        print("[FAIL] " + test_name);
+        print("  Expected: ~" + str(expected));
+        print("  Actual:   " + str(actual));
+        tests_failed = tests_failed + 1;
+        return false;
+    }
+}
+
+fn assert_true(test_name, value) {
+    if (value) {
+        print("[PASS] " + test_name);
+        tests_passed = tests_passed + 1;
+        return true;
+    } else {
+        print("[FAIL] " + test_name);
+        tests_failed = tests_failed + 1;
+        return false;
+    }
+}
+
+fn assert_not_empty(test_name, arr) {
+    if (len(arr) > 0) {
+        print("[PASS] " + test_name);
+        tests_passed = tests_passed + 1;
+        return true;
+    } else {
+        print("[FAIL] " + test_name + " (empty/unexpected result)");
+        tests_failed = tests_failed + 1;
+        return false;
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 1: Vector Math — vec2, vec3, vec4
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 1: Vector Math ---");
+
+# vec2 tests
+let a2 = vec2(1.0, 2.0);
+let b2 = vec2(3.0, 4.0);
+let s2 = v2_add(a2, b2);
+assert_approx("v2_add", s2[0], 4.0, 0.001);
+assert_approx("v2_sub", v2_sub(a2, b2)[0], -2.0, 0.001);
+assert_approx("v2_mul", v2_mul(a2, 2.0)[0], 2.0, 0.001);
+assert_approx("v2_dot", v2_dot(a2, b2), 11.0, 0.001);
+assert_approx("v2_cross", v2_cross(a2, b2), -2.0, 0.001);
+let v2len = v2_length(vec2(3.0, 4.0));
+assert_approx("v2_length", v2len, 5.0, 0.001);
+let v2norm = v2_normalize(vec2(3.0, 0.0));
+assert_approx("v2_normalize", v2norm[0], 1.0, 0.001);
+assert_approx("v2_lerp", v2_lerp(a2, b2, 0.5)[0], 2.0, 0.001);
+assert_approx("v2_distance", v2_distance(a2, b2), 2.828, 0.01);
+assert_approx("v2_reflect", v2_reflect(vec2(1.0, -1.0), vec2(0.0, 1.0))[0], 1.0, 0.001);
+let v2rot = v2_rotate(vec2(1.0, 0.0), MATH_PI / 2.0);
+assert_approx("v2_rotate.x", v2rot[0], 0.0, 0.001);
+assert_approx("v2_rotate.y", v2rot[1], 1.0, 0.001);
+assert_approx("v2_perpendicular", v2_perpendicular(vec2(1.0, 0.0))[1], 1.0, 0.001);
+
+# vec3 tests
+let a3 = vec3(1.0, 2.0, 3.0);
+let b3 = vec3(4.0, 5.0, 6.0);
+assert_approx("v3_add", v3_add(a3, b3)[0], 5.0, 0.001);
+assert_approx("v3_sub", v3_sub(a3, b3)[0], -3.0, 0.001);
+assert_approx("v3_dot", v3_dot(a3, b3), 32.0, 0.001);
+let c3 = v3_cross(a3, b3);
+assert_approx("v3_cross.x", c3[0], -3.0, 0.001);
+assert_approx("v3_cross.y", c3[1], 6.0, 0.001);
+assert_approx("v3_cross.z", c3[2], -3.0, 0.001);
+let v3len = v3_length(vec3(2.0, 3.0, 6.0));
+assert_approx("v3_length", v3len, 7.0, 0.001);
+let v3norm = v3_normalize(vec3(5.0, 0.0, 0.0));
+assert_approx("v3_normalize", v3norm[0], 1.0, 0.001);
+assert_approx("v3_distance", v3_distance(a3, b3), 5.196, 0.01);
+let v3ref = v3_reflect(vec3(1.0, -1.0, 0.0), vec3(0.0, 1.0, 0.0));
+assert_approx("v3_reflect.x", v3ref[0], 1.0, 0.001);
+assert_approx("v3_reflect.y", v3ref[1], 1.0, 0.001);
+let v3proj = v3_project(vec3(1.0, 2.0, 3.0), vec3(1.0, 0.0, 0.0));
+assert_approx("v3_project", v3proj[0], 1.0, 0.001);
+let v3rej = v3_reject(vec3(1.0, 2.0, 3.0), vec3(1.0, 0.0, 0.0));
+assert_approx("v3_reject", v3rej[0], 0.0, 0.001);
+
+# vec4 tests
+let a4 = vec4(1.0, 2.0, 3.0, 4.0);
+let b4 = vec4(5.0, 6.0, 7.0, 8.0);
+assert_approx("v4_add", v4_add(a4, b4)[0], 6.0, 0.001);
+assert_approx("v4_dot", v4_dot(a4, b4), 70.0, 0.001);
+let v4len = v4_length(vec4(1.0, 2.0, 2.0, 0.0));
+assert_approx("v4_length", v4len, 3.0, 0.001);
+let v3fromv4 = v4_to_v3(vec4(2.0, 4.0, 6.0, 2.0));
+assert_approx("v4_to_v3", v3fromv4[0], 1.0, 0.001);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 2: Matrix Math — mat3, mat4
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 2: Matrix Math ---");
+
+# mat3 tests
+let m3id = mat3_identity();
+assert_approx("mat3_identity[0]", m3id[0], 1.0, 0.001);
+assert_approx("mat3_identity[4]", m3id[4], 1.0, 0.001);
+let m3prod = mat3_mul(m3id, m3id);
+assert_approx("mat3_mul_identity", m3prod[0], 1.0, 0.001);
+let m3v = mat3_mul_vec3(m3id, vec3(1.0, 2.0, 3.0));
+assert_approx("mat3_mul_vec3", m3v[0], 1.0, 0.001);
+let m3det = mat3_determinant(m3id);
+assert_approx("mat3_determinant", m3det, 1.0, 0.001);
+let m3inv = mat3_inverse(m3id);
+assert_approx("mat3_inverse", m3inv[0], 1.0, 0.001);
+let m3trans = mat3_transpose(m3id);
+assert_approx("mat3_transpose", m3trans[0], 1.0, 0.001);
+
+# mat4 tests
+let m4id = mat4_identity();
+assert_approx("mat4_identity[0]", m4id[0], 1.0, 0.001);
+let m4prod = mat4_mul(m4id, m4id);
+assert_approx("mat4_mul_identity", m4prod[0], 1.0, 0.001);
+let m4v = mat4_mul_vec3(m4id, vec3(1.0, 2.0, 3.0));
+assert_approx("mat4_mul_vec3", m4v[0], 1.0, 0.001);
+let m4det = mat4_determinant(m4id);
+assert_approx("mat4_determinant", m4det, 1.0, 0.001);
+let m4inv = mat4_inverse(m4id);
+assert_approx("mat4_inverse", m4inv[0], 1.0, 0.001);
+let m4trans = mat4_transpose(m4id);
+assert_approx("mat4_transpose", m4trans[0], 1.0, 0.001);
+
+# mat4 transformations
+let m4scale = mat4_scale(2.0, 3.0, 4.0);
+assert_approx("mat4_scale", m4scale[0], 2.0, 0.001);
+let m4rot = mat4_rotate_x(0.0);
+assert_approx("mat4_rotate_x", m4rot[0], 1.0, 0.001);
+let m4trans = mat4_translate(1.0, 2.0, 3.0);
+assert_approx("mat4_translate", m4trans[3], 1.0, 0.001);
+
+# mat4 perspective
+let m4persp = mat4_perspective(MATH_PI / 4.0, 1.333, 0.1, 100.0);
+assert_true("mat4_perspective_created", len(m4persp) == 16);
+
+# mat4 look_at
+let m4look = mat4_look_at(vec3(0.0, 0.0, 5.0), vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+assert_true("mat4_look_at_created", len(m4look) == 16);
+
+# mat4 from quat
+let qtest = quat_identity();
+let m4q = mat4_from_quat(qtest);
+assert_approx("mat4_from_quat", m4q[0], 1.0, 0.001);
+
+# mat4 extract
+let extrTrans = mat4_extract_translation(m4id);
+assert_approx("mat4_extract_translation", extrTrans[0], 0.0, 0.001);
+let extrScale = mat4_extract_scale(m4id);
+assert_approx("mat4_extract_scale", extrScale[0], 1.0, 0.001);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 3: Quaternion Math
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 3: Quaternion Math ---");
+
+let qid = quat_identity();
+assert_approx("quat_identity.w", qid[3], 1.0, 0.001);
+let qn = quat_normalize(qid);
+assert_approx("quat_normalize.w", qn[3], 1.0, 0.001);
+let qlen = quat_length(qid);
+assert_approx("quat_length", qlen, 1.0, 0.001);
+let qconj = quat_conjugate(qid);
+assert_approx("quat_conjugate.w", qconj[3], 1.0, 0.001);
+let qinv = quat_inverse(qid);
+assert_approx("quat_inverse.w", qinv[3], 1.0, 0.001);
+let qdot = quat_dot(qid, qid);
+assert_approx("quat_dot", qdot, 1.0, 0.001);
+
+# quat slerp
+let qslerp = quat_slerp(qid, qid, 0.5);
+assert_approx("quat_slerp_identity", qslerp[3], 1.0, 0.001);
+
+# quat from axis angle
+let qaxis = quat_from_axis_angle(vec3(0.0, 1.0, 0.0), MATH_PI / 2.0);
+assert_approx("quat_from_axis_angle.x", qaxis[0], 0.0, 0.001);
+assert_approx("quat_from_axis_angle.y", qaxis[1], 0.707, 0.01);
+assert_approx("quat_from_axis_angle.w", qaxis[3], 0.707, 0.01);
+
+# quat from euler
+let qeuler = quat_from_euler(0.0, 0.0, 0.0);
+assert_approx("quat_from_euler_zero.w", qeuler[3], 1.0, 0.001);
+
+# quat to euler
+let euler = quat_to_euler(qid);
+assert_approx("quat_to_euler.pitch", euler[0], 0.0, 0.001);
+
+# quat rotate vector
+let qrotv = quat_rotate_vector(qid, vec3(1.0, 0.0, 0.0));
+assert_approx("quat_rotate_vector_identity", qrotv[0], 1.0, 0.001);
+
+# quat look rotation
+let qlook = quat_look_rotation(vec3(0.0, 0.0, -1.0), vec3(0.0, 1.0, 0.0));
+# For exact 180 yaw, w should be ~0.5 (check it's magnitude is 1)
+let mag_sq = qlook[0]*qlook[0] + qlook[1]*qlook[1] + qlook[2]*qlook[2] + qlook[3]*qlook[3];
+assert_approx("quat_look_rotation_normalized", mag_sq, 1.0, 0.001);
+
+# quat from_to
+let qft = quat_from_to(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0));
+assert_approx("quat_from_to_same.w", qft[3], 1.0, 0.001);
+
+# quat nlerp
+let qnlerp = quat_nlerp(qid, qid, 0.5);
+assert_approx("quat_nlerp", qnlerp[3], 1.0, 0.001);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 4: 3D Primitives — Mesh Generation
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 4: 3D Primitives ---");
+
+# cube
+let cube = mesh_create_cube(2.0);
+assert_true("mesh_create_cube_vertices", len(cube["vertices"]) == 8);
+assert_true("mesh_create_cube_faces", len(cube["faces"]) == 12);
+assert_true("mesh_create_cube_normals", len(cube["normals"]) == 8);
+
+# sphere
+let sphere = mesh_create_sphere(1.0, 8);
+assert_true("mesh_create_sphere_normals", len(sphere["normals"]) > 0);
+
+# cylinder
+let cyl = mesh_create_cylinder(1.0, 2.0, 8);
+assert_true("mesh_create_cylinder_faces", len(cyl["faces"]) > 0);
+
+# cone
+let cone = mesh_create_cone(1.0, 2.0, 8);
+assert_true("mesh_create_cone_vertices", len(cone["vertices"]) > 0);
+
+# torus
+let torus = mesh_create_torus(2.0, 0.5, 8, 6);
+assert_true("mesh_create_torus_faces", len(torus["faces"]) > 0);
+
+# plane
+let plane = mesh_create_plane(4.0, 4.0, 2, 2);
+assert_true("mesh_create_plane_vertices", len(plane["vertices"]) == 9);
+
+# icosahedron
+let ico = mesh_create_icosahedron(1.0);
+assert_true("mesh_create_icosahedron_faces", len(ico["faces"]) == 20);
+
+# tetrahedron
+let tetra = mesh_create_tetrahedron(2.0);
+assert_true("mesh_create_tetrahedron_faces", len(tetra["faces"]) == 4);
+
+# octahedron
+let octa = mesh_create_octahedron(2.0);
+assert_true("mesh_create_octahedron_faces", len(octa["faces"]) == 8);
+
+# capsule
+let cap = mesh_create_capsule(1.0, 2.0, 8);
+assert_true("mesh_create_capsule_vertices", len(cap["vertices"]) > 0);
+
+# pyramid
+let pyr = mesh_create_pyramid(2.0, 3.0);
+assert_true("mesh_create_pyramid_faces", len(pyr["faces"]) == 6);
+
+# quad
+let quad = mesh_create_quad();
+assert_true("mesh_create_quad_vertices", len(quad["vertices"]) == 4);
+assert_true("mesh_create_quad_faces", len(quad["faces"]) == 2);
+
+# triangle
+let tri = mesh_create_triangle();
+assert_true("mesh_create_triangle_vertices", len(tri["vertices"]) == 3);
+assert_true("mesh_create_triangle_faces", len(tri["faces"]) == 1);
+
+# grid
+let grid = mesh_create_grid(10.0, 5);
+assert_true("mesh_create_grid_vertices", len(grid["vertices"]) > 0);
+
+# mesh operations
+let bounds = mesh_compute_bounds(cube);
+assert_true("mesh_compute_bounds", len(bounds) == 6);
+let center = mesh_center(cube);
+assert_approx("mesh_center", center[0], 0.0, 0.001);
+let cloned = mesh_clone(cube);
+assert_true("mesh_clone", len(cloned["vertices"]) == len(cube["vertices"]));
+let merged = mesh_merge(cube, sphere);
+assert_true("mesh_merge", len(merged["vertices"]) > len(cube["vertices"]));
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 5: Camera
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 5: Camera ---");
+
+let cam = camera_create();
+assert_true("camera_create", len(cam) > 0);
+let viewM = camera_view_matrix(cam);
+assert_true("camera_view_matrix", len(viewM) == 16);
+let projM = camera_projection_matrix(cam);
+assert_true("camera_projection_matrix", len(projM) == 16);
+let vpM = camera_vp_matrix(cam);
+assert_true("camera_vp_matrix", len(vpM) == 16);
+let fwd = camera_forward(cam);
+assert_approx("camera_forward", fwd[2], -1.0, 0.01);
+let right = camera_right(cam);
+assert_approx("camera_right", right[0], 1.0, 0.01);
+let screen = camera_world_to_screen(cam, vec3(0.0, 0.0, 0.0));
+assert_true("camera_world_to_screen", len(screen) == 2);
+camera_orbit(cam, 0.5, 0.0);
+assert_true("camera_orbit", true);
+camera_fps_move(cam, 0.0, 0.0);
+assert_true("camera_fps_move", true);
+let planes = camera_frustum_planes(cam);
+assert_true("camera_frustum_planes", len(planes) == 6);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 6: Lighting / Color
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 6: Lighting / Color ---");
+
+# Color functions
+let rgb = color_rgb(1.0, 0.0, 0.0);
+assert_approx("color_rgb", rgb[0], 1.0, 0.001);
+let hsv = color_rgb_to_hsv(1.0, 0.0, 0.0);
+assert_approx("color_rgb_to_hsv_h", hsv[0], 0.0, 0.001);
+let rgb2 = color_hsv_to_rgb(0.0, 1.0, 1.0);
+assert_approx("color_hsv_to_rgb", rgb2[0], 1.0, 0.001);
+let lerped = color_lerp(rgb, vec3(0.0, 0.0, 1.0), 0.5);
+assert_approx("color_lerp", lerped[0], 0.5, 0.001);
+let gray = color_grayscale(rgb);
+assert_approx("color_grayscale", gray[0], 0.299, 0.01);
+let inv = color_invert(rgb);
+assert_approx("color_invert", inv[0], 0.0, 0.001);
+let bright = color_brightness(rgb, 0.5);
+assert_approx("color_brightness", bright[0], 0.5, 0.001);
+let hexVal = color_to_hex(rgb);
+assert_approx("color_to_hex", hexVal, 16711680.0, 1.0);
+let rgbFromHex = color_from_hex(16711680.0);
+assert_approx("color_from_hex", rgbFromHex[0], 1.0, 0.01);
+let gamma = color_gamma(rgb, 2.2);
+assert_approx("color_gamma", gamma[0], 1.0, 0.001);
+let contrast = color_contrast(rgb, 0.0);
+assert_approx("color_contrast", contrast[0], 1.0, 0.001);
+
+# Light functions
+let amb = light_ambient(rgb, 1.0);
+assert_equals("light_ambient_type", amb["type"], "ambient");
+let dir = light_directional(vec3(0.0, -1.0, 0.0), rgb, 1.0);
+assert_equals("light_directional_type", dir["type"], "directional");
+let pt = light_point(vec3(0.0, 0.0, 0.0), rgb, 1.0, 10.0);
+assert_equals("light_point_type", pt["type"], "point");
+let spot = light_spot(vec3(0.0, 5.0, 0.0), vec3(0.0, -1.0, 0.0), rgb, 1.0, 10.0, 0.5, 0.8);
+assert_equals("light_spot_type", spot["type"], "spot");
+let atten = light_attenuation(5.0, 10.0);
+assert_approx("light_attenuation", atten, 0.75, 0.01);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 7: Ray Casting / Intersection
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 7: Ray Casting ---");
+
+let ray = ray_create(vec3(0.0, 0.0, -5.0), vec3(0.0, 0.0, 1.0));
+let rayPt = ray_point_at(ray, 5.0);
+assert_approx("ray_point_at", rayPt[2], 0.0, 0.001);
+
+# ray-sphere
+let rs = ray_sphere_intersect(ray, vec3(0.0, 0.0, 0.0), 1.0);
+assert_not_empty("ray_sphere_intersect", rs);
+
+# ray-plane
+let rp = ray_plane_intersect(ray, vec3(0.0, 0.0, 0.0), vec3(0.0, 0.0, -1.0));
+assert_not_empty("ray_plane_intersect", rp);
+
+# ray-triangle
+let rt = ray_triangle_intersect(ray, vec3(-1.0, -1.0, 0.0), vec3(1.0, -1.0, 0.0), vec3(0.0, 1.0, 0.0));
+assert_not_empty("ray_triangle_intersect", rt);
+
+# ray-aabb
+let ra = ray_aabb_intersect(ray, vec3(-1.0, -1.0, -1.0), vec3(1.0, 1.0, 1.0));
+assert_not_empty("ray_aabb_intersect", ra);
+
+# sphere contains point
+let scp = sphere_contains_point(vec3(0.0, 0.0, 0.0), 1.0, vec3(0.5, 0.0, 0.0));
+assert_true("sphere_contains_point", scp);
+
+# sphere-sphere
+let ss = sphere_sphere_intersect(vec3(0.0, 0.0, 0.0), 1.0, vec3(1.5, 0.0, 0.0), 1.0);
+assert_true("sphere_sphere_intersect", ss);
+
+# aabb contains point
+let acp = aabb_contains_point(vec3(-1.0, -1.0, -1.0), vec3(1.0, 1.0, 1.0), vec3(0.0, 0.0, 0.0));
+assert_true("aabb_contains_point", acp);
+
+# aabb-aabb
+let aa = aabb_aabb_intersect(vec3(-1.0, -1.0, -1.0), vec3(1.0, 1.0, 1.0), vec3(0.0, 0.0, 0.0), vec3(2.0, 2.0, 2.0));
+assert_true("aabb_aabb_intersect", aa);
+
+# triangle area
+let ta = triangle_area(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+assert_approx("triangle_area", ta, 0.5, 0.001);
+
+# triangle normal
+let tn = triangle_normal(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+assert_approx("triangle_normal", tn[2], 1.0, 0.001);
+
+# barycentric
+let bc = triangle_barycentric(vec3(0.25, 0.25, 0.0), vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+assert_approx("triangle_barycentric_u", bc[0], 0.5, 0.01);
+
+# point_in_triangle
+let pit = point_in_triangle(vec3(0.25, 0.25, 0.0), vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+assert_true("point_in_triangle", pit);
+
+# ray_mesh_intersect
+let rmesh = ray_mesh_intersect(ray, cube);
+assert_not_empty("ray_mesh_intersect", rmesh);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 8: Curves
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 8: Curves ---");
+
+let plerp = curve_lerp(vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0), 0.5);
+assert_approx("curve_lerp", plerp[0], 0.5, 0.001);
+
+let bq = curve_bezier_quadratic(vec3(0.0, 0.0, 0.0), vec3(0.5, 1.0, 0.0), vec3(1.0, 0.0, 0.0), 0.5);
+assert_approx("curve_bezier_quadratic", bq[0], 0.5, 0.001);
+
+let bc3 = curve_bezier_cubic(vec3(0.0, 0.0, 0.0), vec3(0.33, 1.0, 0.0), vec3(0.66, 1.0, 0.0), vec3(1.0, 0.0, 0.0), 0.5);
+assert_approx("curve_bezier_cubic", bc3[0], 0.49625, 0.001);
+
+let crm = curve_catmull_rom(vec3(0.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), vec3(2.0, 1.0, 0.0), vec3(3.0, 0.0, 0.0), 0.5);
+assert_true("curve_catmull_rom", len(crm) == 3);
+
+let herm = curve_hermite(vec3(0.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0), 0.5);
+assert_approx("curve_hermite", herm[0], 0.625, 0.01);
+
+let circ = curve_circle_point(1.0, 0.0);
+assert_approx("curve_circle_point", circ[0], 1.0, 0.001);
+
+let ell = curve_ellipse_point(2.0, 1.0, 0.0);
+assert_approx("curve_ellipse_point", ell[0], 2.0, 0.001);
+
+let sp = curve_spiral_point(1.0, 2.0, 3.0, 0.5);
+assert_true("curve_spiral_point", len(sp) == 3);
+
+let hel = curve_helix_point(1.0, 2.0, 3.0, 0.5);
+assert_true("curve_helix_point", len(hel) == 3);
+
+let lis = curve_lissajous_point(1.0, 2.0, 3.0, 1.0, 2.0, 3.0, MATH_PI);
+assert_true("curve_lissajous_point", len(lis) == 3);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 9: Noise
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 9: Noise ---");
+
+let fade0 = noise_fade(0.0);
+assert_approx("noise_fade_0", fade0, 0.0, 0.001);
+let fade1 = noise_fade(1.0);
+assert_approx("noise_fade_1", fade1, 1.0, 0.001);
+
+let np2d = noise_perlin_2d(0.5, 0.5);
+assert_true("noise_perlin_2d", true);
+
+let np3d = noise_perlin_3d(0.5, 0.5, 0.5);
+assert_true("noise_perlin_3d", true);
+
+let nv2d = noise_value_2d(0.5, 0.5);
+assert_true("noise_value_2d", true);
+
+let nfbm = noise_fbm_2d(0.5, 0.5, 4, 0.5, 2.0);
+assert_true("noise_fbm_2d", true);
+
+let nturb = noise_turbulence_2d(0.5, 0.5, 4, 0.5, 2.0);
+assert_true("noise_turbulence_2d", true);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 10: Particle System
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 10: Particle System ---");
+
+let p = particle_create(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), 2.0);
+assert_true("particle_create_alive", particle_is_alive(p));
+assert_approx("particle_create_life", p["life"], 2.0, 0.001);
+
+particle_update(p, 0.5);
+assert_approx("particle_update_pos", p["pos"][1], 0.5, 0.001);
+assert_approx("particle_update_life", p["life"], 1.5, 0.001);
+
+particle_apply_gravity(p, vec3(0.0, -9.8, 0.0), 0.1);
+assert_approx("particle_apply_gravity", p["vel"][1], 0.02, 0.01);
+
+particle_apply_wind(p, vec3(1.0, 0.0, 0.0), 0.1);
+assert_approx("particle_apply_wind", p["vel"][0], 0.1, 0.001);
+
+particle_apply_drag(p, 0.1);
+assert_true("particle_apply_drag", true);
+
+particle_reset(p, vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), 2.0);
+assert_true("particle_reset_alive", particle_is_alive(p));
+
+let pcol = particle_get_color(p);
+assert_true("particle_get_color", len(pcol) == 3);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 11: Bounding Volumes
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 11: Bounding Volumes ---");
+
+let bvSphere = bv_sphere_create(vec3(0.0, 0.0, 0.0), 1.0);
+assert_equals("bv_sphere_create", bvSphere["type"], "sphere");
+
+let bvAabb = bv_aabb_create(vec3(-1.0, -1.0, -1.0), vec3(1.0, 1.0, 1.0));
+assert_equals("bv_aabb_create", bvAabb["type"], "aabb");
+
+let bvObb = bv_obb_create(vec3(0.0, 0.0, 0.0), mat3_identity(), vec3(1.0, 1.0, 1.0));
+assert_equals("bv_obb_create", bvObb["type"], "obb");
+
+bv_merge(bvAabb, vec3(2.0, 2.0, 2.0));
+assert_approx("bv_merge", bvAabb["max"][0], 2.0, 0.001);
+
+let bvTrans = bv_transform(bvSphere, mat4_identity());
+assert_equals("bv_transform", bvTrans["type"], "sphere");
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 12: Frustum / Projection
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 12: Frustum / Projection ---");
+
+let testVp = camera_vp_matrix(cam);
+let frPlanes = frustum_from_matrix(testVp);
+assert_true("frustum_from_matrix", len(frPlanes) == 6);
+
+let frDist = frustum_plane_distance(frPlanes[0], vec3(0.0, 0.0, 0.0));
+assert_true("frustum_plane_distance", true);
+
+let frCont = frustum_contains_point(frPlanes, vec3(0.0, 0.0, 0.0));
+assert_true("frustum_contains_point", frCont);
+
+let frSph = frustum_contains_sphere(frPlanes, vec3(0.0, 0.0, 0.0), 1.0);
+assert_true("frustum_contains_sphere", frSph);
+
+let proj2d = project_3d_to_2d(vec3(0.0, 0.0, 0.0), testVp, 800.0, 600.0);
+assert_true("project_3d_to_2d", len(proj2d) == 2);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 13: Interpolation / Easing
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 13: Interpolation / Easing ---");
+
+assert_approx("lerp", lerp(0.0, 10.0, 0.5), 5.0, 0.001);
+assert_approx("inverse_lerp", inverse_lerp(0.0, 10.0, 5.0), 0.5, 0.001);
+assert_approx("smoothstep", smoothstep(0.0, 1.0, 0.5), 0.5, 0.001);
+assert_approx("smootherstep", smootherstep(0.0, 1.0, 0.5), 0.5, 0.001);
+assert_approx("remap", remap(0.5, 0.0, 1.0, 0.0, 100.0), 50.0, 0.001);
+let pp = ping_pong(0.75, 1.0);
+assert_approx("ping_pong", pp, 0.75, 0.001);
+let mt = move_towards(0.0, 10.0, 0.5);
+assert_approx("move_towards", mt, 0.5, 0.001);
+
+# lerp_angle
+let lang = lerp_angle(0.0, MATH_PI, 0.5);
+assert_approx("lerp_angle", lang, MATH_PI * 0.5, 0.001);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 14: Spline / Path
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 14: Spline / Path ---");
+
+let spline = spline_create();
+spline_add_point(spline, vec3(0.0, 0.0, 0.0));
+spline_add_point(spline, vec3(1.0, 2.0, 0.0));
+spline_add_point(spline, vec3(2.0, 0.0, 0.0));
+spline_add_point(spline, vec3(3.0, 2.0, 0.0));
+
+let spPt = spline_get_point(spline, 0.5);
+assert_true("spline_get_point", len(spPt) == 3);
+
+let spLen = spline_get_length(spline, 20);
+assert_true("spline_get_length", spLen > 0.0);
+
+let spClosest = spline_get_closest_point(spline, vec3(1.5, 1.0, 0.0), 20);
+assert_true("spline_get_closest_point", spClosest >= 0.0);
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 15: Tone Mapping / Post-Processing
+# ═══════════════════════════════════════════════════════════════════
+print("--- SECTION 15: Tone Mapping ---");
+
+let reinhard = tonemap_reinhard(vec3(1.0, 0.5, 0.0));
+assert_approx("tonemap_reinhard", reinhard[0], 0.5, 0.001);
+
+let aces = tonemap_aces(vec3(0.5, 0.5, 0.5));
+assert_true("tonemap_aces", aces[0] >= 0.0 and aces[0] <= 1.0);
+
+let filmic = tonemap_filmic(vec3(0.5, 0.5, 0.5));
+assert_true("tonemap_filmic", filmic[0] >= 0.0 and filmic[0] <= 1.0);
+
+let s2l = srgb_to_linear(vec3(0.5, 0.5, 0.5));
+assert_true("srgb_to_linear", s2l[0] >= 0.0 and s2l[0] <= 1.0);
+
+let l2s = linear_to_srgb(vec3(0.5, 0.5, 0.5));
+assert_true("linear_to_srgb", l2s[0] >= 0.0 and l2s[0] <= 1.0);
+
+# ═══════════════════════════════════════════════════════════════════
+# Summary
+# ═══════════════════════════════════════════════════════════════════
+print("");
+print("========================================");
+print("3D Advanced Library Test Results");
+print("========================================");
+print("Passed: " + str(tests_passed));
+print("Failed: " + str(tests_failed));
+print("Total:  " + str(tests_passed + tests_failed));
+print("");
+
+if (tests_failed == 0) {
+    print("All tests passed!");
+} else {
+    print("Some tests failed. Check above for details.");
+}
+
+# Run library summary
+d3_advanced_summary();

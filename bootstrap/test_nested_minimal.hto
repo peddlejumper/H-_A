@@ -1,0 +1,39 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/interpreter.hto";
+
+# Ultra minimal nested function test
+let src = "fn parse(input) {\n";
+src = src + "    let pos = 0;\n";
+src = src + "    fn cur() { return input[pos]; }\n";
+src = src + "    fn advance() { pos = pos + 1; }\n";
+src = src + "    fn parse_primary() {\n";
+src = src + "        if (cur() == 1) { advance(); return 10; }\n";
+src = src + "        if (cur() == 2) { return parse_binary(); }\n";
+src = src + "        return 0;\n";
+src = src + "    }\n";
+src = src + "    fn parse_binary() {\n";
+src = src + "        advance();\n";
+src = src + "        let left = parse_primary();\n";
+src = src + "        return left;\n";
+src = src + "    }\n";
+src = src + "    fn parse_expression() { return parse_primary(); }\n";
+src = src + "    return parse_expression();\n";
+src = src + "}\n";
+src = src + "let r = parse([2, 1, 1]);\n";
+
+print("Source:");
+print(src);
+print("");
+
+let t = tokenize(src);
+print("Tokenize: " + len(t) + " tokens");
+
+let a = parse(t);
+print("Parse: " + a[0] + " with " + len(a[1]) + " statements");
+print("");
+
+let e = [];
+let result = eval_node(a, e);
+print("Result: " + result);
+print("r = " + _env_get(e, "r"));

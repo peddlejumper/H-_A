@@ -1,0 +1,350 @@
+# H# Static Code Analyzer (Linter)
+# Performs static analysis on H# code to find potential issues
+
+let LINT_WARNINGS = [];
+let LINT_ERRORS = [];
+let LINT_CURRENT_FUNCTION = nullptr;
+let LINT_SCOPE_VARS = [];
+
+fn lint_analyze(source) {
+    # Main entry point for linting
+    LINT_WARNINGS = [];
+    LINT_ERRORS = [];
+    LINT_SCOPE_VARS = [];
+    
+    let tokens = tokenize_for_lint(source);
+    if (tokens == nullptr) {
+        return {"errors": LINT_ERRORS, "warnings": LINT_WARNINGS};
+    }
+    
+    # Parse and analyze
+    lint_check_syntax(tokens);
+    lint_check_style(source);
+    
+    return {"errors": LINT_ERRORS, "warnings": LINT_WARNINGS};
+}
+
+fn tokenize_for_lint(source) {
+    # Tokenize source code for linting
+    let i = 0;
+    let n = len(source);
+    let tokens = [];
+    
+    while (i < n) {
+        let ch = source[i];
+        
+        # Skip whitespace
+        if (ch == " " or ch == "\t" or ch == "\n" or ch == "\r") {
+            i = i + 1;
+            continue;
+        }
+        
+        # Comments
+        if (ch == "#") {
+            let comment_line = i;
+            i = i + 1;
+            while (i < n and source[i] != "\n") {
+                i = i + 1;
+            }
+            push(tokens, {"type": "COMMENT", "line": comment_line});
+            continue;
+        }
+        
+        # Strings
+        if (ch == "\"") {
+            i = i + 1;
+            while (i < n and source[i] != "\"") {
+                if (source[i] == "\\") {
+                    i = i + 1;
+                }
+                i = i + 1;
+            }
+            if (i < n) {
+                i = i + 1;
+            }
+            continue;
+        }
+        
+        # Numbers
+        if (ch >= "0" and ch <= "9") {
+            while (i < n and ((source[i] >= "0" and source[i] <= "9") or source[i] == ".")) {
+                i = i + 1;
+            }
+            continue;
+        }
+        
+        # Identifiers and keywords
+        if ((ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or ch == "_") {
+            let start = i;
+            while (i < n and ((source[i] >= "a" and source[i] <= "z") or 
+                   (source[i] >= "A" and source[i] <= "Z") or 
+                   (source[i] >= "0" and source[i] <= "9") or 
+                   source[i] == "_")) {
+                i = i + 1;
+            }
+            let ident = substring(source, start, i - start);
+            push(tokens, {"type": "IDENTIFIER", "value": ident, "line": start});
+            continue;
+        }
+        
+        # Operators and punctuation
+        if (ch == "=" or ch == "+" or ch == "-" or ch == "*" or ch == "/" or
+            ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "|" or
+            ch == "(" or ch == ")" or ch == "{" or ch == "}" or ch == "[" or
+            ch == "]" or ch == ";" or ch == "," or ch == "." or ch == ":") {
+            i = i + 1;
+            continue;
+        }
+        
+        # Unknown character
+        i = i + 1;
+    }
+    
+    return tokens;
+}
+
+fn lint_check_syntax(tokens) {
+    # Check for syntax issues
+    let i = 0;
+    let brace_count = 0;
+    let paren_count = 0;
+    let bracket_count = 0;
+    
+    while (i < len(tokens)) {
+        let token = tokens[i];
+        
+        # Check balanced braces
+        if (token.type == "LBRACE") {
+            brace_count = brace_count + 1;
+        } else if (token.type == "RBRACE") {
+            brace_count = brace_count - 1;
+            if (brace_count < 0) {
+                lint_add_error("Unmatched closing brace");
+            }
+        }
+        
+        # Check balanced parentheses
+        if (token.type == "LPAREN") {
+            paren_count = paren_count + 1;
+        } else if (token.type == "RPAREN") {
+            paren_count = paren_count - 1;
+            if (paren_count < 0) {
+                lint_add_error("Unmatched closing parenthesis");
+            }
+        }
+        
+        # Check balanced brackets
+        if (token.type == "LBRACKET") {
+            bracket_count = bracket_count + 1;
+        } else if (token.type == "RBRACKET") {
+            bracket_count = bracket_count - 1;
+            if (bracket_count < 0) {
+                lint_add_error("Unmatched closing bracket");
+            }
+        }
+        
+        i = i + 1;
+    }
+    
+    # Check final balance
+    if (brace_count != 0) {
+        lint_add_error("Unmatched opening brace(s): " + str(brace_count));
+    }
+    if (paren_count != 0) {
+        lint_add_error("Unmatched opening parenthesis(es): " + str(paren_count));
+    }
+    if (bracket_count != 0) {
+        lint_add_error("Unmatched opening bracket(s): " + str(bracket_count));
+    }
+}
+
+fn lint_check_style(source) {
+    # Check coding style issues
+    
+    # Check line length
+    let lines = str_split(source, "\n");
+    let i = 0;
+    while (i < len(lines)) {
+        let line = lines[i];
+        if (len(line) > 120) {
+            lint_add_warning("Line " + str(i + 1) + " exceeds 120 characters (" + str(len(line)) + " chars)");
+        }
+        i = i + 1;
+    }
+    
+    # Check for trailing whitespace
+    i = 0;
+    while (i < len(lines)) {
+        let line = lines[i];
+        if (len(line) > 0) {
+            let last_char = line[len(line) - 1];
+            if (last_char == " " or last_char == "\t") {
+                lint_add_warning("Line " + str(i + 1) + " has trailing whitespace");
+            }
+        }
+        i = i + 1;
+    }
+    
+    # Check for tabs (prefer spaces)
+    i = 0;
+    while (i < len(lines)) {
+        let line = lines[i];
+        if (str_contains(line, "\t")) {
+            lint_add_warning("Line " + str(i + 1) + " contains tab character (use spaces instead)");
+        }
+        i = i + 1;
+    }
+}
+
+fn lint_add_error(message) {
+    # Add an error to the error list
+    push(LINT_ERRORS, message);
+}
+
+fn lint_add_warning(message) {
+    # Add a warning to the warning list
+    push(LINT_WARNINGS, message);
+}
+
+fn lint_report() {
+    # Generate a lint report
+    print("=== H# Lint Report ===");
+    print("");
+    
+    if (len(LINT_ERRORS) == 0 and len(LINT_WARNINGS) == 0) {
+        print("No issues found!");
+        return nullptr;
+    }
+    
+    if (len(LINT_ERRORS) > 0) {
+        print("ERRORS (" + str(len(LINT_ERRORS)) + "):");
+        let i = 0;
+        while (i < len(LINT_ERRORS)) {
+            print("  ✗ " + LINT_ERRORS[i]);
+            i = i + 1;
+        }
+        print("");
+    }
+    
+    if (len(LINT_WARNINGS) > 0) {
+        print("WARNINGS (" + str(len(LINT_WARNINGS)) + "):");
+        let i = 0;
+        while (i < len(LINT_WARNINGS)) {
+            print("  ⚠ " + LINT_WARNINGS[i]);
+            i = i + 1;
+        }
+        print("");
+    }
+    
+    print("Summary: " + str(len(LINT_ERRORS)) + " errors, " + str(len(LINT_WARNINGS)) + " warnings");
+    print("=====================");
+}
+
+fn lint_check_unused_variables(ast) {
+    # Check for unused variables in AST
+    # This would require full AST traversal
+    # Placeholder for future implementation
+    return [];
+}
+
+fn lint_check_undefined_variables(ast) {
+    # Check for undefined variables in AST
+    # This would require scope analysis
+    # Placeholder for future implementation
+    return [];
+}
+
+fn lint_check_type_consistency(ast) {
+    # Check for type consistency issues
+    # Placeholder for future implementation
+    return [];
+}
+
+fn lint_check_function_calls(ast) {
+    # Check function calls for correct arity
+    # Placeholder for future implementation
+    return [];
+}
+
+fn lint_file(filepath) {
+    # Lint a file and return results
+    let source = read_file(filepath);
+    if (source == nullptr) {
+        print("Error: Could not read file: " + filepath);
+        return nullptr;
+    }
+    
+    let result = lint_analyze(source);
+    
+    print("Linting: " + filepath);
+    lint_report();
+    
+    return result;
+}
+
+# Helper functions that need host support
+fn read_file(path) {
+    # This would be provided by the host system
+    return nullptr;
+}
+
+fn str_contains(s, substr) {
+    # Check if string contains substring
+    let i = 0;
+    let substr_len = len(substr);
+    let s_len = len(s);
+    
+    if (substr_len == 0) {
+        return true;
+    }
+    
+    while (i <= s_len - substr_len) {
+        let found = true;
+        let j = 0;
+        while (j < substr_len) {
+            if (s[i + j] != substr[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            return true;
+        }
+        i = i + 1;
+    }
+    
+    return false;
+}
+
+fn str_split(s, delimiter) {
+    # Split string by delimiter
+    let result = [];
+    let delim_len = len(delimiter);
+    let start = 0;
+    let i = 0;
+    
+    while (i <= len(s) - delim_len) {
+        let found = true;
+        let j = 0;
+        while (j < delim_len) {
+            if (s[i + j] != delimiter[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        
+        if (found) {
+            push(result, substring(s, start, i - start));
+            i = i + delim_len;
+            start = i;
+        } else {
+            i = i + 1;
+        }
+    }
+    
+    push(result, substring(s, start, len(s) - start));
+    
+    return result;
+}

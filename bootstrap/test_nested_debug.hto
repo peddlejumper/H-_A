@@ -1,0 +1,39 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/interpreter.hto";
+
+# Step 1: just cur() with input
+let src1 = "fn f1(input) { let pos = 0; fn cur() { return input[pos]; } return cur(); }\nlet r1 = f1([42]);\n";
+
+let t1 = tokenize(src1);
+let a1 = parse(t1);
+let e1 = [];
+eval_node(a1, e1);
+print("Test 1: r1 = " + _env_get(e1, "r1"));
+
+# Step 2: cur() + advance() 
+let src2 = "fn f2(input) { let pos = 0; fn cur() { return input[pos]; } fn adv() { pos = pos + 1; } adv(); return cur(); }\nlet r2 = f2([42, 99]);\n";
+
+let t2 = tokenize(src2);
+let a2 = parse(t2);
+let e2 = [];
+eval_node(a2, e2);
+print("Test 2: r2 = " + _env_get(e2, "r2"));
+
+# Step 3: nested function calls later-defined function
+let src3 = "fn f3() { fn a() { return b(); } fn b() { return 88; } return a(); }\nlet r3 = f3();\n";
+
+let t3 = tokenize(src3);
+let a3 = parse(t3);
+let e3 = [];
+eval_node(a3, e3);
+print("Test 3: r3 = " + _env_get(e3, "r3"));
+
+# Step 4: nested function with if/function call
+let src4 = "fn f4(x) { let pos = 0; fn cur() { return x[pos]; } fn g() { return 77; } if (cur() == 1) { return g(); } return 0; }\nlet r4 = f4([1]);\n";
+
+let t4 = tokenize(src4);
+let a4 = parse(t4);
+let e4 = [];
+eval_node(a4, e4);
+print("Test 4: r4 = " + _env_get(e4, "r4"));
