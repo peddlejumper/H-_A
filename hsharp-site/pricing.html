@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZZW Code 定价 — 订阅计划</title>
+  <meta name="description" content="ZZW Code 订阅计划：免费版 / Pro 版 / Team 版 —— 找到适合你节奏的 Coding Agent 方案。" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header" id="header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="H# home">
+        <span class="brand-mark">H<span class="sharp">#</span></span>
+        <span class="brand-tag"><span>v0.4</span></span>
+      </a>
+      <nav class="nav" aria-label="primary">
+        <a class="nav-item" href="index.html#features">特性 <span class="caret">▾</span></a>
+        <a class="nav-item" href="index.html#zzw">ZZW Code</a>
+        <a class="nav-item" href="pricing.html" aria-current="page">定价</a>
+        <a class="nav-item" href="download.html">下载</a>
+        <a class="nav-item nav-item-beta" href="beta.html">Beta <span class="nav-beta-tag">v0.5</span></a>
+        <a class="nav-item" href="guide.html">指南</a>
+        <a class="nav-item" href="index.html#privacy">隐私</a>
+      </nav>
+      <div class="header-right">
+        <a class="uiverse-btn" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">
+          <span>GitHub</span>
+          <span>查看仓库 ↗</span>
+        </a>
+        <a class="uiverse-btn uiverse-btn-brand" href="download.html">
+          <span>下载 H#</span>
+          <span>立即下载 ↓</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="pricing-main">
+    <!-- Hero -->
+    <section class="pricing-hero">
+      <div class="container">
+        <div class="pricing-hero-inner">
+          <div class="pricing-eyebrow fade-up">
+            <span class="zzw-eyebrow-dot"></span>
+            <span>ZZW Code · 订阅计划</span>
+          </div>
+          <h1 class="pricing-title fade-up">
+            选一个适合你节奏的<br />
+            <span class="accent">Coding Agent 方案</span>
+          </h1>
+          <p class="pricing-sub fade-up">
+            从免费用起，按用量付费，到团队协作 —— 同一个 ZZW Code，模型你来定，计费跟着你的工作流走。
+          </p>
+
+          <!-- Billing toggle -->
+          <div class="pricing-toggle fade-up" role="tablist" aria-label="计费周期">
+            <button class="pricing-toggle-btn is-active" data-billing="monthly" role="tab" aria-selected="true">按月</button>
+            <button class="pricing-toggle-btn" data-billing="yearly" role="tab" aria-selected="false">
+              按年
+              <span class="pricing-toggle-tag">省 2 个月</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tier cards -->
+    <section class="pricing-tiers">
+      <div class="container">
+        <div class="pricing-tier-grid">
+
+          <!-- Free -->
+          <article class="pricing-tier fade-up">
+            <div class="pricing-tier-head">
+              <h3>Free</h3>
+              <p>把 AI 装进编辑器，先跑通一次 commit。</p>
+            </div>
+            <div class="pricing-tier-price">
+              <span class="pricing-tier-amount" data-price data-monthly="0" data-yearly="0">¥0</span>
+              <span class="pricing-tier-period">/ 永久免费</span>
+            </div>
+            <a class="btn btn-secondary btn-md" href="index.html#download">下载 ZZW Code</a>
+            <ul class="pricing-tier-features">
+              <li><span class="check">✓</span> 本地运行，无云端依赖</li>
+              <li><span class="check">✓</span> 自带 0 次 / 月 AI 对话额度</li>
+              <li><span class="check">✓</span> 接入任意 OpenAI 兼容 API</li>
+              <li><span class="check">✓</span> 单文件上下文</li>
+              <li><span class="check">✓</span> 基础 H# 语法高亮</li>
+              <li class="dim"><span class="dash">—</span> SOLO 模式（Agent 自动推进）</li>
+              <li class="dim"><span class="dash">—</span> 团队协作 / 共享工作区</li>
+            </ul>
+          </article>
+
+          <!-- Pro (recommended) -->
+          <article class="pricing-tier pricing-tier-pro fade-up">
+            <div class="pricing-tier-badge">最受欢迎</div>
+            <div class="pricing-tier-head">
+              <h3>Pro</h3>
+              <p>为每天写 H# 的人准备的完整 Agent 工作流。</p>
+            </div>
+            <div class="pricing-tier-price">
+              <span class="pricing-tier-amount" data-price data-monthly="149" data-yearly="119">¥149</span>
+              <span class="pricing-tier-period" data-period>/ 月</span>
+            </div>
+            <a class="btn btn-brand btn-md" href="#cta-final">升级到 Pro</a>
+            <ul class="pricing-tier-features">
+              <li><span class="check">✓</span> 包含 Free 全部能力</li>
+              <li><span class="check">✓</span> 150 次 / 月 AI 对话额度</li>
+              <li><span class="check">✓</span> 完整项目上下文 · 多文件</li>
+              <li><span class="check">✓</span> SOLO 模式 · Agent 自动推进</li>
+              <li><span class="check">✓</span> H# 字节码指令集 / DZZW 知识</li>
+              <li><span class="check">✓</span> 优先体验新模型（Claude / GPT-5 / ...）</li>
+            </ul>
+          </article>
+
+          <!-- Team -->
+          <article class="pricing-tier fade-up">
+            <div class="pricing-tier-head">
+              <h3>Team</h3>
+              <p>把整套 ZZW Code 部署到团队的每个工程师机器上。</p>
+            </div>
+            <div class="pricing-tier-price">
+              <span class="pricing-tier-amount" data-price data-monthly="349" data-yearly="279">¥349</span>
+              <span class="pricing-tier-period" data-period>/ 人 / 月</span>
+            </div>
+            <a class="btn btn-secondary btn-md" href="mailto:hi@hsharp.dev?subject=Team%20plan">联系销售</a>
+            <ul class="pricing-tier-features">
+              <li><span class="check">✓</span> 包含 Pro 全部能力</li>
+              <li><span class="check">✓</span> 300 次 / 月（按团队共享）</li>
+              <li><span class="check">✓</span> 共享工作区 · 团队 Rules</li>
+              <li><span class="check">✓</span> 自定义私有模型路由</li>
+              <li><span class="check">✓</span> SSO 登录 · 审计日志</li>
+            </ul>
+          </article>
+
+        </div>
+
+        <!-- Second row: MAX + MAX+ flagship plans -->
+        <div class="pricing-tier-grid pricing-tier-grid-flagship">
+
+          <!-- MAX -->
+          <article class="pricing-tier pricing-tier-max fade-up">
+            <div class="pricing-tier-badge pricing-tier-badge-max">旗舰</div>
+            <div class="pricing-tier-head">
+              <h3>MAX</h3>
+              <p>为需要更大 AI 额度和旗舰模型的独立开发者与极客。</p>
+            </div>
+            <div class="pricing-tier-price">
+              <span class="pricing-tier-amount" data-price data-monthly="850" data-yearly="680">¥850</span>
+              <span class="pricing-tier-period" data-period>/ 月</span>
+            </div>
+            <a class="btn btn-secondary btn-md" href="#cta-final">升级到 MAX</a>
+            <ul class="pricing-tier-features">
+              <li><span class="check">✓</span> 包含 Team 全部能力</li>
+              <li><span class="check">✓</span> <strong>500 次 / 月</strong> AI 对话额度</li>
+              <li><span class="check">✓</span> 旗舰模型优先：GPT-5 · Claude 4 · 自部署</li>
+              <li><span class="check">✓</span> 完整字节码 / DZZW / 标准库深度训练</li>
+              <li><span class="check">✓</span> 私有部署支持 · 优先排期</li>
+            </ul>
+          </article>
+
+          <!-- MAX+ -->
+          <article class="pricing-tier pricing-tier-max-plus fade-up">
+            <div class="pricing-tier-badge pricing-tier-badge-max-plus">MAX+</div>
+            <div class="pricing-tier-head">
+              <h3>MAX<span class="pricing-tier-head-plus">+</span></h3>
+              <p>模型用你的代码风格微调 · 一切为你定做。</p>
+            </div>
+            <div class="pricing-tier-price">
+              <span class="pricing-tier-amount" data-price data-monthly="1750" data-yearly="1400">¥1,750</span>
+              <span class="pricing-tier-period" data-period>/ 月</span>
+            </div>
+            <a class="btn btn-brand btn-md" href="#cta-final">升级到 MAX+</a>
+            <ul class="pricing-tier-features">
+              <li><span class="check">✓</span> 包含 MAX 全部能力</li>
+              <li><span class="check">✓</span> <strong>2000 次 / 月</strong> · 大体量项目</li>
+              <li><span class="check">✓</span> 专属 AI 训练：用你的代码风格微调模型</li>
+              <li><span class="check">✓</span> 优先体验所有实验性功能（SOLO 2.0 · ...）</li>
+            </ul>
+          </article>
+
+        </div>
+
+        <p class="pricing-note fade-up">
+          所有付费方案都<b>支持自带 API Key</b> —— 你填入的 Key 直接走你自己的 Endpoint，H# 服务器不复制、不留存任何 token。
+        </p>
+      </div>
+    </section>
+
+    <!-- Comparison table -->
+    <section class="pricing-compare">
+      <div class="container">
+        <div class="section-head-center" style="text-align:left; margin-bottom: 56px;">
+          <h2 class="section-title fade-up">逐项 <span class="accent">对比</span></h2>
+          <p class="section-desc fade-up">所有方案都内置 H# 知识与 ZZW Code 编辑器 —— 不同之处只在协作规模、AI 额度与支持等级。</p>
+        </div>
+
+        <div class="compare-table-wrap fade-up">
+          <table class="compare-table">
+            <thead>
+              <tr>
+                <th class="compare-feature-col">能力</th>
+                <th>Free</th>
+                <th class="compare-col-highlight">Pro</th>
+                <th>Team</th>
+                <th class="compare-col-flagship">MAX</th>
+                <th class="compare-col-flagship">MAX+</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="compare-feature">Monaco 编辑器 · H# 高亮</td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">AI 对话面板 · 多轮上下文</td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">月度 AI 额度</td>
+                <td>0 次</td>
+                <td class="compare-col-highlight">150 次</td>
+                <td>300 次（共享）</td>
+                <td class="compare-col-flagship">500 次</td>
+                <td class="compare-col-flagship"><strong>2,000 次</strong></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">SOLO 模式（Agent 自动推进）</td>
+                <td><span class="no">—</span></td>
+                <td class="compare-col-highlight"><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">完整项目上下文（多文件）</td>
+                <td><span class="no">—</span></td>
+                <td class="compare-col-highlight"><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">自定义私有模型路由</td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">团队共享工作区 / Rules</td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">SSO 登录 · 审计日志</td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+                <td><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">旗舰模型优先（GPT-5 · Claude 4）</td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td class="compare-col-flagship"><span class="ok">●</span></td>
+                <td class="compare-col-flagship"><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">私有部署支持</td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td class="compare-col-flagship"><span class="ok">●</span></td>
+                <td class="compare-col-flagship"><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">专属 AI 训练（你的代码风格）</td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td><span class="no">—</span></td>
+                <td class="compare-col-flagship"><span class="ok">●</span></td>
+              </tr>
+              <tr>
+                <td class="compare-feature">支持响应</td>
+                <td>社区</td>
+                <td class="compare-col-highlight">24h 邮件</td>
+                <td>24h 邮件</td>
+                <td class="compare-col-flagship">24h 邮件</td>
+                <td class="compare-col-flagship">24h 邮件</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="pricing-faq">
+      <div class="container">
+        <div class="section-head-center" style="text-align:left; margin-bottom: 56px;">
+          <h2 class="section-title fade-up">常见 <span class="accent">疑问</span></h2>
+          <p class="section-desc fade-up">还有问题？<a class="pricing-link" href="mailto:hi@hsharp.dev">写信给我们</a>，通常 24h 内回复。</p>
+        </div>
+
+        <div class="faq-list">
+          <details class="faq-item fade-up" open>
+            <summary>
+              <span>ZZW Code 的 AI 额度用完了怎么办？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              不会突然停用 —— 额度耗尽后会自动切换到你填入的自有 API Key（如果你已经填了的话）。没填自有 Key 的用户可以单独购买额外额度包，5 元 / 3 次。
+            </div>
+          </details>
+
+          <details class="faq-item fade-up">
+            <summary>
+              <span>我用 ZZW Code 必须用 H# 团队提供的模型吗？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              不需要。所有方案都支持「自带 API Key」—— 任何 OpenAI 兼容的 Endpoint（OpenAI / DeepSeek / 通义千问 / 自部署 vLLM 等）都可以直接接入。H# 团队不接触你的 Key 也不留存任何对话。
+            </div>
+          </details>
+
+          <details class="faq-item fade-up">
+            <summary>
+              <span>订阅版的 xxx 次 / 月是怎么算的？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              一次「AI 对话」= 一次问答回合（你发问 + AI 回复算一次）。续写 / Tab 补全不计额度。每个月 1 号 0 点（UTC+8）自动重置。
+            </div>
+          </details>
+
+          <details class="faq-item fade-up">
+            <summary>
+              <span>Pro 版可以中途取消吗？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              可以。随用随停 —— 已支付的部分会一直可用到你当前计费周期结束，结束后自动降回 Free 版，不会自动续费。
+            </div>
+          </details>
+
+          <details class="faq-item fade-up">
+            <summary>
+              <span>Team 版的私有模型路由是什么意思？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              团队管理员可以在 ZZW Code 后台配置一个或多个内部模型（你公司自己的 LLM、经过安全审计的私有部署等），并按团队成员或项目粒度路由特定请求走不同模型。所有路由配置都经过审计日志。
+            </div>
+          </details>
+
+          <details class="faq-item fade-up">
+            <summary>
+              <span>MAX / MAX+ 和 Pro / Team 有什么本质区别？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              MAX 系列是为「重度 AI 用户」准备的：更大的月度额度（500 / 2,000 次）、旗舰模型优先调度（GPT-5、Claude 4、自部署模型）。MAX+ 在此基础上更进一步：<strong>用你提供的代码仓库对模型做风格微调</strong>Pro / Team 更适合「日常使用 ZZW Code 加速 H# 开发」的团队。
+            </div>
+          </details>
+
+          <details class="faq-item fade-up">
+            <summary>
+              <span>MAX+ 的「专属 AI 训练」具体指什么？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              订阅 MAX+ 后，你可以向我们的训练团队提交你的 H# 代码仓库（公开或私有），我们会基于你的代码风格、命名习惯、惯用模式对底层模型做一次轻量微调。微调后的模型在你自己的项目里会输出明显更地道的 H#，包括你团队特有的工具函数调用约定。<strong>提交代码前会签双向 NDA</strong>，训练数据物理隔离，训练结束后 90 天内销毁。
+            </div>
+          </details>
+
+          <details class="faq-item fade-up">
+            <summary>
+              <span>教育 / 开源项目有折扣吗？</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-body">
+              有。GitHub 上有公开仓库的开发者可以申请 <strong>Pro 版免费 1 年</strong>，在校学生 / 教师可以申请 <strong>Team 版 50% 折扣</strong>。把仓库地址或学校邮箱发到 <a class="pricing-link" href="mailto:hi@hsharp.dev?subject=Education%20discount">hi@hsharp.dev</a> 即可。
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="pricing-final" id="cta-final">
+      <div class="container">
+        <div class="final-cta fade-up">
+          <h2>挑个方案，<br /><span class="accent">让 ZZW Code 跑起来</span></h2>
+          <p>下载即用、随时升级、随时降级。30 天内无理由退款。</p>
+          <div class="final-cta-actions">
+            <a class="btn btn-brand btn-lg" href="download.html">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+              Download for macOS
+            </a>
+            <a class="btn btn-secondary btn-lg" href="mailto:hi@hsharp.dev?subject=Talk%20to%20sales">联系销售</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <span class="brand-mark">H<span class="sharp">#</span></span>
+            <span class="brand-tag"><span>v0.4</span></span>
+          </div>
+          <p>A self-hosting language<br/>for the curious mind.</p>
+        </div>
+        <div class="footer-col">
+          <h5>产品</h5>
+          <a href="index.html#features">H# 特性</a>
+          <a href="index.html#zzw">ZZW Code</a>
+          <a href="pricing.html">订阅计划</a>
+          <a href="download.html">下载</a>
+          <a href="guide.html">官方指南</a>
+        </div>
+        <div class="footer-col">
+          <h5>资源</h5>
+          <a href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/peddlejumper/HSharp/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
+          <a href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer-col">
+          <h5>联系</h5>
+          <a href="mailto:hi@hsharp.dev">hi@hsharp.dev</a>
+          <a href="https://github.com/peddlejumper" target="_blank" rel="noopener">peddlejumper</a>
+          <span>独立开发，2026</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 peddlejumper · H# Project</span>
+        <span id="build-time">build · 2026.06.13</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/pricing.js"></script>
+</body>
+</html>

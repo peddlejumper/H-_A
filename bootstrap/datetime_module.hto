@@ -1,0 +1,441 @@
+# H# Date and Time Module
+# Provides date/time manipulation utilities built on top of host functions
+
+# Constants (using let since const may not be supported)
+let DATETIME_DEFAULT_FORMAT = "%Y-%m-%d %H:%M:%S";
+let DATETIME_DATE_ONLY_FORMAT = "%Y-%m-%d";
+let DATETIME_TIME_ONLY_FORMAT = "%H:%M:%S";
+
+# Get current datetime as formatted string
+fn datetime_now() {
+    return date_now();
+}
+
+# Get current timestamp (seconds since epoch)
+fn datetime_timestamp() {
+    return date_timestamp();
+}
+
+# Format timestamp to human-readable string
+fn datetime_format(timestamp, format_string) {
+    if (format_string == nullptr) {
+        format_string = DATETIME_DEFAULT_FORMAT;
+    }
+    return date_format(timestamp, format_string);
+}
+
+# Parse date string to components
+fn datetime_parse(date_string) {
+    return date_parse(date_string);
+}
+
+# Format current time with custom format
+fn datetime_format_now(format_string) {
+    let ts = datetime_timestamp();
+    return datetime_format(ts, format_string);
+}
+
+# Extract year from parsed date components
+fn datetime_get_year(parsed_date) {
+    if (parsed_date == nullptr) {
+        return 0;
+    }
+    # Access dictionary by key - using array-based dict representation
+    let i = 0;
+    while (i < len(parsed_date)) {
+        let entry = parsed_date[i];
+        if (len(entry) >= 2 and entry[0] == "year") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Extract month from parsed date components
+fn datetime_get_month(parsed_date) {
+    if (parsed_date == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(parsed_date)) {
+        let entry = parsed_date[i];
+        if (len(entry) >= 2 and entry[0] == "month") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Extract day from parsed date components
+fn datetime_get_day(parsed_date) {
+    if (parsed_date == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(parsed_date)) {
+        let entry = parsed_date[i];
+        if (len(entry) >= 2 and entry[0] == "day") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Extract hour from parsed date components
+fn datetime_get_hour(parsed_date) {
+    if (parsed_date == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(parsed_date)) {
+        let entry = parsed_date[i];
+        if (len(entry) >= 2 and entry[0] == "hour") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Extract minute from parsed date components
+fn datetime_get_minute(parsed_date) {
+    if (parsed_date == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(parsed_date)) {
+        let entry = parsed_date[i];
+        if (len(entry) >= 2 and entry[0] == "minute") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Extract second from parsed date components
+fn datetime_get_second(parsed_date) {
+    if (parsed_date == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(parsed_date)) {
+        let entry = parsed_date[i];
+        if (len(entry) >= 2 and entry[0] == "second") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Check if year is a leap year
+fn datetime_is_leap_year(year) {
+    # Use division-based modulo: a % b = a - int(a/b) * b
+    let mod4 = year - int(year / 4) * 4;
+    let mod100 = year - int(year / 100) * 100;
+    let mod400 = year - int(year / 400) * 400;
+    return ((mod4 == 0) and (mod100 != 0)) or (mod400 == 0);
+}
+
+# Get days in month for a given year
+fn datetime_days_in_month(year, month) {
+    let days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (month < 1 or month > 12) {
+        return 0;
+    }
+    let result = days[month - 1];
+    if (month == 2 and datetime_is_leap_year(year)) {
+        result = result + 1;
+    }
+    return result;
+}
+
+# Calculate age from birthdate
+fn datetime_calculate_age(birth_year, birth_month, birth_day) {
+    let now_str = datetime_now();
+    let now_components = datetime_parse(now_str);
+    let current_year = datetime_get_year(now_components);
+    let current_month = datetime_get_month(now_components);
+    let current_day = datetime_get_day(now_components);
+
+    let age = current_year - birth_year;
+    if (current_month < birth_month or (current_month == birth_month and current_day < birth_day)) {
+        age = age - 1;
+    }
+    return age;
+}
+
+# Format duration in seconds to human readable string
+fn datetime_format_duration(seconds) {
+    let days = int(seconds / 86400);
+    let remaining = seconds - (days * 86400);
+    let hours = int(remaining / 3600);
+    remaining = remaining - (hours * 3600);
+    let minutes = int(remaining / 60);
+    let secs = int(remaining - (minutes * 60));
+
+    let result = "";
+    if (days > 0) {
+        result = str(days) + " days ";
+    }
+    if (hours > 0) {
+        result = result + str(hours) + " hours ";
+    }
+    if (minutes > 0) {
+        result = result + str(minutes) + " minutes ";
+    }
+    result = result + str(secs) + " seconds";
+    return result;
+}
+
+# Sleep for specified milliseconds (using performance monitor pattern)
+fn datetime_sleep(milliseconds) {
+    let start = time_now();
+    let end_time = start + milliseconds;
+    while (time_now() < end_time) {
+        # Busy wait - would be better with proper sleep in host
+    }
+    return nullptr;
+}
+
+# Get current date only (without time)
+fn datetime_today() {
+    return datetime_format_now(DATETIME_DATE_ONLY_FORMAT);
+}
+
+# Get current time only (without date)
+fn datetime_current_time() {
+    return datetime_format_now(DATETIME_TIME_ONLY_FORMAT);
+}
+
+# Convert Unix timestamp to local datetime string
+fn datetime_from_timestamp(ts) {
+    return datetime_format(ts, DATETIME_DEFAULT_FORMAT);
+}
+
+# Compare two dates (returns -1, 0, or 1)
+fn datetime_compare(date1_str, date2_str) {
+    let d1 = datetime_parse(date1_str);
+    let d2 = datetime_parse(date2_str);
+
+    if (d1 == nullptr or d2 == nullptr) {
+        return 0;
+    }
+
+    let ts1 = 0;
+    let ts2 = 0;
+    let i = 0;
+    while (i < len(d1)) {
+        let entry = d1[i];
+        if (len(entry) >= 2 and entry[0] == "timestamp") {
+            ts1 = entry[1];
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < len(d2)) {
+        let entry = d2[i];
+        if (len(entry) >= 2 and entry[0] == "timestamp") {
+            ts2 = entry[1];
+        }
+        i = i + 1;
+    }
+
+    if (ts1 < ts2) {
+        return -1;
+    } else if (ts1 > ts2) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+# Add days to a date
+fn datetime_add_days(date_str, days_to_add) {
+    let parsed = datetime_parse(date_str);
+    if (parsed == nullptr) {
+        return date_str;
+    }
+
+    let ts = 0;
+    let i = 0;
+    while (i < len(parsed)) {
+        let entry = parsed[i];
+        if (len(entry) >= 2 and entry[0] == "timestamp") {
+            ts = entry[1];
+        }
+        i = i + 1;
+    }
+
+    # Add days (convert to seconds)
+    let new_ts = ts + (days_to_add * 86400);
+    return datetime_format(new_ts, DATETIME_DATE_ONLY_FORMAT);
+}
+
+# Get day of week (0=Monday, 6=Sunday)
+fn datetime_day_of_week(date_str) {
+    let parsed = datetime_parse(date_str);
+    if (parsed == nullptr) {
+        return -1;
+    }
+
+    let ts = 0;
+    let i = 0;
+    while (i < len(parsed)) {
+        let entry = parsed[i];
+        if (len(entry) >= 2 and entry[0] == "timestamp") {
+            ts = entry[1];
+        }
+        i = i + 1;
+    }
+
+    # Python's weekday(): Monday=0, Sunday=6
+    # Using modulo arithmetic (simulated with division)
+    let days_since_epoch = int(ts / 86400);
+    let adjusted = days_since_epoch + 3;
+    let weekday = adjusted - int(adjusted / 7) * 7;  # Adjust for epoch starting on Thursday
+    return weekday;
+}
+
+# Get day of week name
+fn datetime_day_name(date_str) {
+    let dow = datetime_day_of_week(date_str);
+    let names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    if (dow < 0 or dow > 6) {
+        return "Unknown";
+    }
+    return names[dow];
+}
+
+# Get month name from number
+fn datetime_month_name(month_num) {
+    let names = ["January", "February", "March", "April", "May", "June",
+                 "July", "August", "September", "October", "November", "December"];
+    if (month_num < 1 or month_num > 12) {
+        return "Unknown";
+    }
+    return names[month_num - 1];
+}
+
+# Format date with custom separators
+fn datetime_format_custom(date_str, separator) {
+    let parsed = datetime_parse(date_str);
+    if (parsed == nullptr) {
+        return date_str;
+    }
+
+    let year = datetime_get_year(parsed);
+    let month = datetime_get_month(parsed);
+    let day = datetime_get_day(parsed);
+
+    let month_str = str(month);
+    let day_str = str(day);
+
+    # Pad with zero if needed
+    if (month < 10) {
+        month_str = "0" + month_str;
+    }
+    if (day < 10) {
+        day_str = "0" + day_str;
+    }
+
+    return str(year) + separator + month_str + separator + day_str;
+}
+
+# Check if date is valid
+fn datetime_is_valid_date(year, month, day) {
+    if (year < 1 or month < 1 or month > 12 or day < 1) {
+        return false;
+    }
+    let max_days = datetime_days_in_month(year, month);
+    return day <= max_days;
+}
+
+# Calculate days between two dates
+fn datetime_days_between(date1_str, date2_str) {
+    let d1 = datetime_parse(date1_str);
+    let d2 = datetime_parse(date2_str);
+
+    if (d1 == nullptr or d2 == nullptr) {
+        return 0;
+    }
+
+    let ts1 = 0;
+    let ts2 = 0;
+    let i = 0;
+    while (i < len(d1)) {
+        let entry = d1[i];
+        if (len(entry) >= 2 and entry[0] == "timestamp") {
+            ts1 = entry[1];
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < len(d2)) {
+        let entry = d2[i];
+        if (len(entry) >= 2 and entry[0] == "timestamp") {
+            ts2 = entry[1];
+        }
+        i = i + 1;
+    }
+
+    let diff = ts2 - ts1;
+    if (diff < 0) {
+        diff = -diff;
+    }
+    return int(diff / 86400);
+}
+
+# Get quarter of year (1-4)
+fn datetime_quarter(date_str) {
+    let parsed = datetime_parse(date_str);
+    if (parsed == nullptr) {
+        return 0;
+    }
+    let month = datetime_get_month(parsed);
+    return int((month - 1) / 3) + 1;
+}
+
+# Get week number of year
+fn datetime_week_number(date_str) {
+    let parsed = datetime_parse(date_str);
+    if (parsed == nullptr) {
+        return 0;
+    }
+
+    let ts = 0;
+    let i = 0;
+    while (i < len(parsed)) {
+        let entry = parsed[i];
+        if (len(entry) >= 2 and entry[0] == "timestamp") {
+            ts = entry[1];
+        }
+        i = i + 1;
+    }
+
+    # Approximate week number (using division-based modulo)
+    let days_total = int(ts / 86400);
+    let day_of_year = days_total - int(days_total / 365) * 365;
+    return int(day_of_year / 7) + 1;
+}
+
+# Create a simple timer for measuring elapsed time
+fn datetime_timer_start() {
+    return time_now();
+}
+
+fn datetime_timer_elapsed(start_time) {
+    let now = time_now();
+    return now - start_time;
+}
+
+fn datetime_timer_elapsed_seconds(start_time) {
+    let ms = datetime_timer_elapsed(start_time);
+    return ms / 1000.0;
+}

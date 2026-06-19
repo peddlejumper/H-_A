@@ -1,0 +1,117 @@
+# H# zzwUI Test 11 — Collection-bearing widgets (ListBox etc.)
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. ListBox add / count / get ──────────────────────────────────────
+let lb = new ListBox();
+lb.init_listbox();
+check("c/init",          lb.get_count() == 0);
+check("c/init_sel",      lb.get_selected() == -1);
+lb.add_item("alpha");
+check("c/n1",            lb.get_count() == 1);
+lb.add_item("beta");
+lb.add_item("gamma");
+lb.add_item("delta");
+check("c/n4",            lb.get_count() == 4);
+check("c/get0",          lb.get_item(0) == "alpha");
+check("c/get1",          lb.get_item(1) == "beta");
+check("c/get3",          lb.get_item(3) == "delta");
+
+# ─── 2. ListBox get OOB ────────────────────────────────────────────────
+check("c/get_neg",       lb.get_item(-1) == nullptr);
+check("c/get_oob",       lb.get_item(99) == nullptr);
+
+# ─── 3. ListBox set_selected / get_selected / get_selected_text ───────
+lb.set_selected(0);
+check("c/sel0",          lb.get_selected() == 0);
+check("c/sel0_t",        lb.get_selected_text() == "alpha");
+lb.set_selected(2);
+check("c/sel2",          lb.get_selected() == 2);
+check("c/sel2_t",        lb.get_selected_text() == "gamma");
+lb.set_selected(-1);
+check("c/sel_n1",        lb.get_selected() == -1);
+check("c/sel_n1_t",      lb.get_selected_text() == "");
+
+# ─── 4. set_selected out of bounds is silently ignored ────────────────
+lb.set_selected(99);
+check("c/sel_oob",       lb.get_selected() == -1);
+lb.set_selected(-99);
+check("c/sel_neg",       lb.get_selected() == -1);
+
+# ─── 5. ListBox remove_item ────────────────────────────────────────────
+let lb2 = new ListBox();
+lb2.init_listbox();
+lb2.add_item("a");
+lb2.add_item("b");
+lb2.add_item("c");
+lb2.add_item("d");
+check("c/rm2_n",         lb2.get_count() == 4);
+lb2.remove_item(1);  # remove "b"
+check("c/rm2_n3",        lb2.get_count() == 3);
+check("c/rm2_0",         lb2.get_item(0) == "a");
+check("c/rm2_1",         lb2.get_item(1) == "c");
+check("c/rm2_2",         lb2.get_item(2) == "d");
+
+# Remove last item; selected_index clamped
+lb2.set_selected(2);
+lb2.remove_item(2);
+check("c/rm2_last",      lb2.get_count() == 2);
+check("c/rm2_sel_clamp", lb2.get_selected() == 1);
+
+# ─── 6. ListBox multi_select flag ──────────────────────────────────────
+check("c/ms_init",       lb2.multi_select == false);
+lb2.set_multi_select(true);
+check("c/ms_set",        lb2.multi_select == true);
+lb2.set_multi_select(false);
+check("c/ms_unset",      lb2.multi_select == false);
+
+# ─── 7. ListBox clear_items ────────────────────────────────────────────
+lb2.clear_items();
+check("c/clr_n",         lb2.get_count() == 0);
+check("c/clr_sel",       lb2.get_selected() == -1);
+
+# ─── 8. ListBox iteration via get_item (acts as a forward iterator) ───
+let lb3 = new ListBox();
+lb3.init_listbox();
+let k = 0;
+while (k < 10) {
+    lb3.add_item("v" + str(k));
+    k = k + 1;
+}
+let collected = "";
+let j = 0;
+while (j < lb3.get_count()) {
+    collected = collected + lb3.get_item(j);
+    j = j + 1;
+}
+check("c/iter",          collected == "v0v1v2v3v4v5v6v7v8v9");
+
+# ─── 9. ListBox with strings of varying length ─────────────────────────
+let lb4 = new ListBox();
+lb4.init_listbox();
+lb4.add_item("a");
+lb4.add_item("ab");
+lb4.add_item("abc");
+lb4.add_item("abcd");
+check("c/vl_n",          lb4.get_count() == 4);
+check("c/vl_0",          lb4.get_item(0) == "a");
+check("c/vl_3",          lb4.get_item(3) == "abcd");
+
+print("11_ZZW_COLLECTIONS : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

@@ -1,0 +1,368 @@
+# H# String Utility Library
+# Common string manipulation functions implemented in H#
+
+fn str_length(s) {
+    # Get the length of a string
+    return len(s);
+}
+
+fn str_uppercase(s) {
+    # Convert string to uppercase
+    # Note: This requires host support for ord/chr functions
+    # For now, return original string as placeholder
+    let result = "";
+    let i = 0;
+    while (i < len(s)) {
+        let ch = s[i];
+        if (ch >= "a" and ch <= "z") {
+            # Placeholder - would need ord/ch r from host
+            result = result + ch;
+        } else {
+            result = result + ch;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_lowercase(s) {
+    # Convert string to lowercase
+    # Note: This requires host support for ord/chr functions
+    # For now, return original string as placeholder
+    let result = "";
+    let i = 0;
+    while (i < len(s)) {
+        let ch = s[i];
+        if (ch >= "A" and ch <= "Z") {
+            # Placeholder - would need ord/chr from host
+            result = result + ch;
+        } else {
+            result = result + ch;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_trim(s) {
+    # Remove leading and trailing whitespace
+    let start = 0;
+    let end = len(s) - 1;
+    
+    # Trim leading whitespace
+    while (start <= end and (s[start] == " " or s[start] == "\t" or s[start] == "\n" or s[start] == "\r")) {
+        start = start + 1;
+    }
+    
+    # Trim trailing whitespace
+    while (end >= start and (s[end] == " " or s[end] == "\t" or s[end] == "\n" or s[end] == "\r")) {
+        end = end - 1;
+    }
+    
+    if (start > end) {
+        return "";
+    }
+    
+    return substring(s, start, end - start + 1);
+}
+
+fn str_trim_left(s) {
+    # Remove leading whitespace only
+    let start = 0;
+    while (start < len(s) and (s[start] == " " or s[start] == "\t" or s[start] == "\n" or s[start] == "\r")) {
+        start = start + 1;
+    }
+    return substring(s, start, len(s) - start);
+}
+
+fn str_trim_right(s) {
+    # Remove trailing whitespace only
+    let end = len(s) - 1;
+    while (end >= 0 and (s[end] == " " or s[end] == "\t" or s[end] == "\n" or s[end] == "\r")) {
+        end = end - 1;
+    }
+    return substring(s, 0, end + 1);
+}
+
+fn str_contains(s, substr) {
+    # Check if string contains a substring
+    return str_index_of(s, substr) != -1;
+}
+
+fn str_index_of(s, substr) {
+    # Find the index of first occurrence of substring
+    let substr_len = len(substr);
+    let s_len = len(s);
+    
+    if (substr_len == 0) {
+        return 0;
+    }
+    
+    if (substr_len > s_len) {
+        return -1;
+    }
+    
+    let i = 0;
+    while (i <= s_len - substr_len) {
+        let found = true;
+        let j = 0;
+        while (j < substr_len) {
+            if (s[i + j] != substr[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            return i;
+        }
+        i = i + 1;
+    }
+    
+    return -1;
+}
+
+fn str_last_index_of(s, substr) {
+    # Find the index of last occurrence of substring
+    let substr_len = len(substr);
+    let s_len = len(s);
+    
+    if (substr_len == 0) {
+        return s_len;
+    }
+    
+    if (substr_len > s_len) {
+        return -1;
+    }
+    
+    let i = s_len - substr_len;
+    while (i >= 0) {
+        let found = true;
+        let j = 0;
+        while (j < substr_len) {
+            if (s[i + j] != substr[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            return i;
+        }
+        i = i - 1;
+    }
+    
+    return -1;
+}
+
+fn str_replace(s, old, replacement) {
+    # Replace all occurrences of old with replacement
+    let result = "";
+    let old_len = len(old);
+    let i = 0;
+    
+    while (i < len(s)) {
+        let found = true;
+        if (i + old_len <= len(s)) {
+            let j = 0;
+            while (j < old_len) {
+                if (s[i + j] != old[j]) {
+                    found = false;
+                    break;
+                }
+                j = j + 1;
+            }
+        } else {
+            found = false;
+        }
+        
+        if (found) {
+            result = result + replacement;
+            i = i + old_len;
+        } else {
+            result = result + s[i];
+            i = i + 1;
+        }
+    }
+    
+    return result;
+}
+
+fn str_split(s, delimiter) {
+    # Split string by delimiter into array
+    let result = [];
+    let delim_len = len(delimiter);
+    let start = 0;
+    let i = 0;
+    
+    while (i <= len(s) - delim_len) {
+        let found = true;
+        let j = 0;
+        while (j < delim_len) {
+            if (s[i + j] != delimiter[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        
+        if (found) {
+            push(result, substring(s, start, i - start));
+            i = i + delim_len;
+            start = i;
+        } else {
+            i = i + 1;
+        }
+    }
+    
+    # Add the remaining part
+    push(result, substring(s, start, len(s) - start));
+    
+    return result;
+}
+
+fn str_join(arr, separator) {
+    # Join array elements into a string with separator
+    if (len(arr) == 0) {
+        return "";
+    }
+    
+    let result = str(arr[0]);
+    let i = 1;
+    while (i < len(arr)) {
+        result = result + separator + str(arr[i]);
+        i = i + 1;
+    }
+    
+    return result;
+}
+
+fn str_starts_with(s, prefix) {
+    # Check if string starts with prefix
+    let prefix_len = len(prefix);
+    if (prefix_len > len(s)) {
+        return false;
+    }
+    
+    let i = 0;
+    while (i < prefix_len) {
+        if (s[i] != prefix[i]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    
+    return true;
+}
+
+fn str_ends_with(s, suffix) {
+    # Check if string ends with suffix
+    let suffix_len = len(suffix);
+    let s_len = len(s);
+    
+    if (suffix_len > s_len) {
+        return false;
+    }
+    
+    let i = 0;
+    while (i < suffix_len) {
+        if (s[s_len - suffix_len + i] != suffix[i]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    
+    return true;
+}
+
+fn str_repeat(s, count) {
+    # Repeat string n times
+    if (count <= 0) {
+        return "";
+    }
+    
+    let result = "";
+    let i = 0;
+    while (i < count) {
+        result = result + s;
+        i = i + 1;
+    }
+    
+    return result;
+}
+
+fn str_pad_left(s, length, pad_char) {
+    # Pad string on the left with pad_char to reach specified length
+    if (pad_char == nullptr) {
+        pad_char = " ";
+    }
+    
+    let current_len = len(s);
+    if (current_len >= length) {
+        return s;
+    }
+    
+    let padding = str_repeat(pad_char, length - current_len);
+    return padding + s;
+}
+
+fn str_pad_right(s, length, pad_char) {
+    # Pad string on the right with pad_char to reach specified length
+    if (pad_char == nullptr) {
+        pad_char = " ";
+    }
+    
+    let current_len = len(s);
+    if (current_len >= length) {
+        return s;
+    }
+    
+    let padding = str_repeat(pad_char, length - current_len);
+    return s + padding;
+}
+
+fn str_reverse(s) {
+    # Reverse a string
+    let result = "";
+    let i = len(s) - 1;
+    while (i >= 0) {
+        result = result + s[i];
+        i = i - 1;
+    }
+    return result;
+}
+
+fn str_substring(s, start, length) {
+    # Extract a substring (alias for built-in substring)
+    return substring(s, start, length);
+}
+
+fn str_char_at(s, index) {
+    # Get character at specific index
+    if (index < 0 or index >= len(s)) {
+        return nullptr;
+    }
+    return s[index];
+}
+
+fn str_to_array(s) {
+    # Convert string to array of characters
+    let result = [];
+    let i = 0;
+    while (i < len(s)) {
+        push(result, s[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_from_array(arr) {
+    # Convert array of characters back to string
+    let result = "";
+    let i = 0;
+    while (i < len(arr)) {
+        result = result + arr[i];
+        i = i + 1;
+    }
+    return result;
+}

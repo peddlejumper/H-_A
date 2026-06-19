@@ -1,0 +1,309 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="IDE.UI.LauncherWindow"
+        Title="H# Launcher"
+        Width="580" Height="680"
+        MinWidth="480" MinHeight="540"
+        Background="#f0f0f0"
+        WindowStartupLocation="CenterScreen"
+        CanResize="True"
+        FontFamily="Segoe UI, Microsoft YaHei, sans-serif"
+        FontSize="13"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="28">
+
+  <Window.Styles>
+    <!-- ═══════════ HwdUI TextBlock = Label = #333333, 13px, sans-serif ═══════════ -->
+    <Style Selector="TextBlock">
+      <Setter Property="Foreground" Value="#333333"/>
+    </Style>
+
+    <Style Selector="TextBlock.SectionTitle">
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#222222"/>
+    </Style>
+
+    <Style Selector="TextBlock.Muted">
+      <Setter Property="Foreground" Value="#888888"/>
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+
+    <!-- ═══════════ HwdUI Button: bg=#e0e0e0, border=#aaaaaa 1px, radius=4, padding=6 12 ═══════════ -->
+    <Style Selector="Button.Primary">
+      <Setter Property="Background" Value="#e0e0e0"/>
+      <Setter Property="Foreground" Value="#333333"/>
+      <Setter Property="BorderBrush" Value="#aaaaaa"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style Selector="Button.Primary:pointerover">
+      <Setter Property="Background" Value="#d0d0d0"/>
+      <Setter Property="BorderBrush" Value="#888888"/>
+    </Style>
+    <Style Selector="Button.Primary:pressed">
+      <Setter Property="Background" Value="#c0c0c0"/>
+    </Style>
+
+    <!-- ═══════════ HwdUI Accent Button: bg=#4a90d9, white text, radius=4 ═══════════ -->
+    <Style Selector="Button.Accent">
+      <Setter Property="Background" Value="#4a90d9"/>
+      <Setter Property="Foreground" Value="#ffffff"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style Selector="Button.Accent:pointerover">
+      <Setter Property="Background" Value="#5a9fe8"/>
+    </Style>
+    <Style Selector="Button.Accent:pressed">
+      <Setter Property="Background" Value="#3a7fc8"/>
+    </Style>
+
+    <!-- ═══════════ HwdUI Small Button ═══════════ -->
+    <Style Selector="Button.Small">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="8,3"/>
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Background" Value="#e8e8e8"/>
+      <Setter Property="Foreground" Value="#555555"/>
+      <Setter Property="BorderBrush" Value="#cccccc"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.Small:pointerover">
+      <Setter Property="Background" Value="#dddddd"/>
+    </Style>
+
+    <!-- ═══════════ Title Bar Buttons ═══════════ -->
+    <Style Selector="Button.TitleBarBtn">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#ffffff"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="10,5"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.TitleBarBtn:pointerover">
+      <Setter Property="Background" Value="rgba(255,255,255,0.15)"/>
+    </Style>
+    <Style Selector="Button.TitleBarBtn.CloseBtn:pointerover">
+      <Setter Property="Background" Value="#cc4444"/>
+    </Style>
+
+    <!-- ═══════════ HwdUI Link Button ═══════════ -->
+    <Style Selector="Button.Link">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#4a90d9"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="4,2"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.Link:pointerover">
+      <Setter Property="Foreground" Value="#3a7fc8"/>
+    </Style>
+
+    <!-- ═══════════ HwdUI Button:disabled: bg=#f5f5f5, fg=#999999 ═══════════ -->
+    <Style Selector="Button:disabled">
+      <Setter Property="Background" Value="#f5f5f5"/>
+      <Setter Property="Foreground" Value="#999999"/>
+      <Setter Property="BorderBrush" Value="#e0e0e0"/>
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+  </Window.Styles>
+
+  <!-- ═══════════ HwdUI Window: bg=#f0f0f0, title_height=28 ═══════════ -->
+  <Grid RowDefinitions="28,*" Background="#f0f0f0">
+
+    <!-- ═══════════ HwdUI Title Bar (28px) ═══════════ -->
+    <Grid Grid.Row="0" ColumnDefinitions="28,*,36,36"
+          Background="#4a90d9"
+          PointerPressed="OnTitleBarPressed">
+
+      <!-- H# Badge: darker accent -->
+      <Border Grid.Column="0" Background="#3a7fc8" Width="28" Height="28">
+        <TextBlock Text="H#" FontSize="12" FontWeight="Bold" Foreground="#ffffff"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      </Border>
+
+      <!-- Window Title -->
+      <TextBlock Grid.Column="1" Text="H# Launcher"
+                 FontSize="13" Foreground="#ffffff"
+                 VerticalAlignment="Center" Margin="8,0,0,0"
+                 IsHitTestVisible="False"/>
+
+      <!-- Minimize Button -->
+      <Button Grid.Column="2" Classes="TitleBarBtn"
+              Content="─" Click="OnMinimize"
+              Width="36" Height="28"/>
+
+      <!-- Close Button -->
+      <Button Grid.Column="3" Classes="TitleBarBtn CloseBtn"
+              Content="✕" Click="OnClose"
+              Width="36" Height="28"/>
+    </Grid>
+
+    <!-- ═══════════ Client Area ═══════════ -->
+    <ScrollViewer Grid.Row="1" Background="#f0f0f0">
+      <StackPanel Margin="40,12,40,0" Width="500">
+
+        <!-- ═══════════ HEADER ═══════════ -->
+        <Border CornerRadius="4" Background="#ffffff" Padding="18,12" Margin="0,0,0,8"
+                BorderBrush="#cccccc" BorderThickness="1">
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="10">
+            <Border Background="#4a90d9" CornerRadius="4" Width="36" Height="36">
+              <TextBlock Text="H#" FontSize="16" FontWeight="Bold" Foreground="#ffffff"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="H# Development Environment" FontSize="16"
+                         FontWeight="Bold" Foreground="#222222"/>
+              <TextBlock Text="Self-Hosting Runtime · v2.0" FontSize="11"
+                         Foreground="#888888"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- ═══════════ ENVIRONMENT STATUS ═══════════ -->
+        <Border CornerRadius="4" Background="#ffffff" Padding="14,10" Margin="0,0,0,8"
+                BorderBrush="#cccccc" BorderThickness="1">
+          <StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+              <Border Background="#4a90d9" CornerRadius="2" Width="4" Height="14"
+                      VerticalAlignment="Center"/>
+              <TextBlock Classes="SectionTitle" Text="Environment"/>
+              <TextBlock Name="ReadyLabel" Text="✓ ok" FontSize="10"
+                         Foreground="#4a90d9" VerticalAlignment="Center" IsVisible="False"/>
+              <TextBlock Name="CheckingLabel" Text="checking..." FontSize="10"
+                         Foreground="#aaaaaa" VerticalAlignment="Center" IsVisible="True"/>
+            </StackPanel>
+
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+              <TextBlock Grid.Row="0" Grid.Column="0" Name="PythonIcon" Text="●" FontSize="9"
+                         VerticalAlignment="Center" Margin="0,1,8,0"/>
+              <TextBlock Grid.Row="0" Grid.Column="1" Name="PythonStatus"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Grid.Row="1" Grid.Column="0" Name="PipIcon" Text="●" FontSize="9"
+                         VerticalAlignment="Center" Margin="0,1,8,0"/>
+              <TextBlock Grid.Row="1" Grid.Column="1" Name="PipStatus"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Row="2" Grid.Column="0" Name="PyQtIcon" Text="●" FontSize="9"
+                         VerticalAlignment="Center" Margin="0,1,8,0"/>
+              <TextBlock Grid.Row="2" Grid.Column="1" Name="PyQtStatus"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Row="3" Grid.Column="0" Name="HSharpIcon" Text="●" FontSize="9"
+                         VerticalAlignment="Center" Margin="0,1,8,0"/>
+              <TextBlock Grid.Row="3" Grid.Column="1" Name="HSharpStatus"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Row="4" Grid.Column="0" Name="QoderIcon" Text="●" FontSize="9"
+                         VerticalAlignment="Center" Margin="0,1,8,0"/>
+              <TextBlock Grid.Row="4" Grid.Column="1" Name="QoderStatus"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Row="5" Grid.Column="0" Name="CompilerIcon" Text="◎" FontSize="9"
+                         VerticalAlignment="Center" Margin="0,1,8,0"/>
+              <TextBlock Grid.Row="5" Grid.Column="1" Name="CompilerStatus"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" Spacing="6">
+              <Button Classes="Small" Content="re-check" Click="OnRefreshStatus"/>
+              <Button Name="InstallMissingBtn" Classes="Small"
+                      Content="install missing" Click="OnInstallMissing"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- ═══════════ PRIMARY ACTIONS ═══════════ -->
+        <Border CornerRadius="4" Background="#ffffff" Padding="14,10" Margin="0,0,0,8"
+                BorderBrush="#cccccc" BorderThickness="1">
+          <WrapPanel>
+            <Button Name="LaunchPyQtButton" Classes="Accent"
+                    Content="▶  Launch PyQt IDE" Click="OnLaunchPyQt"
+                    FontSize="14" Padding="20,8" Margin="0,0,8,0"/>
+            <Button Classes="Primary"
+                    Content="Open C# IDE" Click="OnLaunchCSharp"
+                    FontSize="14" Padding="20,8"/>
+          </WrapPanel>
+        </Border>
+
+        <!-- ═══════════ ADVANCED ═══════════ -->
+        <Border CornerRadius="4" Background="#ffffff" Padding="14,8" Margin="0,0,0,8"
+                BorderBrush="#cccccc" BorderThickness="1">
+          <StackPanel>
+            <Button Name="AdvancedToggle" Classes="Link"
+                    Content="▸  Advanced Options" Click="OnToggleAdvanced"
+                    HorizontalAlignment="Left" Padding="0,2" FontSize="12"/>
+
+            <StackPanel Name="AdvancedPanel" IsVisible="False" Margin="0,8,0,0">
+              <Border Background="#f8f8f8" CornerRadius="3" Padding="10,8"
+                      BorderBrush="#e0e0e0" BorderThickness="1">
+                <WrapPanel>
+                  <Button Classes="Primary" Content="Load .hps"
+                          Click="OnLoadHps" Margin="0,0,6,6"/>
+                  <Button Classes="Primary" Content="Qoder Compile"
+                          Click="OnUseQoder" Margin="0,0,6,6"/>
+                  <Button Classes="Primary" Content="Select Compiler"
+                          Click="OnSelectCompiler" Margin="0,0,6,6"/>
+                  <Button Classes="Primary" Content="Install Deps"
+                          Click="OnInstallMissing" Margin="0,0,6,6"/>
+                  <Button Name="PythonOrgBtn" Classes="Primary"
+                          Content="python.org" Click="OnOpenPythonOrg"
+                          IsVisible="False" Margin="0,0,6,6"/>
+                </WrapPanel>
+              </Border>
+              <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                <TextBlock Text="Compiler:" FontSize="11" Foreground="#aaaaaa"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Name="AdvancedCompilerPath" FontSize="11"
+                           Foreground="#888888" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                <TextBlock Text="Python:" FontSize="11" Foreground="#aaaaaa"
+                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Name="AdvancedPythonPath" FontSize="11"
+                           Foreground="#888888" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+              </StackPanel>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- ═══════════ OUTPUT: HwdUI TextBox styled ═══════════ -->
+        <Border CornerRadius="4" Background="#ffffff" Padding="12,8" Margin="0,0,0,16"
+                BorderBrush="#cccccc" BorderThickness="1">
+          <StackPanel Spacing="4">
+            <StackPanel Orientation="Horizontal">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Border Background="#4a90d9" CornerRadius="2" Width="4" Height="14"
+                        VerticalAlignment="Center"/>
+                <TextBlock Classes="SectionTitle" Text="Output"/>
+              </StackPanel>
+              <Button Classes="Small" Content="clear" Click="OnClearOutput"
+                      Padding="6,2" FontSize="10" Margin="8,0,0,0"/>
+            </StackPanel>
+
+            <!-- HwdUI TextBox: bg=#ffffff, border=#aaaaaa 1px, radius=3, padding=4 8 -->
+            <Border Background="#ffffff" CornerRadius="3" MinHeight="120" MaxHeight="200"
+                    BorderBrush="#aaaaaa" BorderThickness="1">
+              <TextBox Name="OutputBox" IsReadOnly="True" AcceptsReturn="True"
+                       Background="Transparent" BorderThickness="0"
+                       Foreground="#333333" FontFamily="Consolas, Courier New, monospace"
+                       FontSize="13" TextWrapping="Wrap" Padding="8,4"/>
+            </Border>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</Window>

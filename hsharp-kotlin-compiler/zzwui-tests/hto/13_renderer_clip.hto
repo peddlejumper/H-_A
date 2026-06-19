@@ -1,0 +1,114 @@
+# H# zzwUI Test 13 — Clip stack (push/pop and native glue)
+# build: hwdui_min.hto,zzw_native.hto,zzw_render_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+let r = new ZzwRenderer();
+r.init_renderer(1);
+
+# ─── 1. pushClip appends a rect ──────────────────────────────────────
+check("c/init",          len(r.clip_stack) == 0);
+r.pushClip(0, 0, 100, 100);
+check("c/n1",            len(r.clip_stack) == 1);
+let c0 = r.clip_stack[0];
+check("c/x0",            c0["x"] == 0);
+check("c/y0",            c0["y"] == 0);
+check("c/w0",            c0["w"] == 100);
+check("c/h0",            c0["h"] == 100);
+
+# ─── 2. pushClip / popClip round-trip ────────────────────────────────
+r.pushClip(10, 10, 50, 50);
+check("c/n2",            len(r.clip_stack) == 2);
+r.popClip();
+check("c/n1_again",      len(r.clip_stack) == 1);
+r.popClip();
+check("c/n0_again",      len(r.clip_stack) == 0);
+
+# ─── 3. popClip on empty stack is a no-op ───────────────────────────
+let r0 = r.popClip();
+check("c/pop_empty",     r0 == 0);
+check("c/empty_n",       len(r.clip_stack) == 0);
+
+# ─── 4. multiple pushes / pops in sequence ───────────────────────────
+r.pushClip(0, 0, 10, 10);
+r.pushClip(0, 0, 20, 20);
+r.pushClip(0, 0, 30, 30);
+check("c/n3",            len(r.clip_stack) == 3);
+r.popClip();
+check("c/3to2",          len(r.clip_stack) == 2);
+r.popClip();
+r.popClip();
+check("c/2to0",          len(r.clip_stack) == 0);
+
+# ─── 5. top of stack reflects last push ──────────────────────────────
+r.pushClip(0, 0, 100, 100);
+r.pushClip(5, 5, 50, 50);
+let top = r.clip_stack[len(r.clip_stack) - 1];
+check("c/top_x",         top["x"] == 5);
+check("c/top_w",         top["w"] == 50);
+r.popClip();
+let top2 = r.clip_stack[len(r.clip_stack) - 1];
+check("c/top2_x",        top2["x"] == 0);
+check("c/top2_w",        top2["w"] == 100);
+
+# ─── 6. popClip when not-empty restores the previous clip via native ─
+# (We can't directly verify the native call, but popClip returns 0 and
+# preserves LIFO order.)
+r.popClip();
+check("c/clean",         len(r.clip_stack) == 0);
+
+# ─── 7. draw operations between push and pop don't break ─────────────
+r.pushClip(0, 0, 200, 200);
+let dr = r.drawRect(10, 10, 50, 50, "#fff", 1);
+check("c/draw_in_clip",  dr == 0);
+r.fillRect(0, 0, 100, 100, "#abc");
+check("c/fill_in_clip",  len(r.clip_stack) == 1);
+r.popClip();
+check("c/post_pop",      len(r.clip_stack) == 0);
+
+# ─── 8. deep nesting (10 levels) ─────────────────────────────────────
+let k = 0;
+while (k < 10) {
+    r.pushClip(0, 0, 100 - k, 100 - k);
+    k = k + 1;
+}
+check("c/deep_n",        len(r.clip_stack) == 10);
+k = 0;
+while (k < 10) {
+    r.popClip();
+    k = k + 1;
+}
+check("c/deep_back",     len(r.clip_stack) == 0);
+
+# ─── 9. clip rect is just a dict (no validation in v0.4) ─────────────
+r.pushClip(999, 999, 9999, 9999);
+let big = r.clip_stack[0];
+check("c/big_x",         big["x"] == 999);
+check("c/big_h",         big["h"] == 9999);
+r.popClip();
+
+# ─── 10. repeated popClip on empty is idempotent ────────────────────
+let i = 0;
+while (i < 5) {
+    r.popClip();
+    i = i + 1;
+}
+check("c/idemp_n",       len(r.clip_stack) == 0);
+
+print("13_ZZW_RENDERER_CLIP : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

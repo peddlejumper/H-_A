@@ -1,0 +1,10 @@
+# T29 - Polymorphism via dict
+let circle = {"kind": "circle", "r": 5};
+let rect = {"kind": "rect", "w": 3, "h": 4};
+fn area(shape) {
+    if (shape["kind"] == "circle") { return shape["r"] * shape["r"] * 3; }
+    if (shape["kind"] == "rect") { return shape["w"] * shape["h"]; }
+    return 0;
+}
+print(area(circle));
+print(area(rect));

@@ -1,0 +1,10 @@
+# T27 - Long dict operations
+let d = {};
+for i in range(100) { d["k" + str(i)] = i * i; }
+print(len(d));
+print(d["k10"]);
+print(d["k99"]);
+
+let k = [];
+for key in d { push(k, key); }
+print(len(k));

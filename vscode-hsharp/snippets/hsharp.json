@@ -1,0 +1,172 @@
+{
+  "Function": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:args}) {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define a function"
+  },
+  "Let variable": {
+    "prefix": "let",
+    "body": [
+      "let ${1:name} = ${0:value};"
+    ],
+    "description": "Declare a variable"
+  },
+  "If statement": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "If-else statement": {
+    "prefix": "ifelse",
+    "body": [
+      "if (${1:condition}) {",
+      "\t${2}",
+      "} else {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "If-else statement"
+  },
+  "While loop": {
+    "prefix": "while",
+    "body": [
+      "while (${1:condition}) {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "While loop"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": [
+      "for ${1:item} in ${2:iterable} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "For-in loop"
+  },
+  "Class definition": {
+    "prefix": "class",
+    "body": [
+      "class ${1:ClassName} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define a class"
+  },
+  "Class with extends": {
+    "prefix": "classext",
+    "body": [
+      "class ${1:ClassName} extends ${2:BaseClass} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define a class with inheritance"
+  },
+  "Union type": {
+    "prefix": "union",
+    "body": [
+      "union ${1:TypeName} { ${0:variants} }"
+    ],
+    "description": "Define a union type"
+  },
+  "Interface": {
+    "prefix": "interface",
+    "body": [
+      "interface ${1:Name} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define an interface"
+  },
+  "Module": {
+    "prefix": "module",
+    "body": [
+      "module ${1:name} {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Define a module"
+  },
+  "Print statement": {
+    "prefix": "print",
+    "body": [
+      "print(${0});"
+    ],
+    "description": "Print to stdout"
+  },
+  "Return statement": {
+    "prefix": "return",
+    "body": [
+      "return ${0};"
+    ],
+    "description": "Return from function"
+  },
+  "Import statement": {
+    "prefix": "import",
+    "body": [
+      "import ${0:module};"
+    ],
+    "description": "Import a module"
+  },
+  "Try-catch": {
+    "prefix": "try",
+    "body": [
+      "try {",
+      "\t${1}",
+      "} catch (${2:e}) {",
+      "\t${0}",
+      "}"
+    ],
+    "description": "Try-catch block"
+  },
+  "Main function": {
+    "prefix": "main",
+    "body": [
+      "fn main() {",
+      "\t${0}",
+      "}",
+      "",
+      "main();"
+    ],
+    "description": "Main function entry point"
+  },
+  "Curry function": {
+    "prefix": "curry",
+    "body": [
+      "curry(${1:fn}, ${0:args})"
+    ],
+    "description": "Curry/partial application"
+  },
+  "Compose function": {
+    "prefix": "compose",
+    "body": [
+      "fn composed(x) { return ${1:f}(${2:g}(x)); }"
+    ],
+    "description": "Function composition"
+  },
+  "ML model template": {
+    "prefix": "hsharpmyl",
+    "body": [
+      "let model = ${1|LinearRegression,LogisticRegression,RandomForest,XGBoost,NeuralNetwork,SVM,KMeans,PCA,Transformer|}(${2});",
+      "model${3:.fit}(${0});"
+    ],
+    "description": "H#ML model instantiation"
+  },
+  "HWdui window": {
+    "prefix": "window",
+    "body": [
+      "let ${1:win} = Window(${2:\"Title\"}, ${3:800}, ${4:600});",
+      "${1}.show();"
+    ],
+    "description": "Create a HWdui window"
+  }
+}

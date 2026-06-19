@@ -1,0 +1,108 @@
+# H# zzwUI Test 04 — Native GUI bridge (native_* wrappers)
+# build: hwdui_min.hto,zzw_native.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. Window management ───────────────────────────────────────────────
+let r1 = native_create_window("Test", 800, 600, "#000000");
+# First window returns id 1 (or any non-zero value).
+check("n/create",        r1 != nullptr and r1 != 0);
+let r2 = native_destroy_window(0);
+check("n/destroy",       r2 == 0);
+let r3 = native_show_window(0);
+check("n/show",          r3 == 0);
+let r4 = native_hide_window(0);
+check("n/hide",          r4 == 0);
+let r5 = native_set_window_title(0, "Hi");
+check("n/set_title",     r5 == 0);
+let r6 = native_set_window_size(0, 1024, 768);
+check("n/set_size",      r6 == 0);
+let s = native_get_window_size(0);
+check("n/get_size",      s != nullptr);
+
+# ─── 2. Drawing primitives ──────────────────────────────────────────────
+let d1 = native_clear(0, "#ffffff");
+check("n/clear",         d1 == 0);
+let d2 = native_draw_rect(0, 0, 0, 100, 100, "#ff0000", true);
+check("n/draw_rect",     d2 == 0);
+let d3 = native_draw_rounded_rect(0, 0, 0, 100, 100, 4, "#00ff00", true);
+check("n/draw_rrect",    d3 == 0);
+let d4 = native_draw_line(0, 0, 0, 100, 100, "#0000ff", 2);
+check("n/draw_line",     d4 == 0);
+let d5 = native_draw_circle(0, 50, 50, 20, "#ffff00", true);
+check("n/draw_circle",   d5 == 0);
+let d6 = native_draw_arc(0, 0, 0, 100, 100, 0, 180, "#ff00ff", true);
+check("n/draw_arc",      d6 == 0);
+let pts = [[0, 0], [10, 0], [5, 10]];
+let d7 = native_draw_polygon(0, pts, "#abcdef", true);
+check("n/draw_polygon",  d7 == 0);
+let d8 = native_draw_text(0, 0, 0, "Hello", "#fff", 12, false, "Arial");
+check("n/draw_text",     d8 == 0);
+let d9 = native_draw_text_centered(0, 50, 50, "X", "#fff", 12, false);
+check("n/draw_tcenter",  d9 == 0);
+let m = native_measure_text("abc", 12, false);
+check("n/measure",       m != nullptr);
+let d10 = native_draw_image(0, 0, 0, 100, 100, "#fff");
+check("n/draw_image",    d10 == 0);
+let d11 = native_set_clip(0, 0, 0, 50, 50);
+check("n/set_clip",      d11 == 0);
+let d12 = native_clear_clip(0);
+check("n/clear_clip",    d12 == 0);
+
+# ─── 3. Event system ────────────────────────────────────────────────────
+let ev = native_get_events(0);
+check("n/get_events",    ev != nullptr);
+let u1 = native_update(0);
+check("n/update",        u1 == 0);
+let u2 = native_start_event_loop();
+check("n/start_loop",    u2 == 0);
+let u3 = native_stop_event_loop();
+check("n/stop_loop",     u3 == 0);
+let u4 = native_poll_events();
+check("n/poll_events",   u4 == 0);
+
+# ─── 4. Timer ───────────────────────────────────────────────────────────
+let t1 = native_set_timer(0, 1, 100, "cb");
+check("n/set_timer",     t1 == 0);
+let t2 = native_clear_timer(0, 1);
+check("n/clear_timer",   t2 == 0);
+
+# ─── 5. Screen info ─────────────────────────────────────────────────────
+let ss = native_get_screen_size();
+check("n/screen_size",   ss != nullptr);
+let mp = native_get_mouse_pos();
+check("n/mouse_pos",     mp != nullptr);
+let bp = native_beep();
+check("n/beep",          bp == 0);
+
+# ─── 6. Clipboard ───────────────────────────────────────────────────────
+let cb1 = native_clipboard_copy("hi");
+check("n/cb_copy",       cb1 == 0);
+let cb2 = native_clipboard_paste();
+check("n/cb_paste",      cb2 != nullptr);
+
+# ─── 7. Color utilities ─────────────────────────────────────────────────
+let pc = native_parse_color("#ff8800");
+check("n/parse_color",   pc != nullptr);
+let ch = native_color_to_hex(255, 136, 0);
+check("n/color_hex",     ch != nullptr);
+let lc = native_lerp_color("#ff0000", "#0000ff", 0.5);
+check("n/lerp_color",    lc != nullptr);
+
+print("04_ZZW_NATIVE : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

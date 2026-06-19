@@ -1,0 +1,274 @@
+# H# Library Test 10 — Iterator / Generator Library
+# Tests functional iteration patterns: take, drop, zip, flatten, etc.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Section 1: Range
+# =====================================================
+fn range(n) {
+    let r = [];
+    let i = 0;
+    while (i < n) {
+        push(r, i);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn range_from_to(a, b) {
+    let r = [];
+    let i = a;
+    while (i < b) {
+        push(r, i);
+        i = i + 1;
+    }
+    return r;
+}
+
+let r0 = range(5);
+check("iter/range/0",      r0[0] == 0);
+check("iter/range/4",      r0[4] == 4);
+check("iter/range/size",   len(r0) == 5);
+
+let r1 = range_from_to(3, 8);
+check("iter/range2/0",     r1[0] == 3);
+check("iter/range2/4",     r1[4] == 7);
+check("iter/range2/size",  len(r1) == 5);
+
+# =====================================================
+# Section 2: Zip
+# =====================================================
+fn zip(a, b) {
+    let r = [];
+    let n = len(a);
+    if (len(b) < n) { n = len(b); }
+    let i = 0;
+    while (i < n) {
+        push(r, [a[i], b[i]]);
+        i = i + 1;
+    }
+    return r;
+}
+
+let z1 = zip([1, 2, 3], ["a", "b", "c"]);
+check("iter/zip/0/0",      z1[0][0] == 1);
+check("iter/zip/0/1",      z1[0][1] == "a");
+check("iter/zip/2/0",      z1[2][0] == 3);
+check("iter/zip/size",     len(z1) == 3);
+
+let z2 = zip([1, 2, 3], [10, 20]);
+check("iter/zip/short",    len(z2) == 2);
+
+# =====================================================
+# Section 3: Take / drop
+# =====================================================
+fn take(arr, n) {
+    let r = [];
+    let i = 0;
+    while (i < n && i < len(arr)) {
+        push(r, arr[i]);
+        i = i + 1;
+    }
+    return r;
+}
+
+fn drop(arr, n) {
+    let r = [];
+    let i = n;
+    while (i < len(arr)) {
+        push(r, arr[i]);
+        i = i + 1;
+    }
+    return r;
+}
+
+let arr = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+let t3 = take(arr, 3);
+check("iter/take/size",    len(t3) == 3);
+check("iter/take/0",       t3[0] == 0);
+check("iter/take/2",       t3[2] == 2);
+
+let t100 = take(arr, 100);
+check("iter/take/over",    len(t100) == 10);
+
+let d3 = drop(arr, 3);
+check("iter/drop/size",    len(d3) == 7);
+check("iter/drop/0",       d3[0] == 3);
+check("iter/drop/6",       d3[6] == 9);
+
+# =====================================================
+# Section 4: Flatten (one level)
+# =====================================================
+fn flatten(arrs) {
+    let r = [];
+    let i = 0;
+    while (i < len(arrs)) {
+        let inner = arrs[i];
+        let j = 0;
+        while (j < len(inner)) {
+            push(r, inner[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return r;
+}
+
+let f1 = flatten([[1, 2], [3, 4], [5, 6, 7]]);
+check("iter/flat/size",    len(f1) == 7);
+check("iter/flat/0",       f1[0] == 1);
+check("iter/flat/6",       f1[6] == 7);
+
+# =====================================================
+# Section 5: Concat / append
+# =====================================================
+fn concat(a, b) {
+    let r = [];
+    let i = 0;
+    while (i < len(a)) {
+        push(r, a[i]);
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(b)) {
+        push(r, b[i]);
+        i = i + 1;
+    }
+    return r;
+}
+
+let c1 = concat([1, 2, 3], [4, 5, 6]);
+check("iter/concat/size",  len(c1) == 6);
+check("iter/concat/0",     c1[0] == 1);
+check("iter/concat/5",     c1[5] == 6);
+
+# =====================================================
+# Section 6: Reverse
+# =====================================================
+fn reverse(arr) {
+    let r = [];
+    let i = len(arr) - 1;
+    while (i >= 0) {
+        push(r, arr[i]);
+        i = i - 1;
+    }
+    return r;
+}
+
+let rv = reverse([1, 2, 3, 4, 5]);
+check("iter/rev/0",        rv[0] == 5);
+check("iter/rev/4",        rv[4] == 1);
+check("iter/rev/size",     len(rv) == 5);
+
+# =====================================================
+# Section 7: Group by (using dict-like "key" tracking)
+# =====================================================
+fn group_by(arr, keyfn) {
+    let keys = [];
+    let groups = [];
+    let i = 0;
+    while (i < len(arr)) {
+        let k = keyfn(arr[i]);
+        # Find existing group
+        let found = -1;
+        let j = 0;
+        while (j < len(keys)) {
+            if (keys[j] == k) { found = j; }
+            j = j + 1;
+        }
+        if (found == -1) {
+            push(keys, k);
+            push(groups, [arr[i]]);
+        } else {
+            push(groups[found], arr[i]);
+        }
+        i = i + 1;
+    }
+    return [keys, groups];
+}
+
+let nums = [1, 2, 3, 4, 5, 6, 7, 8];
+let mod2 = group_by(nums, fn(x) { return x % 2; });
+check("iter/group/keys",   len(mod2[0]) == 2);
+check("iter/group/0size",  len(mod2[1][0]) == 4);  # 4 odd
+check("iter/group/1size",  len(mod2[1][1]) == 4);  # 4 even
+
+# =====================================================
+# Section 8: Partition
+# =====================================================
+fn partition(arr, pred) {
+    let trues = [];
+    let falses = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (pred(arr[i])) { push(trues, arr[i]); }
+        else { push(falses, arr[i]); }
+        i = i + 1;
+    }
+    return [trues, falses];
+}
+
+let p1 = partition([1, 2, 3, 4, 5, 6], fn(x) { return x > 3; });
+check("iter/part/t/0",     p1[0][0] == 4);
+check("iter/part/t/1",     p1[0][1] == 5);
+check("iter/part/t/2",     p1[0][2] == 6);
+check("iter/part/f/0",     p1[1][0] == 1);
+check("iter/part/f/2",     p1[1][2] == 3);
+check("iter/part/sum",     len(p1[0]) + len(p1[1]) == 6);
+
+# =====================================================
+# Section 9: Uniq
+# =====================================================
+fn uniq(arr) {
+    let r = [];
+    let i = 0;
+    while (i < len(arr)) {
+        let found = false;
+        let j = 0;
+        while (j < len(r)) {
+            if (r[j] == arr[i]) { found = true; }
+            j = j + 1;
+        }
+        if (!found) { push(r, arr[i]); }
+        i = i + 1;
+    }
+    return r;
+}
+
+let u1 = uniq([1, 2, 2, 3, 3, 3, 4, 1, 5]);
+check("iter/uniq/size",    len(u1) == 5);
+check("iter/uniq/0",       u1[0] == 1);
+check("iter/uniq/4",       u1[4] == 5);
+
+# =====================================================
+# Section 10: Chained iterator operations
+# =====================================================
+fn chain(arr) {
+    # apply: take(3) -> filter(>1) -> double -> sum
+    let r = [];
+    let i = 0;
+    while (i < len(arr) && i < 3) {
+        let v = arr[i];
+        if (v > 1) { push(r, v * 2); }
+        i = i + 1;
+    }
+    let s = 0;
+    i = 0;
+    while (i < len(r)) { s = s + r[i]; i = i + 1; }
+    return s;
+}
+
+check("iter/chain/1-5",   chain([1, 2, 3, 4, 5]) == 10);  # take(1,2,3) -> (2,3) -> (4,6) -> 10
+check("iter/chain/0s",    chain([0, 0, 0]) == 0);
+
+print("10_ITER_LIB : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

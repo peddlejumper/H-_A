@@ -1,0 +1,324 @@
+# H# Library Test 05 — Class / OO Library
+# Tests class-based libraries: LinkedList, Stack, Queue, BST, etc.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Stack (LIFO)
+# =====================================================
+class Stack {
+    let items = [];
+
+    fn push(v) {
+        push(self.items, v);
+    }
+    fn pop() {
+        if (len(self.items) == 0) { return null; }
+        let v = self.items[len(self.items) - 1];
+        # pop the last element by rebuilding
+        let kept = [];
+        let i = 0;
+        while (i < len(self.items) - 1) {
+            push(kept, self.items[i]);
+            let i = i + 1;
+        }
+        self.items = kept;
+        return v;
+    }
+    fn peek() {
+        if (len(self.items) == 0) { return null; }
+        return self.items[len(self.items) - 1];
+    }
+    fn is_empty() { return len(self.items) == 0; }
+    fn size() { return len(self.items); }
+}
+
+let s = new Stack();
+s.push(1);
+s.push(2);
+s.push(3);
+check("stack/push/size",   s.size() == 3);
+check("stack/peek",        s.peek() == 3);
+check("stack/pop/3",       s.pop() == 3);
+check("stack/pop/2",       s.pop() == 2);
+check("stack/pop/1",       s.pop() == 1);
+check("stack/empty",       s.is_empty() == true);
+check("stack/empty-pop",   s.pop() == null);
+
+# =====================================================
+# Queue (FIFO)
+# =====================================================
+class Queue {
+    let items = [];
+
+    fn enqueue(v) {
+        push(self.items, v);
+    }
+    fn dequeue() {
+        if (len(self.items) == 0) { return null; }
+        let v = self.items[0];
+        let kept = [];
+        let i = 1;
+        while (i < len(self.items)) {
+            push(kept, self.items[i]);
+            let i = i + 1;
+        }
+        self.items = kept;
+        return v;
+    }
+    fn is_empty() { return len(self.items) == 0; }
+    fn size() { return len(self.items); }
+}
+
+let q = new Queue();
+q.enqueue("a");
+q.enqueue("b");
+q.enqueue("c");
+check("queue/fifo/1",     q.dequeue() == "a");
+check("queue/fifo/2",     q.dequeue() == "b");
+check("queue/fifo/3",     q.dequeue() == "c");
+check("queue/empty",      q.is_empty() == true);
+check("queue/empty-dq",   q.dequeue() == null);
+
+# =====================================================
+# LinkedList (single direction)
+# =====================================================
+class Node {
+    let data = 0;
+    let next = null;
+}
+class LinkedList {
+    let head = null;
+    let size = 0;
+
+    fn append(v) {
+        let n = new Node();
+        n.data = v;
+        n.next = null;
+        if (self.head == null) {
+            self.head = n;
+        } else {
+            let cur = self.head;
+            while (cur.next != null) { cur = cur.next; }
+            cur.next = n;
+        }
+        self.size = self.size + 1;
+    }
+    fn prepend(v) {
+        let n = new Node();
+        n.data = v;
+        n.next = self.head;
+        self.head = n;
+        self.size = self.size + 1;
+    }
+    fn get(idx) {
+        if (idx < 0 or idx >= self.size) { return null; }
+        let cur = self.head;
+        let i = 0;
+        while (i < idx) { cur = cur.next; i = i + 1; }
+        return cur.data;
+    }
+    fn size() { return self.size; }
+    fn to_array() {
+        let out = [];
+        let cur = self.head;
+        while (cur != null) { push(out, cur.data); cur = cur.next; }
+        return out;
+    }
+    fn find(v) {
+        let cur = self.head;
+        let i = 0;
+        while (cur != null) {
+            if (cur.data == v) { return i; }
+            let cur = cur.next;
+            let i = i + 1;
+        }
+        return -1;
+    }
+    fn remove(v) {
+        if (self.head == null) { return false; }
+        if (self.head.data == v) {
+            self.head = self.head.next;
+            self.size = self.size - 1;
+            return true;
+        }
+        let prev = self.head;
+        let cur = self.head.next;
+        while (cur != null) {
+            if (cur.data == v) {
+                prev.next = cur.next;
+                self.size = self.size - 1;
+                return true;
+            }
+            let prev = cur;
+            let cur = cur.next;
+        }
+        return false;
+    }
+}
+
+let ll = new LinkedList();
+ll.append(1);
+ll.append(2);
+ll.append(3);
+ll.prepend(0);
+check("ll/head",          ll.get(0) == 0);
+check("ll/2nd",           ll.get(1) == 1);
+check("ll/3rd",           ll.get(2) == 2);
+check("ll/4th",           ll.get(3) == 3);
+check("ll/size",          ll.size() == 4);
+check("ll/find/2",        ll.find(2) == 2);
+check("ll/find/missing",  ll.find(99) == -1);
+ll.remove(2);
+check("ll/after-remove",  ll.size() == 3 and ll.find(2) == -1);
+ll.remove(0);
+check("ll/after-remove-head", ll.size() == 2 and ll.get(0) == 1);
+
+# =====================================================
+# Binary Search Tree
+# =====================================================
+class TreeNode {
+    let val = 0;
+    let left = null;
+    let right = null;
+}
+class BST {
+    let root = null;
+
+    fn insert(v) {
+        let n = new TreeNode();
+        n.val = v;
+        if (self.root == null) { self.root = n; return null; }
+        let cur = self.root;
+        while (true) {
+            if (v < cur.val) {
+                if (cur.left == null) { cur.left = n; return null; }
+                let cur = cur.left;
+            } else {
+                if (cur.right == null) { cur.right = n; return null; }
+                let cur = cur.right;
+            }
+        }
+    }
+    fn contains(v) {
+        let cur = self.root;
+        while (cur != null) {
+            if (v == cur.val) { return true; }
+            if (v < cur.val) { cur = cur.left; } else { cur = cur.right; }
+        }
+        return false;
+    }
+    fn in_order() {
+        let out = [];
+        fn rec(node) {
+            if (node == null) { return null; }
+            rec(node.left);
+            push(out, node.val);
+            rec(node.right);
+        }
+        rec(self.root);
+        return out;
+    }
+    fn min() {
+        if (self.root == null) { return null; }
+        let cur = self.root;
+        while (cur.left != null) { cur = cur.left; }
+        return cur.val;
+    }
+    fn max() {
+        if (self.root == null) { return null; }
+        let cur = self.root;
+        while (cur.right != null) { cur = cur.right; }
+        return cur.val;
+    }
+}
+
+let bst = new BST();
+let values = [5, 3, 7, 1, 4, 6, 9, 2, 8];
+let i = 0;
+while (i < len(values)) {
+    bst.insert(values[i]);
+    i = i + 1;
+}
+check("bst/contains/5",   bst.contains(5) == true);
+check("bst/contains/2",   bst.contains(2) == true);
+check("bst/contains/8",   bst.contains(8) == true);
+check("bst/contains/0",   bst.contains(0) == false);
+check("bst/contains/10",  bst.contains(10) == false);
+let sorted = bst.in_order();
+check("bst/sorted/len",   len(sorted) == 9);
+check("bst/sorted/0",     sorted[0] == 1);
+check("bst/sorted/8",     sorted[8] == 9);
+check("bst/min",          bst.min() == 1);
+check("bst/max",          bst.max() == 9);
+
+# =====================================================
+# Simple Vector (resizable)
+# =====================================================
+class Vector {
+    let cap = 4;
+    let data = [];
+    let len = 0;
+
+    fn push_back(v) {
+        if (self.len >= self.cap) {
+            self.cap = self.cap * 2;
+        }
+        # The VM may not allow dynamic cap, so use a plain list
+        push(self.data, v);
+        self.len = self.len + 1;
+    }
+    fn get(i) {
+        if (i < 0 or i >= self.len) { return null; }
+        return self.data[i];
+    }
+    fn size() { return self.len; }
+}
+
+let v = new Vector();
+i = 0;
+while (i < 100) { v.push_back(i * i); i = i + 1; }
+check("vec/size",         v.size() == 100);
+check("vec/0",            v.get(0) == 0);
+check("vec/50",           v.get(50) == 2500);
+check("vec/99",           v.get(99) == 9801);
+check("vec/oob",          v.get(100) == null);
+
+# =====================================================
+# Counter (class-based)
+# =====================================================
+class Counter {
+    let n = 0;
+    fn inc() { self.n = self.n + 1; }
+    fn dec() { self.n = self.n - 1; }
+    fn value() { return self.n; }
+    fn reset() { self.n = 0; }
+}
+
+let c = new Counter();
+c.inc(); c.inc(); c.inc(); c.dec();
+check("counter/val",      c.value() == 2);
+c.reset();
+check("counter/reset",    c.value() == 0);
+
+# =====================================================
+# Report
+# =====================================================
+print("CLASS_LIB : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

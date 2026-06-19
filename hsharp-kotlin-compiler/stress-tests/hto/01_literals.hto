@@ -1,0 +1,11 @@
+# T01 - Variable & literals
+let a = 42;
+let b = 3.14;
+let c = "hello";
+let d = true;
+let e = nullptr;
+print(a);
+print(b);
+print(c);
+print(d);
+print(e);

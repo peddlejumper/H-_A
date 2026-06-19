@@ -1,0 +1,11 @@
+# T19 - Try/catch
+fn mightFail(n) {
+    if (n < 0) { throw "negative!"; }
+    return n * 2;
+}
+let v = 0;
+try { v = mightFail(5); } catch (e) { v = -1; }
+print(v);
+
+try { v = mightFail(-3); } catch (e) { v = -1; print(e); }
+print(v);

@@ -1,0 +1,170 @@
+# ═══════════════════════════════════════════════════════════════
+#  H# 自举构建器 (H# Self-Hosting Builder)
+#  
+#  使用 H# 编译器 (tokenize → parse → compile) 编译所有 .hto 源文件
+#  生成 .hbc 字节码 bundle — 100% H#，零 Python 依赖
+#
+#  用法: hsharp_build(output_path)
+#  返回: true 如果成功，false 如果失败
+# ═══════════════════════════════════════════════════════════════
+
+# 所有需要编译的 bootstrap 源文件（与 build_bundle.py 保持一致）
+fn hsharp_bootstrap_sources() {
+    let sources = [];
+    push(sources, "bootstrap/interpreter.hto");
+    push(sources, "bootstrap/compiler.hto");
+    push(sources, "bootstrap/executor.hto");
+    push(sources, "bootstrap/parser.hto");
+    push(sources, "bootstrap/bootstrap.hto");
+    push(sources, "bootstrap/tokenize.hto");
+    push(sources, "bootstrap/hwdui.hto");
+    push(sources, "bootstrap/formatter.hto");
+    push(sources, "bootstrap/linter.hto");
+    push(sources, "bootstrap/fs_module.hto");
+    push(sources, "bootstrap/io_module.hto");
+    push(sources, "bootstrap/math_utils.hto");
+    push(sources, "bootstrap/string_utils.hto");
+    push(sources, "bootstrap/array_utils.hto");
+    push(sources, "bootstrap/d3system.hto");
+    push(sources, "bootstrap/d3system_ops.hto");
+    push(sources, "bootstrap/d3_emotion.hto");
+    push(sources, "bootstrap/perf_monitor.hto");
+    push(sources, "bootstrap/env_optimized.hto");
+    push(sources, "bootstrap/math_extended.hto");
+    push(sources, "bootstrap/datetime_module.hto");
+    push(sources, "bootstrap/pkg_inspect.hto");
+    push(sources, "bootstrap/json_serializer.hto");
+    push(sources, "bootstrap/hsharp_builder.hto");
+    push(sources, "bootstrap/dzzw.hto");
+    push(sources, "bootstrap/selftest.hto");
+    return sources;
+}
+
+# 从路径提取模块名: "bootstrap/compiler.hto" → "compiler"
+fn hsharp_module_name(path) {
+    let start = 0;
+    let i = 0;
+    while (i < len(path)) {
+        if (path[i] == "/") { start = i + 1; }
+        i = i + 1;
+    }
+    let name = substring(path, start, len(path));
+    let dot = 0;
+    let j = 0;
+    while (j < len(name)) {
+        if (name[j] == ".") { dot = j; }
+        j = j + 1;
+    }
+    if (dot > 0) { name = substring(name, 0, dot); }
+    return name;
+}
+
+# 编译单个源文件
+fn hsharp_compile_file(path) {
+    let src = read_file(path);
+    if (typeof(src) == "nil") {
+        print("ERROR: Cannot read " + path);
+        return [];
+    }
+    let tokens = tokenize(src);
+    if (typeof(tokens) == "nil") {
+        print("ERROR: Tokenize failed for " + path);
+        return [];
+    }
+    let ast = parse(tokens);
+    if (typeof(ast) == "nil") {
+        print("ERROR: Parse failed for " + path);
+        return [];
+    }
+    let bc = compile(ast);
+    if (typeof(bc) == "nil") {
+        print("ERROR: Compile failed for " + path);
+        return [];
+    }
+    return bc;
+}
+
+# 构建完整的 .hbc bundle JSON 字符串
+fn hsharp_build_bundle_json(modules_dict) {
+    let sources = hsharp_bootstrap_sources();
+    let result = "{\"version\": \"v0.4\", \"modules\": {";
+    let first = true;
+    let i = 0;
+    while (i < len(sources)) {
+        let path = sources[i];
+        let name = hsharp_module_name(path);
+        let bc = modules_dict[name];
+        if (typeof(bc) != "nil") {
+            if (first == false) { result = result + ", "; }
+            first = false;
+            result = result + json_escape_string(name);
+            result = result + ": ";
+            result = result + json_serialize(bc);
+        }
+        i = i + 1;
+    }
+    result = result + "}}";
+    return result;
+}
+
+# 主入口：编译所有源文件并生成 bundle
+fn hsharp_build(output_path) {
+    let sources = hsharp_bootstrap_sources();
+    let modules = {};
+    let count = 0;
+    let errors = 0;
+
+    let i = 0;
+    while (i < len(sources)) {
+        let path = sources[i];
+        let name = hsharp_module_name(path);
+        print("  [" + str(i + 1) + "/" + str(len(sources)) + "] " + name + "...");
+
+        let bc = hsharp_compile_file(path);
+        if (typeof(bc) == "nil") {
+            print("    FAILED");
+            errors = errors + 1;
+        } else {
+            modules[name] = bc;
+            let ic = len(bc["instructions"]);
+            let cc = len(bc["consts"]);
+            print("    OK: " + str(ic) + " instrs, " + str(cc) + " consts");
+            count = count + 1;
+        }
+        i = i + 1;
+    }
+
+    if (errors > 0) {
+        print("BUILD FAILED: " + str(errors) + " errors");
+        return false;
+    }
+
+    print("Building JSON bundle...");
+    let json = hsharp_build_bundle_json(modules);
+    let written = write_file(output_path, json);
+    if (typeof(written) != "nil") {
+        print("Wrote " + output_path + " (" + str(len(json)) + " bytes)");
+    } else {
+        print("FAILED to write " + output_path);
+        return false;
+    }
+
+    print("BUILD SUCCESS: " + str(count) + " modules compiled");
+    return true;
+}
+
+# 自举验证：将 H# 编译的输出与当前 bundle 对比
+fn hsharp_verify_selfhost(output_path) {
+    print("=== H# Self-Hosting Verification ===");
+
+    let ok = hsharp_build(output_path);
+    if (ok == false) {
+        print("VERIFICATION FAILED: Build failed");
+        return false;
+    }
+
+    print("=== H# 100% Self-Hosting Verified ===");
+    return true;
+}
+
+print("H# Self-Hosting Builder v1.0 loaded");

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Wrapper to run a .hbc file with the embedded runtime
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+JAR_DIR="$SCRIPT_DIR/../build/libs"
+if [ $# -lt 1 ]; then
+    echo "usage: hsharp-runtime <file.hbc> [program-args...]" >&2
+    exit 1
+fi
+exec java -cp "$JAR_DIR/hsharp-runtime.jar:$JAR_DIR/lib/*" com.hsharp.runtime.HbcLauncher "$@"

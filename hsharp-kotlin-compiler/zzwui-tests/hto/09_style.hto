@@ -1,0 +1,120 @@
+# H# zzwUI Test 09 — Styling (inline_styles, classes, opacity, etc.)
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. inline_styles CRUD ────────────────────────────────────────────
+let u = new zzwUI();
+check("s/init_empty",    len(u.inline_styles) == 0);
+u.set_inline_style("color", "#ff00ff");
+check("s/set1",          has_key(u.inline_styles, "color"));
+check("s/get1",          u.get_inline_style("color", "") == "#ff00ff");
+u.set_inline_style("font-weight", "bold");
+u.set_inline_style("background", "#000");
+check("s/n3",            len(u.inline_styles) == 3);
+check("s/get2",          u.get_inline_style("font-weight", "") == "bold");
+check("s/get3",          u.get_inline_style("background", "") == "#000");
+
+# ─── 2. get_inline_style default fallback ─────────────────────────────
+check("s/def",           u.get_inline_style("missing", "dflt") == "dflt");
+check("s/def_empty",     u.get_inline_style("missing", "") == "");
+
+# ─── 3. set_inline_style overwrites existing key ─────────────────────
+u.set_inline_style("color", "#abcdef");
+check("s/overwrite",     u.get_inline_style("color", "") == "#abcdef");
+
+# ─── 4. classes list accumulation ─────────────────────────────────────
+let u2 = new zzwUI();
+check("s/cls_init",      len(u2.classes) == 0);
+u2.add_class("primary");
+check("s/cls1",          u2.classes[0] == "primary");
+check("s/cls_n1",        len(u2.classes) == 1);
+u2.add_class("large");
+u2.add_class("rounded");
+check("s/cls_n3",        len(u2.classes) == 3);
+check("s/cls2",          u2.classes[1] == "large");
+check("s/cls3",          u2.classes[2] == "rounded");
+
+# ─── 5. opacity / rotation / scale setters ────────────────────────────
+u.set_opacity(0.5);
+check("s/op_half",       u.opacity == 0.5);
+u.set_opacity(1.0);
+check("s/op_full",       u.opacity == 1.0);
+u.set_rotation(45);
+check("s/rot",           u.rotation == 45);
+u.set_rotation(360);
+check("s/rot2",          u.rotation == 360);
+u.set_scale(2.0);
+check("s/scale2",        u.scale == 2.0);
+
+# ─── 6. set_tooltip / set_focus / set_visible / set_enabled ──────────
+u.set_tooltip("hello world");
+check("s/tip",           u.tooltip == "hello world");
+u.set_focus(true);
+check("s/focus_t",       u.focused == true);
+u.set_focus(false);
+check("s/focus_f",       u.focused == false);
+u.set_visible(false);
+check("s/vis_f",         u.visible == false);
+u.set_enabled(false);
+check("s/en_f",          u.enabled == false);
+
+# ─── 7. min_size / max_size / padding / margin / bg_color / fg_color ──
+u.min_width = 10;
+u.min_height = 20;
+u.max_width = 500;
+u.max_height = 600;
+u.padding = 5;
+u.margin = 3;
+u.bg_color = "#aabbcc";
+u.fg_color = "#112233";
+u.border_color = "#445566";
+u.border_width = 2;
+check("s/minw",          u.min_width == 10);
+check("s/minh",          u.min_height == 20);
+check("s/maxw",          u.max_width == 500);
+check("s/maxh",          u.max_height == 600);
+check("s/pad",           u.padding == 5);
+check("s/mar",           u.margin == 3);
+check("s/bg",            u.bg_color == "#aabbcc");
+check("s/fg",            u.fg_color == "#112233");
+check("s/bc",            u.border_color == "#445566");
+check("s/bw",            u.border_width == 2);
+
+# ─── 8. data dict CRUD ────────────────────────────────────────────────
+check("s/data_init",     len(u.data) == 0);
+u.data["k1"] = 1;
+u.data["k2"] = "v";
+check("s/data_n2",       len(u.data) == 2);
+check("s/data_k1",       u.data["k1"] == 1);
+check("s/data_k2",       u.data["k2"] == "v");
+
+# ─── 9. font_size / font_family on zzwUI ─────────────────────────────
+u.font_size = 18;
+u.font_family = "Helvetica";
+u.bold = true;
+u.italic = true;
+u.underlined = true;
+check("s/fs",            u.font_size == 18);
+check("s/ff",            u.font_family == "Helvetica");
+check("s/bold",          u.bold == true);
+check("s/ital",          u.italic == true);
+check("s/under",         u.underlined == true);
+
+print("09_ZZW_STYLE : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

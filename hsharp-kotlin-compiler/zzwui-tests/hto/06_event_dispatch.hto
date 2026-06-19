@@ -1,0 +1,102 @@
+# H# zzwUI Test 06 — Event hook dispatch
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. Button.onClick hook fires when click() is called ───────────────
+let hits = [0];
+let last_arg = [nullptr];
+let b = new Button();
+b.init_btn("OK");
+b.set_onClick(fn(btn) { hits[0] = hits[0] + 1; last_arg[0] = btn; });
+b.click();
+check("e/click1",        hits[0] == 1);
+check("e/click_arg",     last_arg[0] == b);
+check("e/pressed",       b.is_pressed() == true);
+b.click();
+b.click();
+check("e/click3",        hits[0] == 3);
+
+# ─── 2. Button without onClick does not crash on click() ──────────────
+let b2 = new Button();
+b2.init_btn("nope");
+let r = b2.click();
+check("e/click_nop",     r == 0);
+check("e/pressed2",      b2.is_pressed() == true);
+
+# ─── 3. CheckBox.onChange hook fires when toggle() flips state ─────────
+let cb_hits = [0, nullptr];
+let cb = new CheckBox();
+cb.init_cb("x");
+cb.onChange = fn(box, checked) {
+    cb_hits[0] = cb_hits[0] + 1;
+    cb_hits[1] = checked;
+};
+# onChange is a field; H# can't call field-as-function via dot syntax.
+# Use the workaround: load into local then call.
+let f1 = cb.onChange;
+f1(cb, true);
+check("e/cb_hit",        cb_hits[0] == 1);
+check("e/cb_arg",        cb_hits[1] == true);
+
+# ─── 4. Slider state mutation cycles ───────────────────────────────────
+let s = new Slider();
+s.init_slider(0, 100, 0);
+let v_changes = [0];
+# Slider doesn't have an event hook, but we can still test that the
+# value can be read/written and clamping is enforced.
+s.set_value(50);
+check("e/sld_mid",       s.get_value() == 50);
+s.set_value(200);
+check("e/sld_clamp_h",   s.get_value() == 100);
+s.set_value(-50);
+check("e/sld_clamp_l",   s.get_value() == 0);
+
+# ─── 5. multiple widgets, multiple onClick handlers stay independent ───
+let h1 = [0];
+let h2 = [0];
+let h3 = [0];
+let bb1 = new Button(); bb1.init_btn("1");
+let bb2 = new Button(); bb2.init_btn("2");
+let bb3 = new Button(); bb3.init_btn("3");
+bb1.set_onClick(fn(btn) { h1[0] = h1[0] + 1; });
+bb2.set_onClick(fn(btn) { h2[0] = h2[0] + 1; });
+bb3.set_onClick(fn(btn) { h3[0] = h3[0] + 1; });
+bb1.click();
+bb2.click();
+bb2.click();
+bb3.click();
+bb3.click();
+bb3.click();
+check("e/m1",            h1[0] == 1);
+check("e/m2",            h2[0] == 2);
+check("e/m3",            h3[0] == 3);
+
+# ─── 6. set_onClick to nullptr removes hook ─────────────────────────────
+let cnt = [0];
+let bx = new Button();
+bx.init_btn("x");
+bx.set_onClick(fn(btn) { cnt[0] = cnt[0] + 1; });
+bx.click();
+check("e/clr_pre",       cnt[0] == 1);
+bx.onClick = nullptr;
+bx.click();
+check("e/clr_post",      cnt[0] == 1);
+
+print("06_ZZW_EVENT_DISPATCH : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

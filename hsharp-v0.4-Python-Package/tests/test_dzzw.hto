@@ -1,0 +1,51 @@
+fn square(x) {
+    return x * x;
+}
+
+fn main() {
+    print("=== dzzw smoke test ===");
+    let wc = dzzw_worker_count();
+    print("worker_count:");
+    print(wc);
+
+    let items = [1, 2, 3, 4, 5, 6, 7, 8];
+    let squares = dzzw_parallel_map(square, items);
+    print("squares:");
+    print(squares);
+
+    let h1 = dzzw_spawn(square, [3]);
+    let result = dzzw_await(h1);
+    print("spawn await:");
+    print(result);
+
+    let ch = dzzw_channel_create(0);
+    dzzw_channel_send(ch, "hello");
+    dzzw_channel_send(ch, "world");
+    let sz1 = dzzw_channel_size(ch);
+    print("chan_size before recv:");
+    print(sz1);
+    let r1 = dzzw_channel_recv(ch);
+    let r2 = dzzw_channel_recv(ch);
+    print("recv1:");
+    print(r1);
+    print("recv2:");
+    print(r2);
+    dzzw_channel_free(ch);
+
+    let m = dzzw_mutex_create();
+    dzzw_mutex_lock(m);
+    let t1 = dzzw_mutex_try_lock(m);
+    print("try_lock while held:");
+    print(t1);
+    dzzw_mutex_unlock(m);
+    let t2 = dzzw_mutex_try_lock(m);
+    print("try_lock after release:");
+    print(t2);
+    dzzw_mutex_unlock(m);
+    dzzw_mutex_free(m);
+
+    dzzw_dump_stats();
+    print("=== done ===");
+}
+
+main();

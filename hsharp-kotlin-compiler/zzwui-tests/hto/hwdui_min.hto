@@ -1,0 +1,541 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# hwdui_min.h — Minimal hand-written widget set for the H# Python compiler
+# Provides the core widget classes (Button, Label, Panel, CheckBox, TextInput,
+# Slider, ListBox, ProgressBar) plus the base zzwUI class.
+# Only constructs the *interface* used by zzw_render.hto and the test suite.
+# Designed to compile under the v0.4 Python toolchain (no for-in, no `in`).
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Helper: membership test (used in lieu of Python `x in y`) ────────────
+# Works for both lists/HLists (numerically indexed) and dicts (string keys).
+# `coll` is either an HList or an HDict — the H# runtime distinguishes them
+# by the `len` builtin plus indexing semantics. For dicts we can detect by
+# attempting a list-style scan over integer indices: dicts return null
+# on every `coll[i]`, so the function returns false (which is what Python's
+# `x in dict` semantics deliver for unknown string keys).
+fn __contains(coll, key) {
+    if (coll == nullptr) { return false; }
+    let n = len(coll);
+    let i = 0;
+    while (i < n) {
+        if (coll[i] == key) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+# ── Base class zzwUI ─────────────────────────────────────────────────────
+class zzwUI {
+    let id = "";
+    let widget_type = "ui";
+    let x = 0;
+    let y = 0;
+    let width = 0;
+    let height = 0;
+    let visible = true;
+    let enabled = true;
+    let parent = nullptr;
+    let children = [];
+    let bg_color = "";
+    let fg_color = "";
+    let border_color = "";
+    let border_width = 0;
+    let padding = 0;
+    let margin = 0;
+    let font_size = 12;
+    let font_family = "Arial";
+    let text = "";
+    let text_color = "#000000";
+    let text_align = "left";
+    let bold = false;
+    let italic = false;
+    let underlined = false;
+    let tooltip = "";
+    let onClick = nullptr;
+    let onHover = nullptr;
+    let onFocus = nullptr;
+    let onBlur = nullptr;
+    let onKeyDown = nullptr;
+    let onKeyUp = nullptr;
+    let onChange = nullptr;
+    let tab_index = -1;
+    let draggable = false;
+    let resizable = false;
+    let focused = false;
+    let hovered = false;
+    let pressed = false;
+    let opacity = 1.0;
+    let rotation = 0.0;
+    let scale = 1.0;
+    let min_width = 0;
+    let min_height = 0;
+    let max_width = 0;
+    let max_height = 0;
+    let classes = [];
+    let inline_styles = {};
+    let data = {};
+
+    fn set_pos(px, py) {
+        self.x = px;
+        self.y = py;
+        return 0;
+    }
+    fn set_size(w, h) {
+        self.width = w;
+        self.height = h;
+        return 0;
+    }
+    fn set_visible(v) {
+        self.visible = v;
+        return 0;
+    }
+    fn set_enabled(e) {
+        self.enabled = e;
+        return 0;
+    }
+    fn set_bg(c) {
+        self.bg_color = c;
+        return 0;
+    }
+    fn set_fg(c) {
+        self.fg_color = c;
+        return 0;
+    }
+    fn set_text(t) {
+        self.text = t;
+        return 0;
+    }
+    fn get_text() { return self.text; }
+    fn add_child(c) {
+        push(self.children, c);
+        c.parent = self;
+        return 0;
+    }
+    fn remove_child(c) {
+        let nc = [];
+        let i = 0;
+        while (i < len(self.children)) {
+            if (self.children[i] != c) {
+                push(nc, self.children[i]);
+            }
+            i = i + 1;
+        }
+        self.children = nc;
+        c.parent = nullptr;
+        return 0;
+    }
+    fn get_child_at(idx) {
+        if (idx >= 0 and idx < len(self.children)) {
+            return self.children[idx];
+        }
+        return nullptr;
+    }
+    fn contains(px, py) {
+        return px >= self.x and px <= self.x + self.width
+            and py >= self.y and py <= self.y + self.height;
+    }
+    fn set_opacity(o) {
+        self.opacity = o;
+        return 0;
+    }
+    fn set_rotation(r) {
+        self.rotation = r;
+        return 0;
+    }
+    fn set_scale(s) {
+        self.scale = s;
+        return 0;
+    }
+    fn set_tooltip(t) {
+        self.tooltip = t;
+        return 0;
+    }
+    fn set_focus(f) {
+        self.focused = f;
+        return 0;
+    }
+    fn add_class(name) {
+        push(self.classes, name);
+        return 0;
+    }
+    fn set_inline_style(key, val) {
+        self.inline_styles[key] = val;
+        return 0;
+    }
+    fn get_inline_style(key, dflt) {
+        if (has_key(self.inline_styles, key)) {
+            return self.inline_styles[key];
+        }
+        return dflt;
+    }
+    fn bring_to_front() { return 0; }
+    fn send_to_back() { return 0; }
+    fn update() { return 0; }
+    fn invalidate() { return 0; }
+    fn dispatch(event) { return 0; }
+}
+
+# ── Button ───────────────────────────────────────────────────────────────
+class Button extends zzwUI {
+    let icon = "";
+    let is_default = false;
+    let is_cancel = false;
+    let is_checked = false;
+    let is_toggle = false;
+    let is_disabled = false;
+    let shortcut = "";
+
+    fn init_btn(label) {
+        self.text = label;
+        self.widget_type = "Button";
+        self.width = 100;
+        self.height = 30;
+        self.padding = 6;
+        return 0;
+    }
+    fn set_icon(icon_str) {
+        self.icon = icon_str;
+        return 0;
+    }
+    fn set_default(b) { self.is_default = b; return 0; }
+    fn set_cancel(b) { self.is_cancel = b; return 0; }
+    fn set_checked(b) { self.is_checked = b; return 0; }
+    fn set_toggle(b) { self.is_toggle = b; return 0; }
+    fn set_disabled(b) { self.is_disabled = b; return 0; }
+    fn set_shortcut(s) { self.shortcut = s; return 0; }
+    fn is_pressed() { return self.pressed; }
+    fn set_onClick(cb) { self.onClick = cb; return 0; }
+    fn click() {
+        self.pressed = true;
+        if (self.onClick != nullptr) {
+            let cb = self.onClick;
+            cb(self);
+        }
+        return 0;
+    }
+    fn release() {
+        self.pressed = false;
+        if (self.is_toggle) {
+            self.is_checked = not self.is_checked;
+        }
+        return 0;
+    }
+}
+
+# ── Label ────────────────────────────────────────────────────────────────
+class Label extends zzwUI {
+    let word_wrap = false;
+    let multi_line = false;
+    let max_lines = 0;
+
+    fn init_label(text) {
+        self.text = text;
+        self.widget_type = "Label";
+        self.font_size = 12;
+        self.text_align = "left";
+        self.text_color = "#000000";
+        self.width = 100;
+        self.height = 20;
+        return 0;
+    }
+    fn set_word_wrap(b) { self.word_wrap = b; return 0; }
+    fn set_multi_line(b) { self.multi_line = b; return 0; }
+    fn set_max_lines(n) { self.max_lines = n; return 0; }
+    fn set_font_size(s) { self.font_size = s; return 0; }
+    fn set_alignment(a) { self.text_align = a; return 0; }
+    fn set_color(c) { self.text_color = c; return 0; }
+}
+
+# ── Panel (container) ────────────────────────────────────────────────────
+class Panel extends zzwUI {
+    let layout_type = "absolute";
+    let spacing = 4;
+    let padding_top = 0;
+    let padding_right = 0;
+    let padding_bottom = 0;
+    let padding_left = 0;
+    let auto_size = false;
+
+    fn init_panel(layout) {
+        if (layout == nullptr or layout == "") { layout = "absolute"; }
+        self.layout_type = layout;
+        self.widget_type = "Panel";
+        self.spacing = 4;
+        self.width = 200;
+        self.height = 200;
+        return 0;
+    }
+    fn set_layout_type(t) { self.layout_type = t; return 0; }
+    fn set_spacing(s) { self.spacing = s; return 0; }
+    fn set_padding(t, r, b, l) {
+        self.padding_top = t;
+        self.padding_right = r;
+        self.padding_bottom = b;
+        self.padding_left = l;
+        return 0;
+    }
+    fn set_auto_size(b) { self.auto_size = b; return 0; }
+
+    fn do_layout() {
+        if (self.layout_type == "vbox") {
+            self._do_vbox();
+        } else {
+            if (self.layout_type == "hbox") {
+                self._do_hbox();
+            } else {
+                if (self.layout_type == "grid") {
+                    self._do_grid(2);
+                }
+            }
+        }
+        return 0;
+    }
+    fn _do_vbox() {
+        let cy = self.y + self.padding_top;
+        let i = 0;
+        while (i < len(self.children)) {
+            let c = self.children[i];
+            c.x = self.x + self.padding_left;
+            c.y = cy;
+            cy = cy + c.height + self.spacing;
+            i = i + 1;
+        }
+        return 0;
+    }
+    fn _do_hbox() {
+        let cx = self.x + self.padding_left;
+        let i = 0;
+        while (i < len(self.children)) {
+            let c = self.children[i];
+            c.x = cx;
+            c.y = self.y + self.padding_top;
+            cx = cx + c.width + self.spacing;
+            i = i + 1;
+        }
+        return 0;
+    }
+    fn _do_grid(cols) {
+        let col_w = 0;
+        let row_h = 0;
+        let i = 0;
+        while (i < len(self.children)) {
+            let c = self.children[i];
+            if (c.width > col_w) { col_w = c.width; }
+            if (c.height > row_h) { row_h = c.height; }
+            i = i + 1;
+        }
+        i = 0;
+        while (i < len(self.children)) {
+            let c = self.children[i];
+            let col = i - (i / cols) * cols;
+            let row = i / cols;
+            c.x = self.x + col * (col_w + self.spacing);
+            c.y = self.y + row * (row_h + self.spacing);
+            i = i + 1;
+        }
+        return 0;
+    }
+}
+
+# ── CheckBox ─────────────────────────────────────────────────────────────
+class CheckBox extends zzwUI {
+    let is_checked = false;
+
+    fn init_cb(label) {
+        self.text = label;
+        self.widget_type = "CheckBox";
+        self.is_checked = false;
+        self.width = 150;
+        self.height = 24;
+        return 0;
+    }
+    fn set_checked(b) { self.is_checked = b; return 0; }
+    fn toggle() {
+        self.is_checked = not self.is_checked;
+        if (self.onChange != nullptr) {
+            let cb = self.onChange;
+            cb(self, self.is_checked);
+        }
+        return 0;
+    }
+}
+
+# ── TextInput ────────────────────────────────────────────────────────────
+class TextInput extends zzwUI {
+    let placeholder = "";
+    let value = "";
+    let max_length = 0;
+    let is_password = false;
+    let cursor_pos = 0;
+    let selection_start = 0;
+    let selection_end = 0;
+
+    fn init_input(ph, v) {
+        self.placeholder = ph;
+        self.value = v;
+        self.widget_type = "TextInput";
+        self.width = 150;
+        self.height = 24;
+        return 0;
+    }
+    fn set_value(v) { self.value = v; return 0; }
+    fn get_value() { return self.value; }
+    fn set_placeholder(p) { self.placeholder = p; return 0; }
+    fn set_max_length(n) { self.max_length = n; return 0; }
+    fn set_password(b) { self.is_password = b; return 0; }
+    fn append(c) {
+        self.value = self.value + c;
+        return 0;
+    }
+    fn backspace() {
+        if (len(self.value) > 0) {
+            self.value = self.value[:len(self.value) - 1];
+        }
+        return 0;
+    }
+    fn clear_input() {
+        self.value = "";
+        return 0;
+    }
+}
+
+# ── Slider ───────────────────────────────────────────────────────────────
+class Slider extends zzwUI {
+    let min_value = 0;
+    let max_value = 100;
+    let value = 0;
+    let step = 1;
+    let is_vertical = false;
+
+    fn init_slider(minv, maxv, v) {
+        self.min_value = minv;
+        self.max_value = maxv;
+        self.value = v;
+        self.widget_type = "Slider";
+        self.width = 150;
+        self.height = 20;
+        return 0;
+    }
+    fn set_value(v) {
+        if (v < self.min_value) { v = self.min_value; }
+        if (v > self.max_value) { v = self.max_value; }
+        self.value = v;
+        return 0;
+    }
+    fn get_value() { return self.value; }
+    fn set_step(s) { self.step = s; return 0; }
+    fn set_vertical(b) { self.is_vertical = b; return 0; }
+}
+
+# ── ListBox ──────────────────────────────────────────────────────────────
+class ListBox extends zzwUI {
+    let items = [];
+    let selected_index = -1;
+    let multi_select = false;
+
+    fn init_listbox() {
+        self.items = [];
+        self.widget_type = "ListBox";
+        self.width = 150;
+        self.height = 200;
+        self.selected_index = -1;
+        return 0;
+    }
+    fn add_item(item) {
+        push(self.items, item);
+        return 0;
+    }
+    fn remove_item(idx) {
+        let ni = [];
+        let i = 0;
+        while (i < len(self.items)) {
+            if (i != idx) { push(ni, self.items[i]); }
+            i = i + 1;
+        }
+        self.items = ni;
+        if (self.selected_index >= len(self.items)) {
+            self.selected_index = len(self.items) - 1;
+        }
+        return 0;
+    }
+    fn clear_items() {
+        self.items = [];
+        self.selected_index = -1;
+        return 0;
+    }
+    fn get_count() { return len(self.items); }
+    fn get_item(idx) {
+        if (idx >= 0 and idx < len(self.items)) {
+            return self.items[idx];
+        }
+        return nullptr;
+    }
+    fn set_selected(idx) {
+        if (idx >= -1 and idx < len(self.items)) {
+            self.selected_index = idx;
+        }
+        return 0;
+    }
+    fn get_selected() { return self.selected_index; }
+    fn get_selected_text() {
+        if (self.selected_index >= 0 and self.selected_index < len(self.items)) {
+            return self.items[self.selected_index];
+        }
+        return "";
+    }
+    fn set_multi_select(b) { self.multi_select = b; return 0; }
+}
+
+# ── ProgressBar ──────────────────────────────────────────────────────────
+class ProgressBar extends zzwUI {
+    let value = 0;
+    let max_value = 100;
+    let show_text = true;
+    let orientation = "horizontal";
+
+    fn init_pb(v, m) {
+        self.value = v;
+        self.max_value = m;
+        self.widget_type = "ProgressBar";
+        self.width = 150;
+        self.height = 20;
+        return 0;
+    }
+    fn set_value(v) { self.value = v; return 0; }
+    fn get_value() { return self.value; }
+    fn get_percent() {
+        if (self.max_value == 0) { return 0; }
+        return self.value * 100 / self.max_value;
+    }
+    fn set_show_text(b) { self.show_text = b; return 0; }
+    fn set_orientation(o) { self.orientation = o; return 0; }
+}
+
+# ── Image / ImageView (lightweight) ──────────────────────────────────────
+class ImageView extends zzwUI {
+    let source = "";
+    let stretch = "none";
+    let preserve_aspect = true;
+
+    fn init_image(src) {
+        self.source = src;
+        self.widget_type = "ImageView";
+        self.width = 100;
+        self.height = 100;
+        return 0;
+    }
+    fn set_source(s) { self.source = s; return 0; }
+    fn set_stretch(s) { self.stretch = s; return 0; }
+    fn set_preserve_aspect(b) { self.preserve_aspect = b; return 0; }
+}
+
+# ── Canvas (custom-draw) ─────────────────────────────────────────────────
+class Canvas extends zzwUI {
+    fn init_canvas() {
+        self.widget_type = "Canvas";
+        self.width = 200;
+        self.height = 200;
+        return 0;
+    }
+    fn clear(c) { self.bg_color = c; return 0; }
+}

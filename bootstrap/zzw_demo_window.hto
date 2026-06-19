@@ -1,0 +1,292 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# zzw_demo_window.h — 100% H# GUI Demo
+# Demonstrates the full zzw UI rendering engine with all native primitives
+# ═══════════════════════════════════════════════════════════════════════════
+
+print("══════════════════════════════════════");
+print("  zzw UI v6.0 — 100% H# GUI Demo");
+print("  Native Renderer via tkinter backend");
+print("══════════════════════════════════════");
+print("");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Demo: Main Application Window
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DemoWindow {
+    let win = nullptr;
+    let widgets = [];
+
+    fn init() { return 0; }
+
+    fn createWidgets() {
+        # Create buttons
+        let btn1 = Button();
+        btn1.init_btn("Primary Button");
+        btn1.x = 20; btn1.y = 20; btn1.w = 140; btn1.h = 36;
+        btn1.widget_type = "Button";
+        push(self.widgets, btn1);
+
+        let btn2 = Button();
+        btn2.init_btn("Success");
+        btn2.x = 170; btn2.y = 20; btn2.w = 100; btn2.h = 36;
+        btn2.widget_type = "Button";
+        push(self.widgets, btn2);
+
+        let btn3 = Button();
+        btn3.init_btn("Danger");
+        btn3.x = 280; btn3.y = 20; btn3.w = 100; btn3.h = 36;
+        btn3.widget_type = "Button";
+        push(self.widgets, btn3);
+
+        # Toggle buttons
+        let tbtn1 = ToggleButton();
+        tbtn1.init_tbtn("Bold");
+        tbtn1.x = 20; tbtn1.y = 70; tbtn1.w = 70; tbtn1.h = 32;
+        tbtn1.is_checked = true;
+        push(self.widgets, tbtn1);
+
+        let tbtn2 = ToggleButton();
+        tbtn2.init_tbtn("Italic");
+        tbtn2.x = 100; tbtn2.y = 70; tbtn2.w = 70; tbtn2.h = 32;
+        tbtn2.is_checked = false;
+        push(self.widgets, tbtn2);
+
+        # Icon buttons
+        let icon1 = IconButton();
+        icon1.init_ibtn("🔍", "");
+        icon1.x = 20; icon1.y = 115; icon1.w = 36; icon1.h = 36;
+        icon1.widget_type = "IconButton";
+        push(self.widgets, icon1);
+
+        let icon2 = IconButton();
+        icon2.init_ibtn("⚙️", "");
+        icon2.x = 62; icon2.y = 115; icon2.w = 36; icon2.h = 36;
+        icon2.widget_type = "IconButton";
+        push(self.widgets, icon2);
+
+        let icon3 = IconButton();
+        icon3.init_ibtn("💾", "");
+        icon3.x = 104; icon3.y = 115; icon3.w = 36; icon3.h = 36;
+        icon3.widget_type = "IconButton";
+        push(self.widgets, icon3);
+
+        # Labels
+        let lbl1 = Label();
+        lbl1.init_lbl("Welcome to zzw UI v6.0");
+        lbl1.x = 20; lbl1.y = 170; lbl1.w = 300; lbl1.h = 20;
+        lbl1.widget_type = "Label";
+        push(self.widgets, lbl1);
+
+        let lbl2 = Label();
+        lbl2.init_lbl("100% H# · Native Rendering · 500+ Features");
+        lbl2.x = 20; lbl2.y = 194; lbl2.w = 350; lbl2.h = 20;
+        lbl2.widget_type = "Label";
+        push(self.widgets, lbl2);
+
+        # TextBox
+        let tb = TextBox();
+        tb.init_tb("Type here...");
+        tb.x = 20; tb.y = 225; tb.w = 260; tb.h = 32;
+        tb.widget_type = "TextBox";
+        push(self.widgets, tb);
+
+        # SearchBox
+        let sb = SearchBox();
+        sb.init_sb();
+        sb.set_text("Search...");
+        sb.x = 290; sb.y = 225; sb.w = 160; sb.h = 32;
+        sb.widget_type = "SearchBox";
+        push(self.widgets, sb);
+
+        # PasswordBox
+        let pb = PasswordBox();
+        pb.init_pb();
+        pb.set_text("secret123");
+        pb.x = 20; pb.y = 265; pb.w = 200; pb.h = 32;
+        pb.widget_type = "PasswordBox";
+        push(self.widgets, pb);
+
+        # ComboBox
+        let combo = ComboBox();
+        combo.init_cb();
+        combo.add_item("Light Theme");
+        combo.add_item("Dark Theme");
+        combo.add_item("Ocean Theme");
+        combo.add_item("Forest Theme");
+        combo.selected_index = 1;
+        combo.text = "Dark Theme";
+        combo.x = 230; combo.y = 265; combo.w = 220; combo.h = 32;
+        push(self.widgets, combo);
+
+        # CheckBoxes
+        let cb1 = CheckBox();
+        cb1.init_cb("Enable animations");
+        cb1.x = 20; cb1.y = 310; cb1.w = 200; cb1.h = 24;
+        cb1.is_checked = true;
+        push(self.widgets, cb1);
+
+        let cb2 = CheckBox();
+        cb2.init_cb("Auto-save");
+        cb2.x = 20; cb2.y = 338; cb2.w = 200; cb2.h = 24;
+        cb2.is_checked = false;
+        push(self.widgets, cb2);
+
+        let cb3 = CheckBox();
+        cb3.init_cb("Dark mode");
+        cb3.x = 20; cb3.y = 366; cb3.w = 200; cb3.h = 24;
+        cb3.is_checked = true;
+        push(self.widgets, cb3);
+
+        # RadioButtons
+        let rb1 = RadioButton();
+        rb1.init_rb("Option A", "group1");
+        rb1.x = 250; rb1.y = 310; rb1.w = 200; rb1.h = 24;
+        rb1.is_checked = true;
+        push(self.widgets, rb1);
+
+        let rb2 = RadioButton();
+        rb2.init_rb("Option B", "group1");
+        rb2.x = 250; rb2.y = 338; rb2.w = 200; rb2.h = 24;
+        rb2.is_checked = false;
+        push(self.widgets, rb2);
+
+        let rb3 = RadioButton();
+        rb3.init_rb("Option C", "group1");
+        rb3.x = 250; rb3.y = 366; rb3.w = 200; rb3.h = 24;
+        rb3.is_checked = false;
+        push(self.widgets, rb3);
+
+        # Slider
+        let sl = Slider();
+        sl.init_sl(0, 100, 65);
+        sl.x = 20; sl.y = 400; sl.w = 320; sl.h = 24;
+        push(self.widgets, sl);
+
+        # ProgressBar
+        let prog1 = ProgressBar();
+        prog1.init_pb();
+        prog1.val = 75; prog1.max_val = 100;
+        prog1.x = 20; prog1.y = 435; prog1.w = 320; prog1.h = 20;
+        push(self.widgets, prog1);
+
+        # ToggleSwitches
+        let sw1 = ToggleSwitch();
+        sw1.init_ts("WiFi");
+        sw1.x = 20; sw1.y = 468; sw1.w = 120; sw1.h = 24;
+        sw1.is_checked = true;
+        push(self.widgets, sw1);
+
+        let sw2 = ToggleSwitch();
+        sw2.init_ts("Bluetooth");
+        sw2.x = 150; sw2.y = 468; sw2.w = 120; sw2.h = 24;
+        sw2.is_checked = false;
+        push(self.widgets, sw2);
+
+        # TabControl
+        let tab = TabControl();
+        tab.init_tc();
+        tab.tabs = ["General", "Appearance", "Advanced", "About"];
+        tab.selected_index = 0;
+        tab.x = 20; tab.y = 500; tab.w = 430; tab.h = 200;
+        push(self.widgets, tab);
+
+        # Badge
+        let badge = Badge();
+        badge.init_bd("NEW");
+        badge.x = 360; badge.y = 20; badge.w = 40; badge.h = 20;
+        push(self.widgets, badge);
+
+        # Rating
+        let rate = Rating();
+        rate.init_rt();
+        rate.val = 4;
+        rate.x = 360; rate.y = 50; rate.w = 100; rate.h = 24;
+        push(self.widgets, rate);
+
+        # SpinBox
+        let spin = SpinBox();
+        spin.init_sp(0, 100, 42, 1);
+        spin.x = 360; spin.y = 85; spin.w = 90; spin.h = 32;
+        push(self.widgets, spin);
+
+        # ListBox
+        let lb = ListBox();
+        lb.init_lb();
+        lb.add_item("JavaScript");
+        lb.add_item("Python");
+        lb.add_item("H# Language");
+        lb.add_item("Rust");
+        lb.add_item("Go");
+        lb.selected_index = 2;
+        lb.x = 360; lb.y = 130; lb.w = 200; lb.h = 150;
+        push(self.widgets, lb);
+
+        # Separator
+        let sep = Separator();
+        sep.init_sep();
+        sep.x = 20; sep.y = 710; sep.w = 540; sep.h = 4;
+        push(self.widgets, sep);
+
+        # StatusBar
+        let stb = StatusBar();
+        stb.init_sb("Ready — zzw UI v6.0 | 318 classes | 500 features");
+        stb.x = 20; stb.y = 720; stb.w = 540; stb.h = 24;
+        push(self.widgets, stb);
+    }
+
+    fn run() {
+        print("Creating window: 800x600...");
+        self.win = ZzwWindow();
+        self.win.init_zw("zzw UI v6.0 — 100% H# Demo", 600, 770);
+        self.win.setBgColor("#0f1119");
+
+        self.createWidgets();
+
+        let i = 0;
+        while (i < len(self.widgets)) {
+            self.win.addWidget(self.widgets[i]);
+            i = i + 1;
+        }
+
+        print("Opening window and starting render loop...");
+        self.win.open();
+
+        if (self.win.getWinId() <= 0) {
+            print("ERROR: Failed to create window!");
+            return 0;
+        }
+
+        print("Window created. ID: " + str(self.win.getWinId()));
+        print("Rendering...");
+        self.win.running = true;
+
+        let frame = 0;
+        while (self.win.running and frame < 10000) {
+            self.win.handleEvents();
+            self.win.render();
+            native_poll_events();
+            frame = frame + 1;
+        }
+
+        self.win.close();
+        print("Demo completed. " + str(frame) + " frames rendered.");
+        return 0;
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Main Entry Point
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn main() {
+    let demo = DemoWindow();
+    demo.init();
+    demo.run();
+    return 0;
+}
+
+main();
+print("");
+print("zzw UI Demo finished successfully!");
+print("══════════════════════════════════════");

@@ -1,0 +1,265 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# pkg_inspect.hto — H# .hps Package Inspector
+# 由 C# 启动器调用：python3 hsharp.py bootstrap/pkg_inspect.hto <pkg_dir>
+# 使用 H# 自身的功能检查 .hps 包的完整性和信息
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/fs_module.hto";
+import "bootstrap/io_module.hto";
+import "bootstrap/string_utils.hto";
+
+fn pkg_main() {
+    let pkg_dir = fs_get_cwd();
+
+    io_print("═══ H# Package Inspector ═══");
+    io_print("");
+
+    # ── 检查 manifest ──
+    let manifest_path = fs_path_join(pkg_dir, "package.json");
+    if (fs_exists(manifest_path) == false) {
+        io_print("Result: NOT_A_PACKAGE");
+        io_print("Error: No package.json found");
+        return 1;
+    }
+
+    # 读取 manifest 内容
+    let manifest_lines = io_read_file_lines(manifest_path);
+    if (manifest_lines == nullptr or len(manifest_lines) == 0) {
+        io_print("Result: INVALID_MANIFEST");
+        io_print("Error: package.json is empty");
+        return 1;
+    }
+
+    # 解析简单的 JSON 字段 (H# 自举解析，不使用 Python)
+    let pkg_name = pkg_extract_string(manifest_lines, "name");
+    let pkg_version = pkg_extract_string(manifest_lines, "version");
+    let pkg_desc = pkg_extract_string(manifest_lines, "description");
+    let pkg_entry = pkg_extract_string(manifest_lines, "entry");
+    let pkg_type = pkg_extract_string(manifest_lines, "type");
+
+    io_print("Name:    " + pkg_name);
+    io_print("Version: " + pkg_version);
+    io_print("Type:    " + pkg_type);
+    io_print("Desc:    " + pkg_desc);
+    io_print("Entry:   " + pkg_entry);
+    io_print("");
+
+    # ── 读取 file list ──
+    let py_files = pkg_extract_array(manifest_lines, "python");
+    let btp_files = pkg_extract_array(manifest_lines, "bootstrap");
+
+    io_print("Python files listed:   " + len(py_files));
+    io_print("Bootstrap files listed: " + len(btp_files));
+    io_print("");
+
+    # ── 验证文件存在 ──
+    let total_listed = 0;
+    let total_found = 0;
+    let missing_list = [];
+
+    fn verify_files(files_list, label, base_dir) {
+        let found = 0;
+        let listed = 0;
+        for f in files_list {
+            let fname = str_trim(f);
+            listed = listed + 1;
+            let full = fs_path_join(base_dir, fname);
+            if (fs_exists(full) and fs_is_file(full)) {
+                found = found + 1;
+            }
+        }
+        io_print("  " + label + ": " + found + "/" + listed + " found");
+        return found;
+    }
+
+    fn collect_missing(files_list, base_dir) {
+        let results = [];
+        for f in files_list {
+            let fname = str_trim(f);
+            let full = fs_path_join(base_dir, fname);
+            if (fs_exists(full) == false or fs_is_file(full) == false) {
+                push(results, fname);
+            }
+        }
+        return results;
+    }
+
+    let py_found = verify_files(py_files, "Python", pkg_dir);
+    let btp_found = verify_files(btp_files, "Bootstrap", pkg_dir);
+    total_listed = len(py_files) + len(btp_files);
+    total_found = py_found + btp_found;
+
+    let py_missing = collect_missing(py_files, pkg_dir);
+    let btp_missing = collect_missing(btp_files, pkg_dir);
+    for m in py_missing { push(missing_list, m); }
+    for m in btp_missing { push(missing_list, m); }
+
+    io_print("");
+
+    # ── 统计包大小 ──
+    let total_size = pkg_count_size(pkg_dir, py_files);
+    total_size = total_size + pkg_count_size(pkg_dir, btp_files);
+
+    io_print("Total size: " + total_size + " bytes");
+    io_print("");
+
+    # ── 结果 ──
+    if (len(missing_list) > 0) {
+        io_print("Result: INCOMPLETE");
+        io_print("Missing files:");
+        for m in missing_list {
+            io_print("  - " + m);
+        }
+        return 1;
+    }
+
+    io_print("Result: OK");
+    io_print("Package is valid and complete.");
+    return 0;
+}
+
+# ── 从 JSON 行中提取字符串值 ──
+fn pkg_extract_string(lines, key) {
+    let search = "\"" + key + "\"";
+    for line in lines {
+        if (str_contains(line, search)) {
+            # 找到 key 后的冒号，提取冒号后的引号内容
+            let val = pkg_extract_val_after_colon(line);
+            if (val != "") {
+                return val;
+            }
+        }
+    }
+    return "";
+}
+
+# ── 从一行中提取冒号后的引号内容 ──
+fn pkg_extract_val_after_colon(line) {
+    let trimmed = str_trim(line);
+    let colon_found = false;
+    let i = 0;
+    while (i < len(trimmed)) {
+        if (trimmed[i] == ":") {
+            colon_found = true;
+            i = i + 1;
+            continue;
+        }
+        if (colon_found and trimmed[i] == "\"") {
+            # 开始提取值
+            let result = "";
+            i = i + 1;
+            while (i < len(trimmed) and trimmed[i] != "\"") {
+                result = result + trimmed[i];
+                i = i + 1;
+            }
+            return result;
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+# ── 从 JSON 行中提取数组 ──
+fn pkg_extract_array(lines, key) {
+    let search = "\"" + key + "\"";
+    let in_array = false;
+    let items = [];
+
+    for line in lines {
+        if (in_array) {
+            if (str_contains(line, "]")) {
+                let item = pkg_extract_value(line);
+                if (item != "" and item != "]" and item != key) {
+                    push(items, item);
+                }
+                in_array = false;
+                return items;
+            }
+            let item = pkg_extract_value(line);
+            if (item != "" and item != key) {
+                push(items, item);
+            }
+        }
+        if (str_contains(line, search) and str_contains(line, "[")) {
+            in_array = true;
+            # 只提取同行中 [ 后面的引号内容，跳过 "key" 本身
+            let val = pkg_extract_val_after_bracket(line);
+            if (val != "" and val != key) {
+                push(items, val);
+            }
+        }
+    }
+    return items;
+}
+
+# ── 从一行中提取 [ 后引号内容 ──
+fn pkg_extract_val_after_bracket(line) {
+    let trimmed = str_trim(line);
+    let bracket_found = false;
+    let i = 0;
+    while (i < len(trimmed)) {
+        if (trimmed[i] == "[") {
+            bracket_found = true;
+            i = i + 1;
+            continue;
+        }
+        if (bracket_found and trimmed[i] == "\"") {
+            let result = "";
+            i = i + 1;
+            while (i < len(trimmed) and trimmed[i] != "\"") {
+                result = result + trimmed[i];
+                i = i + 1;
+            }
+            return result;
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+# ── 从一行中提取引号内的值 ──
+fn pkg_extract_value(line) {
+    let trimmed = str_trim(line);
+    let result = "";
+    let in_quote = false;
+    let i = 0;
+    while (i < len(trimmed)) {
+        let ch = trimmed[i];
+        if (ch == "\"") {
+            if (in_quote) {
+                return result;
+            }
+            in_quote = true;
+            result = "";
+        } else {
+            if (in_quote) {
+                result = result + ch;
+            }
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# ── 计算文件大小 ──
+fn pkg_count_size(base_dir, files) {
+    let total = 0;
+    for f in files {
+        let fname = str_trim(f);
+        let full = fs_path_join(base_dir, fname);
+        if (fs_exists(full) and fs_is_file(full)) {
+            let lines = io_read_file_lines(full);
+            if (lines != nullptr) {
+                total = total + len(lines);
+            }
+        }
+    }
+    return total;
+}
+
+# ── 读取文件行（HSHARP_PKG_DIR 环境下的辅助） ──
+fn io_read_file_lines(filepath) {
+    return io_read_lines(filepath);
+}
+
+pkg_main();

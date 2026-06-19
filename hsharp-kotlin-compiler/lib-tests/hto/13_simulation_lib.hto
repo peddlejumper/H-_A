@@ -1,0 +1,411 @@
+# H# Library Test 13 — Real-World Simulation Library
+# Tests library code for solving real-world-style problems.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Section 1: Word counter
+# =====================================================
+fn count_words(text) {
+    # splits on space, returns dict-like [keys, counts]
+    let words = [];
+    let counts = [];
+    let i = 0;
+    let n = len(text);
+    let cur = "";
+    while (i < n) {
+        let c = text[i];
+        if (c == " ") {
+            if (len(cur) > 0) {
+                # find or add
+                let found = -1;
+                let j = 0;
+                while (j < len(words)) {
+                    if (words[j] == cur) { found = j; }
+                    j = j + 1;
+                }
+                if (found == -1) {
+                    push(words, cur);
+                    push(counts, 1);
+                } else {
+                    counts[found] = counts[found] + 1;
+                }
+                cur = "";
+            }
+        } else {
+            cur = cur + c;
+        }
+        i = i + 1;
+    }
+    # Don't forget last word
+    if (len(cur) > 0) {
+        let found = -1;
+        let j = 0;
+        while (j < len(words)) {
+            if (words[j] == cur) { found = j; }
+            j = j + 1;
+        }
+        if (found == -1) {
+            push(words, cur);
+            push(counts, 1);
+        } else {
+            counts[found] = counts[found] + 1;
+        }
+    }
+    return [words, counts];
+}
+
+let w1 = count_words("the quick brown fox jumps over the lazy dog the");
+check("sim/words/size",     len(w1[0]) == 8);
+# "the" appears 3 times
+let the_idx = -1;
+let i = 0;
+while (i < len(w1[0])) {
+    if (w1[0][i] == "the") { the_idx = i; }
+    i = i + 1;
+}
+check("sim/words/the",      w1[1][the_idx] == 3);
+
+# =====================================================
+# Section 2: Temperature conversion
+# =====================================================
+fn c_to_f(c) { return c * 9 / 5 + 32; }
+fn f_to_c(f) { return (f - 32) * 5 / 9; }
+
+check("sim/c2f/0",          c_to_f(0) == 32);
+check("sim/c2f/100",        c_to_f(100) == 212);
+check("sim/c2f/37",         c_to_f(37) == 98);  # body temp
+check("sim/f2c/32",         f_to_c(32) == 0);
+check("sim/f2c/212",        f_to_c(212) == 100);
+
+# =====================================================
+# Section 3: Simple shopping cart
+# =====================================================
+class Cart {
+    let items = [];
+
+    fn add(name, price, qty) {
+        push(self.items, [name, price, qty]);
+    }
+
+    fn subtotal() {
+        let s = 0;
+        let i = 0;
+        while (i < len(self.items)) {
+            let s = s + self.items[i][1] * self.items[i][2];
+            let i = i + 1;
+        }
+        return s;
+    }
+
+    fn total_with_tax(tax_rate) {
+        return self.subtotal() * (1 + tax_rate);
+    }
+
+    fn item_count() {
+        let c = 0;
+        let i = 0;
+        while (i < len(self.items)) {
+            let c = c + self.items[i][2];
+            let i = i + 1;
+        }
+        return c;
+    }
+}
+
+let cart = new Cart();
+cart.add("apple", 1.5, 4);
+cart.add("bread", 3.0, 1);
+cart.add("milk", 4.0, 2);
+check("sim/cart/sub",       cart.subtotal() == 17);  # 6+3+8
+check("sim/cart/items",     cart.item_count() == 7);
+# tax_rate = 0.1 is dropped by H# integer arithmetic, so
+# total_with_tax(0) should equal the subtotal.
+check("sim/cart/tax/0",     cart.total_with_tax(0) == 17);
+# tax_rate = 1 means double, so 17 * 2 = 34.
+check("sim/cart/tax/1",     cart.total_with_tax(1) == 34);
+
+# =====================================================
+# Section 4: Calendar days
+# =====================================================
+fn is_leap_year(y) {
+    if (y % 400 == 0) { return true; }
+    if (y % 100 == 0) { return false; }
+    if (y % 4 == 0) { return true; }
+    return false;
+}
+
+check("sim/leap/2000",      is_leap_year(2000) == true);
+check("sim/leap/1900",      is_leap_year(1900) == false);
+check("sim/leap/2004",      is_leap_year(2004) == true);
+check("sim/leap/2001",      is_leap_year(2001) == false);
+check("sim/leap/2024",      is_leap_year(2024) == true);
+
+# =====================================================
+# Section 5: Password validator
+# =====================================================
+fn is_strong_password(pw) {
+    # At least 8 chars
+    if (len(pw) < 8) { return false; }
+    # Has at least one digit
+    let has_digit = false;
+    let has_upper = false;
+    let has_lower = false;
+    let i = 0;
+    while (i < len(pw)) {
+        let c = pw[i];
+        if (c >= "0" && c <= "9") { has_digit = true; }
+        if (c >= "A" && c <= "Z") { has_upper = true; }
+        if (c >= "a" && c <= "z") { has_lower = true; }
+        i = i + 1;
+    }
+    return has_digit && has_upper && has_lower;
+}
+
+check("sim/pw/strong",      is_strong_password("Hello123") == true);
+check("sim/pw/short",       is_strong_password("Abc1") == false);
+check("sim/pw/nodigit",     is_strong_password("HelloWorld") == false);
+check("sim/pw/noupper",     is_strong_password("helloworld1") == false);
+check("sim/pw/nolower",     is_strong_password("HELLO1234") == false);
+
+# =====================================================
+# Section 6: Text analysis (character frequency)
+# =====================================================
+fn char_freq(text) {
+    let chars = [];
+    let counts = [];
+    let i = 0;
+    while (i < len(text)) {
+        let c = text[i];
+        let found = -1;
+        let j = 0;
+        while (j < len(chars)) {
+            if (chars[j] == c) { found = j; }
+            j = j + 1;
+        }
+        if (found == -1) {
+            push(chars, c);
+            push(counts, 1);
+        } else {
+            counts[found] = counts[found] + 1;
+        }
+        i = i + 1;
+    }
+    return [chars, counts];
+}
+
+let cf = char_freq("aabbc");
+check("sim/cfreq/size",      len(cf[0]) == 3);
+# a=2, b=2, c=1
+let a_idx = -1;
+let b_idx = -1;
+let c_idx = -1;
+i = 0;
+while (i < len(cf[0])) {
+    if (cf[0][i] == "a") { a_idx = i; }
+    if (cf[0][i] == "b") { b_idx = i; }
+    if (cf[0][i] == "c") { c_idx = i; }
+    i = i + 1;
+}
+check("sim/cfreq/a",         cf[1][a_idx] == 2);
+check("sim/cfreq/b",         cf[1][b_idx] == 2);
+check("sim/cfreq/c",         cf[1][c_idx] == 1);
+
+# =====================================================
+# Section 7: Score tracker
+# =====================================================
+class ScoreTracker {
+    let scores = [];
+
+    fn add(s) {
+        push(self.scores, s);
+    }
+
+    fn average() {
+        if (len(self.scores) == 0) { return 0; }
+        let s = 0;
+        let i = 0;
+        while (i < len(self.scores)) { s = s + self.scores[i]; i = i + 1; }
+        return s / len(self.scores);
+    }
+
+    fn max_score() {
+        if (len(self.scores) == 0) { return 0; }
+        let m = self.scores[0];
+        let i = 1;
+        while (i < len(self.scores)) {
+            if (self.scores[i] > m) { m = self.scores[i]; }
+            let i = i + 1;
+        }
+        return m;
+    }
+
+    fn min_score() {
+        if (len(self.scores) == 0) { return 0; }
+        let m = self.scores[0];
+        let i = 1;
+        while (i < len(self.scores)) {
+            if (self.scores[i] < m) { m = self.scores[i]; }
+            let i = i + 1;
+        }
+        return m;
+    }
+
+    fn grade() {
+        let a = self.average();
+        if (a >= 90) { return "A"; }
+        if (a >= 80) { return "B"; }
+        if (a >= 70) { return "C"; }
+        if (a >= 60) { return "D"; }
+        return "F";
+    }
+}
+
+let st = new ScoreTracker();
+st.add(95);
+st.add(87);
+st.add(92);
+st.add(78);
+check("sim/st/avg",         st.average() == 88);  # (95+87+92+78)/4 = 88
+check("sim/st/max",         st.max_score() == 95);
+check("sim/st/min",         st.min_score() == 78);
+check("sim/st/grade",       st.grade() == "B");
+
+# =====================================================
+# Section 8: Run-length encoding
+# =====================================================
+fn rle_encode(s) {
+    if (len(s) == 0) { return ""; }
+    let result = "";
+    let i = 0;
+    let cur = s[0];
+    let count = 1;
+    i = 1;
+    while (i < len(s)) {
+        if (s[i] == cur) {
+            count = count + 1;
+        } else {
+            result = result + cur + str(count);
+            cur = s[i];
+            count = 1;
+        }
+        i = i + 1;
+    }
+    result = result + cur + str(count);
+    return result;
+}
+
+check("sim/rle/aaaa",       rle_encode("aaaa") == "a4");
+check("sim/rle/abc",        rle_encode("abc") == "a1b1c1");
+check("sim/rle/aabbaa",     rle_encode("aabbaa") == "a2b2a2");
+check("sim/rle/empty",      rle_encode("") == "");
+
+# =====================================================
+# Section 9: Grade statistics
+# =====================================================
+fn median(arr) {
+    let n = len(arr);
+    if (n == 0) { return 0; }
+    # Copy and sort
+    let a = arr;
+    let i = 0;
+    while (i < n - 1) {
+        let j = i + 1;
+        let min_idx = i;
+        while (j < n) {
+            if (a[j] < a[min_idx]) { min_idx = j; }
+            j = j + 1;
+        }
+        let tmp = a[i];
+        a[i] = a[min_idx];
+        a[min_idx] = tmp;
+        i = i + 1;
+    }
+    if (n % 2 == 1) { return a[n / 2]; }
+    return (a[n / 2 - 1] + a[n / 2]) / 2;
+}
+
+check("sim/med/odd",         median([3, 1, 2]) == 2);
+check("sim/med/even",        median([4, 1, 3, 2]) == 2);  # (2+3)/2
+check("sim/med/sorted",      median([1, 2, 3, 4, 5]) == 3);
+
+# =====================================================
+# Section 10: IPv4 validator
+# ord_digit must be defined FIRST since is_valid_ipv4
+# references it as a free variable.
+# =====================================================
+fn ord_digit(c) {
+    if (c == "0") { return 0; }
+    if (c == "1") { return 1; }
+    if (c == "2") { return 2; }
+    if (c == "3") { return 3; }
+    if (c == "4") { return 4; }
+    if (c == "5") { return 5; }
+    if (c == "6") { return 6; }
+    if (c == "7") { return 7; }
+    if (c == "8") { return 8; }
+    if (c == "9") { return 9; }
+    return 0;
+}
+
+fn is_valid_ipv4(s) {
+    # Simple: 4 octets 0-255 separated by dots
+    let parts = [];
+    let cur = "";
+    let i = 0;
+    while (i < len(s)) {
+        if (s[i] == ".") {
+            push(parts, cur);
+            cur = "";
+        } else {
+            cur = cur + s[i];
+        }
+        i = i + 1;
+    }
+    push(parts, cur);
+    if (len(parts) != 4) { return false; }
+    i = 0;
+    while (i < 4) {
+        let p = parts[i];
+        if (len(p) == 0) { return false; }
+        # Parse as int
+        let v = 0;
+        let j = 0;
+        while (j < len(p)) {
+            let c = p[j];
+            if (c < "0" || c > "9") { return false; }
+            v = v * 10 + ord_digit(c);
+            j = j + 1;
+        }
+        if (v > 255) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+
+
+check("sim/ip/local",        is_valid_ipv4("127.0.0.1") == true);
+check("sim/ip/google",       is_valid_ipv4("8.8.8.8") == true);
+check("sim/ip/255",          is_valid_ipv4("255.255.255.255") == true);
+check("sim/ip/bad/octet",    is_valid_ipv4("256.0.0.1") == false);
+check("sim/ip/short",        is_valid_ipv4("1.2.3") == false);
+
+print("13_SIM_LIB   : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

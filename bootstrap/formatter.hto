@@ -1,0 +1,290 @@
+# H# Code Formatter
+# Formats H# source code with consistent indentation and style
+
+let FORMAT_INDENT_SIZE = 4;
+let FORMAT_USE_TABS = false;
+
+fn format_code(source) {
+    # Main function to format H# code
+    let tokens = tokenize_for_format(source);
+    return format_tokens(tokens);
+}
+
+fn tokenize_for_format(source) {
+    # Simple tokenizer for formatting purposes
+    let i = 0;
+    let n = len(source);
+    let tokens = [];
+    
+    while (i < n) {
+        let ch = source[i];
+        
+        # Skip whitespace (we'll add our own)
+        if (ch == " " or ch == "\t" or ch == "\n" or ch == "\r") {
+            i = i + 1;
+            continue;
+        }
+        
+        # Comments
+        if (ch == "#") {
+            let comment = "#";
+            i = i + 1;
+            while (i < n and source[i] != "\n") {
+                comment = comment + source[i];
+                i = i + 1;
+            }
+            push(tokens, {"type": "COMMENT", "value": comment});
+            continue;
+        }
+        
+        # Strings
+        if (ch == "\"") {
+            let str_val = "\"";
+            i = i + 1;
+            while (i < n and source[i] != "\"") {
+                if (source[i] == "\\") {
+                    str_val = str_val + source[i];
+                    i = i + 1;
+                    if (i < n) {
+                        str_val = str_val + source[i];
+                        i = i + 1;
+                    }
+                } else {
+                    str_val = str_val + source[i];
+                    i = i + 1;
+                }
+            }
+            if (i < n) {
+                str_val = str_val + "\"";
+                i = i + 1;
+            }
+            push(tokens, {"type": "STRING", "value": str_val});
+            continue;
+        }
+        
+        # Numbers
+        if (ch >= "0" and ch <= "9") {
+            let num = "";
+            while (i < n and ((source[i] >= "0" and source[i] <= "9") or source[i] == ".")) {
+                num = num + source[i];
+                i = i + 1;
+            }
+            push(tokens, {"type": "NUMBER", "value": num});
+            continue;
+        }
+        
+        # Identifiers and keywords
+        if ((ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or ch == "_") {
+            let ident = "";
+            while (i < n and ((source[i] >= "a" and source[i] <= "z") or 
+                   (source[i] >= "A" and source[i] <= "Z") or 
+                   (source[i] >= "0" and source[i] <= "9") or 
+                   source[i] == "_")) {
+                ident = ident + source[i];
+                i = i + 1;
+            }
+            
+            # Check if keyword
+            if (ident == "let" or ident == "fn" or ident == "if" or ident == "else" or
+                ident == "while" or ident == "for" or ident == "return" or ident == "print" or
+                ident == "true" or ident == "false" or ident == "nullptr" or ident == "break" or
+                ident == "continue" or ident == "module" or ident == "concept" or ident == "class" or
+                ident == "coro" or ident == "asm" or ident == "import" or ident == "in") {
+                push(tokens, {"type": "KEYWORD", "value": ident});
+            } else {
+                push(tokens, {"type": "IDENTIFIER", "value": ident});
+            }
+            continue;
+        }
+        
+        # Operators and punctuation
+        if (ch == "=") {
+            if (i + 1 < n and source[i + 1] == "=") {
+                push(tokens, {"type": "OPERATOR", "value": "=="});
+                i = i + 2;
+            } else {
+                push(tokens, {"type": "OPERATOR", "value": "="});
+                i = i + 1;
+            }
+            continue;
+        }
+        
+        if (ch == "+" or ch == "-" or ch == "*" or ch == "/" or ch == "%" or
+            ch == "<" or ch == ">" or ch == "!" or ch == "&" or ch == "|" or ch == "^") {
+            let op = "" + ch;
+            i = i + 1;
+            if (i < n and (source[i] == "=" or source[i] == ch)) {
+                op = op + source[i];
+                i = i + 1;
+            }
+            push(tokens, {"type": "OPERATOR", "value": op});
+            continue;
+        }
+        
+        # Single character tokens
+        let single_char_types = {
+            "(": "LPAREN", ")": "RPAREN",
+            "{": "LBRACE", "}": "RBRACE",
+            "[": "LBRACKET", "]": "RBRACKET",
+            ";": "SEMICOLON", ",": "COMMA",
+            ".": "DOT", ":": "COLON"
+        };
+        
+        if (single_char_types[ch] != nullptr) {
+            push(tokens, {"type": single_char_types[ch], "value": ch});
+            i = i + 1;
+            continue;
+        }
+        
+        # Unknown character - skip
+        i = i + 1;
+    }
+    
+    push(tokens, {"type": "EOF", "value": nullptr});
+    return tokens;
+}
+
+fn format_tokens(tokens) {
+    # Format tokens into properly indented code
+    let result = "";
+    let indent_level = 0;
+    let i = 0;
+    let need_space = false;
+    let line_start = true;
+    
+    while (i < len(tokens) and tokens[i].type != "EOF") {
+        let token = tokens[i];
+        let next_token = nullptr;
+        if (i + 1 < len(tokens)) {
+            next_token = tokens[i + 1];
+        }
+        
+        # Handle comments
+        if (token.type == "COMMENT") {
+            if (not line_start) {
+                result = result + "\n";
+            }
+            result = result + make_indent(indent_level) + token.value + "\n";
+            line_start = true;
+            i = i + 1;
+            continue;
+        }
+        
+        # Adjust indent for closing braces
+        if (token.type == "RBRACE") {
+            if (indent_level > 0) {
+                indent_level = indent_level - 1;
+            }
+        }
+        
+        # Add indentation at line start
+        if (line_start) {
+            result = result + make_indent(indent_level);
+            line_start = false;
+        } else if (need_space) {
+            result = result + " ";
+            need_space = false;
+        }
+        
+        # Add token value
+        result = result + token.value;
+        
+        # Determine if we need space after this token
+        if (token.type == "KEYWORD" or token.type == "IDENTIFIER") {
+            need_space = true;
+        }
+        
+        # Handle special tokens
+        if (token.type == "LBRACE") {
+            result = result + "\n";
+            indent_level = indent_level + 1;
+            line_start = true;
+            need_space = false;
+        } else if (token.type == "RBRACE") {
+            # Check if next is not semicolon or comma
+            if (next_token != nullptr and next_token.type != "SEMICOLON" and next_token.type != "COMMA") {
+                result = result + "\n";
+                line_start = true;
+            }
+            need_space = false;
+        } else if (token.type == "SEMICOLON") {
+            result = result + "\n";
+            line_start = true;
+            need_space = false;
+        } else if (token.type == "COMMA") {
+            result = result + " ";
+            need_space = false;
+        } else if (token.type == "LPAREN") {
+            need_space = false;
+        } else if (token.type == "RPAREN") {
+            need_space = false;
+        } else if (token.type == "OPERATOR") {
+            need_space = true;
+        }
+        
+        i = i + 1;
+    }
+    
+    return result;
+}
+
+fn make_indent(level) {
+    # Create indentation string
+    let indent = "";
+    let i = 0;
+    
+    if (FORMAT_USE_TABS) {
+        while (i < level) {
+            indent = indent + "\t";
+            i = i + 1;
+        }
+    } else {
+        let spaces_count = level * FORMAT_INDENT_SIZE;
+        while (i < spaces_count) {
+            indent = indent + " ";
+            i = i + 1;
+        }
+    }
+    
+    return indent;
+}
+
+fn format_file(filepath) {
+    # Format a file and return the formatted content
+    let source = read_file(filepath);
+    if (source == nullptr) {
+        print("Error: Could not read file: " + filepath);
+        return nullptr;
+    }
+    
+    let formatted = format_code(source);
+    return formatted;
+}
+
+fn format_and_save(filepath) {
+    # Format a file and save it back
+    let formatted = format_file(filepath);
+    if (formatted == nullptr) {
+        return false;
+    }
+    
+    let success = write_file(filepath, formatted);
+    if (success) {
+        print("Formatted: " + filepath);
+    } else {
+        print("Error: Could not write to file: " + filepath);
+    }
+    
+    return success;
+}
+
+# Helper functions that need host support
+fn read_file(path) {
+    # This would be provided by the host system
+    return nullptr;
+}
+
+fn write_file(path, content) {
+    # This would be provided by the host system
+    return false;
+}

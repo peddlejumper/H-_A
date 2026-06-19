@@ -1,0 +1,243 @@
+# H# Library Test 04 — Dictionary / HashMap Library
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Functions defined in dependency order.  In H#, when one
+# function references another as a free variable, the
+# referenced function must be defined first; otherwise the
+# closure cell for the free var would be built against an
+# undefined name.  We therefore structure the dict helpers
+# so that lower-level primitives (dict_keys) come first.
+# =====================================================
+# Returns the list of keys stored in the special "__keys__"
+# entry.  If the dict does not have one (e.g. a raw {} literal),
+# returns an empty list.
+fn dict_keys(d) {
+    if (has_key(d, "__keys__")) { return d["__keys__"]; }
+    return [];
+}
+fn dict_has(d, k) {
+    let keys = dict_keys(d);
+    let i = 0;
+    while (i < len(keys)) {
+        if (keys[i] == k) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn dict_size(d) {
+    let n = 0;
+    let keys = dict_keys(d);
+    while (n < len(keys)) { n = n + 1; }
+    return n;
+}
+fn dict_set(d, k, v) {
+    d[k] = v;
+    return d;
+}
+fn dict_get(d, k, default) {
+    let keys = dict_keys(d);
+    let i = 0;
+    while (i < len(keys)) {
+        if (keys[i] == k) { return d[k]; }
+        i = i + 1;
+    }
+    return default;
+}
+fn dict_del(d, k) {
+    let keys = dict_keys(d);
+    let keep = [];
+    let i = 0;
+    while (i < len(keys)) {
+        if (keys[i] != k) {
+            push(keep, keys[i]);
+        }
+        i = i + 1;
+    }
+    # rebuild dict from kept keys
+    let out = {};
+    i = 0;
+    while (i < len(keep)) {
+        out[keep[i]] = d[keep[i]];
+        i = i + 1;
+    }
+    out["__keys__"] = keep;
+    return out;
+}
+fn dict_values(d) {
+    let ks = dict_keys(d);
+    let vs = [];
+    let i = 0;
+    while (i < len(ks)) { push(vs, d[ks[i]]); i = i + 1; }
+    return vs;
+}
+fn dict_items(d) {
+    let ks = dict_keys(d);
+    let items = [];
+    let i = 0;
+    while (i < len(ks)) {
+        push(items, [ks[i], d[ks[i]]]);
+        i = i + 1;
+    }
+    return items;
+}
+fn dict_merge(a, b) {
+    let out = {};
+    let ks = dict_keys(a);
+    let i = 0;
+    while (i < len(ks)) { out[ks[i]] = a[ks[i]]; i = i + 1; }
+    ks = dict_keys(b);
+    i = 0;
+    while (i < len(ks)) { out[ks[i]] = b[ks[i]]; i = i + 1; }
+    # Rebuild the __keys__ list as the union.  Important: make a
+    # fresh copy of a's keys so we don't mutate a's own list.
+    let all = [];
+    let ka = dict_keys(a);
+    i = 0;
+    while (i < len(ka)) { push(all, ka[i]); i = i + 1; }
+    let ksb = dict_keys(b);
+    let j = 0;
+    while (j < len(ksb)) {
+        if (!dict_has(out, ksb[j])) {
+            push(all, ksb[j]);
+        }
+        j = j + 1;
+    }
+    out["__keys__"] = all;
+    return out;
+}
+
+# Use a dict with the special "__keys__" trick so we can iterate
+fn make_dict(pairs) {
+    let d = {};
+    let ks = [];
+    let i = 0;
+    while (i < len(pairs)) {
+        d[pairs[i][0]] = pairs[i][1];
+        push(ks, pairs[i][0]);
+        i = i + 1;
+    }
+    d["__keys__"] = ks;
+    return d;
+}
+
+# =====================================================
+# Build test dicts
+# =====================================================
+let d1 = make_dict([["a", 1], ["b", 2], ["c", 3]]);
+let d2 = make_dict([["x", 10], ["y", 20]]);
+let d3 = make_dict([["name", "Alice"], ["age", 30], ["city", "NYC"]]);
+
+# =====================================================
+# Tests
+# =====================================================
+check("size/1",         dict_size(d1) == 3);
+check("size/2",         dict_size(d2) == 2);
+check("size/empty",     dict_size({}) == 0);
+check("get/yes",        dict_get(d1, "b", -1) == 2);
+check("get/no",         dict_get(d1, "z", -1) == -1);
+check("has/yes",        dict_has(d1, "a") == true);
+check("has/no",         dict_has(d1, "z") == false);
+check("del/yes",        dict_size(dict_del(d1, "b")) == 2);
+check("del/no",         dict_size(dict_del(d1, "z")) == 3);
+check("merge/size",     dict_size(dict_merge(d1, d2)) == 5);
+check("values/count",   len(dict_values(d1)) == 3);
+check("items/count",    len(dict_items(d3)) == 3);
+
+# =====================================================
+# Counter / Multiset
+# =====================================================
+fn make_counter(items) {
+    let d = {};
+    let ks = [];
+    d["__keys__"] = ks;
+    let i = 0;
+    while (i < len(items)) {
+        let k = str(items[i]);
+        if (not dict_has(d, k)) {
+            d[k] = 1;
+            push(ks, k);
+        } else {
+            d[k] = d[k] + 1;
+        }
+        i = i + 1;
+    }
+    return d;
+}
+
+let c = make_counter([1, 2, 2, 3, 3, 3, 4, 4, 4, 4]);
+check("counter/1",      c["1"] == 1);
+check("counter/2",      c["2"] == 2);
+check("counter/3",      c["3"] == 3);
+check("counter/4",      c["4"] == 4);
+
+# =====================================================
+# Group by
+# =====================================================
+fn group_by(items, key_fn) {
+    let out = {};
+    let out_keys = [];
+    out["__keys__"] = out_keys;
+    let i = 0;
+    while (i < len(items)) {
+        let k = str(key_fn(items[i]));
+        if (not dict_has(out, k)) {
+            out[k] = [items[i]];
+            push(out_keys, k);
+        } else {
+            push(out[k], items[i]);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+# group integers by their parity
+let evens_and_odds = group_by([1, 2, 3, 4, 5, 6, 7, 8], fn(x) { return x - int(x/2)*2; });
+check("group/odd-count",  len(evens_and_odds["1"]) == 4);
+check("group/even-count", len(evens_and_odds["0"]) == 4);
+
+# =====================================================
+# Invert
+# =====================================================
+fn dict_invert(d) {
+    let out = {};
+    let ks = dict_keys(d);
+    let out_keys = [];
+    let i = 0;
+    while (i < len(ks)) {
+        let new_k = str(d[ks[i]]);
+        out[new_k] = ks[i];
+        push(out_keys, new_k);
+        i = i + 1;
+    }
+    out["__keys__"] = out_keys;
+    return out;
+}
+
+let inv = dict_invert(make_dict([["a", 1], ["b", 2]]));
+check("invert/1",         inv["1"] == "a");
+check("invert/2",         inv["2"] == "b");
+
+# =====================================================
+# Report
+# =====================================================
+print("DICT_LIB  : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

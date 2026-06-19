@@ -1,0 +1,11 @@
+fn test_catch() {
+    try {
+        let d = {};
+        let v = d["missing"];
+        return 0;
+    } catch (e) {
+        return 1;
+    }
+}
+let result = test_catch();
+print(result);

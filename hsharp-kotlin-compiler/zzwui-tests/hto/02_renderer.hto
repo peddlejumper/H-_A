@@ -1,0 +1,148 @@
+# H# zzwUI Test 02 — ZzwRenderer (the rendering engine)
+# build: hwdui_min.hto,zzw_native.hto,zzw_render_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. Theme dictionary ────────────────────────────────────────────────
+let r = new ZzwRenderer();
+r.init_renderer(7);
+check("r/theme_bg",     r.theme["bg"] == "#0f1119");
+check("r/theme_surf",   r.theme["surface"] == "#161a26");
+check("r/theme_prim",   r.theme["primary"] == "#6366f1");
+check("r/theme_succ",   r.theme["success"] == "#10b981");
+check("r/theme_dang",   r.theme["danger"] == "#ef4444");
+check("r/theme_white",  r.theme["white"] == "#ffffff");
+check("r/winid",        r.win_id == 7);
+check("r/dirty",        r.dirty == true);
+check("r/clip_init",    len(r.clip_stack) == 0);
+check("r/font",         r.font_family == "Arial");
+check("r/fs",           r.default_font_size == 12);
+
+# ─── 2. setTheme / getTheme ─────────────────────────────────────────────
+let custom = {"bg": "#112233", "primary": "#abcdef"};
+r.setTheme(custom);
+check("r/getTheme",     r.getTheme()["bg"] == "#112233");
+check("r/getTheme2",    r.getTheme()["primary"] == "#abcdef");
+check("r/dirty2",       r.dirty == true);
+# Restore the default theme for the rest of the test (it carries the keys
+# the rendering primitives look up by name, e.g. "surface2", "border").
+r.setTheme(RENDER_THEME);
+check("r/restore",      r.theme["surface2"] == "#1e2240");
+
+# ─── 3. setFont ─────────────────────────────────────────────────────────
+r.setFont("Helvetica", 14);
+check("r/font2",        r.font_family == "Helvetica");
+check("r/fs2",          r.default_font_size == 14);
+
+# ─── 4. clip_stack push / pop ───────────────────────────────────────────
+r.pushClip(0, 0, 100, 100);
+check("r/clip_n1",      len(r.clip_stack) == 1);
+let c0 = r.clip_stack[0];
+check("r/clip_x0",      c0["x"] == 0);
+check("r/clip_y0",      c0["y"] == 0);
+check("r/clip_w0",      c0["w"] == 100);
+check("r/clip_h0",      c0["h"] == 100);
+
+r.pushClip(10, 10, 50, 50);
+check("r/clip_n2",      len(r.clip_stack) == 2);
+let c1 = r.clip_stack[1];
+check("r/clip_x1",      c1["x"] == 10);
+
+r.popClip();
+check("r/clip_p1",      len(r.clip_stack) == 1);
+r.popClip();
+check("r/clip_p0",      len(r.clip_stack) == 0);
+
+# popClip on empty stack is safe
+r.popClip();
+check("r/clip_p_e",     len(r.clip_stack) == 0);
+
+# ─── 5. drawArrow — only the chosen direction's points are pushed ─────
+let pts_down = [];
+let saved = native_draw_polygon;
+# Just verify the function executes and returns 0
+let rc = r.drawArrow(0, 0, "down", 8, "#ff0000");
+check("r/arrow_dn",     rc == 0);
+let rc2 = r.drawArrow(0, 0, "up", 8, "#ff0000");
+check("r/arrow_up",     rc2 == 0);
+let rc3 = r.drawArrow(0, 0, "left", 8, "#ff0000");
+check("r/arrow_lf",     rc3 == 0);
+let rc4 = r.drawArrow(0, 0, "right", 8, "#ff0000");
+check("r/arrow_rt",     rc4 == 0);
+# default direction (none of the above) — also a valid call
+let rc5 = r.drawArrow(0, 0, "nope", 8, "#ff0000");
+check("r/arrow_dx",     rc5 == 0);
+
+# ─── 6. drawCheckMark ───────────────────────────────────────────────────
+let rcm = r.drawCheckMark(10, 10, 12, "#0f0");
+check("r/checkmk",      rcm == 0);
+
+# ─── 7. drawScrollbar (vert + horiz) ────────────────────────────────────
+let rsv = r.drawScrollbar(0, 0, 10, 100, 20, 30, true);
+check("r/scr_v",        rsv == 0);
+let rsh = r.drawScrollbar(0, 0, 100, 10, 20, 30, false);
+check("r/scr_h",        rsh == 0);
+
+# ─── 8. drawShadow (4 layer) ────────────────────────────────────────────
+let rss = r.drawShadow(0, 0, 50, 50, 4, 0.5);
+check("r/shadow",       rss == 0);
+
+# ─── 9. measureText (native returns 0-list; method just returns it) ────
+let mr = r.measureText("hi", 12, false);
+check("r/m_ok",         mr != nullptr);
+
+# ─── 10. drawText with default font size / no color ────────────────────
+let rt1 = r.drawText(0, 0, "abc", "", 0, nullptr);
+check("r/dt1",          rt1 == 0);
+let rt2 = r.drawText(0, 0, "abc", "#fff", 0, false);
+check("r/dt2",          rt2 == 0);
+
+# ─── 11. drawTextCentered ───────────────────────────────────────────────
+let rtc1 = r.drawTextCentered(50, 50, "x", "", 0, nullptr);
+check("r/dtc1",         rtc1 == 0);
+let rtc2 = r.drawTextCentered(50, 50, "x", "#fff", 0, false);
+check("r/dtc2",         rtc2 == 0);
+
+# ─── 12. clear with default color (empty arg) ───────────────────────────
+let rc1 = r.clear("");
+check("r/clr_def",      rc1 == 0);
+let rc2 = r.clear(nullptr);
+check("r/clr_nul",      rc2 == 0);
+let rc3 = r.clear("#ff00ff");
+check("r/clr_set",      rc3 == 0);
+
+# ─── 13. fillRect / drawRect / fillRoundedRect / drawRoundedRect ───────
+let fr1 = r.fillRect(0, 0, 10, 10, "#ff0000");
+check("r/fr1",          fr1 == 0);
+let dr1 = r.drawRect(0, 0, 10, 10, "#00ff00", 2);
+check("r/dr1",          dr1 == 0);
+let frr1 = r.fillRoundedRect(0, 0, 10, 10, 4, "#0000ff");
+check("r/frr1",         frr1 == 0);
+let drr1 = r.drawRoundedRect(0, 0, 10, 10, 4, "#ffff00");
+check("r/drr1",         drr1 == 0);
+
+# ─── 14. drawLine, fillCircle, drawCircle ──────────────────────────────
+let dl1 = r.drawLine(0, 0, 10, 10, "#fff", 1);
+check("r/dl1",          dl1 == 0);
+let fc1 = r.fillCircle(5, 5, 3, "#fff");
+check("r/fc1",          fc1 == 0);
+let dc1 = r.drawCircle(5, 5, 3, "#fff");
+check("r/dc1",          dc1 == 0);
+
+print("02_ZZW_RENDERER : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

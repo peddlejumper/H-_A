@@ -1,0 +1,22 @@
+# T12 - Inheritance
+class Animal {
+    let name = "?";
+    fn kind() { return "animal"; }
+}
+class Dog extends Animal {
+    fn kind() { return "dog"; }
+    fn bark() { return name + " says woof"; }
+}
+let d = new Dog();
+d.name = "Rex";
+print(d.name);
+print(d.kind());
+print(d.bark());
+
+class Puppy extends Dog {
+    fn kind() { return "puppy"; }
+}
+let p = new Puppy();
+p.name = "Buddy";
+print(p.kind());
+print(p.bark());

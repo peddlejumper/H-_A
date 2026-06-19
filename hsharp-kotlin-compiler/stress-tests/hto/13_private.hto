@@ -1,0 +1,10 @@
+# T13 - Private fields
+class BankAccount {
+    private let balance = 0;
+    fn deposit(amt) { balance = balance + amt; }
+    fn get() { return balance; }
+}
+let a = new BankAccount();
+a.deposit(100);
+a.deposit(50);
+print(a.get());

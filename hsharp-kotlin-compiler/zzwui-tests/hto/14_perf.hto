@@ -1,0 +1,156 @@
+# H# zzwUI Test 14 — Performance / stress
+# build: hwdui_min.hto,zzw_native.hto,zzw_render_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. Create 200 widgets ────────────────────────────────────────────
+let widgets = [];
+let i = 0;
+while (i < 200) {
+    let b = new Button();
+    b.init_btn("B" + str(i));
+    b.set_size(80, 24);
+    push(widgets, b);
+    i = i + 1;
+}
+check("p/n200",          len(widgets) == 200);
+check("p/last",          widgets[199].text == "B199");
+check("p/first",         widgets[0].text == "B0");
+
+# ─── 2. Build a 3-level deep tree of 50 nodes ─────────────────────────
+let proot = new Panel();
+proot.init_panel("vbox");
+proot.set_size(800, 600);
+i = 0;
+while (i < 10) {
+    let p = new Panel();
+    p.init_panel("hbox");
+    p.set_size(800, 60);
+    proot.add_child(p);
+    let j = 0;
+    while (j < 5) {
+        let b = new Button();
+        b.init_btn("X");
+        b.set_size(100, 40);
+        p.add_child(b);
+        j = j + 1;
+    }
+    i = i + 1;
+}
+check("p/tree_n",        len(proot.children) == 10);
+check("p/tree_d2",       len(proot.children[0].children) == 5);
+proot.do_layout();
+check("p/tree_lay",      proot.children[0].y == 0);
+check("p/tree_lay2",     proot.children[1].y == 64);
+
+# ─── 3. Iterate children 200 times ───────────────────────────────────
+let total = 0;
+i = 0;
+while (i < 200) {
+    let arr = proot.children[0].children;
+    let k = 0;
+    while (k < len(arr)) {
+        total = total + 1;
+        k = k + 1;
+    }
+    i = i + 1;
+}
+check("p/iter_1000",     total == 1000);
+
+# ─── 4. ListBox with 100 items, repeated add/remove ──────────────────
+let lb = new ListBox();
+lb.init_listbox();
+i = 0;
+while (i < 100) {
+    lb.add_item("item" + str(i));
+    i = i + 1;
+}
+check("p/lb_n",          lb.get_count() == 100);
+check("p/lb_first",      lb.get_item(0) == "item0");
+check("p/lb_last",       lb.get_item(99) == "item99");
+# remove odd-indexed items
+i = 0;
+while (i < 50) {
+    lb.remove_item(0);
+    i = i + 1;
+}
+check("p/lb_after_rm",   lb.get_count() == 50);
+
+# ─── 5. Repeated do_layout cycle (100 times) ─────────────────────────
+let dr = new Panel();
+dr.init_panel("vbox");
+dr.set_size(200, 1000);
+i = 0;
+while (i < 10) {
+    let b = new Button();
+    b.init_btn("z");
+    b.set_size(80, 20);
+    dr.add_child(b);
+    i = i + 1;
+}
+i = 0;
+while (i < 100) {
+    dr.do_layout();
+    i = i + 1;
+}
+check("p/dol_y0",        dr.children[0].y == 0);
+check("p/dol_y9",        dr.children[9].y == 216);
+check("p/dol_n",         len(dr.children) == 10);
+
+# ─── 6. Dict access 200 times on inline_styles ───────────────────────
+let d = new zzwUI();
+i = 0;
+while (i < 200) {
+    d.set_inline_style("key" + str(i), "val" + str(i));
+    i = i + 1;
+}
+check("p/d_n",           len(d.inline_styles) == 200);
+check("p/d_0",           d.get_inline_style("key0", "") == "val0");
+check("p/d_199",         d.get_inline_style("key199", "") == "val199");
+check("p/d_miss",        d.get_inline_style("missing", "x") == "x");
+
+# ─── 7. Big dictionary lookup batch (1000) ───────────────────────────
+let big = {};
+i = 0;
+while (i < 1000) {
+    big["k" + str(i)] = i * 2;
+    i = i + 1;
+}
+check("p/big_n",         len(big) == 1000);
+let sum = 0;
+i = 0;
+while (i < 1000) {
+    sum = sum + big["k" + str(i)];
+    i = i + 1;
+}
+# 0 + 2 + 4 + ... + 1998 = 999 * 1000 = 999000
+check("p/big_sum",       sum == 999000);
+
+# ─── 8. Render many primitives (smoke test that lots of calls don't crash)
+let rr = new ZzwRenderer();
+rr.init_renderer(1);
+i = 0;
+while (i < 200) {
+    rr.fillRect(i, i, 10, 10, "#ff0000");
+    rr.drawLine(0, 0, i, i, "#fff", 1);
+    i = i + 1;
+}
+check("p/r200",          rr.win_id == 1);
+
+print("14_ZZW_PERF : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

@@ -1,0 +1,22 @@
+# T16 - Closures
+fn makeCounter() {
+    let n = 0;
+    fn inc() {
+        n = n + 1;
+        return n;
+    }
+    return inc;
+}
+let c = makeCounter();
+print(c());
+print(c());
+print(c());
+
+fn makeAdder(x) {
+    fn add(y) { return x + y; }
+    return add;
+}
+let add5 = makeAdder(5);
+let add10 = makeAdder(10);
+print(add5(3));
+print(add10(3));

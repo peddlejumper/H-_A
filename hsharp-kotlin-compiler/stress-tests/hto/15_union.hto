@@ -1,0 +1,11 @@
+# T15 - Union / sum types
+union Shape {
+    Circle: r;
+    Rect: w, h;
+}
+let c = Shape { Circle: 5 };
+print(c.r);
+let r = Shape { Rect: 3, 4 };
+print(r.w);
+print(r.h);
+print(r.w + r.h);

@@ -1,0 +1,11 @@
+# T18 - Comparison ops
+print(1 < 2);
+print(2 < 1);
+print(1 <= 1);
+print(1 >= 1);
+print(1 == 1);
+print(1 != 2);
+print("abc" < "abd");
+print("abc" == "abc");
+print([1,2] == [1,2]);
+print([1,2] != [1,3]);

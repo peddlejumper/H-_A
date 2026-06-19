@@ -1,0 +1,19 @@
+# T30 - Object-oriented polymorphism via classes
+class Shape {
+    fn area() { return 0; }
+}
+class Circle extends Shape {
+    let r = 1;
+    fn area() { return r * r * 3; }
+}
+class Rect extends Shape {
+    let w = 1;
+    let h = 1;
+    fn area() { return w * h; }
+}
+let shapes = [];
+push(shapes, new Circle());
+push(shapes, new Rect());
+let total = 0;
+for s in shapes { total = total + s.area(); }
+print(total);

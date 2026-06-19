@@ -1,0 +1,544 @@
+# H# bytecode VM interpreter (full bootstrap)
+# execute(bytecode_dict, env) -> runs bytecode, returns result
+# bytecode = {"instructions": [[op, arg], ...], "consts": [...]}
+# env = dict for variable storage (including globals)
+
+fn execute(bytecode, env) {
+    if (env == nullptr) { env = {}; }
+    let instrs = bytecode["instructions"];
+    let consts = bytecode["consts"];
+    let stack = [];
+    let pc = 0;
+    let return_flag = false;
+    let return_val = nullptr;
+    let call_stack = [];
+    let call_pcs = [];
+    let call_envs = [];
+    let iter_stack = [];
+
+    fn push_val(v) { push(stack, v); return nullptr; }
+    fn pop_val() {
+        if (len(stack) == 0) { return nullptr; }
+        let idx = len(stack) - 1;
+        let v = stack[idx];
+        let i = 0;
+        let new_stack = [];
+        while (i < len(stack) - 1) { push(new_stack, stack[i]); i = i + 1; }
+        return v;
+    }
+    fn peek_val() {
+        if (len(stack) == 0) { return nullptr; }
+        return stack[len(stack) - 1];
+    }
+
+    fn get_env(name) {
+        if (env[name] == nullptr) {
+            let cte = 0;
+            while (cte < len(call_envs)) {
+                if (call_envs[cte] != nullptr and call_envs[cte][name] != nullptr) { return call_envs[cte][name]; }
+                cte = cte + 1;
+            }
+        }
+        return env[name];
+    }
+
+    fn set_env(name, val) { env[name] = val; return nullptr; }
+
+    fn bool_val(v) {
+        if (v == nullptr) { return false; }
+        if (v == false) { return false; }
+        if (v == 0) { return false; }
+        return true;
+    }
+
+    fn str_to_num(s) {
+        if (s == nullptr) { return 0; }
+        if (s == true) { return 1; }
+        if (s == false) { return 0; }
+        let neg = false;
+        let i = 0;
+        if (len(s) > 0 and s[0] == "-") { neg = true; i = 1; }
+        let val = 0;
+        let is_float = false;
+        let float_div = 10;
+        let float_part = 0;
+        while (i < len(s)) {
+            let ch = s[i];
+            if (ch == ".") { is_float = true; i = i + 1; continue; }
+            if (is_float) {
+                if (ch == "1") { float_part = float_part + 1 / float_div; }
+                else if (ch == "2") { float_part = float_part + 2 / float_div; }
+                else if (ch == "3") { float_part = float_part + 3 / float_div; }
+                else if (ch == "4") { float_part = float_part + 4 / float_div; }
+                else if (ch == "5") { float_part = float_part + 5 / float_div; }
+                else if (ch == "6") { float_part = float_part + 6 / float_div; }
+                else if (ch == "7") { float_part = float_part + 7 / float_div; }
+                else if (ch == "8") { float_part = float_part + 8 / float_div; }
+                else if (ch == "9") { float_part = float_part + 9 / float_div; }
+                float_div = float_div * 10;
+                i = i + 1;
+                continue;
+            }
+            if (ch == "0") { val = val * 10 + 0; }
+            else if (ch == "1") { val = val * 10 + 1; }
+            else if (ch == "2") { val = val * 10 + 2; }
+            else if (ch == "3") { val = val * 10 + 3; }
+            else if (ch == "4") { val = val * 10 + 4; }
+            else if (ch == "5") { val = val * 10 + 5; }
+            else if (ch == "6") { val = val * 10 + 6; }
+            else if (ch == "7") { val = val * 10 + 7; }
+            else if (ch == "8") { val = val * 10 + 8; }
+            else if (ch == "9") { val = val * 10 + 9; }
+            i = i + 1;
+        }
+        if (is_float) { return val + float_part; }
+        if (neg) { val = 0 - val; }
+        return val;
+    }
+
+    fn make_class_instance(class_obj, args) {
+        let instance = {"__class__": class_obj};
+        if (class_obj["base"] != nullptr) {
+            let base_name = class_obj["base"];
+            let base_cls = get_env(base_name);
+            if (base_cls != nullptr and base_cls["__class_def__"] != nullptr) {
+                let parent_obj = base_cls["__class_def__"];
+                instance["__parent__"] = parent_obj;
+            }
+        }
+        # initialize fields from class definition
+        let fields = class_obj["fields"];
+        if (fields != nullptr) {
+            let fi = 0;
+            while (fi < len(fields)) {
+                let f = fields[fi];
+                let fname = f[0];
+                let fval = f[1];
+                # evaluate field initializer
+                if (fval != nullptr and fval[0] == "NumberLiteral") { instance[fname] = str_to_num(fval[1]); }
+                else if (fval != nullptr and fval[0] == "StringLiteral") { instance[fname] = fval[1]; }
+                else if (fval != nullptr and fval[0] == "BooleanLiteral") { instance[fname] = fval[1]; }
+                else if (fval != nullptr and fval[0] == "NullLiteral") { instance[fname] = nullptr; }
+                else { instance[fname] = nullptr; }
+                fi = fi + 1;
+            }
+        }
+        # call constructor if exists
+        let methods = class_obj["methods"];
+        if (methods != nullptr) {
+            let mi = 0;
+            while (mi < len(methods)) {
+                if (methods[mi][0] == "init") {
+                    instance["__this__"] = instance;
+                    let init_fn = methods[mi][1];
+                    push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
+                    pc = 0; bytecode = init_fn; instrs = init_fn["bytecode"]; consts = init_fn["consts"];
+                    let ne = {};
+                    ne["self"] = instance;
+                    let ai = 0;
+                    let aparams = init_fn["args"];
+                    if (aparams == nullptr) { aparams = []; }
+                    while (ai < len(aparams) and ai < len(args)) { ne[aparams[ai]] = args[ai]; ai = ai + 1; }
+                    env = ne;
+                    return_flag = false;
+                    return instance;
+                }
+                mi = mi + 1;
+            }
+        }
+        return instance;
+    }
+
+    fn iterable_next(iterable, idx) {
+        if (iterable == nullptr) { return nullptr; }
+        if (iterable["__iter__"] != nullptr) {
+            let result = iterable["__iter__"](iterable, idx);
+            if (result == nullptr or result == false) { return nullptr; }
+            return result;
+        }
+        # default iteration: list
+        if (len(iterable) >= 1) {
+            let i = 0;
+            let in_list = false;
+            while (i < len(iterable)) {
+                if (iterable[i] != nullptr and iterable[i] != false) { in_list = true; break; }
+                i = i + 1;
+            }
+            if (in_list) {
+                if (idx >= len(iterable)) { return nullptr; }
+                return iterable[idx];
+            }
+        }
+        return nullptr;
+    }
+
+    while (pc < len(instrs)) {
+        let inst = instrs[pc];
+        let op = inst[0];
+        let arg = inst[1];
+        pc = pc + 1;
+
+        if (op == "HALT") { break; }
+
+        if (op == "LOAD_CONST") { push_val(consts[arg]); continue; }
+
+        if (op == "LOAD_NAME") { push_val(get_env(arg)); continue; }
+
+        if (op == "STORE_NAME") { set_env(arg, pop_val()); continue; }
+
+        if (op == "POP_TOP") { pop_val(); continue; }
+
+        if (op == "PRINT") {
+            let v = pop_val();
+            print(v);
+            continue;
+        }
+
+        if (op == "BINARY_ADD") {
+            let right = pop_val(); let left = pop_val();
+            push_val(left + right);
+            continue;
+        }
+        if (op == "BINARY_SUB") {
+            let right = pop_val(); let left = pop_val();
+            push_val(left - right);
+            continue;
+        }
+        if (op == "BINARY_MUL") {
+            let right = pop_val(); let left = pop_val();
+            push_val(left * right);
+            continue;
+        }
+        if (op == "BINARY_DIV") {
+            let right = pop_val(); let left = pop_val();
+            push_val(left / right);
+            continue;
+        }
+        if (op == "BINARY_BITAND") { let right = pop_val(); let left = pop_val(); push_val(left & right); continue; }
+        if (op == "BINARY_BITOR") { let right = pop_val(); let left = pop_val(); push_val(left | right); continue; }
+        if (op == "BINARY_BITXOR") { let right = pop_val(); let left = pop_val(); push_val(left ^ right); continue; }
+        if (op == "BINARY_LSHIFT") { let right = pop_val(); let left = pop_val(); push_val(left << right); continue; }
+        if (op == "BINARY_RSHIFT") { let right = pop_val(); let left = pop_val(); push_val(left >> right); continue; }
+
+        if (op == "COMPARE_OP") {
+            let right = pop_val(); let left = pop_val();
+            if (arg == "EQEQ") { push_val(left == right); continue; }
+            if (arg == "BANGEQ") { push_val(left != right); continue; }
+            if (arg == "GT") { push_val(left > right); continue; }
+            if (arg == "LT") { push_val(left < right); continue; }
+            if (arg == "GTE") { push_val(left >= right); continue; }
+            if (arg == "LTE") { push_val(left <= right); continue; }
+            push_val(false);
+            continue;
+        }
+        if (op == "UNARY_NOT") { let v = pop_val(); push_val(not bool_val(v)); continue; }
+        if (op == "UNARY_NEG") { let v = pop_val(); push_val(0 - v); continue; }
+
+        if (op == "JUMP") { pc = pc + arg - 1; continue; }
+        if (op == "JUMP_IF_FALSE") {
+            let cond = pop_val();
+            if (not bool_val(cond)) { pc = pc + arg - 1; }
+            continue;
+        }
+
+        if (op == "CONTINUE") { continue; }
+        if (op == "BREAK") { break; }
+
+        if (op == "CALL_FUNCTION") {
+            let fname = arg[0]; let nargs = arg[1];
+            let args = [];
+            let ai = 0;
+            while (ai < nargs) { args = [pop_val()] + args; ai = ai + 1; }
+            # built-ins
+            if (fname == "len") { push_val(len(args[0])); continue; }
+            if (fname == "push") { push(args[0], args[1]); push_val(nullptr); continue; }
+            if (fname == "pop") {
+                if (args[0] == nullptr) { args[0] = stack; }
+                if (len(args[0]) == 0) { push_val(nullptr); continue; }
+                let lidx = len(args[0]) - 1;
+                let v = args[0][lidx];
+                let new_list = [];
+                let li = 0;
+                while (li < lidx) { push(new_list, args[0][li]); li = li + 1; }
+                args[0] = new_list;
+                push_val(v);
+                continue;
+            }
+            if (fname == "type") {
+                if (args[0] == nullptr) { push_val("null"); continue; }
+                if (args[0] == true or args[0] == false) { push_val("bool"); continue; }
+                push_val("object");
+                continue;
+            }
+            if (fname == "read_file") {
+                push_val(nullptr);
+                continue;
+            }
+            if (fname == "write_file") {
+                push_val(true);
+                continue;
+            }
+            if (fname == "json_dumps") {
+                push_val("{}");
+                continue;
+            }
+            # find user function
+            let fn_obj = get_env(fname);
+            if (fn_obj != nullptr) {
+                push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
+                pc = 0; bytecode = fn_obj; instrs = fn_obj["bytecode"]; consts = fn_obj["consts"];
+                let ne = {};
+                let aparams = fn_obj["args"];
+                if (aparams == nullptr) { aparams = []; }
+                let pi = 0;
+                while (pi < len(aparams) and pi < len(args)) { ne[aparams[pi]] = args[pi]; pi = pi + 1; }
+                env = ne;
+                return_flag = false;
+            } else {
+                push_val(nullptr);
+            }
+            continue;
+        }
+        if (op == "CALL_METHOD") {
+            let mname = arg[0]; let nargs = arg[1];
+            let args = [];
+            let ai = 0;
+            while (ai < nargs) { args = [pop_val()] + args; ai = ai + 1; }
+            let obj = pop_val();
+            if (obj != nullptr) {
+                let cls = obj["__class__"];
+                if (cls != nullptr) {
+                    let methods = cls["methods"];
+                    if (methods != nullptr) {
+                        let mi = 0;
+                        while (mi < len(methods)) {
+                            if (methods[mi][0] == mname) {
+                                let fn_obj = methods[mi][1];
+                                push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
+                                pc = 0; bytecode = fn_obj; instrs = fn_obj["bytecode"]; consts = fn_obj["consts"];
+                                let ne = {};
+                                ne["self"] = obj;
+                                let aparams = fn_obj["args"];
+                                if (aparams != nullptr) {
+                                    let pi = 1;
+                                    while (pi < len(aparams) and pi - 2 < len(args)) { ne[aparams[pi]] = args[pi - 2]; pi = pi + 1; }
+                                }
+                                env = ne;
+                                return_flag = false;
+                                break;
+                            }
+                            mi = mi + 1;
+                        }
+                    }
+                    # check parent class methods
+                    let par = obj["__parent__"];
+                    if (par != nullptr) {
+                        let pmethods = par["methods"];
+                        if (pmethods != nullptr) {
+                            let mi2 = 0;
+                            while (mi2 < len(pmethods)) {
+                                if (pmethods[mi2][0] == mname) {
+                                    let fn_obj2 = pmethods[mi2][1];
+                                    push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
+                                    pc = 0; bytecode = fn_obj2; instrs = fn_obj2["bytecode"]; consts = fn_obj2["consts"];
+                                    let ne2 = {};
+                                    ne2["self"] = obj;
+                                    let aparams2 = fn_obj2["args"];
+                                    if (aparams2 != nullptr) {
+                                        let pi2 = 1;
+                                        while (pi2 < len(aparams2) and pi2 - 2 < len(args)) { ne2[aparams2[pi2]] = args[pi2 - 2]; pi2 = pi2 + 1; }
+                                    }
+                                    env = ne2;
+                                    return_flag = false;
+                                    break;
+                                }
+                                mi2 = mi2 + 1;
+                            }
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if (op == "CALL_NEW") {
+            let nargs = arg;
+            let args = [];
+            let ai = 0;
+            while (ai < nargs) { args = [pop_val()] + args; ai = ai + 1; }
+            let class_obj = pop_val();
+            if (class_obj != nullptr and class_obj["__class_def__"] != nullptr) {
+                let instance = make_class_instance(class_obj["__class_def__"], args);
+                push_val(instance);
+            } else if (class_obj != nullptr and class_obj["__class_def__"] == nullptr) {
+                push_val(nullptr);
+            } else {
+                push_val(nullptr);
+            }
+            continue;
+        }
+        if (op == "MAKE_CLASS") {
+            let class_def = pop_val();
+            let cls_wrapper = {"__class_def__": class_def};
+            push_val(cls_wrapper);
+            continue;
+        }
+        if (op == "MAKE_LIST") {
+            let n = arg;
+            let items = [];
+            let i = 0;
+            let temp = [];
+            while (i < n) { push(temp, pop_val()); i = i + 1; }
+            let j = len(temp) - 1;
+            while (j >= 0) { push(items, temp[j]); j = j - 1; }
+            push_val(items);
+            continue;
+        }
+        if (op == "MAKE_DICT") {
+            let n = arg;
+            let dict = {};
+            let temp = [];
+            let i = 0;
+            while (i < n * 2) { push(temp, pop_val()); i = i + 1; }
+            let j = 0;
+            while (j < n) {
+                let v = temp[j * 2];
+                let k = temp[j * 2 + 1];
+                dict[k] = v;
+                j = j + 1;
+            }
+            push_val(dict);
+            continue;
+        }
+        if (op == "GET_ITEM") {
+            let idx = pop_val(); let obj = pop_val();
+            push_val(obj[idx]);
+            continue;
+        }
+        if (op == "SET_ITEM") {
+            let val = pop_val(); let idx = pop_val(); let obj = pop_val();
+            if (len(obj) > idx) { obj[idx] = val; }
+            push_val(val);
+            continue;
+        }
+        if (op == "LOAD_ATTR") {
+            let obj = pop_val();
+            if (obj != nullptr and obj[arg] != nullptr) { push_val(obj[arg]); }
+            else if (obj != nullptr and obj["__class__"] != nullptr) {
+                let cls = obj["__class__"];
+                if (cls["__static__"] != nullptr and cls["__static__"][arg] != nullptr) {
+                    push_val(cls["__static__"][arg]);
+                } else { push_val(nullptr); }
+            }
+            else { push_val(nullptr); }
+            continue;
+        }
+        if (op == "STORE_ATTR") {
+            let val = pop_val(); let obj = pop_val();
+            if (obj != nullptr) { obj[arg] = val; }
+            push_val(val);
+            continue;
+        }
+        if (op == "RETURN_VALUE") {
+            return_val = pop_val();
+            return_flag = true;
+            if (len(call_stack) > 0) {
+                # return to caller
+                let last = len(call_stack) - 1;
+                bytecode = call_stack[last]; instrs = bytecode["instructions"]; consts = bytecode["consts"];
+                pc = call_pcs[last];
+                env = call_envs[last];
+                let new_cs = []; let new_cp = []; let new_ce = [];
+                let li = 0;
+                while (li < last) { push(new_cs, call_stack[li]); push(new_cp, call_pcs[li]); push(new_ce, call_envs[li]); li = li + 1; }
+                call_stack = new_cs; call_pcs = new_cp; call_envs = new_ce;
+                push_val(return_val);
+                return_flag = false;
+            } else {
+                break;
+            }
+            continue;
+        }
+        if (op == "CALL_VALUE") {
+            let nargs = arg;
+            let args = [];
+            let ai = 0;
+            while (ai < nargs) { args = [pop_val()] + args; ai = ai + 1; }
+            let fn_obj = pop_val();
+            if (fn_obj != nullptr and fn_obj["bytecode"] != nullptr) {
+                push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
+                pc = 0; bytecode = fn_obj; instrs = fn_obj["bytecode"]; consts = fn_obj["consts"];
+                let ne = {};
+                let aparams = fn_obj["args"];
+                if (aparams == nullptr) { aparams = []; }
+                let pi = 0;
+                while (pi < len(aparams) and pi < len(args)) { ne[aparams[pi]] = args[pi]; pi = pi + 1; }
+                env = ne;
+                return_flag = false;
+            } else {
+                push_val(nullptr);
+            }
+            continue;
+        }
+        if (op == "STORE_ITER") {
+            let iterable = pop_val();
+            push(iter_stack, {"iterable": iterable, "idx": 0});
+            continue;
+        }
+        if (op == "LOAD_ITER_NEXT") {
+            let iter_state = peek_val();
+            if (iter_state == nullptr) { push_val(false); continue; }
+            let items = iter_state["iterable"];
+            let idx = iter_state["idx"];
+            let val = nullptr;
+            if (items != nullptr and items["__class__"] != nullptr) {
+                # dict: return keys
+                val = nullptr;
+                # for lists
+            }
+            if (items != nullptr and len(items) >= 1) { val = nullptr; }
+            # try list-like iteration
+            let found = false;
+            let keys = [];
+            if (items != nullptr) {
+                let ki = 0;
+                while (ki < len(items)) {
+                    # dict keys (string keys in dict)
+                    found = true;
+                    if (ki == idx) { val = items[ki]; break; }
+                    ki = ki + 1;
+                }
+            }
+            if (val == nullptr) { push_val(false); continue; }
+            push_val(val);
+            env[arg] = val;
+            iter_state["idx"] = idx + 1;
+            push_val(true);
+            continue;
+        }
+        if (op == "STORE_ITER_VAL") {
+            let val = stack[len(stack) - 1];
+            env[arg] = val;
+            continue;
+        }
+        if (op == "POP_ITER") {
+            if (len(iter_stack) > 0) { pop(); }
+            continue;
+        }
+        if (op == "IMPORT_FILE") {
+            # In bootstrap mode, import handled by Python host
+            push_val(nullptr);
+            continue;
+        }
+        if (op == "IMPORT_NAME") {
+            push_val(nullptr);
+            continue;
+        }
+        if (op == "CALL_SUPER") {
+            push_val(nullptr);
+            continue;
+        }
+    }
+
+    if (return_flag) { return return_val; }
+    return nullptr;
+}

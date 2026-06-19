@@ -1,0 +1,26 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Gradle / Kotlin
+.kotlin/
+.gradle/
+build/
+build_old/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo

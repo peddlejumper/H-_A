@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>H# — 自举无限，编程无间</title>
+  <meta name="description" content="H# 是一门完全自举的现代编程语言 — 拥有 C 风格语法、字节码虚拟机、可视化 UI 框架与持续生长的标准库。" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- Entry loader (Uiverse.io — mobinkakei) -->
+  <div class="entry-loader" id="entryLoader" aria-hidden="true">
+    <div class="entry-loader-inner">
+      <div class="entry-loader-stage">
+        <div class="loader" data-shape="rect">
+          <svg viewBox="0 0 80 80"><rect x="8" y="8" width="64" height="64"/></svg>
+        </div>
+        <div class="loader" data-shape="circle">
+          <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="32"/></svg>
+        </div>
+        <div class="loader triangle" data-shape="triangle">
+          <svg viewBox="0 0 80 80"><polygon points="40,8 72,68 8,68"/></svg>
+        </div>
+      </div>
+      <div class="entry-loader-text">
+        <span class="entry-loader-brand">H<span class="sharp">#</span></span>
+        <span class="entry-loader-label">正在加载语言与 IDE · v0.4.2</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="header" id="header">
+    <div class="container header-inner">
+      <a class="brand" href="#hero" aria-label="H# home">
+        <span class="brand-mark">H<span class="sharp">#</span></span>
+        <span class="brand-tag"><span>v0.4</span></span>
+      </a>
+      <nav class="nav" aria-label="primary">
+        <a class="nav-item" href="#features">特性 <span class="caret">▾</span></a>
+        <a class="nav-item" href="#zzw">ZZW Code</a>
+        <a class="nav-item" href="pricing.html">定价</a>
+        <a class="nav-item" href="download.html">下载</a>
+        <a class="nav-item nav-item-beta" href="beta.html">Beta <span class="nav-beta-tag">v0.5</span></a>
+        <a class="nav-item" href="#playground">Playground</a>
+        <a class="nav-item" href="#architecture">架构 <span class="caret">▾</span></a>
+        <a class="nav-item" href="guide.html">指南</a>
+        <a class="nav-item" href="#privacy">隐私与安全</a>
+      </nav>
+      <div class="header-right">
+        <a class="uiverse-btn" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">
+          <span>GitHub</span>
+          <span>查看仓库 ↗</span>
+        </a>
+        <a class="uiverse-btn uiverse-btn-brand" href="download.html">
+          <span>下载 H#</span>
+          <span>立即下载 ↓</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero" id="hero">
+      <div class="container hero-inner">
+        <div class="hero-eyebrow fade-up">
+          <span>self-hosting · tree-walking · v0.4</span>
+        </div>
+        <h1 class="hero-title fade-up">
+          创意无限，<br />
+          <span class="accent">编程无界</span>
+        </h1>
+        <p class="hero-sub fade-up">
+          H# 是一门完全自举的现代编程语言 —— 拥有 C 风格语法、字节码虚拟机、可视化 UI 框架与持续生长的标准库。
+        </p>
+
+        <!-- Product cards (TRAE Work / TRAE IDE style) -->
+        <div class="product-cards fade-up">
+          <div class="product-card">
+            <div class="product-card-head">
+              <h3 class="product-card-title">
+                <span class="product-card-icon">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 4h16v4H4zM4 12h16v4H4zM4 20h10v0"/>
+                  </svg>
+                </span>
+                H# Work
+              </h3>
+              <span class="product-card-tag"><span>Beta</span></span>
+            </div>
+            <p class="product-card-desc">
+              智能编程工作台：把代码、文档、终端、Agent 整合在一个空间里，与 AI 协作完成从想法到部署的每一步。
+            </p>
+            <div class="product-card-actions">
+              <a class="btn btn-brand btn-md" href="download.html">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                  <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                </svg>
+                Download for macOS
+              </a>
+              <a class="btn btn-secondary btn-md" href="#playground">查看演示</a>
+            </div>
+          </div>
+
+          <div class="product-card">
+            <div class="product-card-head">
+              <h3 class="product-card-title">
+                <span class="product-card-icon">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                  </svg>
+                </span>
+                H# IDE
+              </h3>
+            </div>
+            <p class="product-card-desc">
+              你的专属 AI 开发工程师：在编辑器中直接调用 Agent、补全代码、解释逻辑、跑测试、改 bug、生成文档。
+            </p>
+            <div class="product-card-actions">
+              <a class="btn btn-brand btn-md" href="download.html">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                  <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                </svg>
+                Download for macOS
+              </a>
+              <a class="btn btn-secondary btn-md" href="#architecture">查看架构</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Beta banner -->
+        <div class="beta-banner fade-up">
+          <div class="beta-banner-text">
+            <h3>
+              全新 H# Playground
+              <span class="beta-banner-tag">Beta</span>
+            </h3>
+            <p>桌面端、网页版和移动端全量上线 —— 在浏览器里直接写 H# 代码并立即执行。</p>
+          </div>
+          <a class="btn btn-brand" href="#playground">即刻探索 →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- "TRAE 为你解锁全新可能" — 4 numbered cards (horizontal GSAP scroll) -->
+    <section class="features-unlock" id="features">
+      <div class="container">
+        <div class="section-head-center fade-up" style="text-align:left; margin-bottom: 56px;">
+          <h2 class="section-title">H# 为你解锁<br /><span class="accent">编程新可能</span></h2>
+          <p class="section-desc">从源码到字节码，每一层都为「可读性」而设计。H# 不是为了取代任何语言，而是为了让你看清编程语言本身。</p>
+        </div>
+      </div>
+
+      <!-- Horizontal scroll: pin the viewport, translate the track -->
+      <div class="hscroll" id="hscroll">
+        <div class="hscroll-sticky">
+          <div class="hscroll-header">
+            <span class="hscroll-counter" data-hscroll-counter>01 / 04</span>
+            <div class="hscroll-progress" aria-hidden="true">
+              <div class="hscroll-progress-bar" data-hscroll-progress></div>
+            </div>
+            <span class="hscroll-hint">scroll →</span>
+          </div>
+
+          <div class="hscroll-track" data-hscroll-track>
+            <article class="hscroll-card">
+              <div class="hscroll-card-inner">
+                <span class="feature-num">[00]</span>
+                <h3>全栈自举，<br />开箱即用</h3>
+                <p>一套工具链覆盖从 .hto 源码到 .hbc 字节码的完整路径，编译器、字节码、虚拟机都跑在自己的运行时上。</p>
+                <div class="hscroll-card-tags">
+                  <span class="hscroll-tag">.hto</span>
+                  <span class="hscroll-tag">.hbc</span>
+                  <span class="hscroll-tag">bootstrap</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="hscroll-card">
+              <div class="hscroll-card-inner">
+                <span class="feature-num">[01]</span>
+                <h3>AI Coding Agent，<br />推动每一步开发</h3>
+                <p>通过 ZZW Code 接入主流大模型，自动补全、生成函数、解释逻辑、跑测试 —— 把脏活交给 AI。</p>
+                <div class="hscroll-card-tags">
+                  <span class="hscroll-tag">agent</span>
+                  <span class="hscroll-tag">copilot</span>
+                  <span class="hscroll-tag">test-gen</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="hscroll-card">
+              <div class="hscroll-card-inner">
+                <span class="feature-num">[02]</span>
+                <h3>双重开发模式，<br />自由切换</h3>
+                <p>纯解释模式保留原有流程，控制感更强；自举模式让编译器主导构建，自动推进项目迭代。</p>
+                <div class="hscroll-card-tags">
+                  <span class="hscroll-tag">interpret</span>
+                  <span class="hscroll-tag">bootstrap</span>
+                  <span class="hscroll-tag">SOLO</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="hscroll-card">
+              <div class="hscroll-card-inner">
+                <span class="feature-num">[03]</span>
+                <h3>开放标准库生态，<br />围绕问题展开</h3>
+                <p>标准库、UI 框架、并运行时、加密、数据库、网络 —— 模块化分发，像插件一样按需引入。</p>
+                <div class="hscroll-card-tags">
+                  <span class="hscroll-tag">stdlib</span>
+                  <span class="hscroll-tag">HwdUI</span>
+                  <span class="hscroll-tag">DZZW</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+
+      <div class="container">
+        <!-- Long description (like trae.cn) -->
+        <div style="max-width: 960px; margin: 80px auto 0; display: flex; flex-direction: column; gap: 24px;">
+          <p class="body-1 fade-up">H# 覆盖从词法解析、抽象语法树、字节码编译到运行时执行的整套开发任务，支持代码续写、文档生成、逻辑审查与结构优化等，适配多种日常开发场景，帮助开发者减少重复操作，专注核心创新。</p>
+          <p class="body-1 fade-up">H# 内置的 SOLO 模式，配备专属 Coding Agent，可理解目标、规划任务并调度工具，独立推进各阶段编译工作。从自然语言输入到可执行字节码，帮助你高效完成语言设计任务。</p>
+          <p class="body-1 fade-up">H# 不仅将解释器集成进 IDE，也让解释器使用更多开发工具。H# 目前拥有双重开发模式，解释器模式保留原有流程，控制感更强；自举模式让编译器主导任务，自动推进构建。你可根据任务需求自由切换，始终游刃有余。</p>
+          <p class="body-1 fade-up">可自动拆分复杂任务，带来流畅交付体验。也支持独立创建模块并分享到市场，像插件一样灵活组合标准库，适配不同开发需求。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- "智能 IDE" showcase -->
+    <section class="ide-section">
+      <div class="container">
+        <div class="ide-showcase fade-up">
+          <div class="ide-text">
+            <h2>智能语言，<br />将自举融入你的工作流</h2>
+            <p>H# 旗下的自举语言产品，以透明为核心，灵活适配你的开发节奏，与你默契协作，共同实现高效、高质的项目交付。</p>
+            <div style="display: flex; gap: 12px; margin-top: 8px;">
+              <a class="btn btn-brand btn-md" href="download.html">下载 H#</a>
+              <a class="btn btn-secondary btn-md" href="#playground">查看 Playground</a>
+            </div>
+          </div>
+          <div class="ide-visual">
+            <div style="position: relative; z-index: 1; width: 100%; max-width: 520px;">
+              <div class="terminal" style="background: rgba(10, 11, 13, 0.85); backdrop-filter: blur(8px);">
+                <div class="terminal-bar">
+                  <div class="terminal-dots"><span></span><span></span><span></span></div>
+                  <div class="terminal-title">compiler.hto</div>
+                  <div class="terminal-tag">.hto</div>
+                </div>
+                <div class="terminal-body" style="min-height: 220px;">
+<span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+  <span class="tok-kw">let</span> src = <span class="tok-str">"hello.hto"</span>
+  <span class="tok-kw">let</span> ast = <span class="tok-fn">parse</span>(src)
+  <span class="tok-kw">let</span> bc = <span class="tok-fn">compile</span>(ast)
+  <span class="tok-fn">run</span>(bc)
+}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ZZW Code Coding Agent -->
+    <section class="zzw-section" id="zzw">
+      <div class="container">
+        <div class="zzw-head fade-up" style="text-align: center; margin-bottom: 64px;">
+          <div class="zzw-eyebrow">
+            <span class="zzw-eyebrow-dot"></span>
+            <span>Coding Agent · Powered by H#</span>
+          </div>
+          <h2 class="section-title">ZZW Code · <br /><span class="accent">你的专属 H# 编程 Agent</span></h2>
+          <p class="section-desc" style="margin-left: auto; margin-right: auto;">
+            内置完整 H# 语法知识、字节码指令集与标准库的 AI 编辑器。
+            用你自己的 API Key，把任何大模型变成一位真正懂 H# 的搭档。
+          </p>
+        </div>
+
+        <!-- IDE 3-pane mockup -->
+        <div class="zzw-ide fade-up" aria-label="ZZW Code 界面预览">
+          <!-- Title bar -->
+          <div class="zzw-titlebar">
+            <div class="zzw-brand-mini">
+              <span class="zzw-logo">Z</span>
+              <span class="zzw-brand-text">ZZW Code</span>
+              <span class="zzw-project">/ h#-compiler</span>
+            </div>
+            <div class="zzw-tabs">
+              <span class="zzw-tab active">parser.hto</span>
+              <span class="zzw-tab">ast.py</span>
+              <span class="zzw-tab">codegen.hto</span>
+            </div>
+            <div class="zzw-actions">
+              <span class="zzw-run"><svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Run</span>
+              <span class="zzw-icon">⚙</span>
+            </div>
+          </div>
+
+          <div class="zzw-panes">
+            <!-- Left: file tree -->
+            <aside class="zzw-files">
+              <div class="zzw-files-head">
+                <span>EXPLORER</span>
+                <span class="zzw-files-action">+</span>
+              </div>
+              <ul class="zzw-tree">
+                <li class="zzw-tree-dir">▾ h#-compiler
+                  <ul>
+                    <li class="zzw-tree-file active">📄 parser.hto</li>
+                    <li class="zzw-tree-file">📄 ast.py</li>
+                    <li class="zzw-tree-file">📄 codegen.hto</li>
+                    <li class="zzw-tree-file">📄 lexer.hto</li>
+                  </ul>
+                </li>
+                <li class="zzw-tree-dir">▾ tests
+                  <ul>
+                    <li class="zzw-tree-file">📄 test_parser.hto</li>
+                    <li class="zzw-tree-file">📄 test_codegen.hto</li>
+                  </ul>
+                </li>
+                <li class="zzw-tree-file">📄 README.md</li>
+              </ul>
+            </aside>
+
+            <!-- Center: editor -->
+            <main class="zzw-editor">
+              <div class="zzw-editor-gutter">
+                <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                <span>11</span><span>12</span><span>13</span><span>14</span><span>15</span>
+              </div>
+              <pre class="zzw-code"><code><span class="tok-com">// parser.hto — recursive descent parser</span>
+<span class="tok-kw">import</span> std.lexer
+
+<span class="tok-kw">fn</span> <span class="tok-fn">parse</span>(tokens) {
+  <span class="tok-kw">let</span> pos = <span class="tok-num">0</span>
+  <span class="tok-kw">let</span> ast = []
+
+  <span class="tok-kw">while</span> pos &lt; <span class="tok-fn">len</span>(tokens) {
+    <span class="tok-kw">let</span> stmt = <span class="tok-fn">parse_stmt</span>(tokens, pos)
+    ast.<span class="tok-fn">push</span>(stmt.node)
+    pos = stmt.next
+  }
+
+  <span class="tok-kw">return</span> ast
+}</code></pre>
+            </main>
+
+            <!-- Right: AI chat -->
+            <aside class="zzw-chat">
+              <div class="zzw-chat-head">
+                <span class="zzw-chat-title">
+                  <span class="zzw-chat-dot"></span>
+                  ZZW AI · H# Expert
+                </span>
+                <span class="zzw-chat-model">gpt-4o</span>
+              </div>
+              <div class="zzw-chat-body">
+                <div class="zzw-msg zzw-msg-user">
+                  <div class="zzw-msg-text">parser.hto 里 parse_stmt 在遇到 if/else 嵌套时为什么会丢 token？</div>
+                </div>
+                <div class="zzw-msg zzw-msg-ai">
+                  <div class="zzw-msg-name">ZZW AI</div>
+                  <div class="zzw-msg-text">看了你的 <code>parse_stmt</code>，问题在第 12 行：</div>
+                  <pre class="zzw-msg-code"><code><span class="tok-kw">if</span> t.<span class="tok-fn">type</span> == <span class="tok-str">"if"</span> {
+  <span class="tok-kw">return</span> <span class="tok-fn">parse_if</span>(...)
+  <span class="tok-com">// 缺一个 pos += consumed</span>
+}</code></pre>
+                  <div class="zzw-msg-text">把 <code>pos</code> 推进到 <code>parse_if</code> 消费的 token 末尾即可。要我直接帮你改吗？</div>
+                </div>
+                <div class="zzw-msg zzw-msg-user">
+                  <div class="zzw-msg-text">改吧，顺便加 2 个测试用例。</div>
+                </div>
+                <div class="zzw-msg zzw-msg-ai zzw-msg-typing">
+                  <div class="zzw-msg-name">ZZW AI</div>
+                  <div class="zzw-msg-text">
+                    <span class="zzw-typing-text" data-zzw-typing>正在读取当前文件，准备生成补丁与测试…</span>
+                  </div>
+                </div>
+              </div>
+              <div class="zzw-chat-input">
+                <span class="zzw-chat-placeholder">问 ZZW AI 关于 H# 的任何事…</span>
+                <span class="zzw-chat-send">↵</span>
+              </div>
+            </aside>
+          </div>
+
+          <!-- Terminal at bottom -->
+          <div class="zzw-terminal">
+            <div class="zzw-terminal-head">
+              <span class="zzw-terminal-dot"></span>
+              TERMINAL · h# parser
+            </div>
+            <div class="zzw-terminal-body">
+              <span class="zzw-cmd">$ h# parser.hto --test</span>
+              <span class="zzw-out-green">  ✓ test_if_else  12ms</span>
+              <span class="zzw-out-green">  ✓ test_nested   18ms</span>
+              <span class="zzw-out-dim">  → 14 passed · 0 failed</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Capability grid -->
+        <div class="zzw-cap-grid">
+          <article class="zzw-cap-card">
+            <div class="zzw-cap-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <h3>AI 对话面板</h3>
+            <p>与深度理解 H# 语法的 AI 多轮对话，自动携带当前编辑器上下文，回答代码问题、生成函数、解释逻辑。</p>
+            <ul class="zzw-cap-list">
+              <li>· 流式输出，代码块高亮</li>
+              <li>· 多轮上下文，自动关联当前文件</li>
+              <li>· 一键应用 AI 建议到编辑器</li>
+            </ul>
+          </article>
+
+          <article class="zzw-cap-card">
+            <div class="zzw-cap-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+              </svg>
+            </div>
+            <h3>Monaco 编辑器</h3>
+            <p>由 Monaco 驱动的专业代码编辑器，原生 H# 语法高亮、智能补全、代码折叠、多标签页管理。</p>
+            <ul class="zzw-cap-list">
+              <li>· H# 关键字、类型、操作符全色高亮</li>
+              <li>· 自动补全、跳转定义、引用搜索</li>
+              <li>· 多 Tab 切换，最近文件快速打开</li>
+            </ul>
+          </article>
+
+          <article class="zzw-cap-card">
+            <div class="zzw-cap-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <h3>文件管理 & 运行</h3>
+            <p>左侧树形文件浏览器支持 .hto / .hbc 文件创建、重命名、删除；底部一键运行当前项目并显示输出。</p>
+            <ul class="zzw-cap-list">
+              <li>· 树形结构浏览 .hto / .hbc</li>
+              <li>· 新建、重命名、删除文件</li>
+              <li>· 一键 Run，终端内联展示结果</li>
+            </ul>
+          </article>
+
+          <article class="zzw-cap-card">
+            <div class="zzw-cap-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <h3>H# 知识深度注入</h3>
+            <p>系统提示词内置完整 H# 语法、字节码指令集、标准库、并发原语 —— AI 零学习成本就能写出地道的 H#。</p>
+            <ul class="zzw-cap-list">
+              <li>· 关键字 / 语法 / 数据类型全量</li>
+              <li>· 42 条字节码指令释义</li>
+              <li>· DZZW 并发 / HwdUI / 标准库</li>
+            </ul>
+          </article>
+
+          <article class="zzw-cap-card">
+            <div class="zzw-cap-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+              </svg>
+            </div>
+            <h3>自带 API Key</h3>
+            <p>不绑定任何供应商。OpenAI 兼容协议即可，填入 Endpoint / Key / Model 三件套，立即开工。</p>
+            <ul class="zzw-cap-list">
+              <li>· OpenAI / DeepSeek / 通义千问等</li>
+              <li>· 自定义 Endpoint & Model</li>
+              <li>· Key 保存在本地，零数据外发</li>
+            </ul>
+          </article>
+
+          <article class="zzw-cap-card">
+            <div class="zzw-cap-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="13 2 13 9 20 9"/><path d="M3 16.5A4.5 4.5 0 0 1 7.5 12H10v-2a4 4 0 0 1 4-4h.5"/><path d="M9 18.5A4.5 4.5 0 0 0 13.5 14H17v3a3 3 0 0 1-3 3h-1"/>
+              </svg>
+            </div>
+            <h3>SOLO 模式 · Agent 自动推进</h3>
+            <p>把目标交给 Agent：理解需求、规划任务、调度工具、独立推进各阶段开发工作，你只管最终验收。</p>
+            <ul class="zzw-cap-list">
+              <li>· 自然语言输入 → 可执行 H#</li>
+              <li>· 多步骤任务自动拆解</li>
+              <li>· 工具调用 / 错误恢复 / 自检验</li>
+            </ul>
+          </article>
+        </div>
+
+        <!-- CTA strip -->
+        <div class="zzw-cta-strip">
+          <div class="zzw-cta-strip-text">
+            <h3>下载 ZZW Code，开始用 AI 写 H#</h3>
+            <p>macOS / Windows / Linux 三平台，内置 H# 工具链，开箱即用。</p>
+          </div>
+          <div class="zzw-cta-strip-actions">
+            <a class="btn btn-brand btn-md" href="download.html">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+              Download for macOS
+            </a>
+            <a class="btn btn-secondary btn-md" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">查看 GitHub</a>
+            <a class="btn btn-secondary btn-md" href="pricing.html">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              查看定价方案
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- "Playground" code section -->
+    <section class="code-section" id="playground">
+      <div class="container">
+        <div class="section-head-center" style="text-align:left; margin-bottom: 56px;">
+          <h2 class="section-title fade-up">代码 Play<span class="accent">ground</span></h2>
+          <p class="section-desc fade-up">把下面这段代码丢进 H# 解释器，它会做你想做的：定义值、迭代、打印结果。无需包管理、无需编译。</p>
+        </div>
+
+        <div class="playground">
+          <div class="terminal fade-up">
+            <div class="terminal-bar">
+              <div class="terminal-dots"><span></span><span></span><span></span></div>
+              <div class="terminal-title">main.hto — h#</div>
+              <div class="terminal-tag">.hto</div>
+            </div>
+            <div class="terminal-body" id="terminal-body">
+              <code id="code-target"></code><span class="caret">▍</span>
+            </div>
+            <div class="terminal-output" id="terminal-output"></div>
+          </div>
+
+          <div class="side-cards fade-up">
+            <div class="side-card">
+              <h4>Single-pass compile</h4>
+              <p>解析 → AST → 字节码 → 执行。中间产物可序列化到 .hbc，跨进程加载。</p>
+            </div>
+            <div class="side-card">
+              <h4>REPL-ready</h4>
+              <p>逐行求值，print 即时输出，所见即所得。</p>
+            </div>
+            <div class="side-card">
+              <h4>Open internals</h4>
+              <p>所有解释器源码不超过 8000 行 —— 一杯咖啡就能读完。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 自定义智能体 (custom agent) -->
+    <section class="ide-section" style="padding-top: 0;">
+      <div class="container">
+        <div class="ide-showcase fade-up" style="grid-template-columns: 1fr 1.05fr;">
+          <div class="ide-visual" style="order: 1;">
+            <div style="position: relative; z-index: 1; width: 100%; max-width: 420px; text-align: center; color: var(--text-secondary); font-family: var(--font-mono); font-size: 13px; line-height: 1.7;">
+              <div style="background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); padding: 16px; text-align: left;">
+                <div style="color: var(--brand); margin-bottom: 8px;">$ h# agent --new</div>
+                <div style="color: var(--text-tertiary); margin-bottom: 12px;">agent: my-compiler</div>
+                <div style="color: var(--text); margin-bottom: 4px;">name: my-compiler</div>
+                <div style="color: var(--text); margin-bottom: 4px;">tools: [parse, compile, emit]</div>
+                <div style="color: var(--text); margin-bottom: 4px;">skills:</div>
+                <div style="color: var(--text); padding-left: 16px;">- tree-walk ast</div>
+                <div style="color: var(--text); padding-left: 16px;">- emit bytecode</div>
+                <div style="color: var(--brand); margin-top: 12px;">✓ ready</div>
+              </div>
+            </div>
+          </div>
+          <div class="ide-text" style="order: 2;">
+            <h2>自定义智能体，<br />构建专属团队</h2>
+            <p>H# 推出可自由配置的智能体体系，打造开放的标准库生态。你可以根据需求灵活定义工具、技能和任务逻辑，轻松构建专属的 AI Agent 团队。无论何种任务，H#，让 AI 真正为你所用。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 工具自由装配 (MCP) -->
+    <section class="ide-section" style="padding-top: 0;">
+      <div class="container">
+        <div class="ide-showcase fade-up">
+          <div class="ide-text">
+            <h2>工具自由装配，<br />拓展能力边界</h2>
+            <p>H# IDE 支持多种外部工具的无缝集成，让你的智能体根据个人需求灵活调用工具，打造独一无二的任务执行能力。通过 MCP（Module Calling Protocol），你可以赋予智能体专属的外部资源调用能力，根据自己的使用场景和目标，精细化打磨 H# 的能力边界。</p>
+          </div>
+          <div class="ide-visual">
+            <div style="position: relative; z-index: 1; width: 100%; max-width: 420px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+              <div style="aspect-ratio: 1; background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">parse</div>
+              <div style="aspect-ratio: 1; background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">compile</div>
+              <div style="aspect-ratio: 1; background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--brand); border-color: var(--brand);">emit</div>
+              <div style="aspect-ratio: 1; background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">test</div>
+              <div style="aspect-ratio: 1; background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">lint</div>
+              <div style="aspect-ratio: 1; background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">+ add</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Architecture (more context, like trae.cn Rules) -->
+    <section class="ide-section" style="padding-top: 0;" id="architecture">
+      <div class="container">
+        <div class="ide-showcase fade-up" style="grid-template-columns: 1fr 1.05fr;">
+          <div class="ide-visual" style="order: 1;">
+            <div style="position: relative; z-index: 1; width: 100%; max-width: 480px;">
+              <div style="background: var(--bg-base); border: 1px solid var(--border-l2); border-radius: var(--radius); padding: 20px; font-family: var(--font-mono); font-size: 12px; line-height: 1.7; color: var(--text-secondary);">
+                <div style="color: var(--brand); margin-bottom: 8px;">$ cat pipeline.hbc</div>
+                <div style="color: var(--text);">.hto source</div>
+                <div style="color: var(--text-tertiary); padding-left: 8px;">↓ lexer</div>
+                <div style="color: var(--text); padding-left: 8px;">tokens</div>
+                <div style="color: var(--text-tertiary); padding-left: 8px;">↓ parser</div>
+                <div style="color: var(--text); padding-left: 8px;">AST</div>
+                <div style="color: var(--text-tertiary); padding-left: 8px;">↓ compiler</div>
+                <div style="color: var(--text); padding-left: 8px;">.hbc bytecode</div>
+                <div style="color: var(--text-tertiary); padding-left: 8px;">↓ stack VM</div>
+                <div style="color: var(--brand); padding-left: 8px;">runtime</div>
+              </div>
+            </div>
+          </div>
+          <div class="ide-text" style="order: 2;">
+            <h2>更多上下文，<br />更符合个人偏好</h2>
+            <p>H# 的解释能力全面升级，不仅可以理解代码仓库、终端信息等 IDE 内信息，还支持更多类型的外部信息理解，你可以联网搜索、上传文档集。更重要的是，你还可以配置自己的 H# Rules，让 AI 真正融入你的工作流，按照你的需求执行定制化任务。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cue (GSAP 性能展示, trae-style) -->
+    <section class="ide-section" style="padding-top: 0;" id="performance">
+      <div class="container">
+        <div class="ide-showcase fade-up">
+          <div class="ide-text">
+            <h2>H# Profiler 全新升级，<br />实现智能分析</h2>
+            <p>基于优化模型实现精准测量，智能感知字节码上下文与执行轨迹，自动预测下一热点函数。点击 Tab 键即可跳转到慢路径并应用优化建议，提供多行编辑建议与直观 diff 对比，从代码优化到意图预判，让开发行云流水。</p>
+          </div>
+          <div class="ide-visual">
+            <div class="perf-grid" style="position: relative; z-index: 1; max-width: 480px;">
+              <div class="perf-stat">
+                <span class="perf-num" data-count="8274">0</span>
+                <span class="perf-label">lines of source</span>
+              </div>
+              <div class="perf-stat">
+                <span class="perf-num" data-count="42">0</span>
+                <span class="perf-label">bytecode ops</span>
+              </div>
+              <div class="perf-stat">
+                <span class="perf-num" data-count="6">0</span>
+                <span class="perf-label">bench languages</span>
+              </div>
+              <div class="perf-stat">
+                <span class="perf-num"><span data-count="2.5">0</span><span class="accent">×</span></span>
+                <span class="perf-label">faster than Python 3</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 隐私与安全 -->
+    <section class="privacy-section" id="privacy">
+      <div class="container">
+        <div class="section-head-center" style="text-align: left; margin-bottom: 56px;">
+          <h2 class="section-title fade-up">隐私与安全</h2>
+          <p class="section-desc fade-up">我们始终致力于保护用户的隐私与数据安全，坚持「本地优先」和「最小化数据收集」的原则。</p>
+        </div>
+        <div class="privacy-grid">
+          <div class="privacy-card fade-up">
+            <div class="privacy-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+            <h3>数据隐私保护</h3>
+            <p>代码文件默认保存在用户本地设备。为生成索引，文件可能会被临时上传以计算嵌入。处理完成后，所有明文数据将被删除。你也可以通过隐私模式或忽略功能来限制数据的使用。</p>
+          </div>
+          <div class="privacy-card fade-up">
+            <div class="privacy-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <h3>安全访问控制</h3>
+            <p>通过严格的访问权限管理和加密传输机制，防止未经授权的访问，降低安全风险。</p>
+          </div>
+          <div class="privacy-card fade-up">
+            <div class="privacy-icon">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+            </div>
+            <h3>区域化部署</h3>
+            <p>用户数据与服务基础设施依据账号归属地进行存储与部署，并通过隔离机制满足当地数据法规的合规要求。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="final-section" id="download">
+      <div class="container">
+        <div class="final-cta fade-up">
+          <h2>H# IDE<br /><span class="accent">先一步体验未来</span></h2>
+          <p>下载 H#，跑通 demo，读它的解释器源码，然后写一行属于你自己的字节码。</p>
+          <div class="final-cta-actions">
+            <a class="btn btn-brand btn-lg" href="download.html">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+              Download for macOS
+            </a>
+            <a class="btn btn-secondary btn-lg" href="guide.html">阅读 H# 指南</a>
+            <a class="btn btn-beta btn-lg" href="beta.html">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              抢先 v0.5 Beta
+            </a>
+          </div>
+          <div style="margin-top: 32px; display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary);">
+            <span>v0.4 · 2026</span>
+            <span>·</span>
+            <span>macOS · Apple Silicon</span>
+            <span>·</span>
+            <span>MIT-style research license</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <span class="brand-mark">H<span class="sharp">#</span></span>
+            <span class="brand-tag"><span>v0.4</span></span>
+          </div>
+          <p>A self-hosting language<br/>for the curious mind.</p>
+        </div>
+        <div class="footer-col">
+          <h5>产品</h5>
+          <a href="#features">H# 特性</a>
+          <a href="#zzw">ZZW Code</a>
+          <a href="pricing.html">订阅计划</a>
+          <a href="download.html">下载</a>
+          <a href="guide.html">官方指南</a>
+        </div>
+        <div class="footer-col">
+          <h5>资源</h5>
+          <a href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/peddlejumper/HSharp/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
+          <a href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer-col">
+          <h5>联系</h5>
+          <a href="mailto:hi@hsharp.dev">hi@hsharp.dev</a>
+          <a href="https://github.com/peddlejumper" target="_blank" rel="noopener">peddlejumper</a>
+          <span>独立开发，2026</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 peddlejumper · H# Project</span>
+        <span id="build-time">build · 2026.06.13</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="js/main.js"></script>
+
+  <!-- Entry loader dismiss — show for at least 2.4s so the brand
+       identity + Uiverse loader cycle are fully visible, then fade out
+       smoothly via GSAP once the page is ready. -->
+  <script>
+    (function () {
+      var loader = document.getElementById('entryLoader');
+      if (!loader) return;
+      document.body.classList.add('is-loading');
+
+      // Show for at least 2.4s so users can see the brand mark and
+      // get at least one full loop of the Uiverse loader (6s cycle).
+      var startedAt = Date.now();
+      var MIN_DURATION = 2400;
+
+      function dismiss() {
+        var elapsed = Date.now() - startedAt;
+        var wait = Math.max(0, MIN_DURATION - elapsed);
+        setTimeout(function () {
+          if (window.gsap) {
+            window.gsap.to(loader, {
+              opacity: 0,
+              duration: 0.9,
+              ease: 'power2.inOut',
+              onComplete: function () {
+                loader.classList.add('is-done');
+                document.body.classList.remove('is-loading');
+              },
+            });
+          } else {
+            loader.classList.add('is-done');
+            document.body.classList.remove('is-loading');
+          }
+        }, wait);
+      }
+
+      if (document.readyState === 'complete') {
+        dismiss();
+      } else {
+        window.addEventListener('load', dismiss, { once: true });
+      }
+    })();
+  </script>
+</body>
+</html>

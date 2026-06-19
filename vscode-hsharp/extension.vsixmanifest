@@ -1,0 +1,45 @@
+{
+    "packageName": "vscode-hsharp",
+    "description": "H# Language Support",
+    "version": "0.4.1",
+    "date": "2026-06-20",
+    "displayName": "H# Language Support",
+    "publisher": "hsharp",
+    "categories": ["Programming Languages", "Snippets"],
+    "keywords": ["hsharp", "h#", "kotlin", "jvm", "dzzw", "parallel", "union types", "native packaging"],
+    "license": "MIT",
+    "homepage": "https://github.com/peddlejumper/H-_A",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/peddlejumper/H-_A"
+    },
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "assets": {
+        "Microsoft.VisualStudio.Code.Manifest": "extension/package.json",
+        "Microsoft.VisualStudio.Code.Configuration": "extension/package.json",
+        "Microsoft.VisualStudio.Code.Localization": "extension/package.nls.json",
+        "Microsoft.VisualStudio.Code.Commands": "extension/package.json",
+        "Microsoft.VisualStudio.Services.Languages.Syntax": "extension/syntaxes/hsharp.tmLanguage.json",
+        "Microsoft.VisualStudio.Services.Languages.Snippets": "extension/snippets/hsharp.json",
+        "Microsoft.VisualStudio.Code.WorkspaceSymbols": "extension/package.json",
+        "Microsoft.VisualStudio.Code.Engine": "extension/dist/web/extension.js",
+        "Microsoft.VisualStudio.Code.Debug": "extension/dist/web/extension.js",
+        "Microsoft.VisualStudio.Code.NodeDependency": "extension/dist/extension.js"
+    },
+    "targets": {
+        "Microsoft.VisualStudio.Code": [
+            {
+                "assetType": "Microsoft.VisualStudio.Code.Manifest",
+                "displayName": "H# Language Support",
+                "publisher": "hsharp",
+                "description": "H# Language Support - powered by Kotlin H# VM/compiler",
+                "version": "0.4.1",
+                "engines": {
+                    "vscode": "^1.75.0"
+                }
+            }
+        ]
+    }
+}

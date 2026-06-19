@@ -1,0 +1,62 @@
+# DZZW — Parallel Multi-Tasking Runtime for H#  v2.0
+# Work-stealing thread pool, VM reuse, memory pooling,
+# futures, channels, mutex, parallel-for/reduce, continuations
+#
+# Builtins available:
+#   dzzw_spawn(fn, args_list) -> future_handle
+#   dzzw_await(handle) -> result
+#   dzzw_try_await(handle) -> result (nil if pending)
+#   dzzw_await_any(handle_list) -> index (first completed)
+#   dzzw_await_all(handle_list) -> nil
+#   dzzw_parallel_map(fn, list) -> results_list
+#   dzzw_worker_count() -> int
+#   dzzw_pending_count() -> int
+#   dzzw_total_completed() -> int
+#   dzzw_total_submitted() -> int
+#   dzzw_dump_stats() -> 1 (prints to stderr)
+#   dzzw_channel_create(capacity) -> channel_handle
+#   dzzw_channel_send(ch, value)
+#   dzzw_channel_recv(ch) -> value
+#   dzzw_channel_free(ch)
+#   dzzw_mutex_create() -> mutex_handle
+#   dzzw_mutex_lock(m)
+#   dzzw_mutex_unlock(m)
+#   dzzw_mutex_free(m)
+
+fn dzzw_info() {
+    let w = dzzw_worker_count();
+    print("DZZW v2.0 Thread Pool: " + str(w) + " workers (work-stealing, VM reuse)");
+    print("  Submitted: " + str(dzzw_total_submitted()) + ", Completed: " + str(dzzw_total_completed()));
+    return w > 0;
+}
+
+fn dzzw_perf_benchmark() {
+    # Benchmark: spawn many parallel tasks
+    fn worker_task(x) {
+        let s = 0;
+        for i in range(0, 10000) {
+            s = s + i;
+        }
+        return s;
+    }
+    
+    let n = 100;
+    let handles = [];
+    let start = time_now();
+    
+    for i in range(0, n) {
+        let h = dzzw_spawn(worker_task, [i]);
+        push(handles, h);
+    }
+    
+    for i in range(0, n) {
+        let r = dzzw_await(handles[i]);
+    }
+    
+    let elapsed = time_now() - start;
+    print("DZZW v2.0 Benchmark: " + str(n) + " tasks in " + str(elapsed) + "ms");
+    dzzw_dump_stats();
+    return elapsed;
+}
+
+dzzw_info();

@@ -1,0 +1,136 @@
+# End-to-end self-hosting demo
+# Pipeline: H# tokenize → H# parse → H# compile → H# execute
+# Uses ALL H# bootstrap components to execute a test program
+
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/compiler.hto";
+import "bootstrap/executor.hto";
+import "bootstrap/interpreter.hto";
+
+let passed = 0;
+let failed = 0;
+
+fn check(name, actual, expected) {
+    if (actual == expected) {
+        passed = passed + 1;
+        print("[PASS] " + name + " = " + actual);
+    } else {
+        failed = failed + 1;
+        print("[FAIL] " + name + " = " + actual + " (expected " + expected + ")");
+    }
+}
+
+fn run_eval(code, env) {
+    let tokens = tokenize(code);
+    let ast = parse(tokens);
+    let result = eval_node(ast, env);
+    return result;
+}
+
+fn run_compile(code) {
+    let tokens = tokenize(code);
+    let ast = parse(tokens);
+    let bc = compile(ast);
+    let env = [];
+    let result = run(bc, env, env);
+    return result;
+}
+
+# ========================================
+# Group 1: Arithmetic via executor
+# ========================================
+print("--- Arithmetic via executor ---");
+check("exec: 1+2", run_compile("1+2;"), 3);
+check("exec: 10-3", run_compile("10-3;"), 7);
+check("exec: 4*5", run_compile("4*5;"), 20);
+check("exec: 20/4", run_compile("20/4;"), 5);
+check("exec: 2+3*4", run_compile("2+3*4;"), 14);
+check("exec: (2+3)*4", run_compile("(2+3)*4;"), 20);
+
+# ========================================
+# Group 2: Variables via executor
+# ========================================
+print("--- Variables via executor ---");
+check("exec: let", run_compile("let x = 42; x;"), 42);
+check("exec: multi let", run_compile("let a = 10; let b = 20; a + b;"), 30);
+check("exec: reassign", run_compile("let v = 5; v = v + 1; v;"), 6);
+
+# ========================================
+# Group 3: Functions via executor
+# ========================================
+print("--- Functions via executor ---");
+let r3 = run_compile("fn double(x) { return x * 2; } double(5);");
+check("exec: fn call", r3, 10);
+
+let r3b = run_compile("fn add3(a, b, c) { return a + b + c; } add3(1, 2, 3);");
+check("exec: fn 3args", r3b, 6);
+
+let r3c = run_compile("fn fib(n) { if (n < 2) { return n; } return fib(n-1) + fib(n-2); } fib(10);");
+check("exec: fib(10)", r3c, 55);
+
+# ========================================
+# Group 4: If/Else via executor
+# ========================================
+print("--- If/Else via executor ---");
+let r4a = run_compile("let a = 10; if (a > 5) { a = 1; } else { a = 0; } a;");
+check("exec: if-true", r4a, 1);
+
+let r4b = run_compile("let a = 3; if (a > 5) { a = 1; } else { a = 0; } a;");
+check("exec: if-false", r4b, 0);
+
+# ========================================
+# Group 5: While via executor
+# ========================================
+print("--- While via executor ---");
+let r5a = run_compile("let i = 0; while (i < 5) { i = i + 1; } i;");
+check("exec: while", r5a, 5);
+
+let r5b = run_compile("let s = 0; let i = 1; while (i <= 10) { s = s + i; i = i + 1; } s;");
+check("exec: sum 1..10", r5b, 55);
+
+# ========================================
+# Group 6: Self-hosting: executor runs its own test
+# ========================================
+print("--- Self-hosting: executor runs test code ---");
+# the executor is compiled H# code, running bytecode that tests itself
+let self_code = "fn add(x, y) { return x + y; } add(100, 200);";
+let r6 = run_compile(self_code);
+check("exec: self add", r6, 300);
+
+# ========================================
+# Group 7: Nested functions via executor
+# ========================================
+print("--- Nested functions via executor ---");
+let r7a = run_compile("fn outer(x) { fn inner(y) { return x + y; } return inner(10); } outer(5);");
+check("exec: nested fn", r7a, 15);
+
+# ========================================
+# Group 8: Interpreter comparison
+# ========================================
+print("--- Interpreter comparison ---");
+# Same tests via interpreter should produce same results
+let env8 = [];
+run_eval("fn add(x, y) { return x + y; }", env8);
+let r8a = run_eval("add(100, 200);", env8);
+check("interp: add", r8a, 300);
+
+let env8b = [];
+run_eval("fn fib(n) { if (n < 2) { return n; } return fib(n-1) + fib(n-2); }", env8b);
+let r8b = run_eval("fib(10);", env8b);
+check("interp: fib(10)", r8b, 55);
+
+# ========================================
+# Results
+# ========================================
+print("");
+print("=== Self-Hosting Demo Results ===");
+let total = passed + failed;
+print("Passed: " + passed + " / " + total);
+if (failed == 0) {
+    print("ALL TESTS PASSED - Self-hosting chain verified!");
+    print("");
+    print("  Pipeline: tokenize.hto -> parser.hto -> compiler.hto -> executor.hto");
+} else {
+    print("FAILURES: " + failed);
+}

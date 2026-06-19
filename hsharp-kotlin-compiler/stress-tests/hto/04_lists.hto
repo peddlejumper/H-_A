@@ -1,0 +1,15 @@
+# T04 - Lists
+let xs = [1, 2, 3, 4, 5];
+print(len(xs));
+print(xs[0]);
+print(xs[4]);
+print(xs[1] + xs[3]);
+push(xs, 6);
+print(len(xs));
+print(xs[5]);
+let ys = [10, 20, 30];
+print(xs + ys);
+print([0] * 5);
+let sub = [10, 20, 30, 40, 50] - 2;
+print(len(sub));
+print(sub[0]);

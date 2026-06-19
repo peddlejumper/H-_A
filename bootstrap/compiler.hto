@@ -1,0 +1,462 @@
+# H# bootstrap bytecode compiler (full)
+# compile(ast) -> returns a dict with keys `instructions` (list of [op,arg]) and `consts` (list)
+
+fn str_to_num(s) {
+    if (s == nullptr) { return 0; }
+    if (s == "true") { return true; }
+    if (s == "false") { return false; }
+    let neg = false;
+    let i = 0;
+    if (len(s) > 0 and s[0] == "-") { neg = true; i = 1; }
+    let val = 0;
+    let is_float = false;
+    let float_div = 10;
+    let float_part = 0;
+    while (i < len(s)) {
+        let ch = s[i];
+        if (ch == ".") { is_float = true; i = i + 1; continue; }
+        if (is_float) {
+            if (ch == "0") { float_part = float_part + 0 / float_div; }
+            else if (ch == "1") { float_part = float_part + 1 / float_div; }
+            else if (ch == "2") { float_part = float_part + 2 / float_div; }
+            else if (ch == "3") { float_part = float_part + 3 / float_div; }
+            else if (ch == "4") { float_part = float_part + 4 / float_div; }
+            else if (ch == "5") { float_part = float_part + 5 / float_div; }
+            else if (ch == "6") { float_part = float_part + 6 / float_div; }
+            else if (ch == "7") { float_part = float_part + 7 / float_div; }
+            else if (ch == "8") { float_part = float_part + 8 / float_div; }
+            else if (ch == "9") { float_part = float_part + 9 / float_div; }
+            float_div = float_div * 10;
+            i = i + 1;
+            continue;
+        }
+        if (ch == "0") { val = val * 10 + 0; }
+        else if (ch == "1") { val = val * 10 + 1; }
+        else if (ch == "2") { val = val * 10 + 2; }
+        else if (ch == "3") { val = val * 10 + 3; }
+        else if (ch == "4") { val = val * 10 + 4; }
+        else if (ch == "5") { val = val * 10 + 5; }
+        else if (ch == "6") { val = val * 10 + 6; }
+        else if (ch == "7") { val = val * 10 + 7; }
+        else if (ch == "8") { val = val * 10 + 8; }
+        else if (ch == "9") { val = val * 10 + 9; }
+        i = i + 1;
+    }
+    if (is_float) { return val + float_part; }
+    if (neg) { val = 0 - val; }
+    return val;
+}
+
+fn add_const(consts, val) {
+    let i = 0;
+    while (i < len(consts)) {
+        if (consts[i] == val) { return i; }
+        i = i + 1;
+    }
+    push(consts, val);
+    return len(consts) - 1;
+}
+
+fn emit(instrs, opname, arg) {
+    push(instrs, [opname, arg]);
+}
+
+fn compile_expr(node, instrs, consts) {
+    if (node == nullptr) { return nullptr; }
+    let t = node[0];
+    if (t == "NumberLiteral") {
+        let val = str_to_num(node[1]);
+        let idx = add_const(consts, val);
+        emit(instrs, "LOAD_CONST", idx);
+        return nullptr;
+    }
+    if (t == "StringLiteral") {
+        let idx = add_const(consts, node[1]);
+        emit(instrs, "LOAD_CONST", idx);
+        return nullptr;
+    }
+    if (t == "BooleanLiteral") {
+        let idx = add_const(consts, node[1]);
+        emit(instrs, "LOAD_CONST", idx);
+        return nullptr;
+    }
+    if (t == "NullLiteral") {
+        let idx = add_const(consts, nullptr);
+        emit(instrs, "LOAD_CONST", idx);
+        return nullptr;
+    }
+    if (t == "Identifier") {
+        emit(instrs, "LOAD_NAME", node[1]);
+        return nullptr;
+    }
+    if (t == "ArrayLiteral") {
+        let elems = [];
+        if (len(node) > 1 and node[1] != nullptr) { elems = node[1]; }
+        let i = 0;
+        while (i < len(elems)) { compile_expr(elems[i], instrs, consts); i = i + 1; }
+        emit(instrs, "MAKE_LIST", len(elems));
+        return nullptr;
+    }
+    if (t == "DictLiteral") {
+        let pairs = [];
+        if (len(node) > 1 and node[1] != nullptr) { pairs = node[1]; }
+        let i = 0;
+        while (i < len(pairs)) {
+            let p = pairs[i];
+            compile_expr(p[0], instrs, consts);
+            compile_expr(p[1], instrs, consts);
+            i = i + 1;
+        }
+        emit(instrs, "MAKE_DICT", len(pairs));
+        return nullptr;
+    }
+    if (t == "IndexExpression") {
+        compile_expr(node[1], instrs, consts);
+        compile_expr(node[2], instrs, consts);
+        emit(instrs, "GET_ITEM", nullptr);
+        return nullptr;
+    }
+    if (t == "MemberExpression") {
+        compile_expr(node[1], instrs, consts);
+        emit(instrs, "LOAD_ATTR", node[2]);
+        return nullptr;
+    }
+    if (t == "CallExpression") {
+        let fnnode = node[1];
+        let args = [];
+        if (len(node) > 2 and node[2] != nullptr) { args = node[2]; }
+        if (fnnode[0] == "Identifier") {
+            let i = 0;
+            while (i < len(args)) { compile_expr(args[i], instrs, consts); i = i + 1; }
+            emit(instrs, "CALL_FUNCTION", [fnnode[1], len(args)]);
+            return nullptr;
+        }
+        if (fnnode[0] == "MemberExpression") {
+            compile_expr(fnnode[1], instrs, consts);
+            let i = 0;
+            while (i < len(args)) { compile_expr(args[i], instrs, consts); i = i + 1; }
+            emit(instrs, "CALL_METHOD", [fnnode[2], len(args)]);
+            return nullptr;
+        }
+        compile_expr(fnnode, instrs, consts);
+        let i = 0;
+        while (i < len(args)) { compile_expr(args[i], instrs, consts); i = i + 1; }
+        emit(instrs, "CALL_VALUE", len(args));
+        return nullptr;
+    }
+    if (t == "NewExpression") {
+        let cname = node[1];
+        compile_expr(cname, instrs, consts);
+        let args = [];
+        if (len(node) > 2 and node[2] != nullptr) { args = node[2]; }
+        let i = 0;
+        while (i < len(args)) { compile_expr(args[i], instrs, consts); i = i + 1; }
+        emit(instrs, "CALL_NEW", len(args));
+        return nullptr;
+    }
+    if (t == "BinaryOp") {
+        compile_expr(node[1], instrs, consts);
+        compile_expr(node[3], instrs, consts);
+        let op = node[2];
+        if (op == "PLUS") { emit(instrs, "BINARY_ADD", nullptr); return nullptr; }
+        if (op == "MINUS") { emit(instrs, "BINARY_SUB", nullptr); return nullptr; }
+        if (op == "STAR") { emit(instrs, "BINARY_MUL", nullptr); return nullptr; }
+        if (op == "SLASH") { emit(instrs, "BINARY_DIV", nullptr); return nullptr; }
+        if (op == "BITAND") { emit(instrs, "BINARY_BITAND", nullptr); return nullptr; }
+        if (op == "BITOR") { emit(instrs, "BINARY_BITOR", nullptr); return nullptr; }
+        if (op == "BITXOR") { emit(instrs, "BINARY_BITXOR", nullptr); return nullptr; }
+        if (op == "LSHIFT") { emit(instrs, "BINARY_LSHIFT", nullptr); return nullptr; }
+        if (op == "RSHIFT") { emit(instrs, "BINARY_RSHIFT", nullptr); return nullptr; }
+        emit(instrs, "COMPARE_OP", op);
+        return nullptr;
+    }
+    if (t == "UnaryOp") {
+        if (node[1] == "NOT") {
+            compile_expr(node[2], instrs, consts);
+            emit(instrs, "UNARY_NOT", nullptr);
+            return nullptr;
+        }
+        if (node[1] == "MINUS") {
+            compile_expr(node[2], instrs, consts);
+            emit(instrs, "UNARY_NEG", nullptr);
+            return nullptr;
+        }
+    }
+    if (t == "SuperExpression") {
+        let mname = node[1];
+        let args = [];
+        if (len(node) > 2 and node[2] != nullptr) { args = node[2]; }
+        let i = 0;
+        while (i < len(args)) { compile_expr(args[i], instrs, consts); i = i + 1; }
+        emit(instrs, "CALL_SUPER", [mname, len(args)]);
+        return nullptr;
+    }
+    return nullptr;
+}
+
+let __pending_breaks = [];
+let __pending_continues = [];
+
+fn __backpatch_breaks(instrs, target, old_breaks, old_continues) {
+    let i = 0;
+    while (i < len(__pending_breaks)) {
+        let pos = __pending_breaks[i];
+        instrs[pos] = ["JUMP", target];
+        i = i + 1;
+    }
+    __pending_breaks = old_breaks;
+    __pending_continues = old_continues;
+}
+
+fn compile_stmt(node, instrs, consts, last) {
+    if (node == nullptr) { return nullptr; }
+    if (last == nullptr) { last = false; }
+    let t = node[0];
+    if (t == "LetStatement") {
+        compile_expr(node[2], instrs, consts);
+        emit(instrs, "STORE_NAME", node[1]);
+        return nullptr;
+    }
+    if (t == "PrintStatement") {
+        compile_expr(node[1], instrs, consts);
+        emit(instrs, "PRINT", nullptr);
+        return nullptr;
+    }
+    if (t == "Function") {
+        let fname = node[1];
+        let params = [];
+        if (len(node) > 2 and node[2] != nullptr) { params = node[2]; }
+        let body = node[3];
+        let finstrs = [];
+        let fconsts = [];
+        if (body != nullptr and len(body) > 1) {
+            let stmts = body[1];
+            let i = 0;
+            while (i < len(stmts)) { compile_stmt(stmts[i], finstrs, fconsts, false); i = i + 1; }
+        }
+        emit(finstrs, "RETURN_VALUE", nullptr);
+        let fobj = {"args": params, "bytecode": finstrs, "consts": fconsts};
+        let idx = add_const(consts, fobj);
+        emit(instrs, "LOAD_CONST", idx);
+        emit(instrs, "STORE_NAME", fname);
+        return nullptr;
+    }
+    if (t == "ReturnStatement") {
+        compile_expr(node[1], instrs, consts);
+        emit(instrs, "RETURN_VALUE", nullptr);
+        return nullptr;
+    }
+    if (t == "AssignmentIdentifier") {
+        compile_expr(node[2], instrs, consts);
+        emit(instrs, "STORE_NAME", node[1]);
+        return nullptr;
+    }
+    if (t == "AssignmentIndex") {
+        compile_expr(node[1], instrs, consts);
+        compile_expr(node[2], instrs, consts);
+        compile_expr(node[3], instrs, consts);
+        emit(instrs, "SET_ITEM", nullptr);
+        return nullptr;
+    }
+    if (t == "AssignmentMember") {
+        compile_expr(node[1], instrs, consts);
+        compile_expr(node[3], instrs, consts);
+        emit(instrs, "STORE_ATTR", node[2]);
+        return nullptr;
+    }
+    if (t == "ContinueStatement") {
+        if (len(__pending_continues) > 0) {
+            let target = __pending_continues[len(__pending_continues) - 1];
+            emit(instrs, "JUMP", target);
+        } else {
+            emit(instrs, "CONTINUE", nullptr);
+        }
+        return nullptr;
+    }
+    if (t == "BreakStatement") {
+        push(__pending_breaks, len(instrs));
+        emit(instrs, "BREAK", nullptr);
+        return nullptr;
+    }
+    if (t == "IfStatement") {
+        compile_expr(node[1], instrs, consts);
+        let else_jump = len(instrs);
+        emit(instrs, "JUMP_IF_FALSE", 0);
+        compile_stmt(node[2], instrs, consts, false);
+        if (node[3] != nullptr) {
+            let end_jump = len(instrs);
+            emit(instrs, "JUMP", 0);
+            instrs[else_jump][1] = len(instrs);
+            compile_stmt(node[3], instrs, consts, false);
+            instrs[end_jump][1] = len(instrs);
+        } else {
+            instrs[else_jump][1] = len(instrs);
+        }
+        return nullptr;
+    }
+    if (t == "WhileStatement") {
+        let loop_start = len(instrs);
+        compile_expr(node[1], instrs, consts);
+        let exit_jump = len(instrs);
+        emit(instrs, "JUMP_IF_FALSE", 0);
+
+        let old_breaks = __pending_breaks;
+        let old_continues = __pending_continues;
+        __pending_breaks = [];
+        __pending_continues = [loop_start];
+
+        compile_stmt(node[2], instrs, consts, false);
+        emit(instrs, "JUMP", loop_start);
+        let end = len(instrs);
+        instrs[exit_jump][1] = end;
+
+        __backpatch_breaks(instrs, end, old_breaks, old_continues);
+        return nullptr;
+    }
+    if (t == "ForStatement") {
+        let iter = node[3];
+        let var1 = node[1];
+        let var2 = node[2];
+        let body = node[4];
+        compile_expr(iter, instrs, consts);
+        emit(instrs, "STORE_ITER", nullptr);
+        let loop_start = len(instrs);
+        emit(instrs, "LOAD_ITER_NEXT", var1);
+        let exit_jump = len(instrs);
+        emit(instrs, "JUMP_IF_FALSE", 0);
+        if (var2 != nullptr) {
+            emit(instrs, "STORE_ITER_VAL", var2);
+        }
+
+        let old_breaks = __pending_breaks;
+        let old_continues = __pending_continues;
+        __pending_breaks = [];
+        __pending_continues = [loop_start];
+
+        compile_stmt(body, instrs, consts, false);
+        emit(instrs, "JUMP", loop_start);
+        let end = len(instrs);
+        instrs[exit_jump][1] = end;
+
+        __backpatch_breaks(instrs, end, old_breaks, old_continues);
+        emit(instrs, "POP_ITER", nullptr);
+        return nullptr;
+    }
+    if (t == "ClassDeclaration") {
+        let cname = node[1];
+        let body = node[2];
+        let base = nullptr;
+        if (len(node) > 3 and node[3] != nullptr) { base = node[3]; }
+        let impls = [];
+        if (len(node) > 4 and node[4] != nullptr) { impls = node[4]; }
+        let methods = [];
+        let fields = [];
+        let static_methods = [];
+        let private_fields = [];
+        let items = [];
+        if (body != nullptr and len(body) > 1) { items = body[1]; }
+        if (items == nullptr) { items = []; }
+        let i = 0;
+        while (i < len(items)) {
+            let item = items[i];
+            if (item[0] == "Function") {
+                let mname = item[1];
+                let mparams = [];
+                if (len(item) > 2 and item[2] != nullptr) { mparams = item[2]; }
+                let mbody = nullptr;
+                if (len(item) > 3) { mbody = item[3]; }
+                let minstrs = [];
+                let mconsts = [];
+                if (mbody != nullptr and len(mbody) > 1) {
+                    let mstmts = mbody[1];
+                    let mi = 0;
+                    while (mi < len(mstmts)) { compile_stmt(mstmts[mi], minstrs, mconsts, false); mi = mi + 1; }
+                }
+                emit(minstrs, "RETURN_VALUE", nullptr);
+                push(methods, [mname, {"args": mparams, "bytecode": minstrs, "consts": mconsts}]);
+            }
+            if (item[0] == "StaticFunction") {
+                let mname = item[1];
+                let mparams = [];
+                if (len(item) > 2 and item[2] != nullptr) { mparams = item[2]; }
+                let mbody = item[3];
+                let minstrs = [];
+                let mconsts = [];
+                if (mbody != nullptr and len(mbody) > 1) {
+                    let mstmts = mbody[1];
+                    let mi = 0;
+                    while (mi < len(mstmts)) { compile_stmt(mstmts[mi], minstrs, mconsts, false); mi = mi + 1; }
+                }
+                emit(minstrs, "RETURN_VALUE", nullptr);
+                push(static_methods, [mname, {"args": mparams, "bytecode": minstrs, "consts": mconsts}]);
+            }
+            if (item[0] == "FieldDeclaration") {
+                let fname = item[1];
+                let fval = item[2];
+                let is_private = false;
+                if (len(item) > 3 and item[3] == true) { is_private = true; }
+                push(fields, [fname, fval]);
+                if (is_private) { push(private_fields, fname); }
+            }
+            i = i + 1;
+        }
+        let class_obj = {"name": cname, "methods": methods, "fields": fields, "private": private_fields, "base": base, "implements": impls};
+        if (len(static_methods) > 0) {
+            let smap = {};
+            let si = 0;
+            while (si < len(static_methods)) {
+                let sp = static_methods[si];
+                smap[sp[0]] = sp[1];
+                si = si + 1;
+            }
+            class_obj["__static__"] = smap;
+        }
+        let idx = add_const(consts, class_obj);
+        emit(instrs, "LOAD_CONST", idx);
+        emit(instrs, "MAKE_CLASS", nullptr);
+        emit(instrs, "STORE_NAME", cname);
+        return nullptr;
+    }
+    if (t == "BlockStatement") {
+        let stmts = [];
+        if (len(node) > 1 and node[1] != nullptr) { stmts = node[1]; }
+        let i = 0;
+        while (i < len(stmts)) { compile_stmt(stmts[i], instrs, consts, false); i = i + 1; }
+        return nullptr;
+    }
+    if (t == "Program") {
+        let stmts = [];
+        if (len(node) > 1 and node[1] != nullptr) { stmts = node[1]; }
+        let i = 0;
+        let n = len(stmts);
+        while (i < n) {
+            let is_last = false;
+            if (i == n - 1) { is_last = true; }
+            compile_stmt(stmts[i], instrs, consts, is_last);
+            i = i + 1;
+        }
+        return nullptr;
+    }
+    if (t == "ImportStatement") {
+        if (node[1] != nullptr and node[1][0] == "StringLiteral") {
+            emit(instrs, "IMPORT_FILE", node[1][1]);
+        } else if (node[1] != nullptr and node[1][0] == "Identifier") {
+            emit(instrs, "IMPORT_NAME", node[1][1]);
+        }
+        return nullptr;
+    }
+    # expression statement
+    compile_expr(node, instrs, consts);
+    if (last == false) { emit(instrs, "POP_TOP", nullptr); }
+    return nullptr;
+}
+
+fn compile(ast) {
+    let instrs = [];
+    let consts = [];
+    __pending_breaks = [];
+    __pending_continues = [];
+    compile_stmt(ast, instrs, consts, false);
+    emit(instrs, "HALT", nullptr);
+    return {"instructions": instrs, "consts": consts};
+}

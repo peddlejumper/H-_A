@@ -1,0 +1,5 @@
+.vscode/**
+.git/**
+.gitignore
+images/*.svg
+*.vsix

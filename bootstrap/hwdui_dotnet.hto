@@ -1,0 +1,3640 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# hwdui_dotnet.hto — H# zzwUI ↔ .NET 协同开发库
+# ═══════════════════════════════════════════════════════════════════════════
+# 提供 H# 与 .NET 运行时之间的完整互操作基础设施：
+# - 类型映射与值转换
+# - 对象代理与反射调用
+# - 跨运行时事件总线
+# - zzwUI 控件 ↔ .NET 控件桥接
+# - 双向数据绑定
+# - RPC 远程过程调用
+# - 序列化与反序列化
+# - 异步任务桥接
+# - 诊断与配置
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/hwdui.hto";
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 1: 核心互操作层 — 类型映射、值包装、调用代理
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetTypeInfo {
+    let type_name = "";
+    let namespace = "";
+    let assembly = "";
+    let is_value_type = false;
+    let is_generic = false;
+    let generic_args = [];
+    let base_type = "";
+    let interfaces = [];
+    let is_enum = false;
+    let is_array = false;
+    let is_primitive = false;
+    let full_name = "";
+    let clr_type = "";
+
+    fn init_dn_type(name, ns, assm) {
+        self.name = name;
+        self.namespace = ns;
+        self.assembly = assm;
+        self.is_value_type = false;
+        self.is_generic = false;
+        self.generic_args = [];
+        self.base_type = "";
+        self.interfaces = [];
+        self.is_enum = false;
+        self.is_array = false;
+        self.is_primitive = false;
+        self.full_name = ns + "." + name;
+        if (ns == "") {
+            self.full_name = name;
+        }
+        self.clr_type = "";
+        return 0;
+    }
+
+    fn setValueType(v) { self.is_value_type = v; return 0; }
+    fn setGeneric(v) { self.is_generic = v; return 0; }
+    fn addGenericArg(arg) { push(self.generic_args, arg); return 0; }
+    fn setBaseType(bt) { self.base_type = bt; return 0; }
+    fn addInterface(iface) { push(self.interfaces, iface); return 0; }
+    fn setEnum(v) { self.is_enum = v; return 0; }
+    fn setArray(v) { self.is_array = v; return 0; }
+    fn setPrimitive(v) { self.is_primitive = v; return 0; }
+    fn setCLRType(clr) { self.clr_type = clr; return 0; }
+
+    fn getFullName() { return self.full_name; }
+    fn getTypeName() { return self.type_name; }
+    fn getNamespace() { return self.namespace; }
+    fn getAssembly() { return self.assembly; }
+    fn isValueType() { return self.is_value_type; }
+    fn isGeneric() { return self.is_generic; }
+    fn isEnum() { return self.is_enum; }
+    fn isArray() { return self.is_array; }
+    fn isPrimitive() { return self.is_primitive; }
+    fn getBaseType() { return self.base_type; }
+    fn getInterfaces() { return self.interfaces; }
+    fn getGenericArgs() { return self.generic_args; }
+}
+
+
+class DotNetTypeMapper {
+    let type_map = {};
+    let reverse_map = {};
+    let primitive_types = [];
+    let numeric_types = [];
+
+    fn init_mapper() {
+        self.type_map = {};
+        self.reverse_map = {};
+        self.primitive_types = [];
+        self.numeric_types = [];
+        self._register_defaults();
+        return 0;
+    }
+
+    fn _register_defaults() {
+        self.register("int", "System.Int32", true);
+        self.register("float", "System.Double", true);
+        self.register("bool", "System.Boolean", true);
+        self.register("string", "System.String", false);
+        self.register("null", "System.Object", false);
+        self.register("list", "System.Collections.Generic.List", false);
+        self.register("dict", "System.Collections.Generic.Dictionary", false);
+        self.register("int64", "System.Int64", true);
+        self.register("int16", "System.Int16", true);
+        self.register("byte", "System.Byte", true);
+        self.register("char", "System.Char", true);
+        self.register("decimal", "System.Decimal", true);
+        self.register("single", "System.Single", true);
+        self.register("uint", "System.UInt32", true);
+        self.register("uint64", "System.UInt64", true);
+        self.register("uint16", "System.UInt16", true);
+        self.register("sbyte", "System.SByte", true);
+        return 0;
+    }
+
+    fn register(htype, dntype, prim) {
+        self.type_map[htype] = {"dotnet": dntype, "primitive": prim};
+        self.reverse_map[dntype] = htype;
+        if (prim) {
+            push(self.primitive_types, dntype);
+        }
+        return 0;
+    }
+
+    fn unregister(dntype) {
+        let htype = self.reverse_map[dntype];
+        if (htype != nullptr) {
+            self.type_map[htype] = nullptr;
+        }
+        self.reverse_map[dntype] = nullptr;
+        return 0;
+    }
+
+    fn toDotNet(htype) {
+        let info = self.type_map[htype];
+        if (info != nullptr) {
+            return info["dotnet"];
+        }
+        return "System.Object";
+    }
+
+    fn toHSharp(dntype) {
+        let htype = self.reverse_map[dntype];
+        if (htype != nullptr) {
+            return htype;
+        }
+        return "object";
+    }
+
+    fn isPrimitive(dntype) {
+        let i = 0;
+        while (i < len(self.primitive_types)) {
+            if (self.primitive_types[i] == dntype) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn getTypeInfo(dntype) {
+        let info = new DotNetTypeInfo();
+        let parts = self._splitTypeName(dntype);
+        info.init_dn_type(parts["name"], parts["namespace"], "");
+        return info;
+    }
+
+    fn _splitTypeName(full_name) {
+        let last_dot = -1;
+        let i = 0;
+        while (i < len(full_name)) {
+            if (full_name[i] == ".") {
+                last_dot = i;
+            }
+            i = i + 1;
+        }
+        if (last_dot < 0) {
+            return {"namespace": "", "name": full_name};
+        }
+        let ns = "";
+        i = 0;
+        while (i < last_dot) {
+            ns = ns + full_name[i];
+            i = i + 1;
+        }
+        let nm = "";
+        i = last_dot + 1;
+        while (i < len(full_name)) {
+            nm = nm + full_name[i];
+            i = i + 1;
+        }
+        return {"namespace": ns, "name": nm};
+    }
+
+    fn registerCustom(htype, dntype) {
+        self.register(htype, dntype, false);
+        return 0;
+    }
+
+    fn clear() {
+        self.type_map = {};
+        self.reverse_map = {};
+        self.primitive_types = [];
+        return 0;
+    }
+}
+
+
+class DotNetValue {
+    let value = nullptr;
+    let type_name = "System.Object";
+    let is_null = true;
+    let is_primitive = false;
+    let array_rank = 0;
+    let generic_args = [];
+
+    fn init_dnval(val, tn) {
+        self.value = val;
+        self.type_name = tn;
+        self.is_null = (val == nullptr);
+        self.is_primitive = false;
+        self.array_rank = 0;
+        self.generic_args = [];
+        return 0;
+    }
+
+    fn setPrimitive(p) { self.is_primitive = p; return 0; }
+    fn setArrayRank(r) { self.array_rank = r; return 0; }
+    fn addGenericArg(arg) { push(self.generic_args, arg); return 0; }
+
+    fn getValue() { return self.value; }
+    fn getTypeName() { return self.type_name; }
+    fn isNull() { return self.is_null; }
+    fn isPrimitive() { return self.is_primitive; }
+    fn getArrayRank() { return self.array_rank; }
+    fn getGenericArgs() { return self.generic_args; }
+
+    fn asInt() {
+        if (self.is_null) { return 0; }
+        return self.value;
+    }
+
+    fn asFloat() {
+        if (self.is_null) { return 0.0; }
+        return self.value;
+    }
+
+    fn asBool() {
+        if (self.is_null) { return false; }
+        return self.value;
+    }
+
+    fn asString() {
+        if (self.is_null) { return ""; }
+        return self.value;
+    }
+
+    fn asList() {
+        if (self.is_null) { return []; }
+        return self.value;
+    }
+
+    fn asDict() {
+        if (self.is_null) { return {}; }
+        return self.value;
+    }
+}
+
+
+class DotNetInvoke {
+    let target = nullptr;
+    let method_name = "";
+    let args = [];
+    let type_args = [];
+    let is_static = false;
+    let is_property_get = false;
+    let is_property_set = false;
+    let property_name = "";
+    let timeout_ms = 30000;
+    let call_id = 0;
+
+    fn init_invoke(method, arg_list) {
+        self.method_name = method;
+        self.args = arg_list;
+        self.type_args = [];
+        self.is_static = false;
+        self.is_property_get = false;
+        self.is_property_set = false;
+        self.timeout_ms = 30000;
+        self.call_id = 0;
+        return 0;
+    }
+
+    fn setTarget(t) { self.target = t; return 0; }
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn addTypeArg(ta) { push(self.type_args, ta); return 0; }
+    fn setTimeout(ms) { self.timeout_ms = ms; return 0; }
+
+    fn setPropertyGet(prop_name) {
+        self.is_property_get = true;
+        self.property_name = prop_name;
+        return 0;
+    }
+
+    fn setPropertySet(prop_name, value) {
+        self.is_property_set = true;
+        self.property_name = prop_name;
+        self.args = [value];
+        return 0;
+    }
+
+    fn getMethodName() { return self.method_name; }
+    fn getArgs() { return self.args; }
+    fn getArgCount() { return len(self.args); }
+    fn isStatic() { return self.is_static; }
+    fn isPropertyGet() { return self.is_property_get; }
+    fn isPropertySet() { return self.is_property_set; }
+    fn getPropertyName() { return self.property_name; }
+    fn getTimeout() { return self.timeout_ms; }
+}
+
+
+class DotNetResult {
+    let value = nullptr;
+    let success = false;
+    let error_message = "";
+    let error_type = "";
+    let stack_trace = "";
+    let call_id = 0;
+    let duration_ms = 0;
+    let is_exception = false;
+
+    fn init_result() {
+        self.value = nullptr;
+        self.success = false;
+        self.error_message = "";
+        self.error_type = "";
+        self.stack_trace = "";
+        self.call_id = 0;
+        self.duration_ms = 0;
+        self.is_exception = false;
+        return 0;
+    }
+
+    fn setSuccess(val) {
+        self.value = val;
+        self.success = true;
+        return 0;
+    }
+
+    fn setError(msg, etype) {
+        self.error_message = msg;
+        self.error_type = etype;
+        self.success = false;
+        self.is_exception = true;
+        return 0;
+    }
+
+    fn setStackTrace(trace) { self.stack_trace = trace; return 0; }
+    fn setCallId(id) { self.call_id = id; return 0; }
+    fn setDuration(ms) { self.duration_ms = ms; return 0; }
+
+    fn isSuccess() { return self.success; }
+    fn isException() { return self.is_exception; }
+    fn getValue() { return self.value; }
+    fn getError() { return self.error_message; }
+    fn getErrorType() { return self.error_type; }
+    fn getStackTrace() { return self.stack_trace; }
+    fn getDuration() { return self.duration_ms; }
+
+    fn unwrap() {
+        if (self.success == false) {
+            print("DotNetError: " + self.error_message);
+            return nullptr;
+        }
+        return self.value;
+    }
+
+    fn expect(msg) {
+        if (self.success == false) {
+            print("DotNetError: " + msg + " - " + self.error_message);
+        }
+        return self.value;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 2: 对象桥接层 — 对象代理、类型描述、程序集
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetObject {
+    let object_id = 0;
+    let type_name = "";
+    let is_disposed = false;
+    let properties = {};
+    let cached_methods = [];
+    let cached_properties = [];
+    let is_remote = false;
+    let remote_endpoint = "";
+    let metadata = {};
+
+    fn init_dnobj(obj_id, tn) {
+        self.object_id = obj_id;
+        self.type_name = tn;
+        self.is_disposed = false;
+        self.properties = {};
+        self.cached_methods = [];
+        self.cached_properties = [];
+        self.is_remote = false;
+        self.remote_endpoint = "";
+        self.metadata = {};
+        return 0;
+    }
+
+    fn getObjectId() { return self.object_id; }
+    fn getTypeName() { return self.type_name; }
+    fn isDisposed() { return self.is_disposed; }
+
+    fn setProperty(name, value) {
+        self.properties[name] = value;
+        return 0;
+    }
+
+    fn getProperty(name) {
+        return self.properties[name];
+    }
+
+    fn hasProperty(name) {
+        return self.properties[name] != nullptr;
+    }
+
+    fn cacheMethod(method_name) {
+        push(self.cached_methods, method_name);
+        return 0;
+    }
+
+    fn hasMethod(method_name) {
+        let i = 0;
+        while (i < len(self.cached_methods)) {
+            if (self.cached_methods[i] == method_name) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn cacheProperty(prop_name) {
+        push(self.cached_properties, prop_name);
+        return 0;
+    }
+
+    fn setRemote(endpoint) {
+        self.is_remote = true;
+        self.remote_endpoint = endpoint;
+        return 0;
+    }
+
+    fn isRemote() { return self.is_remote; }
+    fn getRemoteEndpoint() { return self.remote_endpoint; }
+
+    fn dispose() {
+        self.is_disposed = true;
+        self.properties = {};
+        self.cached_methods = [];
+        self.cached_properties = [];
+        return 0;
+    }
+
+    fn setMetadata(key, value) {
+        self.metadata[key] = value;
+        return 0;
+    }
+
+    fn getMetadata(key) {
+        return self.metadata[key];
+    }
+}
+
+
+class DotNetObjectCache {
+    let objects = {};
+    let id_counter = 0;
+    let max_cached = 1000;
+    let lru_queue = [];
+
+    fn init_cache() {
+        self.objects = {};
+        self.id_counter = 0;
+        self.max_cached = 1000;
+        self.lru_queue = [];
+        return 0;
+    }
+
+    fn add(obj) {
+        let obj_id = self._next_id();
+        obj.object_id = obj_id;
+        self.objects[obj_id] = obj;
+        push(self.lru_queue, obj_id);
+        if (len(self.lru_queue) > self.max_cached) {
+            let oldest = self.lru_queue[0];
+            let new_q = [];
+            let i = 1;
+            while (i < len(self.lru_queue)) {
+                push(new_q, self.lru_queue[i]);
+                i = i + 1;
+            }
+            self.lru_queue = new_q;
+            self.objects[oldest] = nullptr;
+        }
+        return obj_id;
+    }
+
+    fn get(obj_id) {
+        let obj = self.objects[obj_id];
+        if (obj != nullptr) {
+            self._touch(obj_id);
+        }
+        return obj;
+    }
+
+    fn remove(obj_id) {
+        let obj = self.objects[obj_id];
+        if (obj != nullptr) {
+            obj.dispose();
+        }
+        self.objects[obj_id] = nullptr;
+        let new_q = [];
+        let i = 0;
+        while (i < len(self.lru_queue)) {
+            if (self.lru_queue[i] != obj_id) {
+                push(new_q, self.lru_queue[i]);
+            }
+            i = i + 1;
+        }
+        self.lru_queue = new_q;
+        return 0;
+    }
+
+    fn clear() {
+        let keys = [];
+        for k in self.objects {
+            let obj = self.objects[k];
+            if (obj != nullptr) {
+                obj.dispose();
+            }
+        }
+        self.objects = {};
+        self.lru_queue = [];
+        self.id_counter = 0;
+        return 0;
+    }
+
+    fn getCount() {
+        let count = 0;
+        for k in self.objects {
+            if (self.objects[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn contains(obj_id) {
+        return self.objects[obj_id] != nullptr;
+    }
+
+    fn _next_id() {
+        self.id_counter = self.id_counter + 1;
+        return self.id_counter;
+    }
+
+    fn _touch(obj_id) {
+        let new_q = [];
+        let i = 0;
+        while (i < len(self.lru_queue)) {
+            if (self.lru_queue[i] != obj_id) {
+                push(new_q, self.lru_queue[i]);
+            }
+            i = i + 1;
+        }
+        push(new_q, obj_id);
+        self.lru_queue = new_q;
+        return 0;
+    }
+}
+
+
+class DotNetAssembly {
+    let name = "";
+    let version = "";
+    let path = "";
+    let types = [];
+    let references = [];
+    let is_loaded = false;
+    let is_netcore = false;
+    let target_framework = "";
+
+    fn init_assembly(name, ver, path) {
+        self.name = name;
+        self.version = ver;
+        self.path = path;
+        self.types = [];
+        self.references = [];
+        self.is_loaded = false;
+        self.is_netcore = false;
+        self.target_framework = "";
+        return 0;
+    }
+
+    fn addType(type_info) {
+        push(self.types, type_info);
+        return 0;
+    }
+
+    fn addReference(ref_name) {
+        push(self.references, ref_name);
+        return 0;
+    }
+
+    fn getType(type_name) {
+        let i = 0;
+        while (i < len(self.types)) {
+            let t = self.types[i];
+            if (t.getFullName() == type_name or t.getTypeName() == type_name) {
+                return t;
+            }
+            i = i + 1;
+        }
+        return nullptr;
+    }
+
+    fn getTypeCount() { return len(self.types); }
+    fn getReferenceCount() { return len(self.references); }
+    fn getName() { return self.name; }
+    fn getVersion() { return self.version; }
+    fn getPath() { return self.path; }
+    fn isLoaded() { return self.is_loaded; }
+    fn setLoaded(v) { self.is_loaded = v; return 0; }
+    fn setNetCore(v) { self.is_netcore = v; return 0; }
+    fn setTargetFramework(tf) { self.target_framework = tf; return 0; }
+    fn getTargetFramework() { return self.target_framework; }
+    fn isNetCore() { return self.is_netcore; }
+}
+
+
+class DotNetAssemblyLoader {
+    let assemblies = {};
+    let loaded_count = 0;
+    let search_paths = [];
+
+    fn init_loader() {
+        self.assemblies = {};
+        self.loaded_count = 0;
+        self.search_paths = [];
+        return 0;
+    }
+
+    fn addSearchPath(path) {
+        push(self.search_paths, path);
+        return 0;
+    }
+
+    fn register(assm) {
+        self.assemblies[assm.name] = assm;
+        return 0;
+    }
+
+    fn getAssembly(name) {
+        return self.assemblies[name];
+    }
+
+    fn load(name) {
+        let assm = self.assemblies[name];
+        if (assm != nullptr) {
+            assm.setLoaded(true);
+            self.loaded_count = self.loaded_count + 1;
+        }
+        return assm;
+    }
+
+    fn unload(name) {
+        let assm = self.assemblies[name];
+        if (assm != nullptr) {
+            assm.setLoaded(false);
+            self.loaded_count = self.loaded_count - 1;
+        }
+        return 0;
+    }
+
+    fn isLoaded(name) {
+        let assm = self.assemblies[name];
+        if (assm != nullptr) {
+            return assm.isLoaded();
+        }
+        return false;
+    }
+
+    fn getLoadedCount() { return self.loaded_count; }
+    fn getAssemblyCount() {
+        let count = 0;
+        for k in self.assemblies {
+            count = count + 1;
+        }
+        return count;
+    }
+
+    fn clear() {
+        self.assemblies = {};
+        self.loaded_count = 0;
+        return 0;
+    }
+}
+
+
+class DotNetConstructor {
+    let type_name = "";
+    let params = [];
+    let param_names = [];
+    let is_static = false;
+
+    fn init_ctor(tn) {
+        self.type_name = tn;
+        self.params = [];
+        self.param_names = [];
+        self.is_static = false;
+        return 0;
+    }
+
+    fn addParam(ptype, pname) {
+        push(self.params, ptype);
+        push(self.param_names, pname);
+        return 0;
+    }
+
+    fn getParamCount() { return len(self.params); }
+    fn getParams() { return self.params; }
+    fn getParamNames() { return self.param_names; }
+    fn getParamType(index) {
+        if (index >= 0 and index < len(self.params)) {
+            return self.params[index];
+        }
+        return "";
+    }
+}
+
+
+class DotNetMethod {
+    let name = "";
+    let return_type = "System.Void";
+    let params = [];
+    let param_names = [];
+    let is_static = false;
+    let is_async = false;
+    let is_extension = false;
+    let visibility = "public";
+    let attributes = [];
+
+    fn init_method(name, ret_type) {
+        self.name = name;
+        self.return_type = ret_type;
+        self.params = [];
+        self.param_names = [];
+        self.is_static = false;
+        self.is_async = false;
+        self.is_extension = false;
+        self.visibility = "public";
+        self.attributes = [];
+        return 0;
+    }
+
+    fn addParam(ptype, pname) {
+        push(self.params, ptype);
+        push(self.param_names, pname);
+        return 0;
+    }
+
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn setAsync(v) { self.is_async = v; return 0; }
+    fn setExtension(v) { self.is_extension = v; return 0; }
+    fn setVisibility(v) { self.visibility = v; return 0; }
+    fn addAttribute(attr) { push(self.attributes, attr); return 0; }
+
+    fn getName() { return self.name; }
+    fn getReturnType() { return self.return_type; }
+    fn getParamCount() { return len(self.params); }
+    fn getParams() { return self.params; }
+    fn getParamNames() { return self.param_names; }
+    fn isStatic() { return self.is_static; }
+    fn isAsync() { return self.is_async; }
+    fn isExtension() { return self.is_extension; }
+    fn getVisibility() { return self.visibility; }
+    fn hasAttribute(name) {
+        let i = 0;
+        while (i < len(self.attributes)) {
+            if (self.attributes[i] == name) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+}
+
+
+class DotNetProperty {
+    let name = "";
+    let type_name = "";
+    let can_read = false;
+    let can_write = false;
+    let is_static = false;
+    let is_indexer = false;
+    let visibility = "public";
+
+    fn init_prop(name, tn) {
+        self.name = name;
+        self.type_name = tn;
+        self.can_read = false;
+        self.can_write = false;
+        self.is_static = false;
+        self.is_indexer = false;
+        self.visibility = "public";
+        return 0;
+    }
+
+    fn setReadable(v) { self.can_read = v; return 0; }
+    fn setWritable(v) { self.can_write = v; return 0; }
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn setIndexer(v) { self.is_indexer = v; return 0; }
+    fn setVisibility(v) { self.visibility = v; return 0; }
+
+    fn getName() { return self.name; }
+    fn getType() { return self.type_name; }
+    fn canRead() { return self.can_read; }
+    fn canWrite() { return self.can_write; }
+    fn isStatic() { return self.is_static; }
+    fn isIndexer() { return self.is_indexer; }
+}
+
+
+class DotNetField {
+    let name = "";
+    let type_name = "";
+    let is_static = false;
+    let is_readonly = false;
+    let is_const = false;
+    let visibility = "public";
+
+    fn init_field(name, tn) {
+        self.name = name;
+        self.type_name = tn;
+        self.is_static = false;
+        self.is_readonly = false;
+        self.is_const = false;
+        self.visibility = "public";
+        return 0;
+    }
+
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn setReadonly(v) { self.is_readonly = v; return 0; }
+    fn setConst(v) { self.is_const = v; return 0; }
+    fn setVisibility(v) { self.visibility = v; return 0; }
+
+    fn getName() { return self.name; }
+    fn getType() { return self.type_name; }
+    fn isStatic() { return self.is_static; }
+    fn isReadonly() { return self.is_readonly; }
+    fn isConst() { return self.is_const; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 3: 事件桥接层 — 跨运行时事件总线
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetEvent {
+    let name = "";
+    let handler_type = "";
+    let is_static = false;
+    let subscribers = [];
+    let is_remote = false;
+
+    fn init_event(name, handler) {
+        self.name = name;
+        self.handler_type = handler;
+        self.is_static = false;
+        self.subscribers = [];
+        self.is_remote = false;
+        return 0;
+    }
+
+    fn addSubscriber(subscriber) {
+        push(self.subscribers, subscriber);
+        return 0;
+    }
+
+    fn removeSubscriber(subscriber) {
+        let new_subs = [];
+        let i = 0;
+        while (i < len(self.subscribers)) {
+            if (self.subscribers[i] != subscriber) {
+                push(new_subs, self.subscribers[i]);
+            }
+            i = i + 1;
+        }
+        self.subscribers = new_subs;
+        return 0;
+    }
+
+    fn getSubscriberCount() { return len(self.subscribers); }
+    fn getSubscribers() { return self.subscribers; }
+    fn getName() { return self.name; }
+    fn getHandlerType() { return self.handler_type; }
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn isStatic() { return self.is_static; }
+    fn setRemote(v) { self.is_remote = v; return 0; }
+    fn isRemote() { return self.is_remote; }
+}
+
+
+class DotNetEventHandler {
+    let handler_id = 0;
+    let event_name = "";
+    let callback = nullptr;
+    let is_oneshot = false;
+    let filter = nullptr;
+    let is_active = true;
+
+    fn init_handler(event_name, callback) {
+        self.event_name = event_name;
+        self.callback = callback;
+        self.is_oneshot = false;
+        self.filter = nullptr;
+        self.is_active = true;
+        self.handler_id = 0;
+        return 0;
+    }
+
+    fn setOneShot(v) { self.is_oneshot = v; return 0; }
+    fn setFilter(filter_fn) { self.filter = filter_fn; return 0; }
+    fn setActive(v) { self.is_active = v; return 0; }
+    fn setId(id) { self.handler_id = id; return 0; }
+
+    fn getId() { return self.handler_id; }
+    fn getEventName() { return self.event_name; }
+    fn isActive() { return self.is_active; }
+    fn isOneShot() { return self.is_oneshot; }
+
+    fn invoke(sender, args) {
+        if (self.is_active == false) { return 0; }
+        if (self.filter != nullptr) {
+            if (self.filter(sender, args) == false) {
+                return 0;
+            }
+        }
+        if (self.callback != nullptr) {
+            self.callback(sender, args);
+        }
+        if (self.is_oneshot) {
+            self.is_active = false;
+        }
+        return 0;
+    }
+}
+
+
+class DotNetCrossEventBus {
+    let events = {};
+    let remote_events = {};
+    let handler_counter = 0;
+    let bridge_enabled = false;
+
+    fn init_cross_bus() {
+        self.events = {};
+        self.remote_events = {};
+        self.handler_counter = 0;
+        self.bridge_enabled = false;
+        return 0;
+    }
+
+    fn subscribe(event_name, callback) {
+        let evt = self.events[event_name];
+        if (evt == nullptr) {
+            evt = new DotNetEvent();
+            evt.init_event(event_name, "System.EventHandler");
+            self.events[event_name] = evt;
+        }
+        let handler = new DotNetEventHandler();
+        handler.init_handler(event_name, callback);
+        self.handler_counter = self.handler_counter + 1;
+        handler.setId(self.handler_counter);
+        evt.addSubscriber(handler);
+        return handler;
+    }
+
+    fn unsubscribe(event_name, handler) {
+        let evt = self.events[event_name];
+        if (evt != nullptr) {
+            evt.removeSubscriber(handler);
+        }
+        return 0;
+    }
+
+    fn publish(event_name, sender, args) {
+        let evt = self.events[event_name];
+        if (evt == nullptr) { return 0; }
+        let subs = evt.getSubscribers();
+        let i = 0;
+        while (i < len(subs)) {
+            subs[i].invoke(sender, args);
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn subscribeRemote(event_name, callback) {
+        return self.subscribe(event_name, callback);
+    }
+
+    fn publishRemote(event_name, data) {
+        let evt = self.remote_events[event_name];
+        if (evt == nullptr) {
+            evt = new DotNetEvent();
+            evt.init_event(event_name, "System.EventHandler");
+            evt.setRemote(true);
+            self.remote_events[event_name] = evt;
+        }
+        return self.publish(event_name, nullptr, data);
+    }
+
+    fn enableBridge() {
+        self.bridge_enabled = true;
+        return 0;
+    }
+
+    fn disableBridge() {
+        self.bridge_enabled = false;
+        return 0;
+    }
+
+    fn isBridgeEnabled() { return self.bridge_enabled; }
+
+    fn getEventCount() {
+        let count = 0;
+        for k in self.events {
+            count = count + 1;
+        }
+        for k in self.remote_events {
+            count = count + 1;
+        }
+        return count;
+    }
+
+    fn clear() {
+        self.events = {};
+        self.remote_events = {};
+        self.handler_counter = 0;
+        return 0;
+    }
+
+    fn clearEvent(event_name) {
+        let new_events = {};
+        for k in self.events {
+            if (k != event_name) {
+                new_events[k] = self.events[k];
+            }
+        }
+        self.events = new_events;
+        let new_remote = {};
+        for k in self.remote_events {
+            if (k != event_name) {
+                new_remote[k] = self.remote_events[k];
+            }
+        }
+        self.remote_events = new_remote;
+        return 0;
+    }
+}
+
+
+class DotNetUIDispatcher {
+    let invoke_queue = [];
+    let is_processing = false;
+    let main_thread_id = 0;
+    let sync_context = nullptr;
+
+    fn init_dispatcher() {
+        self.invoke_queue = [];
+        self.is_processing = false;
+        self.main_thread_id = 0;
+        self.sync_context = nullptr;
+        return 0;
+    }
+
+    fn invoke(action) {
+        push(self.invoke_queue, {"action": action, "sync": true, "result": nullptr, "done": false});
+        return 0;
+    }
+
+    fn beginInvoke(action) {
+        push(self.invoke_queue, {"action": action, "sync": false, "result": nullptr, "done": false});
+        return 0;
+    }
+
+    fn processQueue() {
+        if (self.is_processing) { return 0; }
+        self.is_processing = true;
+        let i = 0;
+        while (i < len(self.invoke_queue)) {
+            let item = self.invoke_queue[i];
+            if (item["done"] == false and item["action"] != nullptr) {
+                item["action"]();
+                item["done"] = true;
+            }
+            i = i + 1;
+        }
+        let new_q = [];
+        i = 0;
+        while (i < len(self.invoke_queue)) {
+            if (self.invoke_queue[i]["done"] == false) {
+                push(new_q, self.invoke_queue[i]);
+            }
+            i = i + 1;
+        }
+        self.invoke_queue = new_q;
+        self.is_processing = false;
+        return 0;
+    }
+
+    fn getQueueSize() { return len(self.invoke_queue); }
+    fn clear() { self.invoke_queue = []; return 0; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 4: UI 桥接层 — zzwUI 控件 ↔ .NET 控件
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ZzwUIControlBridge {
+    let hwidget = nullptr;
+    let dotnet_control = nullptr;
+    let bridge_id = 0;
+    let property_bindings = [];
+    let event_bindings = [];
+    let is_syncing = false;
+    let sync_direction = "both";
+    let enabled = true;
+
+    fn init_bridge(hw, dnctrl) {
+        self.hwidget = hw;
+        self.dotnet_control = dnctrl;
+        self.property_bindings = [];
+        self.event_bindings = [];
+        self.is_syncing = false;
+        self.sync_direction = "both";
+        self.enabled = true;
+        self.bridge_id = 0;
+        return 0;
+    }
+
+    fn setSyncDirection(dir) {
+        self.sync_direction = dir;
+        return 0;
+    }
+
+    fn setEnabled(v) {
+        self.enabled = v;
+        return 0;
+    }
+
+    fn isEnabled() { return self.enabled; }
+
+    fn bindProperty(hprop, dnprop) {
+        push(self.property_bindings, {"hsharp": hprop, "dotnet": dnprop});
+        return 0;
+    }
+
+    fn bindEvent(hevent, dnevent) {
+        push(self.event_bindings, {"hsharp": hevent, "dotnet": dnevent});
+        return 0;
+    }
+
+    fn syncToDotNet() {
+        if (self.enabled == false) { return 0; }
+        if (self.sync_direction == "hsharp_to_dotnet" or self.sync_direction == "both") {
+            self.is_syncing = true;
+            let i = 0;
+            while (i < len(self.property_bindings)) {
+                let binding = self.property_bindings[i];
+                let hprop = binding["hsharp"];
+                let dnprop = binding["dotnet"];
+                let val = self.hwidget[hprop];
+                if (val != nullptr) {
+                    self.dotnet_control[dnprop] = val;
+                }
+                i = i + 1;
+            }
+            self.is_syncing = false;
+        }
+        return 0;
+    }
+
+    fn syncToHSharp() {
+        if (self.enabled == false) { return 0; }
+        if (self.sync_direction == "dotnet_to_hsharp" or self.sync_direction == "both") {
+            self.is_syncing = true;
+            let i = 0;
+            while (i < len(self.property_bindings)) {
+                let binding = self.property_bindings[i];
+                let hprop = binding["hsharp"];
+                let dnprop = binding["dotnet"];
+                let val = self.dotnet_control[dnprop];
+                if (val != nullptr) {
+                    self.hwidget[hprop] = val;
+                }
+                i = i + 1;
+            }
+            self.is_syncing = false;
+        }
+        return 0;
+    }
+
+    fn syncBoth() {
+        self.syncToDotNet();
+        self.syncToHSharp();
+        return 0;
+    }
+
+    fn getHWidget() { return self.hwidget; }
+    fn getDotNetControl() { return self.dotnet_control; }
+    fn getPropertyBindings() { return self.property_bindings; }
+    fn getEventBindings() { return self.event_bindings; }
+
+    fn unbindProperty(hprop) {
+        let new_bindings = [];
+        let i = 0;
+        while (i < len(self.property_bindings)) {
+            if (self.property_bindings[i]["hsharp"] != hprop) {
+                push(new_bindings, self.property_bindings[i]);
+            }
+            i = i + 1;
+        }
+        self.property_bindings = new_bindings;
+        return 0;
+    }
+
+    fn unbindAll() {
+        self.property_bindings = [];
+        self.event_bindings = [];
+        return 0;
+    }
+
+    fn dispose() {
+        self.unbindAll();
+        self.hwidget = nullptr;
+        self.dotnet_control = nullptr;
+        self.enabled = false;
+        return 0;
+    }
+}
+
+
+class DotNetWindowBridge {
+    let hwindow = nullptr;
+    let dotnet_window = nullptr;
+    let title_binding = false;
+    let size_binding = false;
+    let position_binding = false;
+    let visibility_binding = false;
+    let state_binding = false;
+
+    fn init_win_bridge(hw, dnw) {
+        self.hwindow = hw;
+        self.dotnet_window = dnw;
+        self.title_binding = false;
+        self.size_binding = false;
+        self.position_binding = false;
+        self.visibility_binding = false;
+        self.state_binding = false;
+        return 0;
+    }
+
+    fn bindTitle() {
+        self.title_binding = true;
+        return 0;
+    }
+
+    fn bindSize() {
+        self.size_binding = true;
+        return 0;
+    }
+
+    fn bindPosition() {
+        self.position_binding = true;
+        return 0;
+    }
+
+    fn bindVisibility() {
+        self.visibility_binding = true;
+        return 0;
+    }
+
+    fn bindState() {
+        self.state_binding = true;
+        return 0;
+    }
+
+    fn syncTitle() {
+        if (self.title_binding and self.hwindow != nullptr and self.dotnet_window != nullptr) {
+            self.hwindow["title"] = self.dotnet_window["title"];
+        }
+        return 0;
+    }
+
+    fn syncSize() {
+        if (self.size_binding and self.hwindow != nullptr and self.dotnet_window != nullptr) {
+            self.hwindow["width"] = self.dotnet_window["width"];
+            self.hwindow["height"] = self.dotnet_window["height"];
+        }
+        return 0;
+    }
+
+    fn syncPosition() {
+        if (self.position_binding and self.hwindow != nullptr and self.dotnet_window != nullptr) {
+            self.hwindow["x"] = self.dotnet_window["x"];
+            self.hwindow["y"] = self.dotnet_window["y"];
+        }
+        return 0;
+    }
+
+    fn syncAll() {
+        self.syncTitle();
+        self.syncSize();
+        self.syncPosition();
+        return 0;
+    }
+
+    fn getHWindow() { return self.hwindow; }
+    fn getDotNetWindow() { return self.dotnet_window; }
+    fn isTitleBound() { return self.title_binding; }
+    fn isSizeBound() { return self.size_binding; }
+    fn isPositionBound() { return self.position_binding; }
+}
+
+
+class ZzwUIHost {
+    let hosted_widgets = [];
+    let dotnet_parent = nullptr;
+    let is_active = false;
+    let layout_engine = "zzwUI";
+
+    fn init_host(parent) {
+        self.hosted_widgets = [];
+        self.dotnet_parent = parent;
+        self.is_active = false;
+        self.layout_engine = "zzwUI";
+        return 0;
+    }
+
+    fn hostWidget(widget) {
+        push(self.hosted_widgets, widget);
+        if (self.dotnet_parent != nullptr) {
+            self.dotnet_parent["children"] = self.hosted_widgets;
+        }
+        return 0;
+    }
+
+    fn removeWidget(widget) {
+        let new_widgets = [];
+        let i = 0;
+        while (i < len(self.hosted_widgets)) {
+            if (self.hosted_widgets[i] != widget) {
+                push(new_widgets, self.hosted_widgets[i]);
+            }
+            i = i + 1;
+        }
+        self.hosted_widgets = new_widgets;
+        return 0;
+    }
+
+    fn activate() {
+        self.is_active = true;
+        return 0;
+    }
+
+    fn deactivate() {
+        self.is_active = false;
+        return 0;
+    }
+
+    fn isActive() { return self.is_active; }
+
+    fn doLayout() {
+        let i = 0;
+        while (i < len(self.hosted_widgets)) {
+            let w = self.hosted_widgets[i];
+            if (w.do_layout != nullptr) {
+                w.do_layout();
+            }
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn getWidgetCount() { return len(self.hosted_widgets); }
+    fn getHostedWidgets() { return self.hosted_widgets; }
+    fn setLayoutEngine(engine) { self.layout_engine = engine; return 0; }
+    fn getLayoutEngine() { return self.layout_engine; }
+
+    fn clear() {
+        self.hosted_widgets = [];
+        return 0;
+    }
+}
+
+
+class DotNetControlFactory {
+    let control_map = {};
+    let default_ctor = nullptr;
+
+    fn init_factory() {
+        self.control_map = {};
+        self.default_ctor = nullptr;
+        self._register_defaults();
+        return 0;
+    }
+
+    fn _register_defaults() {
+        self.register("Button", "System.Windows.Controls.Button");
+        self.register("Label", "System.Windows.Controls.Label");
+        self.register("TextBox", "System.Windows.Controls.TextBox");
+        self.register("CheckBox", "System.Windows.Controls.CheckBox");
+        self.register("RadioButton", "System.Windows.Controls.RadioButton");
+        self.register("Slider", "System.Windows.Controls.Slider");
+        self.register("ProgressBar", "System.Windows.Controls.ProgressBar");
+        self.register("ListBox", "System.Windows.Controls.ListBox");
+        self.register("ComboBox", "System.Windows.Controls.ComboBox");
+        self.register("ScrollView", "System.Windows.Controls.ScrollViewer");
+        self.register("TabControl", "System.Windows.Controls.TabControl");
+        self.register("TreeView", "System.Windows.Controls.TreeView");
+        self.register("Menu", "System.Windows.Controls.Menu");
+        self.register("Image", "System.Windows.Controls.Image");
+        self.register("Panel", "System.Windows.Controls.Panel");
+        self.register("Grid", "System.Windows.Controls.Grid");
+        self.register("StackPanel", "System.Windows.Controls.StackPanel");
+        self.register("Border", "System.Windows.Controls.Border");
+        self.register("Canvas", "System.Windows.Controls.Canvas");
+        self.register("DockPanel", "System.Windows.Controls.DockPanel");
+        self.register("Splitter", "System.Windows.Controls.GridSplitter");
+        self.register("ToggleSwitch", "System.Windows.Controls.ToggleSwitch");
+        self.register("PasswordBox", "System.Windows.Controls.PasswordBox");
+        return 0;
+    }
+
+    fn register(hwidget_type, dntype) {
+        self.control_map[hwidget_type] = dntype;
+        return 0;
+    }
+
+    fn getDotNetType(hwidget_type) {
+        return self.control_map[hwidget_type];
+    }
+
+    fn createControl(hwidget_type) {
+        let dntype = self.control_map[hwidget_type];
+        if (dntype == nullptr) {
+            return nullptr;
+        }
+        return {"__type__": dntype, "widget_type": hwidget_type};
+    }
+
+    fn getSupportedTypes() {
+        let types = [];
+        for k in self.control_map {
+            push(types, k);
+        }
+        return types;
+    }
+
+    fn hasType(hwidget_type) {
+        return self.control_map[hwidget_type] != nullptr;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 5: 数据绑定层 — 双向绑定
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetBinding {
+    let source = nullptr;
+    let source_path = "";
+    let target = nullptr;
+    let target_path = "";
+    let mode = "twoWay";
+    let converter = nullptr;
+    let converter_parameter = nullptr;
+    let is_active = true;
+    let update_source_trigger = "propertyChanged";
+    let fallback_value = nullptr;
+    let target_null_value = nullptr;
+
+    fn init_binding(src, src_path, tgt, tgt_path) {
+        self.source = src;
+        self.source_path = src_path;
+        self.target = tgt;
+        self.target_path = tgt_path;
+        self.mode = "twoWay";
+        self.converter = nullptr;
+        self.converter_parameter = nullptr;
+        self.is_active = true;
+        self.update_source_trigger = "propertyChanged";
+        self.fallback_value = nullptr;
+        self.target_null_value = nullptr;
+        return 0;
+    }
+
+    fn setMode(m) { self.mode = m; return 0; }
+    fn setConverter(c) { self.converter = c; return 0; }
+    fn setConverterParameter(p) { self.converter_parameter = p; return 0; }
+    fn setActive(v) { self.is_active = v; return 0; }
+    fn setUpdateSourceTrigger(t) { self.update_source_trigger = t; return 0; }
+    fn setFallbackValue(v) { self.fallback_value = v; return 0; }
+    fn setTargetNullValue(v) { self.target_null_value = v; return 0; }
+
+    fn getMode() { return self.mode; }
+    fn isActive() { return self.is_active; }
+
+    fn updateSource() {
+        if (self.is_active == false) { return 0; }
+        if (self.mode == "oneWay") { return 0; }
+        let val = self.target[self.target_path];
+        if (val == nullptr and self.target_null_value != nullptr) {
+            val = self.target_null_value;
+        }
+        if (self.converter != nullptr) {
+            val = self.converter(val, self.converter_parameter);
+        }
+        self.source[self.source_path] = val;
+        return 0;
+    }
+
+    fn updateTarget() {
+        if (self.is_active == false) { return 0; }
+        if (self.mode == "oneWayToSource") { return 0; }
+        let val = self.source[self.source_path];
+        if (val == nullptr) {
+            val = self.fallback_value;
+        }
+        if (self.converter != nullptr) {
+            val = self.converter(val, self.converter_parameter);
+        }
+        self.target[self.target_path] = val;
+        return 0;
+    }
+
+    fn update() {
+        self.updateTarget();
+        return 0;
+    }
+
+    fn getSource() { return self.source; }
+    fn getSourcePath() { return self.source_path; }
+    fn getTarget() { return self.target; }
+    fn getTargetPath() { return self.target_path; }
+}
+
+
+class DotNetMultiBinding {
+    let bindings = [];
+    let target = nullptr;
+    let target_path = "";
+    let converter = nullptr;
+    let is_active = true;
+
+    fn init_multi_binding(tgt, tgt_path) {
+        self.bindings = [];
+        self.target = tgt;
+        self.target_path = tgt_path;
+        self.converter = nullptr;
+        self.is_active = true;
+        return 0;
+    }
+
+    fn addBinding(binding) {
+        push(self.bindings, binding);
+        return 0;
+    }
+
+    fn removeBinding(binding) {
+        let new_bindings = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i] != binding) {
+                push(new_bindings, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        self.bindings = new_bindings;
+        return 0;
+    }
+
+    fn setConverter(c) { self.converter = c; return 0; }
+    fn setActive(v) { self.is_active = v; return 0; }
+
+    fn update() {
+        if (self.is_active == false) { return 0; }
+        let values = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            let b = self.bindings[i];
+            let val = b.source[b.source_path];
+            push(values, val);
+            i = i + 1;
+        }
+        if (self.converter != nullptr) {
+            let result = self.converter(values);
+            self.target[self.target_path] = result;
+        }
+        return 0;
+    }
+
+    fn getBindingCount() { return len(self.bindings); }
+}
+
+
+class DotNetBindingManager {
+    let bindings = [];
+    let is_updating = false;
+    let defer_updates = false;
+
+    fn init_binding_mgr() {
+        self.bindings = [];
+        self.is_updating = false;
+        self.defer_updates = false;
+        return 0;
+    }
+
+    fn addBinding(binding) {
+        push(self.bindings, binding);
+        return 0;
+    }
+
+    fn removeBinding(binding) {
+        let new_bindings = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i] != binding) {
+                push(new_bindings, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        self.bindings = new_bindings;
+        return 0;
+    }
+
+    fn updateAll() {
+        if (self.defer_updates) { return 0; }
+        self.is_updating = true;
+        let i = 0;
+        while (i < len(self.bindings)) {
+            self.bindings[i].update();
+            i = i + 1;
+        }
+        self.is_updating = false;
+        return 0;
+    }
+
+    fn updateSource(binding) {
+        binding.updateSource();
+        return 0;
+    }
+
+    fn updateTarget(binding) {
+        binding.updateTarget();
+        return 0;
+    }
+
+    fn setDeferUpdates(v) {
+        self.defer_updates = v;
+        if (v == false) {
+            self.updateAll();
+        }
+        return 0;
+    }
+
+    fn getBindingCount() { return len(self.bindings); }
+    fn isUpdating() { return self.is_updating; }
+
+    fn clear() {
+        self.bindings = [];
+        return 0;
+    }
+
+    fn getBindingsForSource(source) {
+        let result = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i].getSource() == source) {
+                push(result, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    fn getBindingsForTarget(target) {
+        let result = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i].getTarget() == target) {
+                push(result, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+}
+
+
+class DotNetBindingExpression {
+    let binding = nullptr;
+    let target = nullptr;
+    let target_property = "";
+    let is_dirty = false;
+
+    fn init_expr(binding, tgt, tgt_prop) {
+        self.binding = binding;
+        self.target = tgt;
+        self.target_property = tgt_prop;
+        self.is_dirty = false;
+        return 0;
+    }
+
+    fn markDirty() {
+        self.is_dirty = true;
+        return 0;
+    }
+
+    fn isDirty() { return self.is_dirty; }
+
+    fn refresh() {
+        if (self.binding != nullptr) {
+            self.binding.updateTarget();
+        }
+        self.is_dirty = false;
+        return 0;
+    }
+
+    fn getBinding() { return self.binding; }
+    fn getTarget() { return self.target; }
+    fn getTargetProperty() { return self.target_property; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 6: RPC/服务层 — 远程过程调用
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetServiceHost {
+    let services = {};
+    let endpoints = [];
+    let is_running = false;
+    let port = 0;
+    let host_name = "";
+    let max_connections = 100;
+    let active_connections = 0;
+
+    fn init_host(name, port) {
+        self.services = {};
+        self.endpoints = [];
+        self.is_running = false;
+        self.port = port;
+        self.host_name = name;
+        self.max_connections = 100;
+        self.active_connections = 0;
+        return 0;
+    }
+
+    fn registerService(name, instance) {
+        self.services[name] = instance;
+        return 0;
+    }
+
+    fn unregisterService(name) {
+        self.services[name] = nullptr;
+        return 0;
+    }
+
+    fn getService(name) {
+        return self.services[name];
+    }
+
+    fn hasService(name) {
+        return self.services[name] != nullptr;
+    }
+
+    fn addEndpoint(endpoint) {
+        push(self.endpoints, endpoint);
+        return 0;
+    }
+
+    fn start() {
+        self.is_running = true;
+        return 0;
+    }
+
+    fn stop() {
+        self.is_running = false;
+        return 0;
+    }
+
+    fn isRunning() { return self.is_running; }
+    fn getPort() { return self.port; }
+    fn getHostName() { return self.host_name; }
+    fn getServiceCount() {
+        let count = 0;
+        for k in self.services {
+            if (self.services[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn getEndpoints() { return self.endpoints; }
+    fn setMaxConnections(max) { self.max_connections = max; return 0; }
+    fn getMaxConnections() { return self.max_connections; }
+    fn getActiveConnections() { return self.active_connections; }
+}
+
+
+class DotNetRPCClient {
+    let endpoint = "";
+    let timeout_ms = 30000;
+    let is_connected = false;
+    let auth_token = "";
+    let headers = {};
+    let call_counter = 0;
+
+    fn init_client(endpoint) {
+        self.endpoint = endpoint;
+        self.timeout_ms = 30000;
+        self.is_connected = false;
+        self.auth_token = "";
+        self.headers = {};
+        self.call_counter = 0;
+        return 0;
+    }
+
+    fn setTimeout(ms) { self.timeout_ms = ms; return 0; }
+    fn setAuthToken(token) { self.auth_token = token; return 0; }
+    fn setHeader(key, value) { self.headers[key] = value; return 0; }
+
+    fn connect() {
+        self.is_connected = true;
+        return 0;
+    }
+
+    fn disconnect() {
+        self.is_connected = false;
+        return 0;
+    }
+
+    fn isConnected() { return self.is_connected; }
+
+    fn call(method, args) {
+        self.call_counter = self.call_counter + 1;
+        let result = new DotNetResult();
+        result.init_result();
+        result.setCallId(self.call_counter);
+        result.setSuccess(nullptr);
+        return result;
+    }
+
+    fn callAsync(method, args) {
+        return self.call(method, args);
+    }
+
+    fn getEndpoint() { return self.endpoint; }
+    fn getTimeout() { return self.timeout_ms; }
+    fn getCallCount() { return self.call_counter; }
+}
+
+
+class DotNetRPCMessage {
+    let message_id = 0;
+    let method = "";
+    let params = [];
+    let is_notification = false;
+    let is_request = true;
+    let timestamp = 0;
+    let correlation_id = "";
+    let headers = {};
+
+    fn init_msg(method, params) {
+        self.method = method;
+        self.params = params;
+        self.is_notification = false;
+        self.is_request = true;
+        self.timestamp = 0;
+        self.correlation_id = "";
+        self.headers = {};
+        self.message_id = 0;
+        return 0;
+    }
+
+    fn setNotification(v) { self.is_notification = v; return 0; }
+    fn setRequest(v) { self.is_request = v; return 0; }
+    fn setCorrelationId(id) { self.correlation_id = id; return 0; }
+    fn setHeader(key, value) { self.headers[key] = value; return 0; }
+    fn setId(id) { self.message_id = id; return 0; }
+
+    fn getMethod() { return self.method; }
+    fn getParams() { return self.params; }
+    fn getParamCount() { return len(self.params); }
+    fn isNotification() { return self.is_notification; }
+    fn isRequest() { return self.is_request; }
+    fn getCorrelationId() { return self.correlation_id; }
+    fn getId() { return self.message_id; }
+}
+
+
+class DotNetRPCResponse {
+    let message_id = 0;
+    let result = nullptr;
+    let error = "";
+    let error_code = 0;
+    let is_success = false;
+    let correlation_id = "";
+
+    fn init_response(msg_id) {
+        self.message_id = msg_id;
+        self.result = nullptr;
+        self.error = "";
+        self.error_code = 0;
+        self.is_success = false;
+        self.correlation_id = "";
+        return 0;
+    }
+
+    fn setSuccess(result) {
+        self.result = result;
+        self.is_success = true;
+        return 0;
+    }
+
+    fn setError(code, msg) {
+        self.error_code = code;
+        self.error = msg;
+        self.is_success = false;
+        return 0;
+    }
+
+    fn setCorrelationId(id) { self.correlation_id = id; return 0; }
+
+    fn isSuccess() { return self.is_success; }
+    fn getResult() { return self.result; }
+    fn getError() { return self.error; }
+    fn getErrorCode() { return self.error_code; }
+    fn getMessageId() { return self.message_id; }
+    fn getCorrelationId() { return self.correlation_id; }
+}
+
+
+class DotNetRPCContext {
+    let request = nullptr;
+    let response = nullptr;
+    let user_data = nullptr;
+    let is_authenticated = false;
+    let principal = "";
+
+    fn init_context(req, resp) {
+        self.request = req;
+        self.response = resp;
+        self.user_data = nullptr;
+        self.is_authenticated = false;
+        self.principal = "";
+        return 0;
+    }
+
+    fn setAuthenticated(v) { self.is_authenticated = v; return 0; }
+    fn setPrincipal(p) { self.principal = p; return 0; }
+    fn setUserData(data) { self.user_data = data; return 0; }
+
+    fn getRequest() { return self.request; }
+    fn getResponse() { return self.response; }
+    fn isAuthenticated() { return self.is_authenticated; }
+    fn getPrincipal() { return self.principal; }
+    fn getUserData() { return self.user_data; }
+}
+
+
+class DotNetNamedPipe {
+    let pipe_name = "";
+    let is_server = false;
+    let is_connected = false;
+    let buffer_size = 4096;
+    let onMessage = nullptr;
+    let onConnected = nullptr;
+    let onDisconnected = nullptr;
+
+    fn init_pipe(name, server) {
+        self.pipe_name = name;
+        self.is_server = server;
+        self.is_connected = false;
+        self.buffer_size = 4096;
+        self.onMessage = nullptr;
+        self.onConnected = nullptr;
+        self.onDisconnected = nullptr;
+        return 0;
+    }
+
+    fn setName(name) { self.pipe_name = name; return 0; }
+    fn setBufferSize(size) { self.buffer_size = size; return 0; }
+    fn setOnMessage(callback) { self.onMessage = callback; return 0; }
+    fn setOnConnected(callback) { self.onConnected = callback; return 0; }
+    fn setOnDisconnected(callback) { self.onDisconnected = callback; return 0; }
+
+    fn connect() {
+        self.is_connected = true;
+        if (self.onConnected != nullptr) {
+            self.onConnected(self);
+        }
+        return 0;
+    }
+
+    fn disconnect() {
+        self.is_connected = false;
+        if (self.onDisconnected != nullptr) {
+            self.onDisconnected(self);
+        }
+        return 0;
+    }
+
+    fn send(data) {
+        if (self.is_connected == false) { return false; }
+        return true;
+    }
+
+    fn isConnected() { return self.is_connected; }
+    fn isServer() { return self.is_server; }
+    fn getPipeName() { return self.pipe_name; }
+}
+
+
+class DotNetMemoryMappedFile {
+    let name = "";
+    let size = 0;
+    let is_open = false;
+    let access = "read_write";
+
+    fn init_mmf(name, size) {
+        self.name = name;
+        self.size = size;
+        self.is_open = false;
+        self.access = "read_write";
+        return 0;
+    }
+
+    fn open() {
+        self.is_open = true;
+        return 0;
+    }
+
+    fn close() {
+        self.is_open = false;
+        return 0;
+    }
+
+    fn isOpen() { return self.is_open; }
+    fn getName() { return self.name; }
+    fn getSize() { return self.size; }
+    fn setAccess(a) { self.access = a; return 0; }
+    fn getAccess() { return self.access; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 7: 序列化层 — 跨运行时类型转换
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetSerializer {
+    let type_mapper = nullptr;
+    let format = "json";
+    let indent = false;
+    let date_format = "ISO8601";
+    let include_null = false;
+    let custom_serializers = {};
+
+    fn init_serializer(mapper) {
+        self.type_mapper = mapper;
+        self.format = "json";
+        self.indent = false;
+        self.date_format = "ISO8601";
+        self.include_null = false;
+        self.custom_serializers = {};
+        return 0;
+    }
+
+    fn setFormat(f) { self.format = f; return 0; }
+    fn setIndent(v) { self.indent = v; return 0; }
+    fn setDateFormat(f) { self.date_format = f; return 0; }
+    fn setIncludeNull(v) { self.include_null = v; return 0; }
+
+    fn registerCustomSerializer(type_name, serializer) {
+        self.custom_serializers[type_name] = serializer;
+        return 0;
+    }
+
+    fn serialize(value, type_name) {
+        if (value == nullptr) {
+            return {"__type__": "null", "value": nullptr};
+        }
+        let custom = self.custom_serializers[type_name];
+        if (custom != nullptr) {
+            return custom(value);
+        }
+        return {"__type__": type_name, "value": value};
+    }
+
+    fn serializeObject(obj) {
+        if (obj == nullptr) { return nullptr; }
+        let result = {};
+        for k in obj {
+            let val = obj[k];
+            if (val == nullptr and self.include_null == false) {
+                continue;
+            }
+            result[k] = val;
+        }
+        return result;
+    }
+
+    fn serializeList(lst) {
+        if (lst == nullptr) { return []; }
+        let result = [];
+        let i = 0;
+        while (i < len(lst)) {
+            push(result, lst[i]);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    fn getFormat() { return self.format; }
+    fn isIndent() { return self.indent; }
+}
+
+
+class DotNetDeserializer {
+    let type_mapper = nullptr;
+    let format = "json";
+    let strict = false;
+    let custom_deserializers = {};
+
+    fn init_deserializer(mapper) {
+        self.type_mapper = mapper;
+        self.format = "json";
+        self.strict = false;
+        self.custom_deserializers = {};
+        return 0;
+    }
+
+    fn setFormat(f) { self.format = f; return 0; }
+    fn setStrict(v) { self.strict = v; return 0; }
+
+    fn registerCustomDeserializer(type_name, deserializer) {
+        self.custom_deserializers[type_name] = deserializer;
+        return 0;
+    }
+
+    fn deserialize(data) {
+        if (data == nullptr) { return nullptr; }
+        let dn_type = data["__type__"];
+        if (dn_type == nullptr) { return data; }
+        let custom = self.custom_deserializers[dn_type];
+        if (custom != nullptr) {
+            return custom(data);
+        }
+        return data["value"];
+    }
+
+    fn deserializeToType(data, target_type) {
+        let value = self.deserialize(data);
+        return value;
+    }
+
+    fn getFormat() { return self.format; }
+    fn isStrict() { return self.strict; }
+}
+
+
+class DotNetMessagePack {
+    let byte_order = "little_endian";
+    let use_ext_types = true;
+    let max_str_len = 0;
+
+    fn init_msgpack() {
+        self.byte_order = "little_endian";
+        self.use_ext_types = true;
+        self.max_str_len = 0;
+        return 0;
+    }
+
+    fn pack(value) {
+        return value;
+    }
+
+    fn unpack(data) {
+        return data;
+    }
+
+    fn setByteOrder(order) { self.byte_order = order; return 0; }
+    fn setUseExtTypes(v) { self.use_ext_types = v; return 0; }
+    fn setMaxStrLen(len) { self.max_str_len = len; return 0; }
+}
+
+
+class DotNetJSON {
+    let escape_unicode = false;
+    let max_depth = 100;
+    let allow_comments = false;
+
+    fn init_json() {
+        self.escape_unicode = false;
+        self.max_depth = 100;
+        self.allow_comments = false;
+        return 0;
+    }
+
+    fn stringify(obj) {
+        if (obj == nullptr) { return "null"; }
+        if (obj == true) { return "true"; }
+        if (obj == false) { return "false"; }
+        return "\"" + str(obj) + "\"";
+    }
+
+    fn parse(json_str) {
+        return {};
+    }
+
+    fn setEscapeUnicode(v) { self.escape_unicode = v; return 0; }
+    fn setMaxDepth(d) { self.max_depth = d; return 0; }
+    fn setAllowComments(v) { self.allow_comments = v; return 0; }
+}
+
+
+class DotNetTypeConverter {
+    let converters = {};
+    let fallback = nullptr;
+
+    fn init_converter() {
+        self.converters = {};
+        self.fallback = nullptr;
+        self._register_defaults();
+        return 0;
+    }
+
+    fn _register_defaults() {
+        self.converters["int->float"] = fn(val) { return val * 1.0; };
+        self.converters["float->int"] = fn(val) { return val; };
+        self.converters["int->string"] = fn(val) { return str(val); };
+        self.converters["float->string"] = fn(val) { return str(val); };
+        self.converters["bool->string"] = fn(val) { if (val) { return "true"; } return "false"; };
+        self.converters["string->int"] = fn(val) { return val; };
+        self.converters["string->float"] = fn(val) { return val; };
+        return 0;
+    }
+
+    fn registerConverter(from_type, to_type, converter) {
+        let key = from_type + "->" + to_type;
+        self.converters[key] = converter;
+        return 0;
+    }
+
+    fn convert(value, from_type, to_type) {
+        let key = from_type + "->" + to_type;
+        let converter = self.converters[key];
+        if (converter != nullptr) {
+            return converter(value);
+        }
+        if (self.fallback != nullptr) {
+            return self.fallback(value, from_type, to_type);
+        }
+        return value;
+    }
+
+    fn setFallback(fn_ref) {
+        self.fallback = fn_ref;
+        return 0;
+    }
+
+    fn canConvert(from_type, to_type) {
+        let key = from_type + "->" + to_type;
+        return self.converters[key] != nullptr;
+    }
+
+    fn clear() {
+        self.converters = {};
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 8: 异步任务桥接层
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetTask {
+    let task_id = 0;
+    let status = "created";
+    let result = nullptr;
+    let exception = nullptr;
+    let is_completed = false;
+    let is_faulted = false;
+    let is_cancelled = false;
+    let continuations = [];
+    let onCompleted = nullptr;
+    let onFaulted = nullptr;
+
+    fn init_task() {
+        self.status = "created";
+        self.result = nullptr;
+        self.exception = nullptr;
+        self.is_completed = false;
+        self.is_faulted = false;
+        self.is_cancelled = false;
+        self.continuations = [];
+        self.onCompleted = nullptr;
+        self.onFaulted = nullptr;
+        self.task_id = 0;
+        return 0;
+    }
+
+    fn setResult(val) {
+        self.result = val;
+        self.is_completed = true;
+        self.status = "completed";
+        if (self.onCompleted != nullptr) {
+            self.onCompleted(self);
+        }
+        self._runContinuations();
+        return 0;
+    }
+
+    fn setException(ex) {
+        self.exception = ex;
+        self.is_faulted = true;
+        self.is_completed = true;
+        self.status = "faulted";
+        if (self.onFaulted != nullptr) {
+            self.onFaulted(self);
+        }
+        return 0;
+    }
+
+    fn cancel() {
+        self.is_cancelled = true;
+        self.is_completed = true;
+        self.status = "cancelled";
+        return 0;
+    }
+
+    fn continueWith(continuation) {
+        if (self.is_completed) {
+            continuation(self);
+        } else {
+            push(self.continuations, continuation);
+        }
+        return 0;
+    }
+
+    fn _runContinuations() {
+        let i = 0;
+        while (i < len(self.continuations)) {
+            self.continuations[i](self);
+            i = i + 1;
+        }
+        self.continuations = [];
+        return 0;
+    }
+
+    fn setOnCompleted(callback) { self.onCompleted = callback; return 0; }
+    fn setOnFaulted(callback) { self.onFaulted = callback; return 0; }
+
+    fn getResult() { return self.result; }
+    fn getStatus() { return self.status; }
+    fn isCompleted() { return self.is_completed; }
+    fn isFaulted() { return self.is_faulted; }
+    fn isCancelled() { return self.is_cancelled; }
+    fn getException() { return self.exception; }
+    fn getId() { return self.task_id; }
+    fn setId(id) { self.task_id = id; return 0; }
+}
+
+
+class DotNetTaskScheduler {
+    let tasks = [];
+    let running_tasks = [];
+    let max_concurrent = 4;
+    let task_counter = 0;
+    let is_running = false;
+
+    fn init_scheduler() {
+        self.tasks = [];
+        self.running_tasks = [];
+        self.max_concurrent = 4;
+        self.task_counter = 0;
+        self.is_running = false;
+        return 0;
+    }
+
+    fn schedule(task) {
+        self.task_counter = self.task_counter + 1;
+        task.setId(self.task_counter);
+        push(self.tasks, task);
+        return task;
+    }
+
+    fn run() {
+        self.is_running = true;
+        let completed = [];
+        let i = 0;
+        while (i < len(self.tasks)) {
+            let task = self.tasks[i];
+            if (task.isCompleted() == false) {
+                task.setResult(nullptr);
+            }
+            push(completed, task);
+            i = i + 1;
+        }
+        self.tasks = [];
+        self.is_running = false;
+        return 0;
+    }
+
+    fn setMaxConcurrent(max) { self.max_concurrent = max; return 0; }
+    fn getMaxConcurrent() { return self.max_concurrent; }
+    fn getPendingCount() { return len(self.tasks); }
+    fn getRunningCount() { return len(self.running_tasks); }
+    fn isRunning() { return self.is_running; }
+
+    fn cancelAll() {
+        let i = 0;
+        while (i < len(self.tasks)) {
+            self.tasks[i].cancel();
+            i = i + 1;
+        }
+        self.tasks = [];
+        return 0;
+    }
+}
+
+
+class DotNetCancellationToken {
+    let is_cancelled = false;
+    let onCancel = nullptr;
+    let source = nullptr;
+
+    fn init_token() {
+        self.is_cancelled = false;
+        self.onCancel = nullptr;
+        self.source = nullptr;
+        return 0;
+    }
+
+    fn cancel() {
+        self.is_cancelled = true;
+        if (self.onCancel != nullptr) {
+            self.onCancel();
+        }
+        return 0;
+    }
+
+    fn isCancelled() { return self.is_cancelled; }
+    fn setOnCancel(callback) { self.onCancel = callback; return 0; }
+    fn setSource(src) { self.source = src; return 0; }
+    fn getSource() { return self.source; }
+}
+
+
+class DotNetAsyncResult {
+    let task = nullptr;
+    let async_state = nullptr;
+    let is_completed = false;
+    let completed_synchronously = false;
+
+    fn init_async_result(task) {
+        self.task = task;
+        self.async_state = nullptr;
+        self.is_completed = false;
+        self.completed_synchronously = false;
+        return 0;
+    }
+
+    fn setCompleted(v) { self.is_completed = v; return 0; }
+    fn setCompletedSynchronously(v) { self.completed_synchronously = v; return 0; }
+    fn setAsyncState(state) { self.async_state = state; return 0; }
+
+    fn getTask() { return self.task; }
+    fn getAsyncState() { return self.async_state; }
+    fn isCompleted() { return self.is_completed; }
+    fn completedSynchronously() { return self.completed_synchronously; }
+}
+
+
+class DotNetThreadPool {
+    let min_threads = 1;
+    let max_threads = 8;
+    let available_threads = 0;
+    let busy_threads = 0;
+
+    fn init_pool() {
+        self.min_threads = 1;
+        self.max_threads = 8;
+        self.available_threads = self.max_threads;
+        self.busy_threads = 0;
+        return 0;
+    }
+
+    fn setMinThreads(min) { self.min_threads = min; return 0; }
+    fn setMaxThreads(max) { self.max_threads = max; return 0; }
+    fn getMinThreads() { return self.min_threads; }
+    fn getMaxThreads() { return self.max_threads; }
+    fn getAvailableThreads() { return self.available_threads; }
+    fn getBusyThreads() { return self.busy_threads; }
+
+    fn queueUserWorkItem(action) {
+        if (self.available_threads > 0) {
+            self.available_threads = self.available_threads - 1;
+            self.busy_threads = self.busy_threads + 1;
+            action();
+            self.busy_threads = self.busy_threads - 1;
+            self.available_threads = self.available_threads + 1;
+        }
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 9: 诊断与配置层
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetLogger {
+    let log_level = "info";
+    let log_file = "";
+    let include_timestamp = true;
+    let include_level = true;
+    let max_log_size = 0;
+    let categories = [];
+
+    fn init_logger() {
+        self.log_level = "info";
+        self.log_file = "";
+        self.include_timestamp = true;
+        self.include_level = true;
+        self.max_log_size = 0;
+        self.categories = [];
+        return 0;
+    }
+
+    fn setLevel(level) { self.log_level = level; return 0; }
+    fn setLogFile(path) { self.log_file = path; return 0; }
+    fn setIncludeTimestamp(v) { self.include_timestamp = v; return 0; }
+    fn setIncludeLevel(v) { self.include_level = v; return 0; }
+    fn setMaxLogSize(size) { self.max_log_size = size; return 0; }
+    fn addCategory(cat) { push(self.categories, cat); return 0; }
+
+    fn trace(msg) {
+        if (self._shouldLog("trace")) {
+            self._write("TRACE", msg);
+        }
+        return 0;
+    }
+
+    fn debug(msg) {
+        if (self._shouldLog("debug")) {
+            self._write("DEBUG", msg);
+        }
+        return 0;
+    }
+
+    fn info(msg) {
+        if (self._shouldLog("info")) {
+            self._write("INFO", msg);
+        }
+        return 0;
+    }
+
+    fn warn(msg) {
+        if (self._shouldLog("warn")) {
+            self._write("WARN", msg);
+        }
+        return 0;
+    }
+
+    fn error(msg) {
+        if (self._shouldLog("error")) {
+            self._write("ERROR", msg);
+        }
+        return 0;
+    }
+
+    fn fatal(msg) {
+        self._write("FATAL", msg);
+        return 0;
+    }
+
+    fn _shouldLog(level) {
+        let levels = ["trace", "debug", "info", "warn", "error", "fatal"];
+        let current_idx = -1;
+        let msg_idx = -1;
+        let i = 0;
+        while (i < len(levels)) {
+            if (levels[i] == self.log_level) { current_idx = i; }
+            if (levels[i] == level) { msg_idx = i; }
+            i = i + 1;
+        }
+        return msg_idx >= current_idx;
+    }
+
+    fn _write(level, msg) {
+        let output = "";
+        if (self.include_timestamp) {
+            output = output + "[DotNet] ";
+        }
+        if (self.include_level) {
+            output = output + "[" + level + "] ";
+        }
+        output = output + msg;
+        print(output);
+        return 0;
+    }
+
+    fn getLevel() { return self.log_level; }
+    fn getLogFile() { return self.log_file; }
+}
+
+
+class DotNetProfiler {
+    let measurements = {};
+    let is_running = false;
+    let total_measurements = 0;
+
+    fn init_profiler() {
+        self.measurements = {};
+        self.is_running = false;
+        self.total_measurements = 0;
+        return 0;
+    }
+
+    fn start(name) {
+        self.measurements[name] = {"start": 0, "end": 0, "elapsed": 0, "running": true};
+        return 0;
+    }
+
+    fn stop(name) {
+        let m = self.measurements[name];
+        if (m != nullptr) {
+            m["running"] = false;
+            self.total_measurements = self.total_measurements + 1;
+        }
+        return 0;
+    }
+
+    fn getElapsed(name) {
+        let m = self.measurements[name];
+        if (m != nullptr) {
+            return m["elapsed"];
+        }
+        return 0;
+    }
+
+    fn isRunning(name) {
+        let m = self.measurements[name];
+        if (m != nullptr) {
+            return m["running"];
+        }
+        return false;
+    }
+
+    fn getMeasurementCount() {
+        let count = 0;
+        for k in self.measurements {
+            count = count + 1;
+        }
+        return count;
+    }
+
+    fn getTotalMeasurements() { return self.total_measurements; }
+
+    fn reset() {
+        self.measurements = {};
+        self.total_measurements = 0;
+        return 0;
+    }
+
+    fn report() {
+        print("── DotNet Profiler Report ──");
+        print("Total measurements: " + self.total_measurements);
+        for k in self.measurements {
+            let m = self.measurements[k];
+            print("  " + k + ": " + m["elapsed"] + "ms");
+        }
+        return 0;
+    }
+}
+
+
+class DotNetDebugger {
+    let is_attached = false;
+    let breakpoints = {};
+    let step_mode = "none";
+    let current_line = 0;
+    let current_file = "";
+    let onBreak = nullptr;
+
+    fn init_debugger() {
+        self.is_attached = false;
+        self.breakpoints = {};
+        self.step_mode = "none";
+        self.current_line = 0;
+        self.current_file = "";
+        self.onBreak = nullptr;
+        return 0;
+    }
+
+    fn attach() {
+        self.is_attached = true;
+        return 0;
+    }
+
+    fn detach() {
+        self.is_attached = false;
+        self.breakpoints = {};
+        self.step_mode = "none";
+        return 0;
+    }
+
+    fn isAttached() { return self.is_attached; }
+
+    fn setBreakpoint(file, line) {
+        let key = file + ":" + str(line);
+        self.breakpoints[key] = true;
+        return 0;
+    }
+
+    fn removeBreakpoint(file, line) {
+        let key = file + ":" + str(line);
+        self.breakpoints[key] = nullptr;
+        return 0;
+    }
+
+    fn hasBreakpoint(file, line) {
+        let key = file + ":" + str(line);
+        return self.breakpoints[key] != nullptr;
+    }
+
+    fn clearBreakpoints() {
+        self.breakpoints = {};
+        return 0;
+    }
+
+    fn getBreakpointCount() {
+        let count = 0;
+        for k in self.breakpoints {
+            if (self.breakpoints[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn setStepMode(mode) { self.step_mode = mode; return 0; }
+    fn getStepMode() { return self.step_mode; }
+
+    fn setOnBreak(callback) { self.onBreak = callback; return 0; }
+
+    fn setCurrentLocation(file, line) {
+        self.current_file = file;
+        self.current_line = line;
+        return 0;
+    }
+
+    fn getCurrentFile() { return self.current_file; }
+    fn getCurrentLine() { return self.current_line; }
+}
+
+
+class DotNetConfig {
+    let settings = {};
+    let config_file = "";
+    let is_loaded = false;
+    let sections = {};
+
+    fn init_config() {
+        self.settings = {};
+        self.config_file = "";
+        self.is_loaded = false;
+        self.sections = {};
+        return 0;
+    }
+
+    fn load(file_path) {
+        self.config_file = file_path;
+        self.is_loaded = true;
+        return 0;
+    }
+
+    fn save() {
+        return 0;
+    }
+
+    fn get(key, default_val) {
+        let val = self.settings[key];
+        if (val == nullptr) {
+            return default_val;
+        }
+        return val;
+    }
+
+    fn set(key, value) {
+        self.settings[key] = value;
+        return 0;
+    }
+
+    fn remove(key) {
+        self.settings[key] = nullptr;
+        return 0;
+    }
+
+    fn hasKey(key) {
+        return self.settings[key] != nullptr;
+    }
+
+    fn getSection(name) {
+        return self.sections[name];
+    }
+
+    fn setSection(name, section_data) {
+        self.sections[name] = section_data;
+        return 0;
+    }
+
+    fn getKeys() {
+        let keys = [];
+        for k in self.settings {
+            push(keys, k);
+        }
+        return keys;
+    }
+
+    fn getSections() {
+        let secs = [];
+        for k in self.sections {
+            push(secs, k);
+        }
+        return secs;
+    }
+
+    fn isLoaded() { return self.is_loaded; }
+    fn getConfigFile() { return self.config_file; }
+
+    fn clear() {
+        self.settings = {};
+        self.sections = {};
+        return 0;
+    }
+}
+
+
+class DotNetEnvironment {
+    let os_version = "";
+    let clr_version = "";
+    let framework = "";
+    let is_64bit = true;
+    let machine_name = "";
+    let user_name = "";
+    let processor_count = 0;
+    let working_directory = "";
+    let environment_vars = {};
+
+    fn init_env() {
+        self.os_version = "";
+        self.clr_version = "";
+        self.framework = "";
+        self.is_64bit = true;
+        self.machine_name = "";
+        self.user_name = "";
+        self.processor_count = 0;
+        self.working_directory = ".";
+        self.environment_vars = {};
+        return 0;
+    }
+
+    fn setOSVersion(v) { self.os_version = v; return 0; }
+    fn setCLRVersion(v) { self.clr_version = v; return 0; }
+    fn setFramework(v) { self.framework = v; return 0; }
+    fn setIs64Bit(v) { self.is_64bit = v; return 0; }
+    fn setMachineName(v) { self.machine_name = v; return 0; }
+    fn setUserName(v) { self.user_name = v; return 0; }
+    fn setProcessorCount(v) { self.processor_count = v; return 0; }
+    fn setWorkingDirectory(v) { self.working_directory = v; return 0; }
+
+    fn setEnvVar(key, value) {
+        self.environment_vars[key] = value;
+        return 0;
+    }
+
+    fn getEnvVar(key) {
+        return self.environment_vars[key];
+    }
+
+    fn getOSVersion() { return self.os_version; }
+    fn getCLRVersion() { return self.clr_version; }
+    fn getFramework() { return self.framework; }
+    fn is64Bit() { return self.is_64bit; }
+    fn getMachineName() { return self.machine_name; }
+    fn getUserName() { return self.user_name; }
+    fn getProcessorCount() { return self.processor_count; }
+    fn getWorkingDirectory() { return self.working_directory; }
+
+    fn getEnvVars() {
+        let vars = [];
+        for k in self.environment_vars {
+            push(vars, {"key": k, "value": self.environment_vars[k]});
+        }
+        return vars;
+    }
+}
+
+
+class DotNetProcess {
+    let process_id = 0;
+    let process_name = "";
+    let start_time = 0;
+    let exit_code = -1;
+    let is_running = false;
+    let arguments = [];
+    let working_dir = "";
+    let redirect_output = false;
+    let onExit = nullptr;
+
+    fn init_process(name, args) {
+        self.process_name = name;
+        self.arguments = args;
+        self.process_id = 0;
+        self.start_time = 0;
+        self.exit_code = -1;
+        self.is_running = false;
+        self.working_dir = ".";
+        self.redirect_output = false;
+        self.onExit = nullptr;
+        return 0;
+    }
+
+    fn start() {
+        self.is_running = true;
+        self.start_time = 0;
+        return 0;
+    }
+
+    fn kill() {
+        self.is_running = false;
+        self.exit_code = -1;
+        return 0;
+    }
+
+    fn waitForExit() {
+        return self.exit_code;
+    }
+
+    fn setWorkingDir(dir) { self.working_dir = dir; return 0; }
+    fn setRedirectOutput(v) { self.redirect_output = v; return 0; }
+    fn setOnExit(callback) { self.onExit = callback; return 0; }
+
+    fn getProcessId() { return self.process_id; }
+    fn getProcessName() { return self.process_name; }
+    fn isRunning() { return self.is_running; }
+    fn getExitCode() { return self.exit_code; }
+    fn getArguments() { return self.arguments; }
+    fn getWorkingDir() { return self.working_dir; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 10: NuGet & 项目管理
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetNuGetPackage {
+    let package_id = "";
+    let version = "";
+    let authors = [];
+    let description = "";
+    let dependencies = [];
+    let frameworks = [];
+    let is_installed = false;
+    let install_path = "";
+
+    fn init_pkg(id, ver) {
+        self.package_id = id;
+        self.version = ver;
+        self.authors = [];
+        self.description = "";
+        self.dependencies = [];
+        self.frameworks = [];
+        self.is_installed = false;
+        self.install_path = "";
+        return 0;
+    }
+
+    fn addAuthor(author) { push(self.authors, author); return 0; }
+    fn setDescription(desc) { self.description = desc; return 0; }
+    fn addDependency(id, ver) { push(self.dependencies, {"id": id, "version": ver}); return 0; }
+    fn addFramework(fw) { push(self.frameworks, fw); return 0; }
+    fn setInstalled(v) { self.is_installed = v; return 0; }
+    fn setInstallPath(path) { self.install_path = path; return 0; }
+
+    fn getId() { return self.package_id; }
+    fn getVersion() { return self.version; }
+    fn getAuthors() { return self.authors; }
+    fn getDescription() { return self.description; }
+    fn getDependencies() { return self.dependencies; }
+    fn getFrameworks() { return self.frameworks; }
+    fn isInstalled() { return self.is_installed; }
+    fn getInstallPath() { return self.install_path; }
+}
+
+
+class DotNetNuGetManager {
+    let packages = {};
+    let sources = [];
+    let cache_dir = "";
+
+    fn init_nuget() {
+        self.packages = {};
+        self.sources = [];
+        self.cache_dir = "";
+        self._add_default_sources();
+        return 0;
+    }
+
+    fn _add_default_sources() {
+        push(self.sources, "https://api.nuget.org/v3/index.json");
+        return 0;
+    }
+
+    fn addSource(source) {
+        push(self.sources, source);
+        return 0;
+    }
+
+    fn removeSource(source) {
+        let new_sources = [];
+        let i = 0;
+        while (i < len(self.sources)) {
+            if (self.sources[i] != source) {
+                push(new_sources, self.sources[i]);
+            }
+            i = i + 1;
+        }
+        self.sources = new_sources;
+        return 0;
+    }
+
+    fn install(package_id, version) {
+        let pkg = new DotNetNuGetPackage();
+        pkg.init_pkg(package_id, version);
+        pkg.setInstalled(true);
+        self.packages[package_id] = pkg;
+        return pkg;
+    }
+
+    fn uninstall(package_id) {
+        self.packages[package_id] = nullptr;
+        return 0;
+    }
+
+    fn isInstalled(package_id) {
+        let pkg = self.packages[package_id];
+        if (pkg != nullptr) {
+            return pkg.isInstalled();
+        }
+        return false;
+    }
+
+    fn getPackage(package_id) {
+        return self.packages[package_id];
+    }
+
+    fn getInstalledPackages() {
+        let installed = [];
+        for k in self.packages {
+            let pkg = self.packages[k];
+            if (pkg != nullptr and pkg.isInstalled()) {
+                push(installed, pkg);
+            }
+        }
+        return installed;
+    }
+
+    fn setCacheDir(dir) { self.cache_dir = dir; return 0; }
+    fn getCacheDir() { return self.cache_dir; }
+    fn getSources() { return self.sources; }
+    fn getPackageCount() {
+        let count = 0;
+        for k in self.packages {
+            if (self.packages[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+}
+
+
+class DotNetProject {
+    let name = "";
+    let project_type = "";
+    let target_framework = "";
+    let references = [];
+    let packages = [];
+    let source_files = [];
+    let output_type = "";
+    let root_namespace = "";
+
+    fn init_project(name, proj_type) {
+        self.name = name;
+        self.project_type = proj_type;
+        self.target_framework = "net8.0";
+        self.references = [];
+        self.packages = [];
+        self.source_files = [];
+        self.output_type = "exe";
+        self.root_namespace = name;
+        return 0;
+    }
+
+    fn addReference(ref) { push(self.references, ref); return 0; }
+    fn addPackage(pkg_id, ver) { push(self.packages, {"id": pkg_id, "version": ver}); return 0; }
+    fn addSourceFile(file) { push(self.source_files, file); return 0; }
+    fn setTargetFramework(tf) { self.target_framework = tf; return 0; }
+    fn setOutputType(ot) { self.output_type = ot; return 0; }
+    fn setRootNamespace(ns) { self.root_namespace = ns; return 0; }
+
+    fn getName() { return self.name; }
+    fn getProjectType() { return self.project_type; }
+    fn getTargetFramework() { return self.target_framework; }
+    fn getReferences() { return self.references; }
+    fn getPackages() { return self.packages; }
+    fn getSourceFiles() { return self.source_files; }
+    fn getOutputType() { return self.output_type; }
+    fn getRootNamespace() { return self.root_namespace; }
+}
+
+
+class DotNetSolution {
+    let name = "";
+    let projects = [];
+    let config = "";
+
+    fn init_sln(name) {
+        self.name = name;
+        self.projects = [];
+        self.config = "debug";
+        return 0;
+    }
+
+    fn addProject(project) {
+        push(self.projects, project);
+        return 0;
+    }
+
+    fn removeProject(name) {
+        let new_projects = [];
+        let i = 0;
+        while (i < len(self.projects)) {
+            if (self.projects[i].getName() != name) {
+                push(new_projects, self.projects[i]);
+            }
+            i = i + 1;
+        }
+        self.projects = new_projects;
+        return 0;
+    }
+
+    fn getProject(name) {
+        let i = 0;
+        while (i < len(self.projects)) {
+            if (self.projects[i].getName() == name) {
+                return self.projects[i];
+            }
+            i = i + 1;
+        }
+        return nullptr;
+    }
+
+    fn getProjectCount() { return len(self.projects); }
+    fn getProjects() { return self.projects; }
+    fn getName() { return self.name; }
+    fn setConfig(c) { self.config = c; return 0; }
+    fn getConfig() { return self.config; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 11: XAML 互操作
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetXAML {
+    let xaml_content = "";
+    let namespaces = {};
+    let resources = {};
+    let root_element = "";
+
+    fn init_xaml() {
+        self.xaml_content = "";
+        self.namespaces = {};
+        self.resources = {};
+        self.root_element = "";
+        self._add_default_namespaces();
+        return 0;
+    }
+
+    fn _add_default_namespaces() {
+        self.namespaces["default"] = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        self.namespaces["x"] = "http://schemas.microsoft.com/winfx/2006/xaml";
+        return 0;
+    }
+
+    fn addNamespace(prefix, uri) {
+        self.namespaces[prefix] = uri;
+        return 0;
+    }
+
+    fn setRootElement(element) {
+        self.root_element = element;
+        return 0;
+    }
+
+    fn addResource(key, value) {
+        self.resources[key] = value;
+        return 0;
+    }
+
+    fn getResource(key) {
+        return self.resources[key];
+    }
+
+    fn setContent(xaml) {
+        self.xaml_content = xaml;
+        return 0;
+    }
+
+    fn getContent() { return self.xaml_content; }
+    fn getRootElement() { return self.root_element; }
+    fn getResources() { return self.resources; }
+    fn getNamespaces() { return self.namespaces; }
+
+    fn clear() {
+        self.xaml_content = "";
+        self.resources = {};
+        self.root_element = "";
+        return 0;
+    }
+}
+
+
+class DotNetXAMLReader {
+    let xaml = nullptr;
+    let parsed_elements = [];
+
+    fn init_reader(xaml) {
+        self.xaml = xaml;
+        self.parsed_elements = [];
+        return 0;
+    }
+
+    fn parse() {
+        if (self.xaml == nullptr) { return []; }
+        return self.parsed_elements;
+    }
+
+    fn getElements() { return self.parsed_elements; }
+    fn getElementCount() { return len(self.parsed_elements); }
+}
+
+
+class DotNetStyleBridge {
+    let hwidget_styles = {};
+    let xaml_styles = {};
+    let mapped_properties = [];
+
+    fn init_style_bridge() {
+        self.hwidget_styles = {};
+        self.xaml_styles = {};
+        self.mapped_properties = [];
+        self._register_mappings();
+        return 0;
+    }
+
+    fn _register_mappings() {
+        push(self.mapped_properties, {"hwdui": "bg_color", "xaml": "Background"});
+        push(self.mapped_properties, {"hwdui": "fg_color", "xaml": "Foreground"});
+        push(self.mapped_properties, {"hwdui": "border_color", "xaml": "BorderBrush"});
+        push(self.mapped_properties, {"hwdui": "border_width", "xaml": "BorderThickness"});
+        push(self.mapped_properties, {"hwdui": "font_size", "xaml": "FontSize"});
+        push(self.mapped_properties, {"hwdui": "font_family", "xaml": "FontFamily"});
+        push(self.mapped_properties, {"hwdui": "padding", "xaml": "Padding"});
+        return 0;
+    }
+
+    fn addMapping(hwdui_prop, xaml_prop) {
+        push(self.mapped_properties, {"hwdui": hwdui_prop, "xaml": xaml_prop});
+        return 0;
+    }
+
+    fn toXAML(hwdui_styles) {
+        let xaml = {};
+        let i = 0;
+        while (i < len(self.mapped_properties)) {
+            let mapping = self.mapped_properties[i];
+            let hprop = mapping["hwdui"];
+            let xprop = mapping["xaml"];
+            let val = hwdui_styles[hprop];
+            if (val != nullptr) {
+                xaml[xprop] = val;
+            }
+            i = i + 1;
+        }
+        return xaml;
+    }
+
+    fn toHwdUI(xaml_styles) {
+        let hwdui = {};
+        let i = 0;
+        while (i < len(self.mapped_properties)) {
+            let mapping = self.mapped_properties[i];
+            let hprop = mapping["hwdui"];
+            let xprop = mapping["xaml"];
+            let val = xaml_styles[xprop];
+            if (val != nullptr) {
+                hwdui[hprop] = val;
+            }
+            i = i + 1;
+        }
+        return hwdui;
+    }
+
+    fn getMappings() { return self.mapped_properties; }
+    fn getMappingCount() { return len(self.mapped_properties); }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 12: 资源管理
+# ═══════════════════════════════════════════════════════════════════════════
+
+class DotNetResourceManager {
+    let resources = {};
+    let culture = "";
+    let base_name = "";
+
+    fn init_res_mgr() {
+        self.resources = {};
+        self.culture = "";
+        self.base_name = "";
+        return 0;
+    }
+
+    fn setCulture(c) { self.culture = c; return 0; }
+    fn setBaseName(name) { self.base_name = name; return 0; }
+
+    fn addResource(key, value) {
+        self.resources[key] = value;
+        return 0;
+    }
+
+    fn getResource(key) {
+        return self.resources[key];
+    }
+
+    fn getString(key) {
+        let val = self.resources[key];
+        if (val == nullptr) { return key; }
+        return val;
+    }
+
+    fn getInteger(key) {
+        let val = self.resources[key];
+        if (val == nullptr) { return 0; }
+        return val;
+    }
+
+    fn getBoolean(key) {
+        let val = self.resources[key];
+        if (val == nullptr) { return false; }
+        return val;
+    }
+
+    fn hasResource(key) {
+        return self.resources[key] != nullptr;
+    }
+
+    fn removeResource(key) {
+        self.resources[key] = nullptr;
+        return 0;
+    }
+
+    fn clear() {
+        self.resources = {};
+        return 0;
+    }
+
+    fn getResourceCount() {
+        let count = 0;
+        for k in self.resources {
+            if (self.resources[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn getCulture() { return self.culture; }
+    fn getBaseName() { return self.base_name; }
+}
+
+
+class DotNetFileWatcher {
+    let path = "";
+    let filter = "*";
+    let is_watching = false;
+    let onChanged = nullptr;
+    let onCreated = nullptr;
+    let onDeleted = nullptr;
+    let onRenamed = nullptr;
+    let include_subdirs = true;
+
+    fn init_watcher(path, filter) {
+        self.path = path;
+        self.filter = filter;
+        self.is_watching = false;
+        self.onChanged = nullptr;
+        self.onCreated = nullptr;
+        self.onDeleted = nullptr;
+        self.onRenamed = nullptr;
+        self.include_subdirs = true;
+        return 0;
+    }
+
+    fn start() {
+        self.is_watching = true;
+        return 0;
+    }
+
+    fn stop() {
+        self.is_watching = false;
+        return 0;
+    }
+
+    fn isWatching() { return self.is_watching; }
+
+    fn setOnChanged(callback) { self.onChanged = callback; return 0; }
+    fn setOnCreated(callback) { self.onCreated = callback; return 0; }
+    fn setOnDeleted(callback) { self.onDeleted = callback; return 0; }
+    fn setOnRenamed(callback) { self.onRenamed = callback; return 0; }
+    fn setIncludeSubdirs(v) { self.include_subdirs = v; return 0; }
+
+    fn getPath() { return self.path; }
+    fn getFilter() { return self.filter; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 13: 全局函数与初始化
+# ═══════════════════════════════════════════════════════════════════════════
+
+let _dn_mapper = new DotNetTypeMapper();
+let _dn_cache = new DotNetObjectCache();
+let _dn_event_bus = new DotNetCrossEventBus();
+let _dn_binding_mgr = new DotNetBindingManager();
+let _dn_serializer = new DotNetSerializer(_dn_mapper);
+let _dn_deserializer = new DotNetDeserializer(_dn_mapper);
+let _dn_type_converter = new DotNetTypeConverter();
+let _dn_logger = new DotNetLogger();
+let _dn_profiler = new DotNetProfiler();
+let _dn_config = new DotNetConfig();
+let _dn_env = new DotNetEnvironment();
+let _dn_assembly_loader = new DotNetAssemblyLoader();
+let _dn_control_factory = new DotNetControlFactory();
+let _dn_style_bridge = new DotNetStyleBridge();
+let _dn_xaml = new DotNetXAML();
+let _dn_resource_mgr = new DotNetResourceManager();
+let _dn_nuget = new DotNetNuGetManager();
+let _dn_task_scheduler = new DotNetTaskScheduler();
+let _dn_is_initialized = false;
+
+_dn_mapper.init_mapper();
+_dn_cache.init_cache();
+_dn_event_bus.init_cross_bus();
+_dn_binding_mgr.init_binding_mgr();
+_dn_serializer.init_serializer(_dn_mapper);
+_dn_deserializer.init_deserializer(_dn_mapper);
+_dn_type_converter.init_converter();
+_dn_logger.init_logger();
+_dn_profiler.init_profiler();
+_dn_config.init_config();
+_dn_env.init_env();
+_dn_assembly_loader.init_loader();
+_dn_control_factory.init_factory();
+_dn_style_bridge.init_style_bridge();
+_dn_xaml.init_xaml();
+_dn_resource_mgr.init_res_mgr();
+_dn_nuget.init_nuget();
+_dn_task_scheduler.init_scheduler();
+
+fn dotnet_init() {
+    _dn_is_initialized = true;
+    _dn_logger.info("dotnet_init: H# ↔ .NET interop initialized");
+    _dn_logger.info("dotnet_init: " + "type mappings, object cache, event bus, bindings ready");
+    return true;
+}
+
+fn dotnet_shutdown() {
+    _dn_cache.clear();
+    _dn_event_bus.clear();
+    _dn_binding_mgr.clear();
+    _dn_config.clear();
+    _dn_task_scheduler.cancelAll();
+    _dn_is_initialized = false;
+    _dn_logger.info("dotnet_shutdown: H# ↔ .NET interop shut down");
+    return 0;
+}
+
+fn dotnet_is_ready() {
+    return _dn_is_initialized;
+}
+
+fn dotnet_get_mapper() {
+    return _dn_mapper;
+}
+
+fn dotnet_get_cache() {
+    return _dn_cache;
+}
+
+fn dotnet_get_event_bus() {
+    return _dn_event_bus;
+}
+
+fn dotnet_get_binding_manager() {
+    return _dn_binding_mgr;
+}
+
+fn dotnet_get_serializer() {
+    return _dn_serializer;
+}
+
+fn dotnet_get_deserializer() {
+    return _dn_deserializer;
+}
+
+fn dotnet_get_type_converter() {
+    return _dn_type_converter;
+}
+
+fn dotnet_get_logger() {
+    return _dn_logger;
+}
+
+fn dotnet_get_profiler() {
+    return _dn_profiler;
+}
+
+fn dotnet_get_config() {
+    return _dn_config;
+}
+
+fn dotnet_get_env() {
+    return _dn_env;
+}
+
+fn dotnet_get_assembly_loader() {
+    return _dn_assembly_loader;
+}
+
+fn dotnet_get_control_factory() {
+    return _dn_control_factory;
+}
+
+fn dotnet_get_style_bridge() {
+    return _dn_style_bridge;
+}
+
+fn dotnet_get_xaml() {
+    return _dn_xaml;
+}
+
+fn dotnet_get_resource_manager() {
+    return _dn_resource_mgr;
+}
+
+fn dotnet_get_nuget() {
+    return _dn_nuget;
+}
+
+fn dotnet_get_task_scheduler() {
+    return _dn_task_scheduler;
+}
+
+fn dotnet_get_version() {
+    return "1.0.0";
+}
+
+fn dotnet_summary() {
+    print("");
+    print("══════════════════════════════════════════════");
+    print("  H# zzwUI ↔ .NET 协同开发库 v1.0");
+    print("══════════════════════════════════════════════");
+    print("  Core: TypeMapper, DotNetValue, Invoke/Result");
+    print("  Objects: Proxy, Cache, Assembly, Method, Property");
+    print("  Events: CrossEventBus, UIDispatcher, Handler");
+    print("  UI Bridge: ControlBridge, WindowBridge, Host");
+    print("  Data: Binding, MultiBinding, BindingManager");
+    print("  RPC: ServiceHost, Client, Message, Pipe");
+    print("  Serialization: Serializer, Deserializer, JSON");
+    print("  Async: Task, Scheduler, ThreadPool, Token");
+    print("  Diagnostics: Logger, Profiler, Debugger, Config");
+    print("  Project: NuGet, Project, Solution, XAML");
+    print("══════════════════════════════════════════════");
+    return 0;
+}
+
+dotnet_summary();

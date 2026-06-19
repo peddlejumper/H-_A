@@ -1,0 +1,127 @@
+# H# zzwUI Test 10 — State-machine widgets
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. Button: toggle on release ──────────────────────────────────────
+let b = new Button();
+b.init_btn("Tog");
+b.set_toggle(true);
+check("sm/init_checked", b.is_checked == false);
+b.click();
+b.release();
+check("sm/tog1",         b.is_checked == true);
+b.click();
+b.release();
+check("sm/tog2",         b.is_checked == false);
+b.click();
+b.release();
+check("sm/tog3",         b.is_checked == true);
+
+# ─── 2. Button: non-toggle button doesn't change is_checked on release ─
+let nb = new Button();
+nb.init_btn("Non");
+nb.set_toggle(false);
+nb.click();
+nb.release();
+check("sm/nontog",       nb.is_checked == false);
+
+# ─── 3. CheckBox toggle parity ─────────────────────────────────────────
+let cb = new CheckBox();
+cb.init_cb("parity");
+check("sm/cb0",          cb.is_checked == false);
+cb.toggle();
+check("sm/cb1",          cb.is_checked == true);
+cb.toggle();
+check("sm/cb2",          cb.is_checked == false);
+cb.toggle();
+check("sm/cb3",          cb.is_checked == true);
+
+# ─── 4. Slider clamp at boundaries ─────────────────────────────────────
+let s = new Slider();
+s.init_slider(-100, 100, 0);
+s.set_value(0);
+check("sm/sld_zero",     s.get_value() == 0);
+s.set_value(50);
+check("sm/sld_pos",      s.get_value() == 50);
+s.set_value(-50);
+check("sm/sld_neg",      s.get_value() == -50);
+s.set_value(200);
+check("sm/sld_h",        s.get_value() == 100);
+s.set_value(-200);
+check("sm/sld_l",        s.get_value() == -100);
+s.set_value(0);
+check("sm/sld_back",     s.get_value() == 0);
+
+# ─── 5. ProgressBar get_percent edge: max=0 returns 0 (no division) ───
+let pb0 = new ProgressBar();
+pb0.init_pb(10, 0);
+check("sm/pb0",          pb0.get_percent() == 0);
+let pb1 = new ProgressBar();
+pb1.init_pb(50, 100);
+check("sm/pb50",         pb1.get_percent() == 50);
+let pb2 = new ProgressBar();
+pb2.init_pb(0, 100);
+check("sm/pb0_pct",      pb2.get_percent() == 0);
+let pb3 = new ProgressBar();
+pb3.init_pb(100, 100);
+check("sm/pb100",        pb3.get_percent() == 100);
+
+# ─── 6. TextInput append/backspace/clear round-trip ───────────────────
+let ti = new TextInput();
+ti.init_input("ph", "");
+check("sm/ti_init",      ti.value == "");
+ti.append("a");
+check("sm/ti_a",         ti.value == "a");
+ti.append("b");
+ti.append("c");
+check("sm/ti_abc",       ti.value == "abc");
+ti.backspace();
+check("sm/ti_ab",        ti.value == "ab");
+ti.clear_input();
+check("sm/ti_clr",       ti.value == "");
+ti.append("xyz");
+check("sm/ti_xyz",       ti.value == "xyz");
+# backspace on longer string
+let i = 0;
+while (i < 10) { ti.append("!"); i = i + 1; }
+check("sm/ti_long",      ti.value == "xyz!!!!!!!!!!");
+i = 0;
+while (i < 10) { ti.backspace(); i = i + 1; }
+check("sm/ti_back",      ti.value == "xyz");
+
+# ─── 7. TextInput backspace on empty is a no-op ──────────────────────
+let ti2 = new TextInput();
+ti2.init_input("ph", "");
+ti2.backspace();
+check("sm/ti_empty",     ti2.value == "");
+
+# ─── 8. ListBox clear when already empty ──────────────────────────────
+let lb = new ListBox();
+lb.init_listbox();
+check("sm/lb_init",      lb.get_count() == 0);
+lb.clear_items();
+check("sm/lb_clr1",      lb.get_count() == 0);
+lb.add_item("a");
+lb.add_item("b");
+lb.clear_items();
+check("sm/lb_clr2",      lb.get_count() == 0);
+check("sm/lb_clr_sel",   lb.get_selected() == -1);
+
+print("10_ZZW_STATE : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

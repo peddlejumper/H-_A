@@ -1,0 +1,780 @@
+# ═══════════════════════════════════════════════════════════════
+#  D3 接口情绪修饰符 (D3 Interface Emotion Modifiers)
+#  支持人类情绪模拟，给不同情绪的接口不同的特征
+# ═══════════════════════════════════════════════════════════════
+
+import "bootstrap/d3system.hto";
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪类型枚举 (Emotion Type Enum)
+# ═══════════════════════════════════════════════════════════════
+
+fn D3EmotionNeutral() {
+    let e = {};
+    e["type"] = "neutral";
+    e["intensity"] = 0;
+    e["valence"] = 0;
+    e["arousal"] = 0;
+    e["color"] = [128, 128, 128];
+    e["range_modifier"] = 1.0;
+    e["response_modifier"] = 1.0;
+    e["boundary_behavior"] = "stable";
+    e["description"] = "neutral baseline";
+    return e;
+}
+
+fn D3EmotionHappy() {
+    let e = {};
+    e["type"] = "happy";
+    e["intensity"] = 0.7;
+    e["valence"] = 1.0;
+    e["arousal"] = 0.6;
+    e["color"] = [255, 220, 60];
+    e["range_modifier"] = 1.2;
+    e["response_modifier"] = 1.5;
+    e["boundary_behavior"] = "welcoming";
+    e["description"] = "joyful and open";
+    return e;
+}
+
+fn D3EmotionSad() {
+    let e = {};
+    e["type"] = "sad";
+    e["intensity"] = 0.6;
+    e["valence"] = -0.8;
+    e["arousal"] = -0.4;
+    e["color"] = [70, 100, 180];
+    e["range_modifier"] = 0.7;
+    e["response_modifier"] = 0.5;
+    e["boundary_behavior"] = "withdrawn";
+    e["description"] = "melancholy and withdrawn";
+    return e;
+}
+
+fn D3EmotionAngry() {
+    let e = {};
+    e["type"] = "angry";
+    e["intensity"] = 0.9;
+    e["valence"] = -1.0;
+    e["arousal"] = 0.9;
+    e["color"] = [220, 40, 40];
+    e["range_modifier"] = 1.0;
+    e["response_modifier"] = 2.0;
+    e["boundary_behavior"] = "aggressive";
+    e["description"] = "hostile and reactive";
+    return e;
+}
+
+fn D3EmotionCalm() {
+    let e = {};
+    e["type"] = "calm";
+    e["intensity"] = 0.3;
+    e["valence"] = 0.5;
+    e["arousal"] = -0.7;
+    e["color"] = [100, 200, 160];
+    e["range_modifier"] = 1.0;
+    e["response_modifier"] = 0.7;
+    e["boundary_behavior"] = "stable";
+    e["description"] = "peaceful and steady";
+    return e;
+}
+
+fn D3EmotionExcited() {
+    let e = {};
+    e["type"] = "excited";
+    e["intensity"] = 0.9;
+    e["valence"] = 0.9;
+    e["arousal"] = 1.0;
+    e["color"] = [255, 140, 0];
+    e["range_modifier"] = 1.5;
+    e["response_modifier"] = 2.5;
+    e["boundary_behavior"] = "expansive";
+    e["description"] = "energetic and amplified";
+    return e;
+}
+
+fn D3EmotionFearful() {
+    let e = {};
+    e["type"] = "fearful";
+    e["intensity"] = 0.8;
+    e["valence"] = -0.9;
+    e["arousal"] = 0.8;
+    e["color"] = [120, 60, 140];
+    e["range_modifier"] = 0.5;
+    e["response_modifier"] = 1.3;
+    e["boundary_behavior"] = "defensive";
+    e["description"] = "anxious and protective";
+    return e;
+}
+
+fn D3EmotionCurious() {
+    let e = {};
+    e["type"] = "curious";
+    e["intensity"] = 0.5;
+    e["valence"] = 0.4;
+    e["arousal"] = 0.5;
+    e["color"] = [80, 200, 80];
+    e["range_modifier"] = 1.3;
+    e["response_modifier"] = 1.1;
+    e["boundary_behavior"] = "probing";
+    e["description"] = "inquisitive and exploring";
+    return e;
+}
+
+fn D3EmotionSurprised() {
+    let e = {};
+    e["type"] = "surprised";
+    e["intensity"] = 0.7;
+    e["valence"] = 0.2;
+    e["arousal"] = 0.7;
+    e["color"] = [255, 200, 100];
+    e["range_modifier"] = 1.1;
+    e["response_modifier"] = 1.8;
+    e["boundary_behavior"] = "reactive";
+    e["description"] = "startled and alert";
+    return e;
+}
+
+fn D3EmotionDisgusted() {
+    let e = {};
+    e["type"] = "disgusted";
+    e["intensity"] = 0.6;
+    e["valence"] = -0.7;
+    e["arousal"] = 0.3;
+    e["color"] = [100, 140, 50];
+    e["range_modifier"] = 0.8;
+    e["response_modifier"] = 1.2;
+    e["boundary_behavior"] = "repelling";
+    e["description"] = "averse and rejecting";
+    return e;
+}
+
+fn D3EmotionLove() {
+    let e = {};
+    e["type"] = "love";
+    e["intensity"] = 0.8;
+    e["valence"] = 1.0;
+    e["arousal"] = 0.4;
+    e["color"] = [255, 105, 180];
+    e["range_modifier"] = 1.4;
+    e["response_modifier"] = 1.6;
+    e["boundary_behavior"] = "embracing";
+    e["description"] = "affectionate and warm";
+    return e;
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪工厂 (Emotion Factory)
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_emotion_create(emotionType) {
+    if (emotionType == "neutral") {
+        return D3EmotionNeutral();
+    }
+    if (emotionType == "happy") {
+        return D3EmotionHappy();
+    }
+    if (emotionType == "sad") {
+        return D3EmotionSad();
+    }
+    if (emotionType == "angry") {
+        return D3EmotionAngry();
+    }
+    if (emotionType == "calm") {
+        return D3EmotionCalm();
+    }
+    if (emotionType == "excited") {
+        return D3EmotionExcited();
+    }
+    if (emotionType == "fearful") {
+        return D3EmotionFearful();
+    }
+    if (emotionType == "curious") {
+        return D3EmotionCurious();
+    }
+    if (emotionType == "surprised") {
+        return D3EmotionSurprised();
+    }
+    if (emotionType == "disgusted") {
+        return D3EmotionDisgusted();
+    }
+    if (emotionType == "love") {
+        return D3EmotionLove();
+    }
+    return D3EmotionNeutral();
+}
+
+fn d3_emotion_list_types() {
+    return ["neutral", "happy", "sad", "angry", "calm", "excited", "fearful", "curious", "surprised", "disgusted", "love"];
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪修饰符 (Emotion Modifier) — 附加到 interfaces
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_emotion_modifier_create(emotionType, intensity) {
+    let mod = {};
+    mod["emotion"] = d3_emotion_create(emotionType);
+    if (intensity > 0) {
+        mod["emotion"]["intensity"] = intensity;
+    }
+    mod["active"] = true;
+    mod["transition"] = [];
+    mod["timestamp"] = 0;
+    return mod;
+}
+
+fn d3_emotion_modifier_get_type(mod) {
+    return mod["emotion"]["type"];
+}
+
+fn d3_emotion_modifier_get_intensity(mod) {
+    return mod["emotion"]["intensity"];
+}
+
+fn d3_emotion_modifier_get_valence(mod) {
+    return mod["emotion"]["valence"];
+}
+
+fn d3_emotion_modifier_get_arousal(mod) {
+    return mod["emotion"]["arousal"];
+}
+
+fn d3_emotion_modifier_get_color(mod) {
+    return mod["emotion"]["color"];
+}
+
+fn d3_emotion_modifier_get_range(mod) {
+    return mod["emotion"]["range_modifier"];
+}
+
+fn d3_emotion_modifier_get_response(mod) {
+    return mod["emotion"]["response_modifier"];
+}
+
+fn d3_emotion_modifier_get_boundary(mod) {
+    return mod["emotion"]["boundary_behavior"];
+}
+
+fn d3_emotion_modifier_set_intensity(mod, val) {
+    if (val < 0) {
+        val = 0;
+    }
+    if (val > 1.0) {
+        val = 1.0;
+    }
+    mod["emotion"]["intensity"] = val;
+    return mod;
+}
+
+fn d3_emotion_modifier_set_active(mod, active) {
+    mod["active"] = active;
+    return mod;
+}
+
+fn d3_emotion_modifier_is_active(mod) {
+    return mod["active"];
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  接口情绪附加 (Interface Emotion Attachment)
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_interface_attach_emotion(d3Obj, ifaceName, emotionType, intensity) {
+    let i = 0;
+    let ic = len(d3Obj.region_interfaces);
+    while (i < ic) {
+        let iface = d3Obj.region_interfaces[i];
+        if (iface["name"] == ifaceName) {
+            let mod = d3_emotion_modifier_create(emotionType, intensity);
+            iface["emotion_modifier"] = mod;
+            iface["_has_emotion"] = true;
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn d3_interface_detach_emotion(d3Obj, ifaceName) {
+    let i = 0;
+    let ic = len(d3Obj.region_interfaces);
+    while (i < ic) {
+        let iface = d3Obj.region_interfaces[i];
+        if (iface["name"] == ifaceName) {
+            iface["emotion_modifier"] = [];
+            iface["_has_emotion"] = false;
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn d3_interface_get_emotion(d3Obj, ifaceName) {
+    let i = 0;
+    let ic = len(d3Obj.region_interfaces);
+    while (i < ic) {
+        let iface = d3Obj.region_interfaces[i];
+        if (iface["name"] == ifaceName) {
+            if (iface["_has_emotion"]) {
+                return iface["emotion_modifier"];
+            }
+            return [];
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+fn d3_interface_has_emotion(d3Obj, ifaceName) {
+    let mod = d3_interface_get_emotion(d3Obj, ifaceName);
+    if (len(mod) > 0) {
+        return mod["active"];
+    }
+    return false;
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪过渡系统 (Emotion Transition System)
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_interface_transition_emotion(d3Obj, ifaceName, targetEmotion, steps) {
+    let mod = d3_interface_get_emotion(d3Obj, ifaceName);
+    if (len(mod) == 0) {
+        return false;
+    }
+    let current = mod["emotion"];
+    let target = d3_emotion_create(targetEmotion);
+
+    let transition = {};
+    transition["from"] = current["type"];
+    transition["to"] = target["type"];
+    transition["steps"] = steps;
+    transition["current_step"] = 0;
+    transition["start_intensity"] = current["intensity"];
+    transition["end_intensity"] = target["intensity"];
+    transition["start_valence"] = current["valence"];
+    transition["end_valence"] = target["valence"];
+    transition["start_arousal"] = current["arousal"];
+    transition["end_arousal"] = target["arousal"];
+    transition["start_range"] = current["range_modifier"];
+    transition["end_range"] = target["range_modifier"];
+    transition["start_response"] = current["response_modifier"];
+    transition["end_response"] = target["response_modifier"];
+    transition["start_color"] = current["color"];
+    transition["end_color"] = target["color"];
+
+    mod["transition"] = transition;
+    mod["active"] = true;
+    return true;
+}
+
+fn d3_interface_step_transition(d3Obj, ifaceName) {
+    let mod = d3_interface_get_emotion(d3Obj, ifaceName);
+    if (len(mod) == 0) {
+        return false;
+    }
+    let tr = mod["transition"];
+    if (len(tr) == 0) {
+        return false;
+    }
+    tr["current_step"] = tr["current_step"] + 1;
+    let t = tr["current_step"];
+    let s = tr["steps"];
+
+    if (t >= s) {
+        let e = d3_emotion_create(tr["to"]);
+        mod["emotion"] = e;
+        mod["transition"] = [];
+        return true;
+    }
+
+    let ratio = t / s;
+    let e = d3_emotion_create(tr["from"]);
+    e["type"] = tr["from"] + "->" + tr["to"];
+    e["intensity"] = tr["start_intensity"] + (tr["end_intensity"] - tr["start_intensity"]) * ratio;
+    e["valence"] = tr["start_valence"] + (tr["end_valence"] - tr["start_valence"]) * ratio;
+    e["arousal"] = tr["start_arousal"] + (tr["end_arousal"] - tr["start_arousal"]) * ratio;
+    e["range_modifier"] = tr["start_range"] + (tr["end_range"] - tr["start_range"]) * ratio;
+    e["response_modifier"] = tr["start_response"] + (tr["end_response"] - tr["start_response"]) * ratio;
+    e["boundary_behavior"] = "transitioning";
+
+    let sc = tr["start_color"];
+    let ec = tr["end_color"];
+    let cr = sc[0] + (ec[0] - sc[0]) * ratio;
+    let cg = sc[1] + (ec[1] - sc[1]) * ratio;
+    let cb = sc[2] + (ec[2] - sc[2]) * ratio;
+    e["color"] = [cr, cg, cb];
+
+    mod["emotion"] = e;
+    return true;
+}
+
+fn d3_interface_is_transitioning(d3Obj, ifaceName) {
+    let mod = d3_interface_get_emotion(d3Obj, ifaceName);
+    if (len(mod) == 0) {
+        return false;
+    }
+    let tr = mod["transition"];
+    if (len(tr) > 0) {
+        return true;
+    }
+    return false;
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  Region 情绪行为修饰 (Region Emotion Behavior Modifiers)
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_region_attach_emotion(d3Obj, regionName, emotionType, intensity) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return false;
+    }
+    let mod = d3_emotion_modifier_create(emotionType, intensity);
+    rgn["emotion_modifier"] = mod;
+    rgn["_has_emotion"] = true;
+    return true;
+}
+
+fn d3_region_get_emotion_modifier(d3Obj, regionName) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return [];
+    }
+    if (rgn["_has_emotion"]) {
+        return rgn["emotion_modifier"];
+    }
+    return [];
+}
+
+fn d3_region_get_effective_range(rgn) {
+    let mod = rgn["emotion_modifier"];
+    if (len(mod) == 0) {
+        return 1.0;
+    }
+    if (mod["active"] == false) {
+        return 1.0;
+    }
+    return mod["emotion"]["range_modifier"];
+}
+
+fn d3_region_get_effective_response(rgn) {
+    let mod = rgn["emotion_modifier"];
+    if (len(mod) == 0) {
+        return 1.0;
+    }
+    if (mod["active"] == false) {
+        return 1.0;
+    }
+    return mod["emotion"]["response_modifier"];
+}
+
+fn d3_region_get_emotion_behavior(rgn) {
+    let mod = rgn["emotion_modifier"];
+    if (len(mod) == 0) {
+        return "none";
+    }
+    if (mod["active"] == false) {
+        return "none";
+    }
+    return mod["emotion"]["boundary_behavior"];
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪影响的区域查询 (Emotion-Aware Region Queries)
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_region_get_emotion_expanded_bounds(rgn) {
+    let c = rgn.coords;
+    let range = d3_region_get_effective_range(rgn);
+    if (range == 1.0) {
+        return [c[0], c[1], c[2], c[3], c[4], c[5]];
+    }
+    let w = c[3] - c[0];
+    let h = c[4] - c[1];
+    let d = c[5] - c[2];
+    let cx = (c[0] + c[3]) / 2;
+    let cy = (c[1] + c[4]) / 2;
+    let cz = (c[2] + c[5]) / 2;
+    let hw = w * range / 2;
+    let hh = h * range / 2;
+    let hd = d * range / 2;
+    return [cx - hw, cy - hh, cz - hd, cx + hw, cy + hh, cz + hd];
+}
+
+fn d3_region_emotion_contains_point(rgn, x, y, z) {
+    let bounds = d3_region_get_emotion_expanded_bounds(rgn);
+    return d3_point_in_range([x, y, z], bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5]);
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪气氛系统 (Emotion Atmosphere System)
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_atmosphere_create(d3Obj) {
+    let atm = {};
+    atm["dominant_emotion"] = "neutral";
+    atm["intensity"] = 0.0;
+    atm["valence"] = 0.0;
+    atm["arousal"] = 0.0;
+    atm["color_tint"] = [128, 128, 128];
+    atm["regions_affected"] = 0;
+    atm["interfaces_affected"] = 0;
+    return atm;
+}
+
+fn d3_atmosphere_compute(d3Obj) {
+    let atm = d3_atmosphere_create(d3Obj);
+    let totalValence = 0.0;
+    let totalArousal = 0.0;
+    let totalIntensity = 0.0;
+    let totalColor = [0, 0, 0];
+    let count = 0;
+
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let rgn = d3Obj.regions[i];
+        if (rgn["_has_emotion"]) {
+            let mod = rgn["emotion_modifier"];
+            if (mod["active"]) {
+                let e = mod["emotion"];
+                totalValence = totalValence + e["valence"];
+                totalArousal = totalArousal + e["arousal"];
+                totalIntensity = totalIntensity + e["intensity"];
+                totalColor[0] = totalColor[0] + e["color"][0];
+                totalColor[1] = totalColor[1] + e["color"][1];
+                totalColor[2] = totalColor[2] + e["color"][2];
+                count = count + 1;
+            }
+        }
+        i = i + 1;
+    }
+
+    let j = 0;
+    let ic = len(d3Obj.region_interfaces);
+    while (j < ic) {
+        let iface = d3Obj.region_interfaces[j];
+        if (iface["_has_emotion"]) {
+            let mod = iface["emotion_modifier"];
+            if (mod["active"]) {
+                let e = mod["emotion"];
+                totalValence = totalValence + e["valence"];
+                totalArousal = totalArousal + e["arousal"];
+                totalIntensity = totalIntensity + e["intensity"];
+                totalColor[0] = totalColor[0] + e["color"][0];
+                totalColor[1] = totalColor[1] + e["color"][1];
+                totalColor[2] = totalColor[2] + e["color"][2];
+                count = count + 1;
+            }
+        }
+        j = j + 1;
+    }
+
+    if (count > 0) {
+        atm["valence"] = totalValence / count;
+        atm["arousal"] = totalArousal / count;
+        atm["intensity"] = totalIntensity / count;
+        atm["color_tint"][0] = totalColor[0] / count;
+        atm["color_tint"][1] = totalColor[1] / count;
+        atm["color_tint"][2] = totalColor[2] / count;
+        atm["regions_affected"] = count;
+        atm["interfaces_affected"] = count;
+
+        if (atm["valence"] > 0.5) {
+            if (atm["arousal"] > 0.5) {
+                atm["dominant_emotion"] = "excited";
+            }
+            if (atm["arousal"] <= 0.5) {
+                atm["dominant_emotion"] = "happy";
+            }
+        }
+        if (atm["valence"] < -0.5) {
+            if (atm["arousal"] > 0.5) {
+                atm["dominant_emotion"] = "angry";
+            }
+            if (atm["arousal"] <= 0.5) {
+                atm["dominant_emotion"] = "sad";
+            }
+        }
+        if (atm["valence"] >= -0.5) {
+            if (atm["valence"] <= 0.5) {
+                if (atm["arousal"] > 0.5) {
+                    atm["dominant_emotion"] = "surprised";
+                }
+                if (atm["arousal"] <= 0.5) {
+                    atm["dominant_emotion"] = "neutral";
+                }
+            }
+        }
+    }
+
+    return atm;
+}
+
+fn d3_atmosphere_dump(atm) {
+    print("=== D3 Emotion Atmosphere ===");
+    print("Dominant: " + atm["dominant_emotion"]);
+    print("Intensity: " + str(atm["intensity"]));
+    print("Valence: " + str(atm["valence"]));
+    print("Arousal: " + str(atm["arousal"]));
+    print("Color Tint: ");
+    print(atm["color_tint"]);
+    print("Affected: " + str(atm["regions_affected"]));
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪映射 (Emotion Mapping) — 根据外部输入映射情绪
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_emotion_map_from_input(valence, arousal) {
+    if (valence > 0.3) {
+        if (arousal > 0.3) {
+            return "excited";
+        }
+        return "happy";
+    }
+    if (valence < -0.3) {
+        if (arousal > 0.3) {
+            return "angry";
+        }
+        return "sad";
+    }
+    if (arousal > 0.6) {
+        return "surprised";
+    }
+    if (arousal < -0.4) {
+        return "calm";
+    }
+    return "neutral";
+}
+
+fn d3_emotion_map_from_stress(stressLevel) {
+    if (stressLevel > 0.8) {
+        return "angry";
+    }
+    if (stressLevel > 0.6) {
+        return "fearful";
+    }
+    if (stressLevel > 0.4) {
+        return "sad";
+    }
+    if (stressLevel < 0.2) {
+        return "happy";
+    }
+    return "neutral";
+}
+
+fn d3_emotion_map_from_energy(energyLevel) {
+    if (energyLevel > 0.8) {
+        return "excited";
+    }
+    if (energyLevel > 0.5) {
+        return "curious";
+    }
+    if (energyLevel < 0.2) {
+        return "calm";
+    }
+    return "neutral";
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪耦合 (Emotion Coupling) — 区域间情绪传播
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_emotion_propagate(d3Obj, sourceRegion, targetRegion, factor) {
+    let src = d3_region_get_emotion_modifier(d3Obj, sourceRegion);
+    if (len(src) == 0) {
+        return false;
+    }
+    let tgt = d3_region_get_emotion_modifier(d3Obj, targetRegion);
+    let srcType = src["emotion"]["type"];
+    let srcIntensity = src["emotion"]["intensity"];
+
+    if (len(tgt) == 0) {
+        return d3_region_attach_emotion(d3Obj, targetRegion, srcType, srcIntensity * factor);
+    }
+
+    let propagatedIntensity = srcIntensity * factor;
+    if (propagatedIntensity > tgt["emotion"]["intensity"]) {
+        tgt["emotion"]["type"] = srcType;
+        tgt["emotion"]["intensity"] = propagatedIntensity;
+        tgt["emotion"]["valence"] = src["emotion"]["valence"] * factor;
+        tgt["emotion"]["arousal"] = src["emotion"]["arousal"] * factor;
+    }
+    return true;
+}
+
+fn d3_region_bbox_overlaps(a, b) {
+    let bboxA = [a["coords"][0], a["coords"][1], a["coords"][2], a["coords"][3], a["coords"][4], a["coords"][5]];
+    let bboxB = [b["coords"][0], b["coords"][1], b["coords"][2], b["coords"][3], b["coords"][4], b["coords"][5]];
+    return d3_bbox_intersects(bboxA, bboxB);
+}
+
+fn d3_emotion_propagate_to_neighbors(d3Obj, regionName, factor) {
+    let rgn = d3_find_region_by_name(d3Obj, regionName);
+    if (len(rgn) == 0) {
+        return 0;
+    }
+    let propagated = 0;
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let other = d3Obj.regions[i];
+        if (other["name"] != regionName) {
+            if (d3_region_bbox_overlaps(rgn, other)) {
+                let ok = d3_emotion_propagate(d3Obj, regionName, other["name"], factor);
+                if (ok) {
+                    propagated = propagated + 1;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return propagated;
+}
+
+# ═══════════════════════════════════════════════════════════════
+#  情绪系统信息 (Emotion System Info)
+# ═══════════════════════════════════════════════════════════════
+
+fn d3_emotion_system_info(d3Obj) {
+    print("=== D3 Emotion System ===");
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    let emotionCount = 0;
+    while (i < rc) {
+        let rgn = d3Obj.regions[i];
+        if (rgn["_has_emotion"]) {
+            let mod = rgn["emotion_modifier"];
+            if (mod["active"]) {
+                emotionCount = emotionCount + 1;
+                print("Region " + rgn["name"] + ": " + mod["emotion"]["type"] + " (intensity=" + str(mod["emotion"]["intensity"]) + ")");
+            }
+        }
+        i = i + 1;
+    }
+
+    let j = 0;
+    let ic = len(d3Obj.region_interfaces);
+    while (j < ic) {
+        let iface = d3Obj.region_interfaces[j];
+        if (iface["_has_emotion"]) {
+            let mod = iface["emotion_modifier"];
+            if (mod["active"]) {
+                emotionCount = emotionCount + 1;
+                print("Interface " + iface["name"] + ": " + mod["emotion"]["type"] + " (intensity=" + str(mod["emotion"]["intensity"]) + ")");
+            }
+        }
+        j = j + 1;
+    }
+
+    print("Total emotion modifiers: " + str(emotionCount));
+
+    let atm = d3_atmosphere_compute(d3Obj);
+    d3_atmosphere_dump(atm);
+}
+
+print("D3 Emotion Modifier Library v1.0 loaded");
