@@ -321,6 +321,11 @@ class Compiler:
         # (either a user-defined let/fn at the module scope, or a runtime
         # HNative builtin) and should be looked up by name.
         self.in_function_body = False
+        # True when compiling a body declared with `async fn`.  The
+        # `await expr` static check requires this.  `coro fn` and plain
+        # `fn` leave it False even though they share the same
+        # `is_coro=True` runtime representation.
+        self.in_async = False
 
     # -- name access helpers ---------------------------------------------
     def emit_load_name(self, name):
@@ -383,6 +388,10 @@ class Compiler:
             comp.bound = set(stmt.params) | {stmt.name}
             comp.deref_names = set(freevars)
             comp.in_function_body = True
+            # `async fn` requires the inner compiler to permit `await`.
+            # `coro fn` and plain `fn` leave in_async False so any
+            # accidental `await` inside them produces a static error.
+            comp.in_async = bool(getattr(stmt, 'is_async', False))
             for s in stmt.body.statements:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
@@ -397,6 +406,15 @@ class Compiler:
             # object so `fn<T>(x)` can be introspected at runtime.
             if stmt.type_params:
                 func_obj['type_params'] = stmt.type_params
+            # `async fn` is sugar over `coro fn`.  Both are represented
+            # by the same `is_coro: True` runtime flag; the additional
+            # `is_async: True` marker tells the HVM to wrap the call
+            # result in an HFuture, so that `await` can be type-checked
+            # against the Future<T> return type.
+            if getattr(stmt, 'is_coro', False):
+                func_obj['is_coro'] = True
+            if getattr(stmt, 'is_async', False):
+                func_obj['is_async'] = True
             idx = self.add_const(func_obj)
             # 3. Emit closure construction at the call site.  The VM
             #    pops the function from the top of the stack first, then
@@ -858,6 +876,28 @@ class Compiler:
                 self.emit('UNARY_TILDE')
             else:
                 raise CompileError(f'Unsupported unary op: {expr.op}')
+        elif isinstance(expr, AwaitExpression):
+            # `await expr` lowers to AWAIT.  The operand is compiled
+            # first, so its result (expected to be an HFuture) is on
+            # the top of the stack when AWAIT runs.
+            #
+            # Static check: `await` is only allowed
+            #   (a) at the top level of a module (the entry script acts
+            #       as an implicit async context — there's no enclosing
+            #       function to be a non-async one), and
+            #   (b) inside an `async fn` body.
+            # Inside `fn` and `coro fn` bodies, `await` is rejected
+            # because the surrounding function does not have the
+            # `is_async` flag and therefore would not auto-wrap its
+            # call result in an HFuture.
+            if self.in_function_body and not self.in_async:
+                raise CompileError(
+                    "Static type error: `await` is only allowed inside an "
+                    "`async fn` body (or at the top level of a module).  "
+                    "`coro fn` and plain `fn` do not support `await`."
+                )
+            self.compile_expr(expr.expr)
+            self.emit('AWAIT')
         elif isinstance(expr, TernaryOp):
             # condition ? true_expr : false_expr
             # compile condition, then JUMP_IF_FALSE to false_branch

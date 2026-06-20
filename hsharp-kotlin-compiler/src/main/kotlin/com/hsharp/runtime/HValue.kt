@@ -19,7 +19,7 @@
 package com.hsharp.runtime
 
 /** Discriminator used for pattern matching and toJson(). */
-enum class HType { NULL, BOOL, NUMBER, STRING, LIST, DICT, FUNCTION, CLASS, INSTANCE, UNION, NATIVE }
+enum class HType { NULL, BOOL, NUMBER, STRING, LIST, DICT, FUNCTION, CLASS, INSTANCE, UNION, NATIVE, FUTURE }
 
 /** Marker interface implemented by every runtime value. */
 sealed interface HValue {
@@ -110,7 +110,8 @@ data class HDict(val entries: MutableMap<String, HValue>) : HValue {
  * recursively executable bytecode object: instructions + its own consts.
  *
  * In Python VM terms: {'args': [...], 'bytecode': [...], 'consts': [...],
- *                       'freevars': [...]?, 'is_coro': bool?, 'name': str?}
+ *                       'freevars': [...]?, 'is_coro': bool?, 'is_async': bool?,
+ *                       'name': str?}
  */
 data class HFunction(
     val name: String,
@@ -119,6 +120,11 @@ data class HFunction(
     val consts: List<HValue>,
     val freevars: List<String> = emptyList(),
     val isCoro: Boolean = false,
+    // `is_async` is the user-visible async/await sugar.  The compiler
+    // emits this in addition to `is_coro: true` for `async fn`; the VM
+    // uses it to wrap the call result in an HFuture so that `await`
+    // can be type-checked against Future<T>.
+    val isAsync: Boolean = false,
     // Generic / template type-parameter names declared on this function
     // (e.g. `fn identity<T>(x)` → typeParams = ["T"]).  Empty list for
     // non-generic functions.  Used for runtime introspection; H# itself
@@ -228,6 +234,29 @@ data class HNative(val name: String, val arity: Int, val call: (List<HValue>) ->
     override fun toKotlinLiteral() = "/* HNative ${name} */ HNull"
     override fun toDisplayString() = "<native ${name}/${arity}>"
     override fun toJson(): Map<String, Any?> = mapOf("name" to name, "kind" to "native")
+    override fun toString() = toDisplayString()
+}
+
+/**
+ * A `Future<T>` produced by an `async fn` call.  In this VM we use a
+ * single-threaded eager-resolve model: when the call site invokes an
+ * `async fn`, the body runs to completion immediately and the result is
+ * wrapped in an HFuture that `await` then unwraps.  This is the simplest
+ * way to get the type-checked `await expr` shape and the static-analysis
+ * story (`await` only inside `async fn`) without dragging in a coroutine
+ * scheduler.  The shape also leaves room for a future lazy / multi-threaded
+ * implementation (a `resolved = false` HFuture that suspends the frame and
+ * the scheduler resumes it) without changing the AST or surface syntax.
+ */
+data class HFuture(val value: HValue, val resolved: Boolean = true) : HValue {
+    override val type = HType.FUTURE
+    override fun toKotlinLiteral() = "HFuture(${value.toKotlinLiteral()})"
+    override fun toDisplayString() = "<future ${value.toDisplayString()}>"
+    override fun toJson(): Map<String, Any?> = mapOf(
+        "__type__" to "future",
+        "value" to value.toJson(),
+        "resolved" to resolved
+    )
     override fun toString() = toDisplayString()
 }
 

@@ -104,13 +104,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the right order.  This was masked before because most call sites
     were simple `name(...)` forms that go through `CALL_FUNCTION`.
   - **`in_function_body` flag in `compiler.py`** — distinguishes
-    compiling a function body from compiling the module top level.
-    Used to decide whether a name referenced inside a function but
-    not bound locally should be treated as a free variable
-    (`LOAD_DEREF` + `CALL_VALUE`) or looked up by name at call time
-    (`CALL_FUNCTION`).  Without this, top-level functions in
-    `zzw_native.hto` were mis-classifying `gui_set_clip` etc. as
-    free variables and failing to find them.
+  compiling a function body from compiling the module top level.
+  Used to decide whether a name referenced inside a function but
+  not bound locally should be treated as a free variable
+  (`LOAD_DEREF` + `CALL_VALUE`) or looked up by name at call time
+  (`CALL_FUNCTION`).  Without this, top-level functions in
+  `zzw_native.hto` were mis-classifying `gui_set_clip` etc. as
+  free variables and failing to find them.
+- **Native `async fn` / `await expr` syntax** — user-level sugar on
+  top of the low-level `coro fn` API.  H# now has a familiar
+  async/await story: declare with `async fn`, receive a
+  `Future<T>` at the call site, unwrap with `await expr`.  This
+  is the user-facing layer; `coro fn` is preserved as the
+  low-level primitive and continues to be the only API that
+  drives a real (lazy / multi-shot) coroutine — `async fn` is
+  purely a static-and-runtime convenience.
+  - **Keywords / tokens** — `async` and `await` added to
+    `tokens.py` and `lexer.py` as reserved words.  `async` is
+    only treated as a keyword when it is immediately followed by
+    `fn` (the parser uses `lexer.save_state` /
+    `lexer.restore_state` so that `async` remains usable as an
+    ordinary identifier in expression contexts).
+  - **AST** — `Function` got an `is_async: bool` field; new
+    `AwaitExpression` node wrapping the awaited expression.
+  - **Parser** — `function_declaration(is_async=True)` sets both
+    `is_coro=True` and `is_async=True` on the function AST,
+    making `async fn` semantically a `coro fn` plus the
+    user-level sugar marker.  `unary()` recognises the
+    `await expr` prefix and builds an `AwaitExpression`.
+  - **Static type check (`compiler.py`)** — the compiler
+    tracks an `in_async` flag while compiling function bodies.
+    `await expr` is rejected at compile time when
+    `in_function_body` is true but `in_async` is false, with the
+    error
+    > Static type error: `await` is only allowed inside an
+    > `async fn` body (or at the top level of a module).  `coro
+    > fn` and plain `fn` do not support `await`.
+    Top-level `await` is permitted because the entry script
+    acts as an implicit async context — there's no enclosing
+    function that could be a non-async one.  This is the
+    "明确哪些函数可 await" requirement: the static pass names
+    exactly the functions that can be awaited, eliminating the
+    callback-chain ambiguity that pure `coro fn` had.
+  - **Bytecode** — `await expr` lowers to a single `AWAIT`
+    opcode.  `async fn` call sites automatically wrap their
+    return value in an `HFuture`, so the user never has to
+    touch the future machinery directly.
+  - **Runtime (`HValue.kt`)** — new `HType.FUTURE` enum value
+    and a corresponding `HFuture(value: HValue, resolved:
+    Boolean = true)` data class.  In this VM the future is
+    single-threaded and eagerly resolved (the body runs to
+    completion on the call, and `await` just unwraps the
+    inner value); the shape is also ready for a future
+    lazy / multi-threaded implementation
+    (`HFuture(resolved = false)` would suspend the frame and
+    the scheduler would resume it) without changing the AST or
+    the surface syntax.
+  - **Runtime (`HVM.kt`)** — new `AWAIT` opcode in the dispatch
+    loop: pops the value, type-checks that it is an `HFuture`
+    (raises `HSharpRuntimeError` otherwise), and pushes the
+    inner value.  `invokeHFunction` wraps the return value in
+    `HFuture(raw, resolved = true)` whenever
+    `func.isAsync == true`; `coro fn` and plain `fn` are
+    unaffected, so `coro fn` remains the low-level API and
+    `async fn` is the user-level sugar layer as the spec
+    requires.
+  - **Runtime (`HbcReader.kt`)** — reads the new `is_async`
+    boolean from the function const map and sets
+    `HFunction.isAsync`.  `MAKE_CLOSURE` preserves the
+    `isAsync` flag when building a closure instance.
+  - **Introspection** — function values now expose
+    `fn.is_async`, `fn.is_coro`, `fn.name`, and `fn.args` as
+    read-only attributes (so a generic decorator can decide
+    whether a callable is async at runtime).
+  - **Test suite** — new `16_async_await.hto` (16 cases):
+    `async fn` declaration, returning a future that `await`
+    unwraps, sequential awaits in one body, nested awaits
+    across two `async fn`s, `await` on a non-future raising
+    at runtime, `coro fn` (low-level) still returning a raw
+    value, `is_async` flag true for `async fn` and false for
+    `coro fn` and plain `fn`, and async fn returning values
+    of different types (number, string, list, bool, null).
+    All **20/20** zzwui test files pass; **721/721**
+    individual `check()` cases pass.
 
 ### Changed
 

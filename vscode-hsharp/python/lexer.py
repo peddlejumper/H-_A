@@ -77,6 +77,8 @@ class Lexer:
             'module': TokenType.MODULE,
             'concept': TokenType.CONCEPT,
             'coro': TokenType.CORO,
+            'async': TokenType.ASYNC,
+            'await': TokenType.AWAIT,
             'asm': TokenType.ASM,
             'ptr': TokenType.PTR,
             'true': ('BOOL', True),

@@ -25,6 +25,8 @@ class TokenType(Enum):
     MODULE = 'MODULE'
     CONCEPT = 'CONCEPT'
     CORO = 'CORO'
+    ASYNC = 'ASYNC'
+    AWAIT = 'AWAIT'
     ASM = 'ASM'
     PTR = 'PTR'
     TRY = 'TRY'

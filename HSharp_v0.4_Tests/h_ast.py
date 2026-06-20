@@ -19,12 +19,29 @@ class ImportStatement(AST):
         self.path = path
 
 class Function(AST):
-    def __init__(self, name, params, body, is_static=False, type_params=None):
+    def __init__(self, name, params, body, is_static=False, type_params=None,
+                 is_async=False):
         self.name = name
         self.params = params
         self.body = body
         self.is_static = is_static
         self.type_params = type_params or []
+        # `async fn foo() { ... }` lowers to `coro fn foo() { ... }`
+        # with an extra `is_async` marker on the func object so that the
+        # Kotlin VM can recognise async calls and wrap their result in
+        # a HFuture.
+        self.is_async = is_async
+
+class AwaitExpression(AST):
+    """`await expr` — must appear inside an `async fn` body.  The
+    operand `expr` is expected to be an HFuture (or any HValue
+    recognised as awaitable by the static check).  At runtime this
+    lowers to a single AWAIT opcode that synchronously pulls the
+    future's value; since H# has no real concurrency, async/await is
+    a static-analysis-friendly sugar over the underlying `coro fn` /
+    HFuture machinery."""
+    def __init__(self, expr):
+        self.expr = expr
 
 class CallExpression(AST):
     def __init__(self, func, args, type_args=None):

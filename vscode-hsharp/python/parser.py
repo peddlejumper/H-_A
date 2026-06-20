@@ -32,6 +32,24 @@ class Parser:
             self.eat(TokenType.CORO)
             fn = self.function_declaration(is_coro=True)
             return fn
+        if self.current_token[0] == TokenType.ASYNC:
+            # `async fn foo() { ... }` is sugar over `coro fn foo() { ... }`.
+            # We require `async` to be followed by `fn` on the same logical
+            # line so that `async` is still usable as an identifier inside
+            # expression contexts.
+            saved_lexer = self.lexer.save_state()
+            saved_token = self.current_token
+            try:
+                self.eat(TokenType.ASYNC)
+                if self.current_token[0] == TokenType.FN:
+                    fn = self.function_declaration(is_async=True)
+                    return fn
+                # Not `async fn`; treat `async` as a plain identifier.
+                self.lexer.restore_state(saved_lexer)
+                self.current_token = saved_token
+            except SyntaxError:
+                self.lexer.restore_state(saved_lexer)
+                self.current_token = saved_token
         if self.current_token[0] == TokenType.D3SIZEPOWER:
             return self.d3sizepower_declaration()
         if self.current_token[0] == TokenType.EM3D:
@@ -126,7 +144,7 @@ class Parser:
         self.eat(TokenType.SEMI)
         return ImportStatement(path)
 
-    def function_declaration(self, is_coro=False):
+    def function_declaration(self, is_coro=False, is_async=False):
         self.eat(TokenType.FN)
         func_name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
@@ -146,6 +164,14 @@ class Parser:
         fn = Function(func_name, params, body, type_params=type_params)
         if is_coro:
             fn.is_coro = True
+        if is_async:
+            # `async fn` is sugar over the lower-level `coro fn`.  The
+            # HVM recognises the resulting function object by the
+            # `is_async` flag and wraps its return value in an
+            # HFuture, so `await` can be statically checked against
+            # the Future<T> return type.
+            fn.is_coro = True
+            fn.is_async = True
         return fn
 
     def _parse_type_params(self):
@@ -723,6 +749,12 @@ class Parser:
         if self.current_token[0] == TokenType.TILDE:
             self.eat(TokenType.TILDE)
             return UnaryOp(TokenType.TILDE, self.unary())
+        if self.current_token[0] == TokenType.AWAIT:
+            # `await expr` lowers to a single AWAIT opcode.  The
+            # static check that `await` only appears inside an
+            # `async fn` body is performed by the compiler.
+            self.eat(TokenType.AWAIT)
+            return AwaitExpression(self.unary())
         return self.primary()
 
     def primary(self):

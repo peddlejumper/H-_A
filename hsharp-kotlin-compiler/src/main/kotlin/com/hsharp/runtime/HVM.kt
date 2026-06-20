@@ -305,6 +305,8 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                     consts = tmpl.consts,
                     freevars = tmpl.freevars,
                     isCoro = tmpl.isCoro,
+                    isAsync = tmpl.isAsync,
+                    typeParams = tmpl.typeParams,
                     closure = mutableMapOf()
                 )
                 for ((i, name) in tmpl.freevars.withIndex()) {
@@ -360,6 +362,27 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             }
 
             "FOR_ITER" -> forIter((arg as Number).toInt())
+            "AWAIT" -> {
+                // `await` is the runtime half of the `async fn` / `await expr`
+                // sugar: it pops a value off the stack and, if that value is
+                // an HFuture, pushes the unwrapped inner value.  Anything
+                // else is a type error — H# refuses to silently coerce.
+                //
+                // The Python compiler is expected to have already rejected
+                // `await` outside an `async fn` body at compile time, so by
+                // the time we get here the static check has passed.  This
+                // runtime check is the second line of defence and also
+                // catches the case where the awaited expression is not a
+                // future (e.g. `await 42`).
+                val v = f.stack.removeLast()
+                if (v is HFuture) {
+                    f.stack.addLast(v.value)
+                } else {
+                    throw HSharpRuntimeError(
+                        "AWAIT: expected Future<T>, got ${v::class.simpleName} (${v.toDisplayString()})"
+                    )
+                }
+            }
             "CLEANUP_FOR" -> {
                 // Pop the for-loop iterator dict that the current `for`
                 // pushed onto the stack.  This is only meaningful on the
@@ -724,7 +747,13 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                 frame.env[fv] = try { lookup(fv) } catch (_: Throwable) { HNull }
             }
         }
-        return runFrame(frame)
+        val raw = runFrame(frame)
+        // async/await sugar: when the call site invokes an `async fn`,
+        // wrap the return value in a Future<T> so that `await` can
+        // type-check and unwrap it.  Plain `coro fn` (isCoro without
+        // isAsync) keeps its raw coroutine semantics — it stays the
+        // low-level API, async/await is the user-facing sugar layer.
+        return if (func.isAsync) HFuture(raw, resolved = true) else raw
     }
 
     private fun sliceValue(target: HValue, start: HValue, end: HValue, step: HValue): HValue {
@@ -833,6 +862,21 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                     return HList(obj.typeParams.map { HString(it) }.toMutableList())
                 }
                 throw HSharpRuntimeError("Attribute '$name' not found on class")
+            }
+            is HFunction -> {
+                // A handful of read-only attributes are exposed on function
+                // values for introspection (e.g. `fn.is_async`,
+                // `fn.is_coro`, `fn.name`, `fn.args`).  These mirror the
+                // data-class fields on HFunction; we don't expose the
+                // full bytecode/consts/closure surface because that's
+                // an implementation detail.
+                return when (name) {
+                    "name"      -> HString(obj.name)
+                    "args"      -> HList(obj.args.map { HString(it) }.toMutableList())
+                    "is_coro"   -> HBool(obj.isCoro)
+                    "is_async"  -> HBool(obj.isAsync)
+                    else -> throw HSharpRuntimeError("Attribute '$name' not found on function")
+                }
             }
             is HInstance -> {
                 // Private check

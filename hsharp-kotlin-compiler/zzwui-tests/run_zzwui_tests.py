@@ -30,13 +30,7 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-# Resolve the project root relative to *this* file so the runner works
-# whether it is invoked from inside the H#_v0.4.1_Package checkout or
-# from any other location.  The script expects to live at
-#   <root>/hsharp-kotlin-compiler/zzwui-tests/run_zzwui_tests.py
-# where <root> is the directory containing HSharp_v0.4_Tests and
-# hsharp-kotlin-compiler.
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT       = Path("/Users/peddlejumper/H#/v0.4")
 PY_DIR     = ROOT / "HSharp_v0.4_Tests"
 KT_DIR     = ROOT / "hsharp-kotlin-compiler"
 HTO_DIR    = KT_DIR / "zzwui-tests" / "hto"
@@ -77,6 +71,8 @@ CATALOG: dict[str, tuple[str, str]] = {
     "12_text_input":     ("input",       "TextInput lifecycle: placeholder, value, max_length, password flag, append/backspace round-trip, clear, set/get value identity, unicode/empty boundary."),
     "13_renderer_clip":  ("clip",        "Clip stack: pushClip/popClip single, push/pop push/pop, popClip on empty, nested clip with theme rect, native_set_clip/native_clear_clip callability."),
     "14_perf":           ("performance", "Performance: create 200 widgets, build a 3-level deep tree, iterate children 200 times, list ops on 100 items, repeated layout do_layout cycle, dict-style access 200 times."),
+    "15_for_loop":       ("syntax",      "for x in y: list / string / dict / range iteration; break; continue; nested for with break; empty containers; collection isolation between consecutive loops."),
+    "16_async_await":    ("syntax",      "async fn / await expr: declaring an async fn lowers to coro fn + is_async; calling it returns Future<T> that await unwraps; nested awaits; await on a non-future raises; coro fn (low-level API) still works; is_async flag observable on the function value."),
 }
 
 # ---------------------------------------------------------------------------

@@ -157,12 +157,22 @@ class HbcReader {
         val freevars = (m["freevars"] as? List<*>)
             ?.map { it.toString() } ?: emptyList()
         val isCoro = (m["is_coro"] as? Boolean) ?: false
+        val isAsync = (m["is_async"] as? Boolean) ?: false
         val typeParams = (m["type_params"] as? List<*>)
             ?.map { it.toString() } ?: emptyList()
         // The same Python-compiler JUMP bug exists inside nested functions
         // too, so apply the fix here as well.
         val typedBc = bc.map { parseInstruction(it) }
-        return HFunction(name, args, fixForLoopJumps(typedBc), consts, freevars, isCoro, typeParams)
+        return HFunction(
+            name = name,
+            args = args,
+            instructions = fixForLoopJumps(typedBc),
+            consts = consts,
+            freevars = freevars,
+            isCoro = isCoro,
+            isAsync = isAsync,
+            typeParams = typeParams
+        )
     }
 
     private fun parseClass(m: Map<*, *>): HClass {
