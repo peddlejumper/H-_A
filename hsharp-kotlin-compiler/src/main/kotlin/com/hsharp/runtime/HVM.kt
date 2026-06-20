@@ -43,11 +43,42 @@ class HFrame(
  */
 class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: File? = null) {
 
-    val globals: MutableMap<String, HValue> = mutableMapOf()
+    /** Shared global symbol table.  ConcurrentHashMap makes reads from
+     *  parallel worker threads safe; writes are still expected to come
+     *  from the main thread (parallel tasks are pure: they read args,
+     *  produce results, and use channels for I/O). */
+    val globals: java.util.concurrent.ConcurrentHashMap<String, HValue> = java.util.concurrent.ConcurrentHashMap()
+
+    /** Per-thread current frame.  Workers running on the DZZW pool each
+     *  have their own slot, so they don't trample on the main thread's
+     *  `current`.  The HVM is still logically a single interpreter;
+     *  the only "parallel" part is that several of these interpreters
+     *  can be in flight at the same time, each on its own thread. */
+    private val threadCurrent: ThreadLocal<HFrame?> = ThreadLocal.withInitial { null }
+
     private val frames: ArrayDeque<HFrame> = ArrayDeque()
-    var current: HFrame = makeEntryFrame()
-        private set
-    private val iterState: ArrayDeque<HValue> = ArrayDeque()  // mirrors hsvm's iter_stack
+    /** Per-thread current frame.  The HVM is logically a single
+     *  interpreter, but several interpreters can be in flight at the
+     *  same time (one per worker thread), so `current` reads from a
+     *  thread-local slot.  The main thread's slot is initialised by
+     *  [resetEntry] before [run] is called. */
+    var current: HFrame
+        get() = threadCurrent.get() ?: error("no current frame on this thread; call resetEntry first")
+        private set(value) { threadCurrent.set(value) }
+
+    /** The active structured-concurrency scope for this thread, or
+     *  null if we're outside any `concurrent { ... }` block.  Set by
+     *  the [CONCURRENT_ENTER] / [CONCURRENT_EXIT] opcodes; read by
+     *  [invokeHFunction] when it dispatches a parallel task so the
+     *  new task can be registered as a child of the surrounding scope
+     *  (this is what enables cancel propagation and parent-wins
+     *  join semantics). */
+    var currentScope: ConcurrentScope? = null
+
+    /** Per-thread stack of scopes.  [CONCURRENT_ENTER] pushes the
+     *  current scope, [CONCURRENT_EXIT] pops it.  This lets nested
+     *  `concurrent { concurrent { ... } }` blocks work. */
+    private val scopeStack: ThreadLocal<ArrayDeque<ConcurrentScope?>> = ThreadLocal.withInitial { ArrayDeque() }
 
     private fun makeEntryFrame(): HFrame {
         val mod = entryName?.let { file.modules[it] } ?: file.mainModule()
@@ -60,7 +91,15 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
         frames.clear()
     }
 
+    /** Initialise the main thread's frame slot from the default entry. */
+    private fun ensureEntryOnCurrentThread() {
+        if (threadCurrent.get() == null) {
+            threadCurrent.set(makeEntryFrame())
+        }
+    }
+
     fun run(): HValue {
+        ensureEntryOnCurrentThread()
         frames.addLast(current)
         try {
             loop@ while (true) {
@@ -306,6 +345,7 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                     freevars = tmpl.freevars,
                     isCoro = tmpl.isCoro,
                     isAsync = tmpl.isAsync,
+                    isParallel = tmpl.isParallel,
                     typeParams = tmpl.typeParams,
                     closure = mutableMapOf()
                 )
@@ -365,8 +405,9 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             "AWAIT" -> {
                 // `await` is the runtime half of the `async fn` / `await expr`
                 // sugar: it pops a value off the stack and, if that value is
-                // an HFuture, pushes the unwrapped inner value.  Anything
-                // else is a type error — H# refuses to silently coerce.
+                // an HFuture, blocks on the underlying FutureCell and pushes
+                // the resolved value.  Anything else is a type error — H#
+                // refuses to silently coerce.
                 //
                 // The Python compiler is expected to have already rejected
                 // `await` outside an `async fn` body at compile time, so by
@@ -374,13 +415,85 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                 // runtime check is the second line of defence and also
                 // catches the case where the awaited expression is not a
                 // future (e.g. `await 42`).
+                //
+                // For an eager-resolve HFuture (the one `async fn` produces
+                // when the body has already finished), the cell is already
+                // RESOLVED and the call returns immediately.  For a
+                // multi-threaded HFuture (the one `@parallel` produces), the
+                // cell is PENDING and the call blocks the calling thread
+                // until a worker completes it.
                 val v = f.stack.removeLast()
                 if (v is HFuture) {
-                    f.stack.addLast(v.value)
+                    f.stack.addLast(v.cell.await())
                 } else {
                     throw HSharpRuntimeError(
                         "AWAIT: expected Future<T>, got ${v::class.simpleName} (${v.toDisplayString()})"
                     )
+                }
+            }
+            "CHAN_NEW" -> {
+                // `chan_new(capacity)` — the runtime half of the
+                // `chan T` / `chan_new(N)` syntax.  Pops the capacity
+                // (must be a number) and pushes a fresh HChannel.
+                // Capacity 0 means unbounded.
+                val cap = HValueOps.toLong(f.stack.removeLast()).toInt()
+                f.stack.addLast(HChannel(cap))
+            }
+            "CHAN_SEND" -> {
+                // `chan_send(ch, v)` — push the channel under the
+                // value (or just check the channel and then pop the
+                // value off).  We pop the value last, then the
+                // channel, but the compiler emits them in (channel,
+                // value) order, so the stack has [..., channel,
+                // value].  The send() call blocks if the channel is
+                // at capacity (bounded channel) — the worker thread
+                // parks on the queue until space is available.
+                val v = f.stack.removeLast()
+                val ch = f.stack.removeLast()
+                if (ch !is HChannel) {
+                    throw HSharpRuntimeError("CHAN_SEND: expected HChannel, got ${ch.type}")
+                }
+                ch.send(v)
+            }
+            "CHAN_RECV" -> {
+                // `chan_recv(ch)` — pops the channel and pushes the
+                // next value.  Blocks until a sender produces one
+                // (or the channel is closed and drained, in which case
+                // it raises an H# exception).
+                val ch = f.stack.removeLast()
+                if (ch !is HChannel) {
+                    throw HSharpRuntimeError("CHAN_RECV: expected HChannel, got ${ch.type}")
+                }
+                f.stack.addLast(ch.recv())
+            }
+            "CHAN_CLOSE" -> {
+                val ch = f.stack.removeLast()
+                if (ch !is HChannel) {
+                    throw HSharpRuntimeError("CHAN_CLOSE: expected HChannel, got ${ch.type}")
+                }
+                ch.close()
+            }
+            "CONCURRENT_ENTER" -> {
+                // `concurrent { ... }` open: allocate a fresh
+                // ConcurrentScope and push the previous scope onto
+                // the thread-local scope stack.  All parallel tasks
+                // spawned inside the block are registered as
+                // children of this scope.
+                val scope = ConcurrentScope()
+                scopeStack.get().addLast(currentScope)
+                currentScope = scope
+            }
+            "CONCURRENT_EXIT" -> {
+                // `concurrent { ... }` close: join the scope (wait
+                // for every child, propagate the first failure) and
+                // then pop back to the parent scope.
+                val scope = currentScope ?: throw HSharpRuntimeError("CONCURRENT_EXIT without CONCURRENT_ENTER")
+                val stack = scopeStack.get()
+                val parent = if (stack.isEmpty()) null else stack.removeLast()
+                try {
+                    scope.join()
+                } finally {
+                    currentScope = parent
                 }
             }
             "CLEANUP_FOR" -> {
@@ -727,6 +840,43 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
     ): HValue {
         if (func.args.size != args.size)
             throw HSharpRuntimeError("Function ${func.name} expects ${func.args.size} args, got ${args.size}")
+
+        // Multi-threaded dispatch: a `@parallel` (or `parallel fn`)
+        // coroutine is submitted to the DZZW worker pool instead of
+        // running on the caller's thread.  The function still
+        // produces an HFuture so that `await` works uniformly: the
+        // difference is only whether the HFuture's cell is already
+        // resolved at the time `invokeHFunction` returns.
+        if (func.isParallel) {
+            val cell = FutureCell()
+            val fut = HFuture(cell)
+            // Register with the active structured-concurrency scope, if
+            // any.  This is what makes parent cancellation propagate to
+            // children: a scope that has been cancelled will call
+            // `cell.cancel()` on every child future it knows about.
+            currentScope?.add(fut)
+            // Capture the caller's frame as the parent so that free
+            // variable lookups (e.g. module-level `let W = 80`) inside
+            // the worker fall through to the main module's env.  The
+            // worker runs on a different thread, but `HFrame` is a
+            // passive data structure, so sharing it across threads is
+            // safe (the worker only reads it; the main thread isn't
+            // mutating it after submission).
+            val callerFrame = current
+            WorkerPool.defaultPool().submit {
+                try {
+                    val raw = runOnWorker(func, args, instance, staticClass, typeArgs, parent = callerFrame)
+                    cell.complete(raw)
+                } catch (t: Throwable) {
+                    cell.fail(t)
+                }
+                // The HFuture is the user-visible result; the lambda's
+                // return value is just a sentinel.
+                HNull
+            }
+            return fut
+        }
+
         val frame = HFrame(func, func.consts, func.instructions, mutableMapOf(), parent)
         for ((p, v) in func.args.zip(args)) frame.env[p] = v
         if (instance != null) frame.env["self"] = instance
@@ -754,6 +904,36 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
         // isAsync) keeps its raw coroutine semantics — it stays the
         // low-level API, async/await is the user-facing sugar layer.
         return if (func.isAsync) HFuture(raw, resolved = true) else raw
+    }
+
+    /**
+     * Worker-thread variant of `runFrame` for `@parallel` functions.
+     * Identical semantics, but called from a WorkerPool thread.
+     * The frame's `pc` and `env` are local to the worker; the only
+     * shared state touched is `globals` (which is a ConcurrentHashMap).
+     */
+    private fun runOnWorker(
+        func: HFunction,
+        args: List<HValue>,
+        instance: HValue?,
+        staticClass: HClass?,
+        typeArgs: HValue?,
+        parent: HFrame? = null
+    ): HValue {
+        val frame = HFrame(func, func.consts, func.instructions, mutableMapOf(), parent)
+        for ((p, v) in func.args.zip(args)) frame.env[p] = v
+        if (instance != null) frame.env["self"] = instance
+        if (typeArgs != null) frame.env["__type_args__"] = typeArgs
+        if (staticClass != null) frame.env["__static_class__"] = staticClass
+        for (fv in func.freevars) {
+            val cell = func.closure[fv]
+            if (cell != null) {
+                frame.env[fv] = cell
+            } else {
+                frame.env[fv] = try { lookup(fv) } catch (_: Throwable) { HNull }
+            }
+        }
+        return runFrame(frame)
     }
 
     private fun sliceValue(target: HValue, start: HValue, end: HValue, step: HValue): HValue {
@@ -866,15 +1046,16 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             is HFunction -> {
                 // A handful of read-only attributes are exposed on function
                 // values for introspection (e.g. `fn.is_async`,
-                // `fn.is_coro`, `fn.name`, `fn.args`).  These mirror the
-                // data-class fields on HFunction; we don't expose the
-                // full bytecode/consts/closure surface because that's
-                // an implementation detail.
+                // `fn.is_coro`, `fn.is_parallel`, `fn.name`, `fn.args`).
+                // These mirror the data-class fields on HFunction; we don't
+                // expose the full bytecode/consts/closure surface because
+                // that's an implementation detail.
                 return when (name) {
-                    "name"      -> HString(obj.name)
-                    "args"      -> HList(obj.args.map { HString(it) }.toMutableList())
-                    "is_coro"   -> HBool(obj.isCoro)
-                    "is_async"  -> HBool(obj.isAsync)
+                    "name"        -> HString(obj.name)
+                    "args"        -> HList(obj.args.map { HString(it) }.toMutableList())
+                    "is_coro"     -> HBool(obj.isCoro)
+                    "is_async"    -> HBool(obj.isAsync)
+                    "is_parallel" -> HBool(obj.isParallel)
                     else -> throw HSharpRuntimeError("Attribute '$name' not found on function")
                 }
             }

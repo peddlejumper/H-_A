@@ -415,6 +415,17 @@ class Compiler:
                 func_obj['is_coro'] = True
             if getattr(stmt, 'is_async', False):
                 func_obj['is_async'] = True
+            # `parallel fn` (or `@parallel fn`) is the DZZW worker-pool
+            # entry point.  It is also a coro (we run it as a separate
+            # frame on a worker thread), but the additional `is_parallel:
+            # True` marker tells the HVM to dispatch the call to a
+            # worker via WorkerPool.submit() instead of running it
+            # inline.  The result is an HFuture whose cell is left
+            # PENDING until a worker completes the body.
+            if getattr(stmt, 'is_parallel', False):
+                func_obj['is_parallel'] = True
+            if getattr(stmt, 'decorators', None):
+                func_obj['decorators'] = list(stmt.decorators)
             idx = self.add_const(func_obj)
             # 3. Emit closure construction at the call site.  The VM
             #    pops the function from the top of the stack first, then
@@ -608,6 +619,21 @@ class Compiler:
         elif isinstance(stmt, BlockStatement):
             for s in stmt.statements:
                 self.compile_stmt(s)
+        elif isinstance(stmt, ConcurrentBlock):
+            # `concurrent { ... }` lowers to:
+            #   CONCURRENT_ENTER
+            #   <body>
+            #   CONCURRENT_EXIT
+            # The CONCURRENT_ENTER allocates a fresh ConcurrentScope
+            # on the runtime's thread-local scope stack; every
+            # @parallel call inside the body is registered as a
+            # child of that scope.  CONCURRENT_EXIT joins on every
+            # child (and re-throws the first failure) and pops the
+            # scope off the stack.
+            self.emit('CONCURRENT_ENTER')
+            for s in stmt.body.statements:
+                self.compile_stmt(s)
+            self.emit('CONCURRENT_EXIT')
         elif isinstance(stmt, TryStatement):
             setup_pos = len(self.instructions)
             self.emit('SETUP_EXCEPT', None)

@@ -158,6 +158,7 @@ class HbcReader {
             ?.map { it.toString() } ?: emptyList()
         val isCoro = (m["is_coro"] as? Boolean) ?: false
         val isAsync = (m["is_async"] as? Boolean) ?: false
+        val isParallel = (m["is_parallel"] as? Boolean) ?: false
         val typeParams = (m["type_params"] as? List<*>)
             ?.map { it.toString() } ?: emptyList()
         // The same Python-compiler JUMP bug exists inside nested functions
@@ -171,6 +172,7 @@ class HbcReader {
             freevars = freevars,
             isCoro = isCoro,
             isAsync = isAsync,
+            isParallel = isParallel,
             typeParams = typeParams
         )
     }

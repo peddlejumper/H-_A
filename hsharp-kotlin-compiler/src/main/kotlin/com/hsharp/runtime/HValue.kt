@@ -19,7 +19,7 @@
 package com.hsharp.runtime
 
 /** Discriminator used for pattern matching and toJson(). */
-enum class HType { NULL, BOOL, NUMBER, STRING, LIST, DICT, FUNCTION, CLASS, INSTANCE, UNION, NATIVE, FUTURE }
+enum class HType { NULL, BOOL, NUMBER, STRING, LIST, DICT, FUNCTION, CLASS, INSTANCE, UNION, NATIVE, FUTURE, CHANNEL, TASK }
 
 /** Marker interface implemented by every runtime value. */
 sealed interface HValue {
@@ -125,6 +125,14 @@ data class HFunction(
     // uses it to wrap the call result in an HFuture so that `await`
     // can be type-checked against Future<T>.
     val isAsync: Boolean = false,
+    // `is_parallel` is the DZZW worker-pool marker.  Set by the
+    // compiler when a function is decorated with `@parallel` (or
+    // declared with `parallel fn`); the VM uses it to dispatch the
+    // call to a worker thread instead of running it on the caller's
+    // thread.  Functions that have both `is_async` and `is_parallel`
+    // are wrapped in a *lazy* HFuture (the worker fills in the
+    // value asynchronously) rather than an *eager* HFuture.
+    val isParallel: Boolean = false,
     // Generic / template type-parameter names declared on this function
     // (e.g. `fn identity<T>(x)` → typeParams = ["T"]).  Empty list for
     // non-generic functions.  Used for runtime introspection; H# itself
@@ -238,25 +246,109 @@ data class HNative(val name: String, val arity: Int, val call: (List<HValue>) ->
 }
 
 /**
- * A `Future<T>` produced by an `async fn` call.  In this VM we use a
- * single-threaded eager-resolve model: when the call site invokes an
- * `async fn`, the body runs to completion immediately and the result is
- * wrapped in an HFuture that `await` then unwraps.  This is the simplest
- * way to get the type-checked `await expr` shape and the static-analysis
- * story (`await` only inside `async fn`) without dragging in a coroutine
- * scheduler.  The shape also leaves room for a future lazy / multi-threaded
- * implementation (a `resolved = false` HFuture that suspends the frame and
- * the scheduler resumes it) without changing the AST or surface syntax.
+ * A `Future<T>` produced by an `async fn` or `@parallel` call.  Wraps a
+ * [FutureCell] that holds the eventual value (or failure) and synchronises
+ * waiters.  Both eager and lazy resolve share the same shape:
+ *
+ *  - `async fn` (no `@parallel`): the body runs immediately and the
+ *    [FutureCell] is completed before the constructor returns, so `await`
+ *    is a no-op.  This preserves the user-visible single-threaded behaviour
+ *    of plain `async fn` while keeping the surface syntax (`await expr`)
+ *    type-checked against `HType.FUTURE`.
+ *  - `@parallel` annotated `coro fn`: the body is submitted to a
+ *    [WorkerPool] and the cell is left PENDING.  `await` then blocks
+ *    the calling thread until a worker completes the cell.
+ *
+ * The two paths share the same value type because the user's `await`
+ * expression has no way to tell them apart at the source level — and
+ * crucially, mixing the two in the same code is fine: `await` always
+ * just blocks if the cell isn't done yet.
  */
-data class HFuture(val value: HValue, val resolved: Boolean = true) : HValue {
+class HFuture(val cell: FutureCell) : HValue {
     override val type = HType.FUTURE
-    override fun toKotlinLiteral() = "HFuture(${value.toKotlinLiteral()})"
-    override fun toDisplayString() = "<future ${value.toDisplayString()}>"
+    /** Convenience constructor for the eager case (body already ran). */
+    constructor(value: HValue) : this(FutureCell().also { it.complete(value) })
+    /** Convenience constructor for the eager case with an explicit resolved flag. */
+    constructor(value: HValue, resolved: Boolean) : this(
+        FutureCell().also { if (resolved) it.complete(value) }
+    )
+    val resolved: Boolean get() = cell.isResolved()
+    val value: HValue get() = if (cell.isResolved()) cell.value ?: HNull else throw HSharpRuntimeError("future not resolved yet")
+    override fun toKotlinLiteral() = "HFuture()"
+    override fun toDisplayString() = "<future>"
     override fun toJson(): Map<String, Any?> = mapOf(
         "__type__" to "future",
-        "value" to value.toJson(),
-        "resolved" to resolved
+        "resolved" to cell.isResolved(),
+        "value" to (cell.value?.toJson())
     )
+    override fun toString() = toDisplayString()
+}
+
+/**
+ * A thread-safe channel of [HValue].  Backed by a [java.util.concurrent.LinkedBlockingQueue]
+ * for unbounded channels or an [java.util.concurrent.ArrayBlockingQueue]
+ * for bounded channels.  This is the value type that `chan T` desugars to.
+ *
+ * `chan_send(ch, v)` enqueues; `chan_recv(ch)` dequeues; both block as
+ * needed.  `chan_close(ch)` marks the channel as closed, after which
+ * further sends raise an error and further receives return the next
+ * pending value or an H# `ChannelClosed` exception.
+ */
+class HChannel(
+    val capacity: Int,                      // 0 = unbounded
+    val queue: java.util.concurrent.BlockingQueue<HValue> =
+        if (capacity == 0) java.util.concurrent.LinkedBlockingQueue()
+        else java.util.concurrent.ArrayBlockingQueue(capacity),
+    @Volatile var closed: Boolean = false
+) : HValue {
+    override val type = HType.CHANNEL
+    /** Total items currently in the queue (snapshot). */
+    fun size(): Int = queue.size
+    fun isEmpty(): Boolean = queue.isEmpty()
+    fun send(v: HValue) {
+        if (closed) throw HSharpException(HString("send on closed channel"))
+        queue.put(v)
+    }
+    /** Non-blocking send; throws ChannelFull if the queue is at capacity. */
+    fun trySend(v: HValue): Boolean {
+        if (closed) throw HSharpException(HString("send on closed channel"))
+        return queue.offer(v)
+    }
+    /** Blocking receive.  Returns the next value or throws if the channel
+     *  is closed and drained. */
+    fun recv(): HValue {
+        if (closed && queue.isEmpty()) throw HSharpException(HString("recv on closed channel"))
+        return queue.take()
+    }
+    /** Non-blocking receive; returns null if the queue is empty (and the
+     *  channel is not closed). */
+    fun tryRecv(): HValue? {
+        return queue.poll()
+    }
+    fun close() { closed = true }
+
+    override fun toKotlinLiteral() = "/* HChannel */ HNull"
+    override fun toDisplayString() = "<chan cap=${capacity} closed=${closed} size=${queue.size}>"
+    override fun toJson(): Map<String, Any?> = mapOf(
+        "__type__" to "channel",
+        "capacity" to capacity,
+        "closed" to closed,
+        "size" to queue.size
+    )
+    override fun toString() = toDisplayString()
+}
+
+/**
+ * A handle to a task running on the [WorkerPool].  This is the user-visible
+ * object that a `concurrent { ... }` block produces.  A [HTask] is
+ * essentially a tagged [HFuture] — the structured-concurrency join code
+ * path uses the type tag to know which futures belong to a scope.
+ */
+class HTask(val future: HFuture, val scope: ConcurrentScope? = null) : HValue {
+    override val type = HType.TASK
+    override fun toKotlinLiteral() = "/* HTask */ HNull"
+    override fun toDisplayString() = "<task>"
+    override fun toJson(): Map<String, Any?> = mapOf("__type__" to "task")
     override fun toString() = toDisplayString()
 }
 

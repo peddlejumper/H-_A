@@ -51,6 +51,71 @@ object HNativeBridge {
             if (arr.items.isEmpty()) throw HSharpRuntimeError("pop() on empty list")
             arr.items.removeAt(arr.items.size - 1)
         },
+
+        // ── DZZW channels ──
+        // `chan_new(capacity)` is the user-facing way to create a channel.
+        // A capacity of 0 means unbounded (LinkedBlockingQueue); a positive
+        // capacity gives a bounded channel (ArrayBlockingQueue) that blocks
+        // senders once full.  The `chan T` surface type is just a
+        // documentation hint; the runtime type is HChannel.
+        "chan_new" to HNative("chan_new", 1) { args ->
+            val cap = HValueOps.toLong(args[0]).toInt()
+            HChannel(if (cap < 0) 0 else cap)
+        },
+        // `chan_send(ch, v)` — push `v` onto the channel.  Blocking on a
+        // bounded channel; the runtime parks the calling thread (which may
+        // be a DZZW worker or the main thread) until space is available.
+        "chan_send" to HNative("chan_send", 2) { args ->
+            val ch = args[0] as? HChannel ?: throw HSharpRuntimeError("chan_send() 1st arg must be a channel")
+            ch.send(args[1])
+            HNull
+        },
+        // `chan_try_send(ch, v)` — non-blocking send.  Returns true if
+        // the value was queued, false if the channel is at capacity
+        // (bounded only; unbounded always succeeds).  Sends on a closed
+        // channel raise.
+        "chan_try_send" to HNative("chan_try_send", 2) { args ->
+            val ch = args[0] as? HChannel ?: throw HSharpRuntimeError("chan_try_send() 1st arg must be a channel")
+            HBool(ch.trySend(args[1]))
+        },
+        // `chan_recv(ch)` — pop the next value.  Blocking when the queue
+        // is empty (until a sender produces one or the channel is closed
+        // and drained).
+        "chan_recv" to HNative("chan_recv", 1) { args ->
+            val ch = args[0] as? HChannel ?: throw HSharpRuntimeError("chan_recv() arg must be a channel")
+            ch.recv()
+        },
+        // `chan_try_recv(ch)` — non-blocking receive.  Returns the next
+        // value or HNull if the queue is empty (and the channel isn't
+        // closed).  Useful for polling.
+        "chan_try_recv" to HNative("chan_try_recv", 1) { args ->
+            val ch = args[0] as? HChannel ?: throw HSharpRuntimeError("chan_try_recv() arg must be a channel")
+            ch.tryRecv() ?: HNull
+        },
+        // `chan_close(ch)` — mark the channel as closed.  Further sends
+        // raise; receives drain and then raise.
+        "chan_close" to HNative("chan_close", 1) { args ->
+            val ch = args[0] as? HChannel ?: throw HSharpRuntimeError("chan_close() arg must be a channel")
+            ch.close()
+            HNull
+        },
+        // `chan_size(ch)` — number of items currently buffered.  Mostly
+        // for tests and instrumentation.
+        "chan_size" to HNative("chan_size", 1) { args ->
+            val ch = args[0] as? HChannel ?: throw HSharpRuntimeError("chan_size() arg must be a channel")
+            HNumber(ch.size().toDouble())
+        },
+        // `parallelism()` — how many worker threads the DZZW pool has.
+        // Used by tests to confirm the pool is sized to the host cores.
+        "parallelism" to HNative("parallelism", 0) { _ ->
+            HNumber(WorkerPool.defaultPool().parallelism.toDouble())
+        },
+        // `time_ms()` — milliseconds since the epoch.  Useful in
+        // benchmarks (and elsewhere) as a portable monotonic-ish clock.
+        // Mirrors the existing time_now but with a clearer name.
+        "time_ms" to HNative("time_ms", 0) { _ ->
+            HNumber(System.currentTimeMillis().toDouble())
+        },
         "read_file" to HNative("read_file", 1) { args ->
             val path = (args[0] as? HString)?.value ?: throw HSharpRuntimeError("read_file path must be string")
             HString(File(path).readText(Charsets.UTF_8))
@@ -73,6 +138,10 @@ object HNativeBridge {
             HString(readlnOrNull() ?: "")
         },
         "abs" to HNative("abs", 1) { args -> HNumber(abs(HValueOps.toDouble(args[0]))) },
+        "sqrt" to HNative("sqrt", 1) { args -> HNumber(Math.sqrt(HValueOps.toDouble(args[0]))) },
+        "pow"  to HNative("pow", 2)  { args -> HNumber(Math.pow(HValueOps.toDouble(args[0]), HValueOps.toDouble(args[1]))) },
+        "min_num" to HNative("min_num", 2) { args -> HNumber(minOf(HValueOps.toDouble(args[0]), HValueOps.toDouble(args[1]))) },
+        "max_num" to HNative("max_num", 2) { args -> HNumber(maxOf(HValueOps.toDouble(args[0]), HValueOps.toDouble(args[1]))) },
         "min" to HNative("min", 1) { args ->
             val lst = args[0] as? HList ?: throw HSharpRuntimeError("min() requires a list")
             if (lst.items.isEmpty()) throw HSharpRuntimeError("min() on empty list")

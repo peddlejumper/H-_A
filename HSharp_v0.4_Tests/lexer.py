@@ -79,6 +79,9 @@ class Lexer:
             'coro': TokenType.CORO,
             'async': TokenType.ASYNC,
             'await': TokenType.AWAIT,
+            'parallel': TokenType.PARALLEL,
+            'concurrent': TokenType.CONCURRENT,
+            'chan': TokenType.CHAN,
             'asm': TokenType.ASM,
             'ptr': TokenType.PTR,
             'true': ('BOOL', True),
@@ -291,6 +294,9 @@ class Lexer:
             if self.current_char == '%':
                 self.advance()
                 return (TokenType.MOD, '%')
+            if self.current_char == '@':
+                self.advance()
+                return (TokenType.AT, '@')
 
             raise SyntaxError(f"Invalid character: '{self.current_char}'")
 

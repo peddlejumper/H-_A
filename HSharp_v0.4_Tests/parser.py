@@ -50,6 +50,50 @@ class Parser:
             except SyntaxError:
                 self.lexer.restore_state(saved_lexer)
                 self.current_token = saved_token
+        if self.current_token[0] == TokenType.PARALLEL:
+            # `parallel fn foo() { ... }` — the DZZW worker-pool
+            # entry point.  Same syntactic shape as `coro fn` /
+            # `async fn`; the VM dispatches the body to a worker
+            # thread (rather than running it on the caller's
+            # thread) because of the `is_parallel` flag on the
+            # resulting HFunction.
+            self.eat(TokenType.PARALLEL)
+            fn = self.function_declaration(is_parallel=True)
+            return fn
+        if self.current_token[0] == TokenType.AT:
+            # `@decorator` prefix on a function declaration.
+            # We currently only act on the well-known `@parallel`
+            # decorator; unknown decorators are recorded on the AST
+            # node for future use but don't change the lowering.
+            self.eat(TokenType.AT)
+            name_tok = self.current_token
+            # The decorator name can be a regular identifier or one of
+            # the well-known keyword aliases we want to allow as
+            # decorator names (e.g. `parallel` is both a function-keyword
+            # and a decorator name).
+            if name_tok[0] in (TokenType.IDENTIFIER, TokenType.PARALLEL):
+                self.eat(name_tok[0])
+            else:
+                self.eat(TokenType.IDENTIFIER)
+            decorator = '@' + (name_tok[1] if name_tok[1] is not None else name_tok[0].value.lower())
+            if self.current_token[0] == TokenType.FN:
+                if decorator == '@parallel':
+                    fn = self.function_declaration(is_parallel=True,
+                                                   decorators=[decorator])
+                else:
+                    # Unknown decorator: pass through with the raw name.
+                    fn = self.function_declaration(decorators=[decorator])
+                return fn
+            raise SyntaxError("@-decorator must be followed by 'fn' (got '%s')" %
+                              self.current_token[0].value)
+        if self.current_token[0] == TokenType.CONCURRENT:
+            # `concurrent { stmt1; stmt2; ... }` — a structured-
+            # concurrency block.  All `@parallel` calls inside the
+            # body are registered as children of an implicit scope;
+            # the block's exit joins on every child.
+            self.eat(TokenType.CONCURRENT)
+            body = self.block()
+            return ConcurrentBlock(body)
         if self.current_token[0] == TokenType.D3SIZEPOWER:
             return self.d3sizepower_declaration()
         if self.current_token[0] == TokenType.EM3D:
@@ -144,7 +188,7 @@ class Parser:
         self.eat(TokenType.SEMI)
         return ImportStatement(path)
 
-    def function_declaration(self, is_coro=False, is_async=False):
+    def function_declaration(self, is_coro=False, is_async=False, is_parallel=False, decorators=None):
         self.eat(TokenType.FN)
         func_name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
@@ -161,7 +205,8 @@ class Parser:
                 self.eat(TokenType.IDENTIFIER)
         self.eat(TokenType.RPAREN)
         body = self.block()
-        fn = Function(func_name, params, body, type_params=type_params)
+        fn = Function(func_name, params, body, type_params=type_params,
+                      decorators=decorators or [])
         if is_coro:
             fn.is_coro = True
         if is_async:
@@ -172,6 +217,15 @@ class Parser:
             # the Future<T> return type.
             fn.is_coro = True
             fn.is_async = True
+        if is_parallel:
+            # `parallel fn` (or `@parallel fn`) is the DZZW worker-pool
+            # entry point.  Like async fn it lowers to coro fn, plus
+            # an `is_parallel` flag, so the VM dispatches the body to a
+            # worker thread instead of running it on the caller's
+            # thread.  The return value is wrapped in an HFuture whose
+            # cell is left PENDING until a worker completes the body.
+            fn.is_coro = True
+            fn.is_parallel = True
         return fn
 
     def _parse_type_params(self):

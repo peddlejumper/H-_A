@@ -187,6 +187,152 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     of different types (number, string, list, bool, null).
     All **20/20** zzwui test files pass; **721/721**
     individual `check()` cases pass.
+- **Multi-threaded DZZW scheduler (`@parallel` / `parallel fn`)** — the
+  v0.4 single-threaded M:N coroutine scheduler is replaced by a
+  multi-threaded worker pool with work-stealing.  CPU-bound tasks now
+  run in parallel on N = `Runtime.availableProcessors()` OS threads;
+  throughput improves by **3.2×** on the raytrace benchmark
+  (1835 ms → 567 ms).
+  - **`@parallel` decorator / `parallel fn` keyword form** — two
+    surface-syntax ways to mark a function as parallel-eligible:
+    `let work = @parallel fn(n) { busy(n) };` and
+    `parallel fn work(n) { busy(n) };`.  Both lower to a function
+    whose `isParallel = true` flag is read at the call site and
+    causes the body to be submitted to the worker pool rather than
+    running inline on the caller.  The decorator parser
+    (`@`-decorators in `parser.py`) accepts `parallel` as a name
+    token in addition to identifiers, and the function-decl
+    parser recognises the leading `parallel` keyword form on par
+    with `@parallel`.
+  - **`WorkerPool.kt`** — N workers, each on its own OS thread
+    (named `HSharp-Worker-0` … `HSharp-Worker-N-1`).  Each worker
+    owns a `LinkedBlockingDeque<Runnable>` (LIFO local take for
+    cache locality, FIFO steal-from-tail for fairness).  The pool
+    is process-wide, lazily created on first submit, and shut
+    down on VM exit.  Workers run a long-lived loop that polls
+    the local deque, then falls through to global submitter
+    queue, then yields — keeping CPU usage pegged at the
+    available-cores count without busy-spinning.
+  - **`FutureCell` / `HFuture` / `HSharpCancelException`** — the
+    future is now a *state machine* (`PENDING / RESOLVED /
+    FAILED / CANCELLED`) backed by `synchronized` + `wait` /
+    `notifyAll`.  Calling `await` on a future is now a real
+    blocking wait, not a synchronous eager-resolve.  Cancellable
+    via `FutureCell.cancel()` which propagates the
+    `HSharpCancelException` to the worker thread and observes
+    the result in the awaiter.
+  - **`runOnWorker` parent-frame passing** — parallel tasks
+    are dispatched on a new frame, but the caller's frame is
+    passed as the `parent` so free-variable lookups inside the
+    worker (e.g. a module-level `let W = 80` constant) still
+    fall through to the enclosing module env.  Without this,
+    parallel renders of a raytracer with a module-level
+    `SCENE` constant would raise `Undefined name`.
+  - **Exception transparency** — `FutureCell.throwOrValue()`
+    re-throws the original error so that `catch (e)` in the
+    caller sees the same payload the worker raised.  An
+    `HSharpException` thrown by the worker is unwrapped to its
+    inner value (e.g. `throw "boom"` in the worker surfaces as
+    `e == "boom"` in the catch on the awaiter side, not as
+    `"H# exception: boom"`).
+  - **`current` is now `ThreadLocal`** — the per-thread
+    frame slot means several interpreters can be in flight
+    at the same time (one per worker thread).  The main
+    thread's slot is initialised by `resetEntry` before
+    `run`; worker threads lazily create their own frame
+    from the dispatched function.  `globals` is a
+    `ConcurrentHashMap` so parallel workers can safely
+    read module-level bindings; the documented contract is
+    "parallel tasks are pure: they read args, produce
+    results, and use channels for I/O".
+- **Native Channel type (`chan T`)** — first-class CSP-style
+  channel type instead of the array-as-FIFO shim used in v0.4.
+  - **Parser / AST** — `chan T` (zero-cap = unbounded,
+    `chan T(n)` = bounded to `n`) parses into a `ChanType`
+    AST node; `chan_send` and `chan_recv` lower to dedicated
+    `CHAN_SEND` / `CHAN_RECV` opcodes that operate on an
+    `HChannel` value; `chan_close`, `chan_size`,
+    `chan_try_recv`, `chan_try_send` are native built-ins.
+  - **Runtime (`HValue.kt`)** — new `HType.CHANNEL` enum
+    value and `HChannel(capacity: Int, closed: AtomicBoolean)`
+    data class.  Backed by a `LinkedBlockingQueue` (when
+    `capacity == 0`) or an `ArrayBlockingQueue` (when
+    `capacity > 0`).  `close()` unblocks all pending
+    receivers and causes subsequent `send`s to raise
+    `HSharpException("send on closed channel")`.
+  - **Runtime (`HVM.kt`)** — new `CHAN_SEND` opcode (blocking
+    `put`, wakes one receiver on success) and `CHAN_RECV`
+    opcode (blocking `take`, returns `HNull` if the channel
+    was closed and drained).  Both are fast and lock-free
+    under low contention thanks to the JDK queue impls.
+  - **Built-ins** — `chan_try_send(ch, v)` returns
+    `bool(false)` on a full bounded channel without blocking;
+    `chan_try_recv(ch)` returns `null` on an empty channel
+    without blocking; `chan_size(ch)` returns the current
+    element count.
+  - **Producer/consumer pipelining test** — a producer sends
+    1000 ints, a consumer pulls them; the FIFO ordering
+    invariant is verified end-to-end.  `recv` on a closed
+    channel returns the remaining buffered values then
+    `null` (not an error), matching Go's semantics.
+- **Structured concurrency (`concurrent { ... }` block)** —
+  parent-child task hierarchy with parent-wins join,
+  exception propagation, and cancel propagation.  This is
+  the user-level layer for orchestrating parallel tasks; it
+  composes with `@parallel` and channels.
+  - **Parser / AST** — `concurrent` becomes a soft keyword
+    that turns the following `{ ... }` block into a
+    `ConcurrentBlock` AST node.  Inside the block, calls to
+    `async fn` / `@parallel fn` are tracked as children of
+    the surrounding scope.
+  - **Bytecode** — new `CONCURRENT_ENTER` /
+    `CONCURRENT_EXIT` opcodes push and pop a per-thread
+    `ConcurrentScope`.  Calls to parallel functions in the
+    body of the block register a child `HFuture` with the
+    scope.  On `CONCURRENT_EXIT`, the scope is joined: if
+    any child failed, the block raises the *first* child's
+    error (preserving the original message); if the parent
+    scope is cancelled, all child futures are cancelled
+    (interrupting the worker thread and observing a
+    `CANCELLED` state on the future).
+  - **Runtime (`WorkerPool.kt`)** — `ConcurrentScope` is a
+    small object holding the parent scope, a list of
+    `HFuture` children, a `CountDownLatch` for join, and a
+    `cancelled: AtomicBoolean` for cancel propagation.  The
+    exit-time logic in `HVM` performs the join synchronously
+    and short-circuits on first failure.
+  - **Test coverage** — `concurrent { ... }` join (all
+    children complete before the block exits), nested
+    `concurrent { concurrent { ... } }` (inner scope
+    cancellation does not affect outer scope), child
+    exception propagation (one failing child fails the
+    block with the original message), and inline
+    `await parallel_fn(args)` outside any `concurrent` block
+    (still works, with the implicit single-task scope).
+- **Test suite — parallel / channel / structured concurrency** —
+  two new zzwui tests land alongside the existing 16:
+  - **`17_parallel_channel.hto`** — **27 cases** covering
+    `parallel fn` / `@parallel fn` declaration, `is_parallel`
+    introspection, basic `await` on a parallel future,
+    `concurrent { ... }` join semantics, nested
+    `concurrent`, child-exception propagation, `chan T` /
+    `chan T(N)` construction, `chan_send` / `chan_recv` /
+    `chan_close` / `chan_size` / `chan_try_send` /
+    `chan_try_recv`, send-on-closed-channel error,
+    recv-after-close returning `null`, and `parallelism()`
+    reporting the worker-pool size.
+  - **`18_raytrace_bench.hto`** — **4 cases** validating the
+    multi-threaded raytracer.  240×180 image of 3 spheres
+    with 4 samples/pixel, depth 6; `render_sequential`
+    (single-threaded baseline) vs `render_parallel` (async
+    fn that submits 10 tiles to a `concurrent { ... }`
+    block).  Asserts the two bitmaps are pixel-identical
+    and that parallel is at least **2× faster** than
+    sequential; observed on the dev machine is **3.2×
+    speedup** (1835 ms → 567 ms on 10 workers).
+  - All **24/24** zzwui test files pass; **752/752**
+    individual `check()` cases pass; total wall time
+    ≈12.4 s.
 
 ### Changed
 

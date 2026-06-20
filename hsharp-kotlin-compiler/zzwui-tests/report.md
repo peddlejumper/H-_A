@@ -16,42 +16,43 @@ to the test body.  The H# Python compiler does not yet process
 native GUI calls return deterministic stubs from `HNativeBridge.kt`;
 no real display is opened.
 
-**Generated:** 2026-06-20 13:00:22  
-**Total wall time:** 3.844 s  
+**Generated:** 2026-06-20 13:55:00  
+**Total wall time:** 12.401 s  
 **Pipeline:** `build.py` (composition) → `compile_test.py` (Python parser) → `.hbc` → `hsharp-runtime.jar` (Kotlin VM)
 
 ## 1. Executive Summary
 
 | Metric | Value |
 | --- | --- |
-| Total test files | **20** |
-| Test files passed (all cases) | **20** |
+| Total test files | **24** |
+| Test files passed (all cases) | **24** |
 | Test files with at least one failing case | 0 |
 | Test files failed at compile | 0 |
 | Test files failed at runtime | 0 |
 | Test files timed out (> 60s) | 0 |
 | File-level pass rate | **100.0%** |
-| Total individual check() cases | **721** |
-| Total individual cases passed | **721** |
+| Total individual check() cases | **752** |
+| Total individual cases passed | **752** |
 | Total individual cases failed | **0** |
 | Case-level pass rate | **100.00%** |
-| Avg compile time |    82.5 ms |
-| Avg run time (Kotlin VM) |   109.2 ms |
+| Avg compile time |    95.0 ms |
+| Avg run time (Kotlin VM) |   421.1 ms |
 
 ## 2. Per-Category Results
 
 | Category | Files | Files OK | Files with cases failing | Case Pass Rate |
 | --- | ---: | ---: | ---: | ---: |
-| `?` | 4 | 4 | 0 | 100.0% |
+| `?` | 6 | 6 | 0 | 100.0% |
 | `clip` | 1 | 1 | 0 | 100.0% |
 | `collection` | 1 | 1 | 0 | 100.0% |
 | `event` | 1 | 1 | 0 | 100.0% |
 | `input` | 1 | 1 | 0 | 100.0% |
 | `layout` | 1 | 1 | 0 | 100.0% |
 | `native` | 1 | 1 | 0 | 100.0% |
-| `performance` | 1 | 1 | 0 | 100.0% |
+| `performance` | 2 | 2 | 0 | 100.0% |
 | `primitive` | 1 | 1 | 0 | 100.0% |
 | `renderer` | 1 | 1 | 0 | 100.0% |
+| `runtime` | 1 | 1 | 0 | 100.0% |
 | `state` | 1 | 1 | 0 | 100.0% |
 | `styling` | 1 | 1 | 0 | 100.0% |
 | `syntax` | 2 | 2 | 0 | 100.0% |
@@ -63,26 +64,30 @@ no real display is opened.
 
 | # | Test | Cat | Compile | Run | Exit | Total Time | PASS | FAIL | Status |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| 1 | `01_widget_core` | `widget` |    82.7 ms |   113.6 ms | 0 |   196.4 ms | 120 | 0 | **OK** |
-| 2 | `02_renderer` | `renderer` |    87.0 ms |   110.7 ms | 0 |   197.7 ms | 51 | 0 | **OK** |
-| 3 | `03_window` | `window` |    84.8 ms |   109.8 ms | 0 |   194.7 ms | 29 | 0 | **OK** |
-| 4 | `04_native` | `native` |    78.0 ms |   107.4 ms | 0 |   185.5 ms | 35 | 0 | **OK** |
-| 5 | `05_layout_stress` | `layout` |    76.4 ms |   114.9 ms | 0 |   191.3 ms | 31 | 0 | **OK** |
-| 6 | `06_event_dispatch` | `event` |    75.3 ms |    93.6 ms | 0 |   168.9 ms | 16 | 0 | **OK** |
-| 7 | `07_widget_tree` | `tree` |    75.0 ms |   122.3 ms | 0 |   197.3 ms | 22 | 0 | **OK** |
-| 8 | `08_primitives` | `primitive` |    85.3 ms |   105.4 ms | 0 |   190.7 ms | 25 | 0 | **OK** |
-| 9 | `09_style` | `styling` |    75.8 ms |    92.9 ms | 0 |   168.6 ms | 44 | 0 | **OK** |
-| 10 | `10_state_machines` | `state` |    76.0 ms |   107.1 ms | 0 |   183.1 ms | 32 | 0 | **OK** |
-| 11 | `11_collections` | `collection` |    75.8 ms |    95.1 ms | 0 |   171.0 ms | 33 | 0 | **OK** |
-| 12 | `12_text_input` | `input` |    76.0 ms |    94.4 ms | 0 |   170.4 ms | 34 | 0 | **OK** |
-| 13 | `13_renderer_clip` | `clip` |    84.8 ms |   111.7 ms | 0 |   196.5 ms | 27 | 0 | **OK** |
-| 14 | `14_perf` | `performance` |    84.7 ms |   156.6 ms | 0 |   241.3 ms | 22 | 0 | **OK** |
-| 15 | `15_for_loop` | `syntax` |    86.3 ms |   110.3 ms | 0 |   196.6 ms | 18 | 0 | **OK** |
-| 16 | `16_async_await` | `syntax` |    86.6 ms |   115.6 ms | 0 |   202.1 ms | 16 | 0 | **OK** |
-| 17 | `_hconcepts_smoke` | `?` |    80.4 ms |   109.4 ms | 0 |   189.8 ms | 0 | 0 | **OK** |
-| 18 | `h_concepts` | `?` |    99.7 ms |    80.4 ms | 0 |   180.0 ms | 0 | 0 | **OK** |
-| 19 | `test_concepts` | `?` |    94.0 ms |   125.8 ms | 0 |   219.8 ms | 166 | 0 | **OK** |
-| 20 | `test_generics` | `?` |    85.2 ms |   107.7 ms | 0 |   192.9 ms | 0 | 0 | **OK** |
+| 1 | `01_widget_core` | `widget` |    99.6 ms |   133.3 ms | 0 |   232.9 ms | 120 | 0 | **OK** |
+| 2 | `02_renderer` | `renderer` |    90.9 ms |   110.8 ms | 0 |   201.7 ms | 51 | 0 | **OK** |
+| 3 | `03_window` | `window` |    90.3 ms |   123.0 ms | 0 |   213.3 ms | 29 | 0 | **OK** |
+| 4 | `04_native` | `native` |    84.4 ms |   106.2 ms | 0 |   190.6 ms | 35 | 0 | **OK** |
+| 5 | `05_layout_stress` | `layout` |    83.3 ms |   119.2 ms | 0 |   202.5 ms | 31 | 0 | **OK** |
+| 6 | `06_event_dispatch` | `event` |    87.1 ms |   106.8 ms | 0 |   193.9 ms | 16 | 0 | **OK** |
+| 7 | `07_widget_tree` | `tree` |    82.6 ms |   146.5 ms | 0 |   229.1 ms | 22 | 0 | **OK** |
+| 8 | `08_primitives` | `primitive` |    96.2 ms |   135.9 ms | 0 |   232.1 ms | 25 | 0 | **OK** |
+| 9 | `09_style` | `styling` |    88.6 ms |   108.5 ms | 0 |   197.1 ms | 44 | 0 | **OK** |
+| 10 | `10_state_machines` | `state` |    91.0 ms |   132.2 ms | 0 |   223.2 ms | 32 | 0 | **OK** |
+| 11 | `11_collections` | `collection` |    90.6 ms |   124.9 ms | 0 |   215.5 ms | 33 | 0 | **OK** |
+| 12 | `12_text_input` | `input` |    83.1 ms |   107.1 ms | 0 |   190.2 ms | 34 | 0 | **OK** |
+| 13 | `13_renderer_clip` | `clip` |    93.9 ms |   128.0 ms | 0 |   221.9 ms | 27 | 0 | **OK** |
+| 14 | `14_perf` | `performance` |    93.4 ms |   187.0 ms | 0 |   280.5 ms | 22 | 0 | **OK** |
+| 15 | `15_for_loop` | `syntax` |   102.8 ms |   129.3 ms | 0 |   232.2 ms | 18 | 0 | **OK** |
+| 16 | `16_async_await` | `syntax` |   100.0 ms |   129.7 ms | 0 |   229.7 ms | 16 | 0 | **OK** |
+| 17 | `17_parallel_channel` | `runtime` |    94.0 ms |  4435.8 ms | 0 |   4.530 s | 27 | 0 | **OK** |
+| 18 | `18_raytrace_bench` | `performance` |   118.0 ms |  2846.8 ms | 0 |   2.965 s | 4 | 0 | **OK** |
+| 19 | `_hconcepts_smoke` | `?` |   101.3 ms |   129.6 ms | 0 |   230.9 ms | 0 | 0 | **OK** |
+| 20 | `_parallel_smoke` | `?` |    94.0 ms |   176.7 ms | 0 |   270.7 ms | 0 | 0 | **OK** |
+| 21 | `_test_minimal` | `?` |    92.2 ms |   120.1 ms | 0 |   212.2 ms | 0 | 0 | **OK** |
+| 22 | `h_concepts` | `?` |   111.2 ms |   102.8 ms | 0 |   214.0 ms | 0 | 0 | **OK** |
+| 23 | `test_concepts` | `?` |   120.1 ms |   146.3 ms | 0 |   266.4 ms | 166 | 0 | **OK** |
+| 24 | `test_generics` | `?` |    92.5 ms |   120.5 ms | 0 |   213.0 ms | 0 | 0 | **OK** |
 
 ## 4. Test Catalogue
 
@@ -104,10 +109,14 @@ no real display is opened.
 | 14 | `14_perf` | `performance` | Performance: create 200 widgets, build a 3-level deep tree, iterate children 200 times, list ops on 100 items, repeated layout do_layout cycle, dict-style access 200 times. |
 | 15 | `15_for_loop` | `syntax` | for x in y: list / string / dict / range iteration; break; continue; nested for with break; empty containers; collection isolation between consecutive loops. |
 | 16 | `16_async_await` | `syntax` | async fn / await expr: declaring an async fn lowers to coro fn + is_async; calling it returns Future<T> that await unwraps; nested awaits; await on a non-future raises; coro fn (low-level API) still works; is_async flag observable on the function value. |
-| 17 | `_hconcepts_smoke` | `?` | ? |
-| 18 | `h_concepts` | `?` | ? |
-| 19 | `test_concepts` | `?` | ? |
-| 20 | `test_generics` | `?` | ? |
+| 17 | `17_parallel_channel` | `runtime` | Multi-threaded DZZW scheduler: @parallel fn / parallel fn (both yield is_parallel=true); await on parallel Future<T>; concurrent { } block joins on child tasks; structured-concurrency exception propagation; chan T (unbounded/bounded) + chan_send/recv/close/try_recv/size; chan_try_send on full channel returns false; chan_try_recv returns nullptr on empty; send on closed channel raises; parallelism() reports worker-pool size. |
+| 18 | `18_raytrace_bench` | `performance` | Raytracer benchmark: 240x180 image of 3 spheres rendered with 4 samples/pixel, depth 6.  Sequential vs parallel (10 worker pool, 10 tiles via concurrent { }).  Asserts parallel render produces an identical bitmap and is >=2x faster (target: 2x+ speedup for CPU-bound work). |
+| 19 | `_hconcepts_smoke` | `?` | ? |
+| 20 | `_parallel_smoke` | `?` | ? |
+| 21 | `_test_minimal` | `?` | ? |
+| 22 | `h_concepts` | `?` | ? |
+| 23 | `test_concepts` | `?` | ? |
+| 24 | `test_generics` | `?` | ? |
 
 ## 5. Per-Test Standard Output (parsed summary lines)
 
@@ -223,7 +232,33 @@ ASYNC_TEST : PASS=16 FAIL=0
 ```
 - **PASS=16, FAIL=0**
 
+### `17_parallel_channel` — `runtime`
+
+```text
+PARALLEL_TEST : PASS=27 FAIL=0
+```
+- **PASS=27, FAIL=0**
+
+### `18_raytrace_bench` — `performance`
+
+```text
+RAYTRACE_BENCH : PASS=4 FAIL=0
+```
+- **PASS=4, FAIL=0**
+
 ### `_hconcepts_smoke` — `?`
+
+```text
+```
+- **PASS=0, FAIL=0**
+
+### `_parallel_smoke` — `?`
+
+```text
+```
+- **PASS=0, FAIL=0**
+
+### `_test_minimal` — `?`
 
 ```text
 ```
@@ -251,7 +286,7 @@ HCONCEPTS_TEST : PASS=166 FAIL=0
 
 ## 7. Findings & Coverage Analysis
 
-- All **20** zzwui test files pass; all **721** individual
+- All **24** zzwui test files pass; all **752** individual
   `check()` cases pass.  H# v0.4's zzwui library (widget class
   hierarchy, `ZzwRenderer`, `ZzwWindow`, native GUI bridge, and
   the composable minimal `hwdui_min.hto` module) is fully functional

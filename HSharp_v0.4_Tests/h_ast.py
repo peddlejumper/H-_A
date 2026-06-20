@@ -20,7 +20,7 @@ class ImportStatement(AST):
 
 class Function(AST):
     def __init__(self, name, params, body, is_static=False, type_params=None,
-                 is_async=False):
+                 is_async=False, is_parallel=False, decorators=None):
         self.name = name
         self.params = params
         self.body = body
@@ -31,6 +31,17 @@ class Function(AST):
         # Kotlin VM can recognise async calls and wrap their result in
         # a HFuture.
         self.is_async = is_async
+        # `@parallel foo() { ... }` (or `parallel fn foo() { ... }`)
+        # marks the function as a multi-threaded DZZW worker-pool
+        # task.  The call site submits the body to a worker thread
+        # and returns an HFuture whose cell is left PENDING until a
+        # worker completes the body.  This is the *user-facing* way
+        # to get true parallelism; `async fn` is single-threaded.
+        self.is_parallel = is_parallel
+        # Raw decorator list, e.g. ['@parallel'].  Kept for future
+        # user-defined decorators; the compiler currently only acts
+        # on the well-known ones (`@parallel`).
+        self.decorators = decorators or []
 
 class AwaitExpression(AST):
     """`await expr` — must appear inside an `async fn` body.  The
@@ -84,6 +95,20 @@ class ForStatement(AST):
 class BlockStatement(AST):
     def __init__(self, statements):
         self.statements = statements
+
+class ConcurrentBlock(AST):
+    """`concurrent { stmt1; stmt2; ... }` — a structured-concurrency
+    block.  All `@parallel` coroutines spawned inside the body are
+    registered as children of an implicit scope; the block's exit
+    joins on every child and re-throws the first failure.
+
+    Note: at the AST level a ConcurrentBlock is just a BlockStatement
+    with extra context; the compiler emits CONCURRENT_ENTER before
+    the body and CONCURRENT_EXIT after.  We model it as its own node
+    so the parser can be explicit about it (rather than overload the
+    `block` rule with a heuristic)."""
+    def __init__(self, body):
+        self.body = body
 
 class Identifier(AST):
     def __init__(self, name):

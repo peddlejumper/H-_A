@@ -27,6 +27,10 @@ class TokenType(Enum):
     CORO = 'CORO'
     ASYNC = 'ASYNC'
     AWAIT = 'AWAIT'
+    PARALLEL = 'PARALLEL'  # `parallel fn foo()` — same as `@parallel`
+    CONCURRENT = 'CONCURRENT'  # `concurrent { ... }` block
+    CHAN = 'CHAN'  # `chan T` channel type
+    AT = 'AT'  # `@` decorator prefix
     ASM = 'ASM'
     PTR = 'PTR'
     TRY = 'TRY'
