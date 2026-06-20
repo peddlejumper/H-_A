@@ -1,0 +1,13 @@
+# Smoke test for h_concepts.hto
+# build: h_concepts.hto
+
+print("HCONCEPTS_LOAD_OK");
+print("is_int(5) = " + str(is_int(5)));
+print("is_str('hi') = " + str(is_str("hi")));
+print("upper('hello') = " + str(upper("hello")));
+print("len(take([1,2,3,4,5],3)) = " + str(len(take([1,2,3,4,5], 3))));
+print("factorial(5) = " + str(factorial(5)));
+print("gcd(12,18) = " + str(gcd(12, 18)));
+print("map([1,2,3], fn(x){x*2}) len = " + str(len(map([1,2,3], fn(x){ return x*2; }))));
+print("OK");
+

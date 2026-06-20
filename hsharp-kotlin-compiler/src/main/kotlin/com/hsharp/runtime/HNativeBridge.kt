@@ -1,4 +1,13 @@
-
+/*
+ * H# native bridge
+ * ----------------
+ * Implements the built-in functions that H# code expects, plus a fallback
+ * module-loader (which in pure-JVM mode can only read classpath resources).
+ *
+ * The original Python VM exposed these globals to user programs (see
+ * bytecode.py:22-42 and host_functions.py). We re-implement them in Kotlin
+ * so an .hbc compiled with this toolchain remains self-contained.
+ */
 package com.hsharp.runtime
 
 import java.io.File

@@ -30,7 +30,13 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-ROOT       = Path("/Users/peddlejumper/H#/v0.4")
+# Resolve the project root relative to *this* file so the runner works
+# whether it is invoked from inside the H#_v0.4.1_Package checkout or
+# from any other location.  The script expects to live at
+#   <root>/hsharp-kotlin-compiler/zzwui-tests/run_zzwui_tests.py
+# where <root> is the directory containing HSharp_v0.4_Tests and
+# hsharp-kotlin-compiler.
+ROOT = Path(__file__).resolve().parent.parent.parent
 PY_DIR     = ROOT / "HSharp_v0.4_Tests"
 KT_DIR     = ROOT / "hsharp-kotlin-compiler"
 HTO_DIR    = KT_DIR / "zzwui-tests" / "hto"

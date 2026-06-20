@@ -235,7 +235,30 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                 val pair = arg as List<Any>
                 val name = pair[0] as String
                 val argc = (pair[1] as Number).toInt()
-                callFunction(name, argc)
+                callFunction(name, argc, hasTypeArgs = false)
+            }
+            "CALL_FUNCTION_T" -> {
+                // Generic function call with explicit type arguments.
+                // Stack layout: [..., arg1, ..., argN, type_args]
+                // (the function itself is looked up by name, not on the stack).
+                // The `type_args` are exposed to the called body through the
+                // call frame's `__type_args__` env entry.
+                @Suppress("UNCHECKED_CAST")
+                val pair = arg as List<Any>
+                val name = pair[0] as String
+                val argc = (pair[1] as Number).toInt()
+                callFunction(name, argc, hasTypeArgs = true)
+            }
+            "CALL_VALUE_T" -> {
+                val argc = (arg as Number).toInt()
+                callValue(argc, hasTypeArgs = true)
+            }
+            "CALL_METHOD_T" -> {
+                @Suppress("UNCHECKED_CAST")
+                val pair = arg as List<Any>
+                val name = pair[0] as String
+                val argc = (pair[1] as Number).toInt()
+                callMethod(name, argc, hasTypeArgs = true)
             }
             "LOAD_DEREF" -> {
                 val name = arg as String
@@ -246,7 +269,6 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                 if (lst.items.isEmpty())
                     throw HSharpRuntimeError("LOAD_DEREF: empty cell for '$name'")
                 val v = lst.items[0]
-                if (System.getenv("HDEBUG") != null) System.err.println("DBG LOAD_DEREF $name -> ${v::class.simpleName} ${v.toDisplayString().take(60)}")
                 f.stack.addLast(v)
             }
             "STORE_DEREF" -> {
@@ -300,11 +322,15 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             }
             "CALL_VALUE" -> {
                 val argc = (arg as Number).toInt()
-                callValue(argc)
+                callValue(argc, hasTypeArgs = false)
             }
             "CALL_NEW" -> {
                 val argc = (arg as Number).toInt()
-                callNew(argc)
+                callNew(argc, hasTypeArgs = false)
+            }
+            "CALL_NEW_T" -> {
+                val argc = (arg as Number).toInt()
+                callNew(argc, hasTypeArgs = true)
             }
 
             "INSTANCEOF" -> {
@@ -376,10 +402,27 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
 
     /* =============================================================
      * Builtins / call conventions
+     *
+     * Stack layout convention (set by the Python compiler):
+     *
+     *   CALL_FUNCTION:    [..., arg1, ..., argN]                 (name is looked up, not on stack)
+     *   CALL_FUNCTION_T:  [..., arg1, ..., argN, type_args]
+     *   CALL_VALUE:       [..., arg1, ..., argN, function]        (function is on stack)
+     *   CALL_VALUE_T:     [..., arg1, ..., argN, type_args, function]
+     *   CALL_METHOD:      [..., arg1, ..., argN, self]            (self is on stack)
+     *   CALL_METHOD_T:    [..., arg1, ..., argN, type_args, self]
+     *   CALL_NEW:         [..., arg1, ..., argN, class]           (class is on stack)
+     *   CALL_NEW_T:       [..., arg1, ..., argN, type_args, class]
+     *
+     * In all cases the value args are on TOP of the stack (pushed last),
+     * with the function/self/class (and, when present, the type-args list)
+     * below them.  The call helpers pop args first, then the type-args
+     * list (if `hasTypeArgs`), then the callee object.
      * ============================================================= */
-    private fun callFunction(name: String, argc: Int) {
+    private fun callFunction(name: String, argc: Int, hasTypeArgs: Boolean) {
         val f = current
         val args = popArgs(argc)
+        val targs: HList? = if (hasTypeArgs) f.stack.removeLast() as? HList else null
         // Python VM checks builtins FIRST, then falls back to env lookup.
         // This ensures builtins like len() aren't shadowed by user variables.
         val builtin = HNativeBridge.builtins[name]
@@ -388,14 +431,15 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             return
         }
         val v = lookup(name)
-        val res = invokeCallable(v, args, instance = null, nameForError = name)
+        val res = invokeCallable(v, args, instance = null, nameForError = name, typeArgs = targs)
         f.stack.addLast(res)
     }
 
-    private fun callMethod(name: String, argc: Int) {
+    private fun callMethod(name: String, argc: Int, hasTypeArgs: Boolean = false) {
         val f = current
         val args = popArgs(argc)
         val inst = f.stack.removeLast()
+        val targs: HList? = if (hasTypeArgs) f.stack.removeLast() as? HList else null
         // Built-in string methods.  Strings in the Kotlin VM are HString
         // (not a class with a method table), so we dispatch the common
         // methods by hand.  This mirrors the surface that the Python
@@ -443,7 +487,7 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
         if (inst !is HInstance) throw HSharpRuntimeError("CALL_METHOD on non-instance ($name)")
         val cls = inst.klass ?: throw HSharpRuntimeError("Instance has no __class__")
         val mfunc = cls.methods[name] ?: throw HSharpRuntimeError("Method '$name' not found on ${cls.name}")
-        val res = invokeHFunction(mfunc, args, instance = inst, parent = current)
+        val res = invokeHFunction(mfunc, args, instance = inst, parent = current, typeArgs = targs)
         f.stack.addLast(res)
     }
 
@@ -586,21 +630,38 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
         throw HSharpRuntimeError("Method '$name' not found in any base class of ${cls.name}")
     }
 
-    private fun callValue(argc: Int) {
+    private fun callValue(argc: Int, hasTypeArgs: Boolean = false) {
         val f = current
-        val args = popArgs(argc)
+        // Stack layout for CALL_VALUE:    [..., arg1, ..., argN, function]
+        // Stack layout for CALL_VALUE_T:  [..., arg1, ..., argN, type_args, function]
+        // The function (or type-args list, then function) is at the TOP of
+        // the stack — pushed LAST by the compiler — so we pop it first.
         val fn = f.stack.removeLast()
-        val res = invokeCallable(fn, args, instance = null, nameForError = "<lambda>")
+        val targs: HList? = if (hasTypeArgs) f.stack.removeLast() as? HList else null
+        val args = popArgs(argc)
+        val res = invokeCallable(fn, args, instance = null, nameForError = "<lambda>", typeArgs = targs)
         f.stack.addLast(res)
     }
 
-    private fun callNew(argc: Int) {
+    private fun callNew(argc: Int, hasTypeArgs: Boolean = false) {
         val f = current
+        // Stack layout for CALL_NEW:    [..., arg1, ..., argN, class]
+        // Stack layout for CALL_NEW_T:  [..., arg1, ..., argN, type_args, class]
+        // The class was pushed FIRST, then (optionally) the type-args list,
+        // then the value args on top.  So we pop the value args first,
+        // then the type-args list, then the class.
         val args = popArgs(argc)
+        val targsList: HList? = if (hasTypeArgs) f.stack.removeLast() as? HList else null
         val cls = f.stack.removeLast()
-        if (cls !is HClass) throw HSharpRuntimeError("CALL_NEW on non-class object")
+        if (cls !is HClass) throw HSharpRuntimeError("CALL_NEW on non-class object (got ${cls.type})")
         val resolved = resolveClass(cls)
         val inst = HInstance(mutableMapOf("__class__" to resolved))
+        if (targsList != null) {
+            // Generics: the call site supplied explicit type arguments
+            // (`new Box<int>(42)`).  Stash them on the instance as
+            // `__type_args__` so method bodies can introspect them.
+            inst.fields["__type_args__"] = targsList
+        }
         for ((k, v) in resolved.fields) inst.fields[k] = deepCopy(v)
         val init = resolved.methods["__init__"]
         if (init != null) {
@@ -609,12 +670,12 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
         f.stack.addLast(inst)
     }
 
-    private fun invokeCallable(v: HValue, args: List<HValue>, instance: HValue?, nameForError: String): HValue {
+    private fun invokeCallable(v: HValue, args: List<HValue>, instance: HValue?, nameForError: String, typeArgs: HValue? = null): HValue {
         // Built-in?
         if (v is HNative) return v.call(args)
         // H# user function?
         if (v is HFunction) {
-            return invokeHFunction(v, args, instance = instance, parent = current)
+            return invokeHFunction(v, args, instance = instance, parent = current, typeArgs = typeArgs)
         }
         throw HSharpRuntimeError("Cannot call value of type ${v.type} ($nameForError)")
     }
@@ -624,13 +685,19 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
         args: List<HValue>,
         instance: HValue?,
         parent: HFrame,
-        staticClass: HClass? = null
+        staticClass: HClass? = null,
+        typeArgs: HValue? = null
     ): HValue {
         if (func.args.size != args.size)
             throw HSharpRuntimeError("Function ${func.name} expects ${func.args.size} args, got ${args.size}")
         val frame = HFrame(func, func.consts, func.instructions, mutableMapOf(), parent)
         for ((p, v) in func.args.zip(args)) frame.env[p] = v
         if (instance != null) frame.env["self"] = instance
+        // Generics: when the call site supplied explicit type arguments,
+        // make them available to the body as `__type_args__` so generic
+        // code can introspect them at runtime.  We don't perform static
+        // type checks because H# is dynamically typed.
+        if (typeArgs != null) frame.env["__type_args__"] = typeArgs
         if (staticClass != null) frame.env["__static_class__"] = staticClass
         // Free variables are looked up first in the function's own closure
         // (attached at MAKE_CLOSURE time).  Fall back to the caller's frame
@@ -743,6 +810,16 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                 obj.entries[name]?.let { return it }
                 throw HSharpRuntimeError("Attribute '$name' not found on dict")
             }
+            is HClass -> {
+                // Generics-related introspection: `ClassName.__type_params__`
+                // returns the list of type-parameter names declared on the
+                // class (empty list for non-generic classes).  This mirrors
+                // the Python VM's behaviour for class-level metadata.
+                if (name == "__type_params__") {
+                    return HList(obj.typeParams.map { HString(it) }.toMutableList())
+                }
+                throw HSharpRuntimeError("Attribute '$name' not found on class")
+            }
             is HInstance -> {
                 // Private check
                 val cls = obj.klass
@@ -767,6 +844,12 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
                     val proxy = HDict(mutableMapOf("__method__" to m, "__self__" to obj))
                     return proxy
                 }
+                // Generics-related fallbacks.  Reading `__type_args__` on an
+                // instance of a non-generic class (or before the call site
+                // provided explicit type arguments) should yield nullptr
+                // rather than raise an Attribute-not-found error, matching
+                // Python's behaviour.
+                if (name == "__type_args__") return HNull
                 throw HSharpRuntimeError("Attribute '$name' not found on object")
             }
             else -> throw HSharpRuntimeError("Cannot load attribute on ${obj.type}")

@@ -1,0 +1,263 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# test_concepts.hto — exercises all 100 entries in h_concepts.hto
+# ═══════════════════════════════════════════════════════════════════════════
+# build: h_concepts.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── Category 1: Type predicates (1-10) ─────────────────────────────────
+check("01/is_int",       is_int(5));
+check("01/is_int_neg",   is_int(-3));
+check("01/is_float",     is_float(3.14));
+check("01/is_number_i",  is_number(42));
+check("01/is_number_f",  is_number(3.14));
+check("01/is_str",       is_str("hi"));
+check("01/is_bool",      is_bool(true));
+check("01/is_null",      is_null(nullptr));
+check("01/is_list",      is_list([1,2]));
+check("01/is_dict",      is_dict({}));
+check("01/is_fn",        is_fn(fn(){return 0;}));
+check("01/is_empty_s",   is_empty(""));
+check("01/is_empty_l",   is_empty([]));
+check("01/is_empty_d",   is_empty({}));
+check("01/is_empty_n",   is_empty(nullptr));
+check("01/is_empty_x",   not is_empty("x"));
+
+# ─── Category 2: Type coercions (11-20) ─────────────────────────────────
+check("02/as_int_s",     as_int("42") == 42);
+check("02/as_int_f",     as_int(3.0) == 3);
+check("02/as_int_b",     as_int(true) == 1);
+check("02/as_int_n",     as_int(nullptr) == 0);
+check("02/as_float_i",   as_float(3) == 3.0);
+check("02/as_float_s",   as_float("3.14") == 3.14);
+check("02/as_str_i",     as_str(42) == "42");
+check("02/as_str_n",     as_str(nullptr) == "");
+check("02/as_bool_0",    as_bool(0) == false);
+check("02/as_bool_1",    as_bool(1) == true);
+check("02/as_bool_s",    as_bool("x") == true);
+check("02/as_bool_e",    as_bool("") == false);
+check("02/as_list_n",    len(as_list(nullptr)) == 0);
+check("02/as_list_s",    len(as_list("x")) == 1);
+check("02/as_dict_l",    len(as_dict([1,2])) == 0);
+check("02/or_default",   or_default(nullptr, 5) == 5);
+check("02/or_default_x", or_default(3, 5) == 3);
+check("02/or_zero",      or_zero(nullptr) == 0);
+check("02/or_empty_l",   len(or_empty([])) == 0);
+check("02/or_empty_n",   len(or_empty(nullptr)) == 0);
+check("02/parse_or_x",   parse_or("abc", 99) == 99);
+check("02/parse_or_0",   parse_or("0", 99) == 0);
+check("02/parse_or_42",  parse_or("42", 99) == 42);
+
+# ─── Category 3: String operations (21-30) ──────────────────────────────
+check("03/upper",        upper("abc") == "ABC");
+check("03/upper_mix",    upper("AbC") == "ABC");
+check("03/lower",        lower("ABC") == "abc");
+check("03/lower_mix",    lower("aBc") == "abc");
+check("03/trim",         trim("  hi  ") == "hi");
+check("03/trim_l",       trim_left("  hi  ") == "hi  ");
+check("03/trim_r",       trim_right("  hi  ") == "  hi");
+check("03/rev_str",      reverse_str("abc") == "cba");
+check("03/contains_t",   contains_str("hello", "ell"));
+check("03/contains_f",   not contains_str("hello", "x"));
+check("03/contains_e",   contains_str("hello", ""));
+check("03/starts_t",     starts_with("hello", "he"));
+check("03/starts_f",     not starts_with("hello", "lo"));
+check("03/ends_t",       ends_with("hello", "lo"));
+check("03/ends_f",       not ends_with("hello", "he"));
+check("03/repeat",       repeat_str("ab", 3) == "ababab");
+check("03/repeat_0",     repeat_str("x", 0) == "");
+
+# ─── Category 4: List operations (31-40) ─────────────────────────────────
+check("04/head",         head([1,2,3]) == 1);
+check("04/head_e",       head([]) == nullptr);
+check("04/tail",         len(tail([1,2,3])) == 2 and tail([1,2,3])[0] == 2);
+check("04/last",         last([1,2,3]) == 3);
+check("04/init",         len(init([1,2,3])) == 2 and init([1,2,3])[1] == 2);
+check("04/take",         len(take([1,2,3,4], 2)) == 2);
+check("04/take_ovf",     len(take([1,2], 10)) == 2);
+check("04/drop",         len(drop([1,2,3,4], 2)) == 2 and drop([1,2,3,4], 2)[0] == 3);
+check("04/concat",       len(concat([1,2],[3,4])) == 4);
+check("04/flatten",      len(flatten([[1,2],[3,4]])) == 4);
+check("04/distinct",     len(distinct([1,2,2,3,3,3])) == 3);
+check("04/rev_list",     len(reverse_list([1,2,3])) == 3 and reverse_list([1,2,3])[0] == 3);
+
+# ─── Category 5: Math (41-50) ───────────────────────────────────────────
+check("05/clamp_in",     clamp(5, 0, 10) == 5);
+check("05/clamp_lo",     clamp(-5, 0, 10) == 0);
+check("05/clamp_hi",     clamp(15, 0, 10) == 10);
+check("05/lerp",         lerp(0, 10, 0.5) == 5);
+check("05/sign_pos",     sign(5) == 1);
+check("05/sign_neg",     sign(-5) == -1);
+check("05/sign_zero",    sign(0) == 0);
+check("05/even_t",       is_even(4));
+check("05/even_f",       not is_even(5));
+check("05/odd_t",        is_odd(5));
+check("05/odd_f",        not is_odd(4));
+check("05/prime_2",      is_prime(2));
+check("05/prime_7",      is_prime(7));
+check("05/prime_4",      not is_prime(4));
+check("05/prime_9",      not is_prime(9));
+check("05/gcd",          gcd(12, 18) == 6);
+check("05/gcd_1",        gcd(17, 13) == 1);
+check("05/lcm",          lcm(4, 6) == 12);
+check("05/fact",         factorial(5) == 120);
+check("05/fact_0",       factorial(0) == 1);
+check("05/fib_0",        fibonacci(0) == 0);
+check("05/fib_10",       fibonacci(10) == 55);
+
+# ─── Category 6: Dict operations (51-60) ────────────────────────────────
+let d1 = {"a": 1, "b": 2};
+let d2 = {"c": 3, "d": 4};
+check("06/get_or",       get_or({}, "x", 99) == 99);
+check("06/get_or_x",     get_or(d1, "a", 99) == 1);
+check("06/set_default",  set_default({}, "k", "v")["k"] == "v");
+let merged = merge(d1, d2);
+check("06/merge_n",      len(keys(merged)) == 4);
+check("06/invert_n",     len(invert({"a": 1, "b": 2})) == 2);
+check("06/pick",         len(pick({"a": 1, "b": 2, "c": 3}, ["a", "c"])) == 2);
+check("06/omit",         len(omit({"a": 1, "b": 2, "c": 3}, ["b"])) == 2);
+check("06/map_keys",     len(keys(map_keys({"a": 1}, fn(k) { return k + "_x"; }))) == 1);
+check("06/map_values",   map_values({"a": 2}, fn(v) { return v * 3; })["a"] == 6);
+check("06/has_all_t",    has_all({"a": 1, "b": 2}, ["a", "b"]));
+check("06/has_all_f",    not has_all({"a": 1}, ["a", "b"]));
+check("06/has_any_t",    has_any({"a": 1}, ["x", "a"]));
+check("06/has_any_f",    not has_any({"a": 1}, ["x", "y"]));
+
+# ─── Category 7: Functional (61-70) ─────────────────────────────────────
+check("07/map",          len(map([1, 2, 3], fn(x) { return x * 2; })) == 3);
+check("07/map_eq",       map([1, 2, 3], fn(x) { return x * 2; })[0] == 2);
+check("07/filter",       len(filter([1, 2, 3, 4], fn(x) { return is_even(x); })) == 2);
+check("07/reduce",       reduce([1, 2, 3, 4], fn(a, b) { return a + b; }, 0) == 10);
+check("07/fold",         fold([1, 2, 3, 4], fn(a, b) { return a + b; }) == 10);
+check("07/any_t",        any([1, 2, 3], fn(x) { return x == 2; }));
+check("07/any_f",        not any([1, 2, 3], fn(x) { return x == 9; }));
+check("07/all_t",        all([2, 4, 6], fn(x) { return is_even(x); }));
+check("07/all_f",        not all([2, 4, 5], fn(x) { return is_even(x); }));
+check("07/find",         find([1, 2, 3], fn(x) { return x == 2; }) == 2);
+check("07/find_n",       find([1, 2, 3], fn(x) { return x == 9; }) == nullptr);
+let pr = partition([1, 2, 3, 4], fn(x) { return is_even(x); });
+check("07/part_n",       len(pr) == 2);
+check("07/part_yes",     len(pr[0]) == 2);
+check("07/part_no",      len(pr[1]) == 2);
+let gb = group_by([1, 2, 3, 4, 5, 6], fn(x) { return is_even(x); });
+check("07/groupby_n",    len(gb) == 2);
+check("07/zip_n",        len(zip([1, 2, 3], ["a", "b", "c"])) == 3);
+check("07/zip_0",        zip([1, 2, 3], ["a", "b", "c"])[0][0] == 1);
+
+# ─── Category 8: Decorator / modifier (71-80) ───────────────────────────
+# 71 memoize
+let slow = memoize(fn(n) { return n * 2; });
+check("08/memo1",        slow(5) == 10);
+check("08/memo2",        slow(5) == 10);
+# 72 compose
+let inc = fn(x) { return x + 1; };
+let dbl = fn(x) { return x * 2; };
+let inc_then_dbl = compose(dbl, inc);
+check("08/compose",      inc_then_dbl(3) == 8);
+# 73 pipe
+let pipe_r = pipe(5, [inc, dbl, inc]);
+check("08/pipe",         pipe_r == 13);
+# 74 curry2
+let add = fn(a, b) { return a + b; };
+let add5 = curry2(add)(5);
+check("08/curry2",       add5(7) == 12);
+# 75 partial
+let mul = fn(a, b) { return a * b; };
+let triple = partial(mul, 3);
+check("08/partial",      triple(4) == 12);
+# 76 tap
+let tap_v = tap(42, fn(x) { return x; });
+check("08/tap",          tap_v == 42);
+# 77 log_calls - just call and verify it works
+let logged = log_calls("L", fn(x) { return x + 1; });
+check("08/log",          logged(2) == 3);
+# 78 time_it - call and verify
+let timed = time_it("T", fn(x) { return x * x; });
+check("08/time",         timed(5) == 25);
+# 79 retry
+let r_state = [0];
+let r_get = fn() { r_state[0] = r_state[0] + 1; if (r_state[0] >= 3) { return "ok"; } return nullptr; };
+check("08/retry",        retry(5, r_get) == "ok");
+# 80 throttle - call multiple times
+let th_state = {"last": 0, "interval": 100000, "last_value": -1};
+let th_f = fn() { return 42; };
+let th1 = throttle(th_state, th_f);
+# (first call sets state; just verify it returns something)
+check("08/throttle",     th1 == 42 or th1 == -1);
+
+# ─── Category 9: Control flow (81-90) ───────────────────────────────────
+let tc = [0];
+let inc_fn = fn(i) { tc[0] = tc[0] + i; };
+times(3, inc_fn);
+check("09/times",        tc[0] == 3);
+let uc = [0];
+until(fn() { return uc[0] >= 5; }, fn() { uc[0] = uc[0] + 1; });
+check("09/until",        uc[0] == 5);
+check("09/range_n",      len(range_step(0, 10, 2)) == 5);
+check("09/range_neg",    len(range_step(10, 0, -2)) == 5);
+check("09/range_eq",     range_step(0, 10, 2)[0] == 0);
+let ch = chain([inc, dbl, inc]);
+check("09/chain",        ch(3) == 9);
+let doubler = when_(fn(x) { return x > 0; }, fn(x) { return x * 2; });
+check("09/when_t",       doubler(5) == 10);
+check("09/when_f",       doubler(-5) == -5);
+let negator = unless(fn(x) { return x < 0; }, fn(x) { return -x; });
+check("09/unless_t",     negator(5) == -5);
+check("09/unless_f",     negator(-5) == -5);
+let safe_inc = with_default(0, inc);
+check("09/with_def",     safe_inc(5) == 6);
+check("09/with_def_n",   safe_inc(nullptr) == 0);
+check("09/identity",     identity(42) == 42);
+check("09/constant",     constant(7)() == 7);
+check("09/noop",         noop() == 0);
+
+# ─── Category 10: I/O / system (91-100) ─────────────────────────────────
+check("10/file_ext",     file_ext("foo.txt") == "txt");
+check("10/file_ext_n",   file_ext("foo") == "");
+check("10/file_name",    file_name("/a/b/c.txt") == "c.txt");
+check("10/file_name_n",  file_name("alone.txt") == "alone.txt");
+check("10/file_stem",    file_stem("foo.txt") == "foo");
+check("10/file_stem_n",  file_stem("/a/foo.tar.gz") == "foo.tar");
+check("10/path_join",    path_join("a", "b") == "a/b");
+check("10/path_join_t",  path_join("a/", "b") == "a/b");
+check("10/safe_div",     safe_div(10, 2) == 5);
+check("10/safe_div_z",   safe_div(10, 0) == 0);
+check("10/in_range_t",   in_range(5, 1, 10));
+check("10/in_range_lo",  in_range(1, 1, 10));
+check("10/in_range_hi",  in_range(10, 1, 10));
+check("10/in_range_f",   not in_range(0, 1, 10));
+
+# write_lines then read_lines round-trip (use /tmp for safety)
+let __tmp_path = "/tmp/h_concepts_test.txt";
+write_lines(__tmp_path, ["line1", "line2", "line3"]);
+let rlines = read_lines(__tmp_path);
+check("10/write_n_read", len(rlines) == 3);
+check("10/round_0",      rlines[0] == "line1");
+check("10/round_1",      rlines[1] == "line2");
+check("10/round_2",      rlines[2] == "line3");
+
+# with_file read
+let wf_r = with_file(__tmp_path, "r", fn(s) { return len(s) > 0; });
+check("10/with_file_r",  wf_r == true);
+# with_file write
+with_file(__tmp_path, "w", fn(_) { return "written"; });
+let wf_w = read_file(__tmp_path);
+check("10/with_file_w",  wf_w == "written");
+
+print("HCONCEPTS_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

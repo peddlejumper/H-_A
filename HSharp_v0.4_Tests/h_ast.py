@@ -19,16 +19,18 @@ class ImportStatement(AST):
         self.path = path
 
 class Function(AST):
-    def __init__(self, name, params, body, is_static=False):
+    def __init__(self, name, params, body, is_static=False, type_params=None):
         self.name = name
         self.params = params
         self.body = body
         self.is_static = is_static
+        self.type_params = type_params or []
 
 class CallExpression(AST):
-    def __init__(self, func, args):
+    def __init__(self, func, args, type_args=None):
         self.func = func
         self.args = args
+        self.type_args = type_args or []
 
 class ReturnStatement(AST):
     def __init__(self, expr):
@@ -163,17 +165,19 @@ class AssignmentMember(AST):
         self.value = value
 
 class ClassDeclaration(AST):
-    def __init__(self, name, body, base=None, implements=None):
+    def __init__(self, name, body, base=None, implements=None, type_params=None):
         self.name = name
         self.body = body
         self.base = base
         self.implements = implements or []
+        self.type_params = type_params or []
 
 class InterfaceDeclaration(AST):
-    def __init__(self, name, body, bases=None):
+    def __init__(self, name, body, bases=None, type_params=None):
         self.name = name
         self.body = body
         self.bases = bases or []
+        self.type_params = type_params or []
 
 class UnionVariant(AST):
     def __init__(self, name, fields):
@@ -198,9 +202,10 @@ class FieldDeclaration(AST):
         self.is_private = is_private
 
 class NewExpression(AST):
-    def __init__(self, class_name, args):
+    def __init__(self, class_name, args, type_args=None):
         self.class_name = class_name
         self.args = args
+        self.type_args = type_args or []
 
 class SuperExpression(AST):
     def __init__(self, method_name, args):

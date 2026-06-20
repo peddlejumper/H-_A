@@ -130,6 +130,8 @@ class Parser:
         self.eat(TokenType.FN)
         func_name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
+        # Optional type parameter list: fn foo<T, U>(...)
+        type_params = self._parse_type_params()
         self.eat(TokenType.LPAREN)
         params = []
         if self.current_token[0] != TokenType.RPAREN:
@@ -141,10 +143,27 @@ class Parser:
                 self.eat(TokenType.IDENTIFIER)
         self.eat(TokenType.RPAREN)
         body = self.block()
-        fn = Function(func_name, params, body)
+        fn = Function(func_name, params, body, type_params=type_params)
         if is_coro:
             fn.is_coro = True
         return fn
+
+    def _parse_type_params(self):
+        """If current token is '<', parse a comma-separated list of
+        identifiers and consume the closing '>'.  Returns the list
+        (possibly empty).  Used by class/fn/interface declarations
+        and by `new` / call expressions for type-argument lists."""
+        if self.current_token[0] != TokenType.LT:
+            return []
+        self.eat(TokenType.LT)
+        out = [self.current_token[1]]
+        self.eat(TokenType.IDENTIFIER)
+        while self.current_token[0] == TokenType.COMMA:
+            self.eat(TokenType.COMMA)
+            out.append(self.current_token[1])
+            self.eat(TokenType.IDENTIFIER)
+        self.eat(TokenType.GT)
+        return out
 
     def module_declaration(self):
         self.eat(TokenType.MODULE)
@@ -178,6 +197,8 @@ class Parser:
         self.eat(TokenType.CLASS)
         class_name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
+        # Optional type parameter list: class Foo<T, U>
+        type_params = self._parse_type_params()
         base = None
         implements = []
         if self.current_token[0] == TokenType.EXTENDS:
@@ -226,12 +247,14 @@ class Parser:
             else:
                 members.append(self.statement())
         self.eat(TokenType.RBRACE)
-        return ClassDeclaration(class_name, BlockStatement(members), base, implements)
+        return ClassDeclaration(class_name, BlockStatement(members), base, implements, type_params=type_params)
 
     def interface_declaration(self):
         self.eat(TokenType.INTERFACE)
         name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
+        # Optional type parameter list: interface Foo<T, U>
+        type_params = self._parse_type_params()
         bases = []
         if self.current_token[0] == TokenType.EXTENDS:
             self.eat(TokenType.EXTENDS)
@@ -248,6 +271,8 @@ class Parser:
                 self.eat(TokenType.FN)
                 mname = self.current_token[1]
                 self.eat(TokenType.IDENTIFIER)
+                # Interface method type params (rarely used, but supported)
+                mtype_params = self._parse_type_params()
                 self.eat(TokenType.LPAREN)
                 params = []
                 if self.current_token[0] != TokenType.RPAREN:
@@ -260,14 +285,14 @@ class Parser:
                 self.eat(TokenType.RPAREN)
                 if self.current_token[0] == TokenType.SEMI:
                     self.eat(TokenType.SEMI)
-                    methods.append(Function(mname, params, None))
+                    methods.append(Function(mname, params, None, type_params=mtype_params))
                 else:
                     body = self.block()
-                    methods.append(Function(mname, params, body))
+                    methods.append(Function(mname, params, body, type_params=mtype_params))
             else:
                 raise SyntaxError('Only method declarations allowed in interface')
         self.eat(TokenType.RBRACE)
-        return InterfaceDeclaration(name, BlockStatement(methods), bases)
+        return InterfaceDeclaration(name, BlockStatement(methods), bases, type_params=type_params)
 
     def union_declaration(self):
         self.eat(TokenType.UNION)
@@ -574,6 +599,10 @@ class Parser:
 
     def return_statement(self):
         self.eat(TokenType.RETURN)
+        # support both `return;` and `return expr;`
+        if self.current_token[0] == TokenType.SEMI:
+            self.current_token = self.lexer.get_next_token()
+            return ReturnStatement(None)
         expr = self.expression()
         self.eat(TokenType.SEMI)
         return ReturnStatement(expr)
@@ -720,6 +749,8 @@ class Parser:
             self.eat(TokenType.NEW)
             cls_name = self.current_token[1]
             self.eat(TokenType.IDENTIFIER)
+            # Optional type-arg list: new Foo<T, U>(...)
+            type_args = self._parse_type_params()
             self.eat(TokenType.LPAREN)
             args = []
             if self.current_token[0] != TokenType.RPAREN:
@@ -728,7 +759,7 @@ class Parser:
                     self.eat(TokenType.COMMA)
                     args.append(self.expression())
             self.eat(TokenType.RPAREN)
-            return NewExpression(Identifier(cls_name), args)
+            return NewExpression(Identifier(cls_name), args, type_args=type_args)
         if token[0] == TokenType.SUPER:
             self.eat(TokenType.SUPER)
             self.eat(TokenType.DOT)
@@ -745,13 +776,13 @@ class Parser:
             return SuperExpression(method_name, args)
         if token[0] == TokenType.NUMBER:
             self.eat(TokenType.NUMBER)
-            return NumberLiteral(token[1])
+            return self._parse_postfix(NumberLiteral(token[1]))
         elif token[0] == TokenType.STRING:
             self.eat(TokenType.STRING)
-            return StringLiteral(token[1])
+            return self._parse_postfix(StringLiteral(token[1]))
         elif token[0] == TokenType.BOOL:
             self.eat(TokenType.BOOL)
-            return BooleanLiteral(token[1])
+            return self._parse_postfix(BooleanLiteral(token[1]))
         elif token[0] == TokenType.LBRACKET:
             return self.array_literal()
         elif token[0] == TokenType.LBRACE:
@@ -759,79 +790,83 @@ class Parser:
         elif token[0] == TokenType.IDENTIFIER:
             name = token[1]
             self.eat(TokenType.IDENTIFIER)
-            node = Identifier(name)
-            while True:
-                if self.current_token[0] == TokenType.LPAREN:
-                    self.eat(TokenType.LPAREN)
-                    args = []
-                    if self.current_token[0] != TokenType.RPAREN:
-                        args.append(self.expression())
-                        while self.current_token[0] == TokenType.COMMA:
-                            self.eat(TokenType.COMMA)
-                            args.append(self.expression())
-                    self.eat(TokenType.RPAREN)
-                    node = CallExpression(node, args)
-                    continue
-                if self.current_token[0] == TokenType.LBRACKET:
-                    self.eat(TokenType.LBRACKET)
-                    indices = [self.expression()]
-                    while self.current_token[0] == TokenType.COMMA:
-                        self.eat(TokenType.COMMA)
-                        indices.append(self.expression())
-                    self.eat(TokenType.RBRACKET)
-                    for idx in indices:
-                        node = IndexExpression(node, idx)
-                    continue
-                if self.current_token[0] == TokenType.DOT:
-                    self.eat(TokenType.DOT)
-                    attr = self.current_token[1]
-                    self.eat(TokenType.IDENTIFIER)
-                    node = MemberExpression(node, attr)
-                    continue
-                if self.current_token[0] == TokenType.LBRACE:
-                    # Union construction: TypeName{VariantName: expr1, ...} or TypeName{VariantName}
-                    # Check for {Identifier: or {Identifier} pattern; if not, let parent handle the {
-                    saved_token = self.current_token
-                    saved_pos = self.lexer.pos
-                    saved_line = self.lexer.line
-                    saved_col = self.lexer.col
-                    saved_char = self.lexer.current_char
-                    self.eat(TokenType.LBRACE)  # consume {
-                    tok1 = self.current_token
-                    has_pattern = (tok1[0] == TokenType.IDENTIFIER)
-                    if has_pattern:
-                        self.eat(TokenType.IDENTIFIER)  # consume variant name
-                        has_pattern = (self.current_token[0] == TokenType.COLON or self.current_token[0] == TokenType.RBRACE)
-                    # Restore lexer state and current token
-                    self.lexer.pos = saved_pos
-                    self.lexer.line = saved_line
-                    self.lexer.col = saved_col
-                    self.lexer.current_char = saved_char
-                    self.current_token = saved_token
-                    if not has_pattern:
-                        break
-                    # Now parse union construction for real
-                    self.eat(TokenType.LBRACE)
-                    var_name = self.current_token[1]
-                    self.eat(TokenType.IDENTIFIER)
-                    values = []
-                    if self.current_token[0] == TokenType.COLON:
-                        self.eat(TokenType.COLON)
-                        values.append(self.expression())
-                        while self.current_token[0] == TokenType.COMMA:
-                            self.eat(TokenType.COMMA)
-                            values.append(self.expression())
-                    self.eat(TokenType.RBRACE)
-                    node = UnionConstructExpression(node, var_name, values)
-                    continue
-                break
-            return node
+            return self._parse_postfix(Identifier(name))
         elif token[0] == TokenType.LPAREN:
             self.eat(TokenType.LPAREN)
             node = self.expression()
             self.eat(TokenType.RPAREN)
-            # allow call chaining on parenthesized expressions: (fn(...))(args)
-            while self.current_token[0] == TokenType.LPAREN:
+            return self._parse_postfix(node)
+        else:
+            line = self.current_token[2] if len(self.current_token) > 2 else '?'
+            col = self.current_token[3] if len(self.current_token) > 3 else '?'
+            raise SyntaxError(f"Unexpected token: {token} at line {line}, col {col}")
+
+    def _parse_subscript(self):
+        """Parse one subscript inside `[ … ]` — an expression or a slice
+        expression of the form `[start? : end? (: step?)?]`."""
+        start = None
+        if self.current_token[0] != TokenType.COLON:
+            start = self.expression()
+        if self.current_token[0] == TokenType.COLON:
+            self.eat(TokenType.COLON)
+            end = None
+            if self.current_token[0] not in (TokenType.COLON, TokenType.RBRACKET, TokenType.COMMA):
+                end = self.expression()
+            step = None
+            if self.current_token[0] == TokenType.COLON:
+                self.eat(TokenType.COLON)
+                if self.current_token[0] not in (TokenType.RBRACKET, TokenType.COMMA):
+                    step = self.expression()
+            return SliceExpression(start, end, step)
+        return start
+
+    def _parse_postfix(self, node):
+        """Apply zero or more postfix operators (`(args)`, `[idx]`, `.name`,
+        `{Variant:…}`) to an already-parsed primary.  Used uniformly for
+        identifiers, literals, and parenthesised expressions so that things
+        like `"hello".length()` and `(a + b).method(1)` parse correctly.
+
+        A leading `name<T, U>(args)` (call with explicit type arguments) is
+        allowed when `node` is an `Identifier`.  Because the `<` operator
+        also appears in binary comparisons, we use a try/restore approach:
+        peek ahead to confirm the shape `<ident[, ident]*>(` and only then
+        consume the tokens as type arguments.  If the shape does not match
+        (e.g. `a < b` in a comparison), the `<` is left untouched and the
+        surrounding expression layer handles it as a comparison operator."""
+        if (isinstance(node, Identifier) and
+                self.current_token[0] == TokenType.LT):
+            saved_lexer = self.lexer.save_state()
+            saved_token = self.current_token
+            try:
+                type_args = self._parse_type_params()
+                if self.current_token[0] == TokenType.LPAREN:
+                    # Real type-arg list; keep the consumption and stash
+                    # the names so the next loop iteration can attach them
+                    # to the call expression.
+                    node._pending_type_args = type_args
+                else:
+                    # Wasn't a type-arg list (e.g. `a < b`).  Undo.
+                    self.lexer.restore_state(saved_lexer)
+                    self.current_token = saved_token
+            except SyntaxError:
+                self.lexer.restore_state(saved_lexer)
+                self.current_token = saved_token
+        while True:
+            if (hasattr(node, '_pending_type_args') and
+                    self.current_token[0] == TokenType.LPAREN):
+                pending = node._pending_type_args
+                self.eat(TokenType.LPAREN)
+                args = []
+                if self.current_token[0] != TokenType.RPAREN:
+                    args.append(self.expression())
+                    while self.current_token[0] == TokenType.COMMA:
+                        self.eat(TokenType.COMMA)
+                        args.append(self.expression())
+                self.eat(TokenType.RPAREN)
+                call = CallExpression(node, args, type_args=pending)
+                node = call
+                continue
+            if self.current_token[0] == TokenType.LPAREN:
                 self.eat(TokenType.LPAREN)
                 args = []
                 if self.current_token[0] != TokenType.RPAREN:
@@ -841,11 +876,61 @@ class Parser:
                         args.append(self.expression())
                 self.eat(TokenType.RPAREN)
                 node = CallExpression(node, args)
-            return node
-        else:
-            line = self.current_token[2] if len(self.current_token) > 2 else '?'
-            col = self.current_token[3] if len(self.current_token) > 3 else '?'
-            raise SyntaxError(f"Unexpected token: {token} at line {line}, col {col}")
+                continue
+            if self.current_token[0] == TokenType.LBRACKET:
+                self.eat(TokenType.LBRACKET)
+                subscripts = [self._parse_subscript()]
+                while self.current_token[0] == TokenType.COMMA:
+                    self.eat(TokenType.COMMA)
+                    subscripts.append(self._parse_subscript())
+                self.eat(TokenType.RBRACKET)
+                for sub in subscripts:
+                    node = IndexExpression(node, sub)
+                continue
+            if self.current_token[0] == TokenType.DOT:
+                self.eat(TokenType.DOT)
+                attr = self.current_token[1]
+                self.eat(TokenType.IDENTIFIER)
+                node = MemberExpression(node, attr)
+                continue
+            if self.current_token[0] == TokenType.LBRACE:
+                # Union construction: TypeName{VariantName: expr1, ...} or TypeName{VariantName}
+                # Check for {Identifier: or {Identifier} pattern; if not, let parent handle the {
+                saved_token = self.current_token
+                saved_pos = self.lexer.pos
+                saved_line = self.lexer.line
+                saved_col = self.lexer.col
+                saved_char = self.lexer.current_char
+                self.eat(TokenType.LBRACE)  # consume {
+                tok1 = self.current_token
+                has_pattern = (tok1[0] == TokenType.IDENTIFIER)
+                if has_pattern:
+                    self.eat(TokenType.IDENTIFIER)  # consume variant name
+                    has_pattern = (self.current_token[0] == TokenType.COLON or self.current_token[0] == TokenType.RBRACE)
+                # Restore lexer state and current token
+                self.lexer.pos = saved_pos
+                self.lexer.line = saved_line
+                self.lexer.col = saved_col
+                self.lexer.current_char = saved_char
+                self.current_token = saved_token
+                if not has_pattern:
+                    break
+                # Now parse union construction for real
+                self.eat(TokenType.LBRACE)
+                var_name = self.current_token[1]
+                self.eat(TokenType.IDENTIFIER)
+                values = []
+                if self.current_token[0] == TokenType.COLON:
+                    self.eat(TokenType.COLON)
+                    values.append(self.expression())
+                    while self.current_token[0] == TokenType.COMMA:
+                        self.eat(TokenType.COMMA)
+                        values.append(self.expression())
+                self.eat(TokenType.RBRACE)
+                node = UnionConstructExpression(node, var_name, values)
+                continue
+            break
+        return node
 
     def array_literal(self):
         self.eat(TokenType.LBRACKET)

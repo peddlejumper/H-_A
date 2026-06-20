@@ -87,6 +87,7 @@ class Lexer:
             'continue': TokenType.CONTINUE,
             'break': TokenType.BREAK,
             'nullptr': (TokenType.NULL, None),
+            'null': (TokenType.NULL, None),
             'auto': TokenType.AUTO,
             'try': TokenType.TRY,
             'catch': TokenType.CATCH,
@@ -143,6 +144,14 @@ class Lexer:
         self.current_char = saved_char
         return token
 
+    def save_state(self):
+        """Capture the lexer state so the caller can restore it on error.
+        Returns a tuple that can be passed back to restore_state()."""
+        return (self.pos, self.line, self.col, self.current_char)
+
+    def restore_state(self, state):
+        self.pos, self.line, self.col, self.current_char = state
+
     def get_next_token(self):
         while self.current_char is not None:
             if self.current_char.isspace() or self.current_char == '#':
@@ -189,7 +198,8 @@ class Lexer:
                 if self.current_char == '=':
                     self.advance()
                     return (TokenType.BANGEQ, '!=')
-                raise SyntaxError("Unexpected '!'")
+                # bare `!` is a logical-not prefix, like in C / Kotlin
+                return (TokenType.NOT, '!')
             if self.current_char == '>':
                 self.advance()
                 if self.current_char == '=':
@@ -230,9 +240,15 @@ class Lexer:
                 return (TokenType.SLASH, '/')
             if self.current_char == '&':
                 self.advance()
+                if self.current_char == '&':
+                    self.advance()
+                    return (TokenType.AND, '&&')
                 return (TokenType.BITAND, '&')
             if self.current_char == '|':
                 self.advance()
+                if self.current_char == '|':
+                    self.advance()
+                    return (TokenType.OR, '||')
                 return (TokenType.BITOR, '|')
             if self.current_char == '^':
                 self.advance()

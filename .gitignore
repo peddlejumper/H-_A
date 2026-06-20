@@ -24,3 +24,11 @@ bin/
 obj/
 *.user
 *.suo
+
+# H# test output (compiled .hbc and per-test stdout files)
+**/zzwui-tests/hbc/
+**/zzwui-tests/out/
+**/lib-tests/hbc/
+**/lib-tests/out/
+**/stress-tests/hbc/
+**/stress-tests/out/

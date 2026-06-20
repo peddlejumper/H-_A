@@ -40,6 +40,17 @@ class Compiler:
     def emit(self, opname, arg=None):
         self.instructions.append((opname, arg))
 
+    def _emit_type_args_list(self, type_args):
+        """Emit a `MAKE_LIST` of the given type-argument name strings
+        followed by pushing the resulting list on the stack.  Used as a
+        prelude to the *_T call opcodes so the runtime can attach the
+        type arguments to the call frame / instance for introspection."""
+        idx = self.add_const(list(type_args))
+        # Use the same const pool encoding as ordinary H# list literals
+        # (a Python list) so the JSON-side reader sees a normal list.
+        # The runtime's HList constructor handles it.
+        self.emit('LOAD_CONST', idx)
+
     def compile(self, program):
         # program: Program AST
         for stmt in program.statements:
@@ -301,6 +312,15 @@ class Compiler:
         # Used to decide what is a free variable when compiling a nested
         # function.  Empty for the module top level.
         self.bound = set()
+        # True when compiling a function body (vs. the module top level).
+        # Used to decide whether a name referenced inside a function but
+        # not bound in the function should be treated as a free variable
+        # (CALL_VALUE / LOAD_DEREF) or just looked up by name at call time
+        # (CALL_FUNCTION).  For top-level functions, every reference other
+        # than the function's own params/name is a module-level name
+        # (either a user-defined let/fn at the module scope, or a runtime
+        # HNative builtin) and should be looked up by name.
+        self.in_function_body = False
 
     # -- name access helpers ---------------------------------------------
     def emit_load_name(self, name):
@@ -337,17 +357,32 @@ class Compiler:
             #    `fn fact(n) { ... fact(n-1) ... }` recursive work
             #    without `fact` being treated as a free variable of
             #    itself).
-            freevars = [
-                fv for fv in self._find_free_vars_in_stmt(
-                    stmt.body, set(stmt.params) | {stmt.name}
-                ) if fv != stmt.name
-            ]
+            #
+            #    EXCEPTION: for top-level functions (the enclosing scope
+            #    is the module), we skip the free-variable analysis
+            #    entirely.  Module-level names (lets/functions defined
+            #    in the module) and runtime HNative builtins must both
+            #    be looked up by name at call time, NOT captured in
+            #    closure cells.  Without this exception, every top-level
+            #    function that calls a runtime builtin would falsely be
+            #    treated as having that builtin as a free variable,
+            #    which would force the runtime to read the wrong value
+            #    out of a closure cell.
+            if self.in_function_body:
+                freevars = [
+                    fv for fv in self._find_free_vars_in_stmt(
+                        stmt.body, set(stmt.params) | {stmt.name}
+                    ) if fv != stmt.name
+                ]
+            else:
+                freevars = []
             # 2. Compile the body in a fresh compiler that knows which
             #    names are *free* in the enclosing function and must
             #    therefore go through the closure cell.
             comp = Compiler()
             comp.bound = set(stmt.params) | {stmt.name}
             comp.deref_names = set(freevars)
+            comp.in_function_body = True
             for s in stmt.body.statements:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
@@ -356,7 +391,12 @@ class Compiler:
                 'bytecode': comp.instructions,
                 'consts': comp.consts,
                 'freevars': list(freevars),
+                'name': stmt.name,
             }
+            # Generics: record the type-parameter list on the function
+            # object so `fn<T>(x)` can be introspected at runtime.
+            if stmt.type_params:
+                func_obj['type_params'] = stmt.type_params
             idx = self.add_const(func_obj)
             # 3. Emit closure construction at the call site.  The VM
             #    pops the function from the top of the stack first, then
@@ -436,12 +476,22 @@ class Compiler:
                         comp.compile_stmt(sub)
                     comp.emit('RETURN_VALUE')
                     func_obj = {'args': s.params, 'bytecode': comp.instructions, 'consts': comp.consts}
+                    # record type parameters on the method so generic
+                    # methods of generic classes are still introspectable
+                    if s.type_params:
+                        func_obj['type_params'] = s.type_params
                     if getattr(s, 'is_static', False):
                         # store static methods as top-level attributes on the class object
                         # they will be callable via ClassName.method(...)
                         methods.setdefault('__static__', {})[s.name] = func_obj
                     else:
-                        methods[s.name] = func_obj
+                        # H#'s `fn init(...)` is the constructor; the runtime
+                        # looks it up under the name `__init__` (matching the
+                        # Python VM's convention).  Renaming here keeps the
+                        # call to `init(x)` working for user code and makes
+                        # the constructor discoverable for `new ClassName(...)`.
+                        mname = "__init__" if s.name == "init" else s.name
+                        methods[mname] = func_obj
                 elif isinstance(s, FieldDeclaration):
                     # only support literal defaults at compile time
                     def eval_literal(node):
@@ -486,6 +536,10 @@ class Compiler:
                 class_obj['base'] = stmt.base
             if getattr(stmt, 'implements', None):
                 class_obj['implements'] = stmt.implements
+            # Generics: store the type-parameter list on the class object
+            # so `new Foo<int>(...)` and `Foo.__type_params__[0]` work.
+            if getattr(stmt, 'type_params', None):
+                class_obj['type_params'] = stmt.type_params
             # move any static methods recorded under methods['__static__'] to top-level for runtime
             if '__static__' in class_obj['methods']:
                 class_obj['__static__'] = class_obj['methods'].pop('__static__')
@@ -517,6 +571,9 @@ class Compiler:
                 merged.update(base_iface.get('methods', {}))
             merged.update(methods)
             iface_obj = {'name': stmt.name, 'methods': merged, 'bases': getattr(stmt, 'bases', []) or []}
+            # Generics: store the interface's own type-parameter list.
+            if getattr(stmt, 'type_params', None):
+                iface_obj['type_params'] = stmt.type_params
             self.interfaces[stmt.name] = iface_obj
         elif isinstance(stmt, UnionDeclaration):
             # compile union as a type descriptor constant
@@ -662,6 +719,7 @@ class Compiler:
             comp = Compiler()
             comp.bound = set(expr.params)
             comp.deref_names = set(freevars)
+            comp.in_function_body = True
             for s in expr.body.statements:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
@@ -839,48 +897,65 @@ class Compiler:
         elif isinstance(expr, CallExpression):
             # support calls like func(...), or obj.method(...)
             # func can be Identifier or MemberExpression
+            has_targs = bool(getattr(expr, 'type_args', None))
             if isinstance(expr.func, Identifier):
                 # If the callee is a free variable (captured from an enclosing
                 # scope), the env holds a closure cell (HList), not the raw
-                # function.  Emit LOAD_DEREF + CALL_VALUE so we unwrap the cell
-                # first; otherwise emit the cheap CALL_FUNCTION which does
-                # env+builtin lookup by name.
-                #
-                # IMPORTANT: push the function (or its cell) BEFORE the args,
-                # so that the VM's `callValue` (which pops the function first
-                # via `removeLast`, then the args via `popArgs`) sees the
-                # correct stack layout: [arg1, arg2, ..., argN, function].
+                # function.  Emit LOAD_DEREF (to push the cell) BEFORE the
+                # args, so the VM's `callValue` (which pops the function
+                # first via `removeLast`, then the args via `popArgs`) sees
+                # the correct stack layout: [arg1, arg2, ..., argN, function].
                 if expr.func.name in self.deref_names:
-                    self.emit('LOAD_DEREF', expr.func.name)
+                    if has_targs:
+                        self._emit_type_args_list(expr.type_args)
                     for arg in expr.args:
                         self.compile_expr(arg)
-                    self.emit('CALL_VALUE', len(expr.args))
+                    self.emit_load_name(expr.func.name)  # push the cell LAST
+                    op = 'CALL_VALUE_T' if has_targs else 'CALL_VALUE'
+                    self.emit(op, len(expr.args))
                 else:
+                    if has_targs:
+                        self._emit_type_args_list(expr.type_args)
                     for arg in expr.args:
                         self.compile_expr(arg)
-                    self.emit('CALL_FUNCTION', (expr.func.name, len(expr.args)))
+                    op = 'CALL_FUNCTION_T' if has_targs else 'CALL_FUNCTION'
+                    self.emit(op, (expr.func.name, len(expr.args)))
             elif isinstance(expr.func, MemberExpression):
                 # for method call, compile left (instance), then args, then CALL_METHOD
+                if has_targs:
+                    self._emit_type_args_list(expr.type_args)
                 self.compile_expr(expr.func.left)
                 for arg in expr.args:
                     self.compile_expr(arg)
-                self.emit('CALL_METHOD', (expr.func.name, len(expr.args)))
+                op = 'CALL_METHOD_T' if has_targs else 'CALL_METHOD'
+                self.emit(op, (expr.func.name, len(expr.args)))
             else:
-                # general callable expression: compile the function expression
-                self.compile_expr(expr.func)
+                # General callable expression (e.g. `fns[i]`, lambdas, or
+                # any other expression that yields a function value).
+                # The VM's `callValue` expects the callee to be at the
+                # TOP of the stack, so we push the value-args first and
+                # the function/cell expression LAST.
+                if has_targs:
+                    self._emit_type_args_list(expr.type_args)
                 for arg in expr.args:
                     self.compile_expr(arg)
-                self.emit('CALL_VALUE', len(expr.args))
+                self.compile_expr(expr.func)
+                op = 'CALL_VALUE_T' if has_targs else 'CALL_VALUE'
+                self.emit(op, len(expr.args))
         elif isinstance(expr, NewExpression):
             # compile class expression (usually Identifier)
             # emit LOAD_NAME for class then args then CALL_NEW
+            has_targs = bool(getattr(expr, 'type_args', None))
             if isinstance(expr.class_name, Identifier):
                 self.emit('LOAD_NAME', expr.class_name.name)
             else:
                 self.compile_expr(expr.class_name)
+            if has_targs:
+                self._emit_type_args_list(expr.type_args)
             for arg in expr.args:
                 self.compile_expr(arg)
-            self.emit('CALL_NEW', len(expr.args))
+            op = 'CALL_NEW_T' if has_targs else 'CALL_NEW'
+            self.emit(op, len(expr.args))
         elif isinstance(expr, UnionConstructExpression):
             # compile union construction: TypeName{Variant: values}
             if isinstance(expr.type_name, Identifier):

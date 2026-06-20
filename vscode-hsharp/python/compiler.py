@@ -18,15 +18,6 @@ class InstanceOfExpression(AST):
         self.type_name = type_name
 
 class Compiler:
-    def __init__(self, use_hcompiler=False):
-        self.use_hcompiler = use_hcompiler
-        self.consts = []
-        self.instructions = []
-        self._labels = []
-        self.interfaces = {}
-        self.pending_breaks = []
-        self.pending_continues = []
-
     def _backpatch_breaks(self, target, old_breaks, old_continues):
         for pos in self.pending_breaks:
             self.instructions[pos] = ('JUMP', target)
@@ -49,6 +40,17 @@ class Compiler:
     def emit(self, opname, arg=None):
         self.instructions.append((opname, arg))
 
+    def _emit_type_args_list(self, type_args):
+        """Emit a `MAKE_LIST` of the given type-argument name strings
+        followed by pushing the resulting list on the stack.  Used as a
+        prelude to the *_T call opcodes so the runtime can attach the
+        type arguments to the call frame / instance for introspection."""
+        idx = self.add_const(list(type_args))
+        # Use the same const pool encoding as ordinary H# list literals
+        # (a Python list) so the JSON-side reader sees a normal list.
+        # The runtime's HList constructor handles it.
+        self.emit('LOAD_CONST', idx)
+
     def compile(self, program):
         # program: Program AST
         for stmt in program.statements:
@@ -57,62 +59,361 @@ class Compiler:
         return {'instructions': self.instructions, 'consts': self.consts}
 
     def _find_free_vars_in_stmt(self, node, bound):
-        free = set()
-        from h_ast import Identifier, LetStatement, Function, Lambda, BlockStatement, CallExpression, MemberExpression
-        def visit(n, local_bound):
+        """Walk `node` (statement or expression AST) and return the set of
+        names that are referenced but **not** bound within `node` itself.
+
+        `bound` is the set of names that are visible from outside `node` —
+        i.e. the function's parameters plus everything in the enclosing
+        scope.  Names defined inside the function (via `let` or as
+        function parameters of an inner function) shadow the outer
+        bindings.
+
+        This is a tree walk; it does not understand control flow, so a name
+        only used after a `return` will still be reported.  That's fine for
+        our purposes — the only thing that matters is that *true* free
+        variables are reported (false positives are tolerable; false
+        negatives are not).
+        """
+        from h_ast import (Identifier, LetStatement, Function, Lambda,
+                           BlockStatement, CallExpression, MemberExpression,
+                           IndexExpression, AssignmentIdentifier,
+                           AssignmentMember, AssignmentIndex, IfStatement,
+                           WhileStatement, ForStatement, ReturnStatement,
+                           PrintStatement, TryStatement, ThrowStatement,
+                           UnaryOp, BinaryOp, TernaryOp, QuaternaryOp,
+                           StringLiteral, NumberLiteral, BooleanLiteral,
+                           NullLiteral, ArrayLiteral, DictLiteral,
+                           UnionConstructExpression, NewExpression,
+                           SuperExpression, SliceExpression, AST)
+
+        def visit(n, b, free):
+            """Walk `n` with currently-bound set `b`.  Returns the (possibly
+            augmented) bound set so that callers in a sequential block can
+            carry forward the new bindings.  Free-variable findings are
+            added to `free` (which the caller can pass in to keep them
+            isolated — important for nested lambdas)."""
+            if n is None:
+                return b
             if isinstance(n, Identifier):
-                if n.name not in local_bound:
+                if n.name not in b:
                     free.add(n.name)
-            elif isinstance(n, LetStatement):
-                visit(n.value, local_bound)
-                local_bound = set(local_bound)
-                local_bound.add(n.name)
-            elif isinstance(n, Function):
-                return
-            elif isinstance(n, Lambda):
-                b = set(local_bound)|set(n.params)
+                return b
+            if isinstance(n, LetStatement):
+                visit(n.value, b, free)
+                b = set(b)
+                b.add(n.name)
+                return b
+            if isinstance(n, Function):
+                # The function binds its name in the enclosing scope.
+                # We do NOT recurse into its body here: the inner
+                # function's own free variables are computed separately
+                # when that function is compiled.  Recursing here with
+                # only the inner function's params would discard the
+                # outer scope's bindings, so names bound in the outer
+                # scope (e.g. via `let`) would be wrongly reported as
+                # free variables of the enclosing function.
+                nb = set(b)
+                nb.add(n.name)
+                return nb
+            if isinstance(n, Lambda):
+                # Lambda introduces a fresh scope — its body sees only
+                # its own params (and what they themselves bind).  Any
+                # names it references from the enclosing scope become
+                # *its own* free variables, computed separately when the
+                # lambda is compiled.  Crucially, those names must NOT
+                # leak into the enclosing function's free-variable set
+                # (which would falsely make the enclosing function
+                # capture them and hide real free-variable errors, and
+                # would also force the enclosing function to wrap those
+                # names in closure cells needlessly).  Achieved by
+                # walking the lambda body with its own `local_free` set.
+                #
+                # EXCEPTION: the inner lambda's *own* free variables
+                # (names that come from beyond this function) DO need to
+                # be captured by this function, because creating the
+                # inner lambda's closure requires those values to be on
+                # the stack.  So names found in `local_free` that are
+                # NOT in this function's own bound set get promoted into
+                # the outer free set.
+                local_free = set()
+                inner_b = set(n.params)
                 for s in n.body.statements:
-                    visit(s, b)
-            elif isinstance(n, BlockStatement):
+                    # IMPORTANT: carry forward the returned bound set
+                    # so `let` statements inside the lambda body bind
+                    # their name for subsequent statements.
+                    inner_b = visit(s, inner_b, local_free)
+                # Promote names that the inner lambda needs but this
+                # function hasn't bound itself.
+                for fv in local_free:
+                    if fv not in b:
+                        free.add(fv)
+                return b
+            if isinstance(n, BlockStatement):
                 for s in n.statements:
-                    visit(s, local_bound)
-            elif isinstance(n, CallExpression):
-                visit(n.func, local_bound)
+                    b = visit(s, b, free)
+                return b
+            if isinstance(n, CallExpression):
+                visit(n.func, b, free)
                 for a in n.args:
-                    visit(a, local_bound)
-            elif isinstance(n, MemberExpression):
-                visit(n.left, local_bound)
-            elif isinstance(n, AST):
+                    visit(a, b, free)
+                return b
+            if isinstance(n, MemberExpression):
+                visit(n.left, b, free)
+                return b
+            if isinstance(n, IndexExpression):
+                visit(n.left, b, free)
+                visit(n.index, b, free)
+                return b
+            if isinstance(n, SliceExpression):
+                visit(n.start, b, free)
+                visit(n.end, b, free)
+                visit(n.step, b, free)
+                return b
+            if isinstance(n, AssignmentIdentifier):
+                visit(n.value, b, free)
+                return b
+            if isinstance(n, AssignmentMember):
+                visit(n.left, b, free)
+                visit(n.value, b, free)
+                return b
+            if isinstance(n, AssignmentIndex):
+                visit(n.array, b, free)
+                visit(n.index, b, free)
+                visit(n.value, b, free)
+                return b
+            if isinstance(n, IfStatement):
+                visit(n.condition, b, free)
+                if n.consequence is not None:
+                    bt = b
+                    for s in n.consequence.statements:
+                        bt = visit(s, bt, free)
+                if n.alternative is not None:
+                    if isinstance(n.alternative, IfStatement):
+                        # nested if: use the carried-forward bound set
+                        # from the consequence so `let` bindings in the
+                        # consequence are visible in this nested if
+                        # (this is the standard scoping rule).
+                        visit(n.alternative, bt, free)
+                    else:
+                        bt2 = b
+                        for s in n.alternative.statements:
+                            bt2 = visit(s, bt2, free)
+                # The names bound inside the consequence or alternative
+                # are NOT visible in the function's outer scope (they
+                # only exist in their respective blocks), so we keep
+                # returning the original `b`.  However, the inner visits
+                # may have used a local copy of `b` to track let-bindings
+                # across statements; that local tracking happens in the
+                # visitors themselves (visit is recursive).
+                return b
+            if isinstance(n, WhileStatement):
+                visit(n.condition, b, free)
+                for s in n.body.statements:
+                    b = visit(s, b, free)
+                return b
+            if isinstance(n, ForStatement):
+                nb = set(b)
+                nb.add(n.var1)
+                if n.var2 is not None: nb.add(n.var2)
+                visit(n.iterable, b, free)
+                for s in n.body.statements:
+                    nb = visit(s, nb, free)
+                return b
+            if isinstance(n, ReturnStatement):
+                visit(n.expr, b, free)
+                return b
+            if isinstance(n, PrintStatement):
+                visit(n.expr, b, free)
+                return b
+            if isinstance(n, TryStatement):
+                for s in n.body.statements:
+                    b = visit(s, b, free)
+                nb = set(b)
+                nb.add(n.exception_name)
+                visit(n.handler, nb, free)
+                return b
+            if isinstance(n, ThrowStatement):
+                visit(n.expr, b, free)
+                return b
+            if isinstance(n, UnaryOp):
+                visit(n.operand, b, free)
+                return b
+            if isinstance(n, BinaryOp):
+                visit(n.left, b, free)
+                visit(n.right, b, free)
+                return b
+            if isinstance(n, TernaryOp):
+                visit(n.condition, b, free)
+                visit(n.true_expr, b, free)
+                visit(n.false_expr, b, free)
+                return b
+            if isinstance(n, QuaternaryOp):
+                visit(n.cond1, b, free)
+                visit(n.expr1, b, free)
+                visit(n.cond2, b, free)
+                visit(n.expr2, b, free)
+                return b
+            if isinstance(n, UnionConstructExpression):
+                if hasattr(n, 'type_name'):
+                    visit(n.type_name, b, free)
+                for v in n.values:
+                    visit(v, b, free)
+                return b
+            if isinstance(n, NewExpression):
+                visit(n.class_name, b, free)
+                for a in n.args:
+                    visit(a, b, free)
+                return b
+            if isinstance(n, SuperExpression):
+                for a in n.args:
+                    visit(a, b, free)
+                return b
+            if isinstance(n, (StringLiteral, NumberLiteral, BooleanLiteral, NullLiteral)):
+                return b
+            if isinstance(n, ArrayLiteral):
+                for e in n.elements:
+                    visit(e, b, free)
+                return b
+            if isinstance(n, DictLiteral):
+                for k, v in n.pairs:
+                    visit(k, b, free)
+                    visit(v, b, free)
+                return b
+            if isinstance(n, AST):
                 for attr, v in vars(n).items():
                     if isinstance(v, list):
                         for item in v:
                             if isinstance(item, AST):
-                                visit(item, local_bound)
+                                visit(item, b, free)
                     elif isinstance(v, AST):
-                        visit(v, local_bound)
-        visit(node, set(bound))
+                        visit(v, b, free)
+                return b
+            return b
+
+        free = set()
+        visit(node, set(bound), free)
         return list(free)
+
+    def __init__(self, use_hcompiler=False):
+        self.use_hcompiler = use_hcompiler
+        self.consts = []
+        self.instructions = []
+        self._labels = []
+        self.interfaces = {}
+        self.pending_breaks = []
+        self.pending_continues = []
+        # Names that are free variables in the *enclosing* function — if we
+        # see LOAD/STORE of one of these inside this compilation unit, we
+        # must emit LOAD_DEREF/STORE_DEREF instead so the value is read out
+        # of (and written back into) the closure cell rather than the local
+        # frame's env.
+        self.deref_names = set()
+        # Names that are bound in this compilation unit (parameters + lets).
+        # Used to decide what is a free variable when compiling a nested
+        # function.  Empty for the module top level.
+        self.bound = set()
+        # True when compiling a function body (vs. the module top level).
+        # Used to decide whether a name referenced inside a function but
+        # not bound in the function should be treated as a free variable
+        # (CALL_VALUE / LOAD_DEREF) or just looked up by name at call time
+        # (CALL_FUNCTION).  For top-level functions, every reference other
+        # than the function's own params/name is a module-level name
+        # (either a user-defined let/fn at the module scope, or a runtime
+        # HNative builtin) and should be looked up by name.
+        self.in_function_body = False
+
+    # -- name access helpers ---------------------------------------------
+    def emit_load_name(self, name):
+        import os
+        if os.environ.get('HFVDEBUG') and name in ('f', 'g', 'a', 'b'):
+            print(f"  emit_load_name({name}) deref_names={self.deref_names} -> {'LOAD_DEREF' if name in self.deref_names else 'LOAD_NAME'}", flush=True)
+        if name in self.deref_names:
+            self.emit('LOAD_DEREF', name)
+        else:
+            self.emit('LOAD_NAME', name)
+
+    def emit_store_name(self, name):
+        if name in self.deref_names:
+            self.emit('STORE_DEREF', name)
+        else:
+            self.emit('STORE_NAME', name)
 
     def compile_stmt(self, stmt):
         from h_ast import ClassDeclaration, AssignmentMember, MemberExpression, NewExpression, UnionDeclaration, UnionConstructExpression
         if isinstance(stmt, LetStatement):
             self.compile_expr(stmt.value)
-            self.emit('STORE_NAME', stmt.name)
+            self.emit_store_name(stmt.name)
+            self.bound.add(stmt.name)
         elif isinstance(stmt, PrintStatement):
             self.compile_expr(stmt.expr)
             self.emit('PRINT')
         elif isinstance(stmt, Function):
-            # compile function body into its own bytecode object
+            # 1. Compute free variables used inside this function.  The
+            #    only things that count as "bound" inside the function are
+            #    its own parameters and its own `let`s — anything the
+            #    function uses from the enclosing scope is a free var.
+            #    The function's *own* name is implicitly bound in the
+            #    enclosing scope by this declaration (this is what makes
+            #    `fn fact(n) { ... fact(n-1) ... }` recursive work
+            #    without `fact` being treated as a free variable of
+            #    itself).
+            #
+            #    EXCEPTION: for top-level functions (the enclosing scope
+            #    is the module), we skip the free-variable analysis
+            #    entirely.  Module-level names (lets/functions defined
+            #    in the module) and runtime HNative builtins must both
+            #    be looked up by name at call time, NOT captured in
+            #    closure cells.  Without this exception, every top-level
+            #    function that calls a runtime builtin would falsely be
+            #    treated as having that builtin as a free variable,
+            #    which would force the runtime to read the wrong value
+            #    out of a closure cell.
+            if self.in_function_body:
+                freevars = [
+                    fv for fv in self._find_free_vars_in_stmt(
+                        stmt.body, set(stmt.params) | {stmt.name}
+                    ) if fv != stmt.name
+                ]
+            else:
+                freevars = []
+            # 2. Compile the body in a fresh compiler that knows which
+            #    names are *free* in the enclosing function and must
+            #    therefore go through the closure cell.
             comp = Compiler()
+            comp.bound = set(stmt.params) | {stmt.name}
+            comp.deref_names = set(freevars)
+            comp.in_function_body = True
             for s in stmt.body.statements:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
-            func_obj = {'args': stmt.params, 'bytecode': comp.instructions, 'consts': comp.consts}
+            func_obj = {
+                'args': stmt.params,
+                'bytecode': comp.instructions,
+                'consts': comp.consts,
+                'freevars': list(freevars),
+                'name': stmt.name,
+            }
+            # Generics: record the type-parameter list on the function
+            # object so `fn<T>(x)` can be introspected at runtime.
+            if stmt.type_params:
+                func_obj['type_params'] = stmt.type_params
             idx = self.add_const(func_obj)
+            # 3. Emit closure construction at the call site.  The VM
+            #    pops the function from the top of the stack first, then
+            #    pops the freevars below, so the function must be pushed
+            #    last (i.e. emitted after the freevars).
+            for fv in freevars:
+                self.emit_load_name(fv)
             self.emit('LOAD_CONST', idx)
-            self.emit('STORE_NAME', stmt.name)
+            if freevars:
+                self.emit('MAKE_CLOSURE', len(freevars))
+            self.emit_store_name(stmt.name)
         elif isinstance(stmt, ReturnStatement):
-            self.compile_expr(stmt.expr)
+            if stmt.expr is not None:
+                self.compile_expr(stmt.expr)
+            else:
+                # bare `return;` — push null so RETURN_VALUE has a value
+                self.emit('LOAD_CONST', self.add_const(None))
             self.emit('RETURN_VALUE')
         elif isinstance(stmt, WhileStatement):
             start = len(self.instructions)
@@ -175,12 +476,22 @@ class Compiler:
                         comp.compile_stmt(sub)
                     comp.emit('RETURN_VALUE')
                     func_obj = {'args': s.params, 'bytecode': comp.instructions, 'consts': comp.consts}
+                    # record type parameters on the method so generic
+                    # methods of generic classes are still introspectable
+                    if s.type_params:
+                        func_obj['type_params'] = s.type_params
                     if getattr(s, 'is_static', False):
                         # store static methods as top-level attributes on the class object
                         # they will be callable via ClassName.method(...)
                         methods.setdefault('__static__', {})[s.name] = func_obj
                     else:
-                        methods[s.name] = func_obj
+                        # H#'s `fn init(...)` is the constructor; the runtime
+                        # looks it up under the name `__init__` (matching the
+                        # Python VM's convention).  Renaming here keeps the
+                        # call to `init(x)` working for user code and makes
+                        # the constructor discoverable for `new ClassName(...)`.
+                        mname = "__init__" if s.name == "init" else s.name
+                        methods[mname] = func_obj
                 elif isinstance(s, FieldDeclaration):
                     # only support literal defaults at compile time
                     def eval_literal(node):
@@ -225,6 +536,10 @@ class Compiler:
                 class_obj['base'] = stmt.base
             if getattr(stmt, 'implements', None):
                 class_obj['implements'] = stmt.implements
+            # Generics: store the type-parameter list on the class object
+            # so `new Foo<int>(...)` and `Foo.__type_params__[0]` work.
+            if getattr(stmt, 'type_params', None):
+                class_obj['type_params'] = stmt.type_params
             # move any static methods recorded under methods['__static__'] to top-level for runtime
             if '__static__' in class_obj['methods']:
                 class_obj['__static__'] = class_obj['methods'].pop('__static__')
@@ -256,6 +571,9 @@ class Compiler:
                 merged.update(base_iface.get('methods', {}))
             merged.update(methods)
             iface_obj = {'name': stmt.name, 'methods': merged, 'bases': getattr(stmt, 'bases', []) or []}
+            # Generics: store the interface's own type-parameter list.
+            if getattr(stmt, 'type_params', None):
+                iface_obj['type_params'] = stmt.type_params
             self.interfaces[stmt.name] = iface_obj
         elif isinstance(stmt, UnionDeclaration):
             # compile union as a type descriptor constant
@@ -303,7 +621,7 @@ class Compiler:
             self.emit('STORE_ATTR', stmt.name)
         elif isinstance(stmt, AssignmentIdentifier):
             self.compile_expr(stmt.value)
-            self.emit('STORE_NAME', stmt.name)
+            self.emit_store_name(stmt.name)
         elif isinstance(stmt, ForStatement):
             iter_idx = self.add_const(('__ITER__', stmt.var1, stmt.var2))
             self.compile_expr(stmt.iterable)
@@ -391,21 +709,32 @@ class Compiler:
             idx = self.add_const(expr.value)
             self.emit('LOAD_CONST', idx)
         elif isinstance(expr, Identifier):
-            self.emit('LOAD_NAME', expr.name)
+            self.emit_load_name(expr.name)
         elif isinstance(expr, NullLiteral):
             idx = self.add_const(None)
             self.emit('LOAD_CONST', idx)
         elif isinstance(expr, Lambda):
-            # compile lambda into a function constant (no capture support in this MVP)
+            # compile lambda into a closure (function + captured free vars)
+            freevars = self._find_free_vars_in_stmt(expr.body, set(expr.params))
             comp = Compiler()
+            comp.bound = set(expr.params)
+            comp.deref_names = set(freevars)
+            comp.in_function_body = True
             for s in expr.body.statements:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
-            # capture free vars from current compilation scope
-            freevars = self._find_free_vars_in_stmt(expr, expr.params)
-            func_obj = {'args': expr.params, 'bytecode': comp.instructions, 'consts': comp.consts, 'freevars': freevars}
+            func_obj = {
+                'args': expr.params,
+                'bytecode': comp.instructions,
+                'consts': comp.consts,
+                'freevars': list(freevars),
+            }
             idx = self.add_const(func_obj)
+            for fv in freevars:
+                self.emit_load_name(fv)
             self.emit('LOAD_CONST', idx)
+            if freevars:
+                self.emit('MAKE_CLOSURE', len(freevars))
         elif isinstance(expr, ArrayLiteral):
             for e in expr.elements:
                 self.compile_expr(e)
@@ -416,9 +745,29 @@ class Compiler:
                 self.compile_expr(v)
             self.emit('MAKE_DICT', len(expr.pairs))
         elif isinstance(expr, IndexExpression):
-            self.compile_expr(expr.left)
-            self.compile_expr(expr.index)
-            self.emit('GET_ITEM')
+            from h_ast import SliceExpression
+            if isinstance(expr.index, SliceExpression):
+                # compile as a single SLICE opcode:
+                #   push collection, start, end, step
+                #   SLICE
+                self.compile_expr(expr.left)
+                if expr.index.start is not None:
+                    self.compile_expr(expr.index.start)
+                else:
+                    self.emit('LOAD_CONST', self.add_const(None))
+                if expr.index.end is not None:
+                    self.compile_expr(expr.index.end)
+                else:
+                    self.emit('LOAD_CONST', self.add_const(None))
+                if expr.index.step is not None:
+                    self.compile_expr(expr.index.step)
+                else:
+                    self.emit('LOAD_CONST', self.add_const(None))
+                self.emit('SLICE')
+            else:
+                self.compile_expr(expr.left)
+                self.compile_expr(expr.index)
+                self.emit('GET_ITEM')
         elif isinstance(expr, MemberExpression):
             # push attribute value: compile left (instance) then load attribute
             self.compile_expr(expr.left)
@@ -548,32 +897,65 @@ class Compiler:
         elif isinstance(expr, CallExpression):
             # support calls like func(...), or obj.method(...)
             # func can be Identifier or MemberExpression
+            has_targs = bool(getattr(expr, 'type_args', None))
             if isinstance(expr.func, Identifier):
-                for arg in expr.args:
-                    self.compile_expr(arg)
-                self.emit('CALL_FUNCTION', (expr.func.name, len(expr.args)))
+                # If the callee is a free variable (captured from an enclosing
+                # scope), the env holds a closure cell (HList), not the raw
+                # function.  Emit LOAD_DEREF (to push the cell) BEFORE the
+                # args, so the VM's `callValue` (which pops the function
+                # first via `removeLast`, then the args via `popArgs`) sees
+                # the correct stack layout: [arg1, arg2, ..., argN, function].
+                if expr.func.name in self.deref_names:
+                    if has_targs:
+                        self._emit_type_args_list(expr.type_args)
+                    for arg in expr.args:
+                        self.compile_expr(arg)
+                    self.emit_load_name(expr.func.name)  # push the cell LAST
+                    op = 'CALL_VALUE_T' if has_targs else 'CALL_VALUE'
+                    self.emit(op, len(expr.args))
+                else:
+                    if has_targs:
+                        self._emit_type_args_list(expr.type_args)
+                    for arg in expr.args:
+                        self.compile_expr(arg)
+                    op = 'CALL_FUNCTION_T' if has_targs else 'CALL_FUNCTION'
+                    self.emit(op, (expr.func.name, len(expr.args)))
             elif isinstance(expr.func, MemberExpression):
                 # for method call, compile left (instance), then args, then CALL_METHOD
+                if has_targs:
+                    self._emit_type_args_list(expr.type_args)
                 self.compile_expr(expr.func.left)
                 for arg in expr.args:
                     self.compile_expr(arg)
-                self.emit('CALL_METHOD', (expr.func.name, len(expr.args)))
+                op = 'CALL_METHOD_T' if has_targs else 'CALL_METHOD'
+                self.emit(op, (expr.func.name, len(expr.args)))
             else:
-                # general callable expression: compile the function expression
-                self.compile_expr(expr.func)
+                # General callable expression (e.g. `fns[i]`, lambdas, or
+                # any other expression that yields a function value).
+                # The VM's `callValue` expects the callee to be at the
+                # TOP of the stack, so we push the value-args first and
+                # the function/cell expression LAST.
+                if has_targs:
+                    self._emit_type_args_list(expr.type_args)
                 for arg in expr.args:
                     self.compile_expr(arg)
-                self.emit('CALL_VALUE', len(expr.args))
+                self.compile_expr(expr.func)
+                op = 'CALL_VALUE_T' if has_targs else 'CALL_VALUE'
+                self.emit(op, len(expr.args))
         elif isinstance(expr, NewExpression):
             # compile class expression (usually Identifier)
             # emit LOAD_NAME for class then args then CALL_NEW
+            has_targs = bool(getattr(expr, 'type_args', None))
             if isinstance(expr.class_name, Identifier):
                 self.emit('LOAD_NAME', expr.class_name.name)
             else:
                 self.compile_expr(expr.class_name)
+            if has_targs:
+                self._emit_type_args_list(expr.type_args)
             for arg in expr.args:
                 self.compile_expr(arg)
-            self.emit('CALL_NEW', len(expr.args))
+            op = 'CALL_NEW_T' if has_targs else 'CALL_NEW'
+            self.emit(op, len(expr.args))
         elif isinstance(expr, UnionConstructExpression):
             # compile union construction: TypeName{Variant: values}
             if isinstance(expr.type_name, Identifier):

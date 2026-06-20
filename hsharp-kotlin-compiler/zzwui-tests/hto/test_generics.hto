@@ -1,0 +1,130 @@
+# test_generics.hto - Tests for H# generics/templates
+# ===============================================
+# Covers:
+#   1. Generic class with single type param
+#   2. Generic class with multiple type params
+#   3. Type-arg introspection on instance
+#   4. Generic function with type params
+#   5. Type params show up on the class/function const
+#   6. Backward compat: classes/functions without type params still work
+#   7. Comparison operator `<` is NOT confused with type-arg list
+
+fn check(name, cond) {
+    if (cond) {
+        print("OK " + name);
+    } else {
+        print("FAIL " + name);
+    }
+}
+
+# ─── 1. Generic class, single param ─────────────────────────────────────
+class Box<T> {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+    fn get() { return self.value; }
+    fn describe() {
+        return "Box<" + self.__type_args__[0] + ">(" + str(self.value) + ")";
+    }
+}
+
+let ib = new Box<int>(42);
+let sb = new Box<string>("hi");
+check("1/int_value",       ib.get() == 42);
+check("1/str_value",       sb.get() == "hi");
+check("1/int_describe",    ib.describe() == "Box<int>(42)");
+check("1/str_describe",    sb.describe() == "Box<string>(hi)");
+
+# ─── 2. Generic class with multiple type params ─────────────────────────
+class Pair<K, V> {
+    let k = nullptr;
+    let v = nullptr;
+    fn init(key, val) { self.k = key; self.v = val; }
+    fn first() { return self.k; }
+    fn second() { return self.v; }
+}
+
+let p = new Pair<string, int>("age", 30);
+check("2/pair_first",      p.first() == "age");
+check("2/pair_second",     p.second() == 30);
+check("2/pair_typeargs",   p.__type_args__[0] == "string" and p.__type_args__[1] == "int");
+
+# ─── 3. Generic function ────────────────────────────────────────────────
+fn identity<T>(x) {
+    return x;
+}
+
+check("3/identity_int",    identity<int>(100) == 100);
+check("3/identity_str",    identity<string>("hello") == "hello");
+check("3/identity_bool",   identity<bool>(true) == true);
+
+fn first_of<T>(arr) {
+    return arr[0];
+}
+
+check("3/first_of",        first_of<int>([10, 20, 30]) == 10);
+
+# ─── 4. Backward compat: non-generic class still works ───────────────────
+class Point {
+    let x = 0;
+    let y = 0;
+    fn init(px, py) { self.x = px; self.y = py; }
+    fn sum() { return self.x + self.y; }
+}
+
+let pt = new Point(3, 4);
+check("4/point_sum",       pt.sum() == 7);
+check("4/no_typeargs",     pt.__type_args__ == nullptr);
+
+# ─── 5. Type params are introspectable on the class const ───────────────
+check("5/box_typeparams",  len(Box.__type_params__) == 1 and Box.__type_params__[0] == "T");
+check("5/pair_typeparams", len(Pair.__type_params__) == 2 and Pair.__type_params__[1] == "V");
+
+# ─── 6. Class without type params has empty list ────────────────────────
+check("6/point_no_tp",     len(Point.__type_params__) == 0);
+
+# ─── 7. Comparison `<` is not confused with type args ───────────────────
+let a = 5;
+let b = 10;
+let c = a < b;
+let d = a > b;
+check("7/lt_op",           c == true);
+check("7/gt_op",           d == false);
+let e = 0;
+if (a < b) { e = 1; } else { e = 2; }
+check("7/if_compare",      e == 1);
+
+# ─── 8. Generic class with method using __type_args__ ───────────────────
+class Wrapper<T> {
+    let val = nullptr;
+    fn init(v) { self.val = v; }
+    fn type_name() {
+        return "Wrapper<" + self.__type_args__[0] + ">";
+    }
+    fn first_arg() {
+        return self.__type_args__[0];
+    }
+}
+
+let w = new Wrapper<float>(3.14);
+check("8/type_name",       w.type_name() == "Wrapper<float>");
+check("8/first_arg",       w.first_arg() == "float");
+
+# ─── 9. Three type parameters ──────────────────────────────────────────
+class Triple<A, B, C> {
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    fn init(a, b, c) { self.a = a; self.b = b; self.c = c; }
+    fn sum() { return self.a + self.b + self.c; }
+}
+
+let tri = new Triple<int, int, int>(1, 2, 3);
+check("9/triple_sum",      tri.sum() == 6);
+check("9/triple_args",     tri.__type_args__[2] == "int");
+
+# ─── 10. Non-generic function call still works ──────────────────────────
+fn add(x, y) { return x + y; }
+check("10/regular_fn",     add(2, 3) == 5);
+
+print("---");
+print("GENERICS TEST DONE");

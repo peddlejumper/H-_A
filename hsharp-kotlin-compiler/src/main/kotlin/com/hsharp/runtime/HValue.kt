@@ -1,4 +1,21 @@
-
+/*
+ * H# Runtime Value System
+ * -----------------------
+ * Dynamic, boxed value type that mirrors the JSON shape of values in an .hbc file.
+ * Every cell of the VM stack / env / const-pool is one of these.
+ *
+ * The .hbc file format (see hsvm.c) serialises values as JSON:
+ *   - null                  -> HNull
+ *   - true/false            -> HBool
+ *   - integer / real number -> HNumber (always double precision, like Python VM)
+ *   - "..."                 -> HString
+ *   - [v0, v1, ...]         -> HList
+ *   - { k: v, ... }         -> HDict
+ *   - {"name":.., "args":[..], "bytecode":[[op,arg]...], "consts":[..], ...} -> HFunction
+ *   - {"name":.., "methods":.., "fields":.., "private":[..], "base":.., ...}    -> HClass
+ *   - {"__type__":"union", "name":.., "variants":[...]}                         -> HUnion
+ *   - {"__class__":..., ...}                                                    -> HInstance
+ */
 package com.hsharp.runtime
 
 /** Discriminator used for pattern matching and toJson(). */
@@ -102,6 +119,11 @@ data class HFunction(
     val consts: List<HValue>,
     val freevars: List<String> = emptyList(),
     val isCoro: Boolean = false,
+    // Generic / template type-parameter names declared on this function
+    // (e.g. `fn identity<T>(x)` → typeParams = ["T"]).  Empty list for
+    // non-generic functions.  Used for runtime introspection; H# itself
+    // is dynamically typed and does not perform static type checks.
+    val typeParams: List<String> = emptyList(),
     // Mutable closure-cell map: freevar name -> HList cell.  Each HList
     // holds a single HValue so that STORE_DEREF can mutate it in place and
     // the change is visible to all functions sharing the same closure.
@@ -124,6 +146,7 @@ data class HFunction(
  * Shape: {'name': str, 'methods': {name: HFunction, ...},
  *         'fields': {name: HValue, ...}, 'private': [str, ...],
  *         'base': str?, 'implements': [str, ...]?,
+ *         'type_params': [str, ...]?,
  *         '__static__': {name: HFunction, ...}?}
  */
 data class HClass(
@@ -133,11 +156,20 @@ data class HClass(
     val privateFields: MutableList<String> = mutableListOf(),
     val base: String? = null,
     val implements: MutableList<String> = mutableListOf(),
-    val staticMethods: MutableMap<String, HFunction> = mutableMapOf()
+    val staticMethods: MutableMap<String, HFunction> = mutableMapOf(),
+    // Generic / template type-parameter names declared on this class
+    // (e.g. `class Box<T>` → typeParams = ["T"]).  Empty list for
+    // non-generic classes.
+    val typeParams: List<String> = emptyList()
 ) : HValue {
     override val type = HType.CLASS
     override fun toKotlinLiteral() = "/* HClass ${name} */ HNull"
-    override fun toDisplayString() = "<class ${name}>"
+    override fun toDisplayString(): String {
+        if (typeParams.isNotEmpty()) {
+            return "<class ${name}<${typeParams.joinToString(", ")}>>"
+        }
+        return "<class ${name}>"
+    }
     override fun toJson(): Map<String, Any?> = mapOf("name" to name, "kind" to "class")
     override fun toString() = toDisplayString()
 }

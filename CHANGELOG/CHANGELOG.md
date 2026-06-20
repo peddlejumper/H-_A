@@ -41,6 +41,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`H#_v0.4.1_Package/`** — single-directory distribution of every useful
   artifact of v0.4.1 (Kotlin compiler source + jars, zzwui, bootstrap, VS Code
   extension, IDE, launcher, website, docs, CHANGELOG).
+- **Generics / Templates support (`<T>` syntax)** — class and function
+  type-parameter declarations (`class Box<T>`, `class Pair<K, V>`,
+  `fn identity<T>(x)`) and explicit type-argument call sites
+  (`new Box<int>(42)`, `identity<int>(42)`, `Pair<string, int>("k", 7)`).
+  - **AST nodes** — `type_params` field on `ClassDef` and `FunctionDef`,
+    `type_args` field on `Call`, `New`, `MethodCall`, and `CallValue` AST
+    nodes in `h_ast.py`.
+  - **Parser** — new `_parse_type_params()` in `parser.py`; uses lexer
+    `save_state`/`restore_state` plus a `(` lookahead so that `a < b` is
+    never mistaken for a type-parameter list.  The `<T>` syntax is
+    recognized on class declarations, top-level functions, and
+    non-deref function expressions.
+  - **Lexer** — `save_state()` and `restore_state()` added so the parser
+    can speculatively read a `<` and roll back.
+  - **Python compiler (`compiler.py`)** — emits `type_params` (string list)
+    on class/function consts, attaches `type_args` to call-site consts,
+    and introduces four new opcodes:
+      * `CALL_FUNCTION_T` — name lookup with type-arg list
+      * `CALL_VALUE_T`    — value-arg call with type-arg list
+      * `CALL_METHOD_T`   — method call with type-arg list
+      * `CALL_NEW_T`      — constructor call with type-arg list
+    The stack layout for the `*_T` opcodes is
+    `[arg1, ..., argN, type_args_list, callable]`, with the `type_args`
+    list just above the value args and the callable (function / class /
+    self) on top, matching how the Kotlin runtime pops them.
+    `fn init` is now renamed to `__init__` when stored in the class method
+    table so that the Kotlin VM's existing `methods["__init__"]` lookup
+    continues to work.
+  - **Kotlin runtime** — `HClass` and `HFunction` gained a `typeParams:
+    List<String>` field; `HbcReader` parses the new `type_params` key.
+    `HVM` now has `callFunction(name, argc, hasTypeArgs)` /
+    `callValue(argc, hasTypeArgs)` / `callMethod(name, argc, hasTypeArgs)` /
+    `callNew(argc, hasTypeArgs)` overloads that pop the type-arg list
+    (as an `HList`) immediately above the value args, then pass it as
+    `typeArgs` to `invokeCallable`.  When `callNew` is given explicit
+    type arguments, the created `HInstance` receives a `__type_args__`
+    field so the body can introspect them; the `__type_args__` lookup
+    on a non-generic instance yields `HNull` (Python-like).  Reading
+    `Cls.__type_params__` on a class returns the type-parameter name list.
+  - **Test suite** — new `test_generics.hto` covers `class Box<T>`,
+    `class Pair<K, V>`, `class Triple<A, B, C>`, `class Wrapper<T>`,
+    `class Point` (non-generic), `fn identity<T>(x)`, `fn first_of<T>(arr)`;
+    verifies `__type_args__` / `__type_params__` introspection; verifies
+    that `a < b` comparison is not parsed as type-argument syntax; and
+    verifies the rename of `init` → `__init__`.  All **18/18** zzwui
+    test files pass; **687/687** individual `check()` cases pass.
+  - **Compiler fix for `fns[i](v)`-style value calls** — the generic
+    callable-expression path now pushes value args first and the
+    function/cell expression last, so the Kotlin VM's `callValue`
+    (which pops the callable from the top of the stack) sees them in
+    the right order.  This was masked before because most call sites
+    were simple `name(...)` forms that go through `CALL_FUNCTION`.
+  - **`in_function_body` flag in `compiler.py`** — distinguishes
+    compiling a function body from compiling the module top level.
+    Used to decide whether a name referenced inside a function but
+    not bound locally should be treated as a free variable
+    (`LOAD_DEREF` + `CALL_VALUE`) or looked up by name at call time
+    (`CALL_FUNCTION`).  Without this, top-level functions in
+    `zzw_native.hto` were mis-classifying `gui_set_clip` etc. as
+    free variables and failing to find them.
 
 ### Changed
 

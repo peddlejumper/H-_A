@@ -144,6 +144,14 @@ class Lexer:
         self.current_char = saved_char
         return token
 
+    def save_state(self):
+        """Capture the lexer state so the caller can restore it on error.
+        Returns a tuple that can be passed back to restore_state()."""
+        return (self.pos, self.line, self.col, self.current_char)
+
+    def restore_state(self, state):
+        self.pos, self.line, self.col, self.current_char = state
+
     def get_next_token(self):
         while self.current_char is not None:
             if self.current_char.isspace() or self.current_char == '#':
