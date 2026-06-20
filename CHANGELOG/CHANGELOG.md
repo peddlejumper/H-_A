@@ -333,6 +333,109 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All **24/24** zzwui test files pass; **752/752**
     individual `check()` cases pass; total wall time
     ≈12.4 s.
+- **Pattern matching (`match expr { pat => body, ... }`)** — first-class
+  pattern matching expression.  Compiles to a `MATCH_CASE` byte
+  sequence that walks 7 pattern kinds against the scrutinee, binds
+  payload variables into the local frame, and picks the matching
+  arm's body.  If no arm matches, the whole expression raises
+  `"non-exhaustive match"` — by design, users add a `_` arm to
+  make the match total.
+  - **7 pattern kinds**:
+    - `_` (wildcard — matches anything, no binding)
+    - `name` (binding — matches anything, binds to the name)
+    - `42 | "x" | true | false | null` (literal — structural equality)
+    - `is T as x` (type — matches a value of H# type `T`, optionally
+      binding it to `x`.  The runtime recognises the primitive
+      type names `int`, `str`, `bool`, `null`, `list`, `dict`,
+      `channel`, `future` and any user-defined class name.)
+    - `Variant(x, y, …)` (union variant — matches a `Union{…}`
+      instance with the named variant and binds the named payload
+      fields)
+    - `chan send(_)` / `chan send(v)` (channel can-send — matches
+      a non-closed channel with room for another send; the
+      binding is set to `true` if you ask for it)
+    - `chan recv(v)` (channel can-recv — matches a channel with a
+      queued value, **without** consuming it; binds `v` to the
+      head value via a non-destructive peek)
+    - `chan close` (channel is closed — matches a channel whose
+      `closed` flag is set)
+  - **Guards** — `pattern if cond => body` falls through to the
+    next arm if `cond` is false.  Implemented as a separate
+    `JUMP_IF_FALSE` between the pattern match and the body.
+  - **Soft keyword** — `match` is only a keyword when it is
+    immediately followed by an expression.  An `IDENTIFIER
+    "match"` token in expression position (e.g. on the right
+    side of a `let` or as a function argument) still parses as a
+    normal identifier, so `let match = 7` is a valid binding.
+  - **Lexer / tokens** — added `MATCH` and `FAT_ARROW` (`=>`).
+    The ternary ambiguity (`cond ? a : b` vs. `cond? a:b` aka
+    `cond?:`) is resolved by recognising `?:` as a single
+    `QMARK_COLON` token.
+  - **Compiler (`compiler.py`)** — `MatchExpression` lowers to
+    `DUP / LOAD_CONST <pattern> / MATCH_CASE / JUMP_IF_FALSE
+    <next-arm>` per arm, then a default `RAISE "non-exhaustive
+    match"`, then a `SWAP / POP` to dispose of the leftover
+    scrutinee at the end.  The pattern dict is a stable contract
+    (`{"kind": ..., ...}`) the Kotlin VM interprets.
+  - **Compiler fix — bool-aware const-pool dedup** — Python's
+    `True == 1` would otherwise cause `add_const` to merge
+    `{kind: literal, literal: True}` with `{kind: literal,
+    literal: 1}`, breaking literal-`true` arms.  Added
+    `_bool_aware_eq()` and routed `add_const` through it.
+  - **Runtime (`HVM.kt`)** — new `matchPattern()` helper does
+    the 7-way dispatch.  `MATCH_CASE` pops the pattern
+    dictionary off the stack, pops the duplicated scrutinee,
+    and pushes a bool.  `SWAP` opcode added so the post-match
+    `body / leftover-scrutinee → body / discarded` rearrangement
+    compiles cleanly.  `HChannel.peek()` added so `chan recv(v)`
+    can bind the head value without consuming it.
+  - **Parser (`parser.py`)** — `parse_pattern` accepts the
+    `NULL` / `BOOL` token kinds as a `is T` type-name (so
+    `is null` and `is bool` work).  `match_expression` accepts
+    either the reserved `MATCH` token or the soft-keyword
+    `IDENTIFIER "match"`.
+  - **Test coverage** — new `19_match_propagation.hto` (**37
+    cases**) exercises every pattern kind, every primitive
+    type binding, chan `send` / `recv` / `close` patterns
+    (including unbuffered, bounded-full, and closed states),
+    variant payload binding, fall-through to wildcard, guards
+    on bare-name and variant patterns, and non-exhaustive
+    raising with the correct error message.  All **25/25**
+    zzwui test files pass; **789/789** individual `check()`
+    cases pass; total wall time ≈12 s.
+- **Error-propagation postfix (`expr?`)** — a Rust-style `?`
+  operator that unwraps an exception to its payload value.  At
+  the call site, `expr?` is semantically equivalent to
+  `try { expr } catch (e) { e }` — the postfix evaluates to the
+  expression's normal value, or to the exception payload if
+  `expr` raised.  Callers can either use the value as a normal
+  H# value or chain another `?` over it.
+  - **Tokens / parser** — `?` continues to be a normal token,
+    but `_additive_unit()` in `parser.py` peels off zero or
+    more `?` postfixes after a factor, so the postfix binds
+    tighter than `+`/`-` (so `a + b?` parses as `a + (b?)`,
+    not `(a + b)?`).
+  - **AST** — new `PropagateExpression(expr)` node in `h_ast.py`.
+  - **Compiler** — `PropagateExpression` lowers to
+    `SETUP_PROPAGATE <catch> / compile expr / POP_PROPAGATE /
+    JUMP <end> / <catch>: <end>:`.  The catch block just falls
+    through; the exception payload is left on the stack as the
+    postfix's value.
+  - **Runtime (`HVM.kt`)** — three new opcodes:
+    - `SETUP_PROPAGATE <catch>` — pushes a `__propagate__`
+      handler (target PC + current stack size) on the frame's
+      handler chain.
+    - `POP_PROPAGATE` — pops the last `__propagate__` handler.
+    - `dispatchException` — when raising, walks the handler
+      chain; `__propagate__` handlers capture the exception,
+      truncate the stack to the saved size (discarding the
+      partial expression's values), and jump to the catch
+      target, leaving the payload on the stack.
+  - **Test coverage** — `?` on a value that returns normally
+    (pass-through), on a value that raises (yields the payload
+    as a value), chained through nested functions, on a
+    non-raising arithmetic expression.  See
+    `19_match_propagation.hto` sections B / C / D.
 
 ### Changed
 

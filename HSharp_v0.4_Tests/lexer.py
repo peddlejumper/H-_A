@@ -82,6 +82,10 @@ class Lexer:
             'parallel': TokenType.PARALLEL,
             'concurrent': TokenType.CONCURRENT,
             'chan': TokenType.CHAN,
+            # 'match' is a SOFT keyword — it's still a valid identifier
+            # name (so `let match = false;` still works), but the
+            # parser also recognises it as the head of a `match` expr
+            # when followed by an expression-start token and `{`.
             'asm': TokenType.ASM,
             'ptr': TokenType.PTR,
             'true': ('BOOL', True),
@@ -197,6 +201,9 @@ class Lexer:
                 if self.current_char == '=':
                     self.advance()
                     return (TokenType.EQEQ, '==')
+                if self.current_char == '>':
+                    self.advance()
+                    return (TokenType.FAT_ARROW, '=>')
                 return (TokenType.EQ, '=')
             if self.current_char == '!':
                 self.advance()
@@ -228,6 +235,13 @@ class Lexer:
                 if self.current_char == '^':
                     self.advance()
                     return (TokenType.QMARK_CARET, '?^')
+                if self.current_char == ':':
+                    # `?:` is the head of the ternary `cond ?: a : b`.
+                    # Distinct from bare `?` (error-propagation postfix)
+                    # so that `expr?` and `cond ?: a : b` are
+                    # unambiguous at the lexer level.
+                    self.advance()
+                    return (TokenType.QMARK_COLON, '?:')
                 return (TokenType.QMARK, '?')
 
             # 单字符

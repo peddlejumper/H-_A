@@ -75,6 +75,7 @@ CATALOG: dict[str, tuple[str, str]] = {
     "16_async_await":    ("syntax",      "async fn / await expr: declaring an async fn lowers to coro fn + is_async; calling it returns Future<T> that await unwraps; nested awaits; await on a non-future raises; coro fn (low-level API) still works; is_async flag observable on the function value."),
     "17_parallel_channel": ("runtime",    "Multi-threaded DZZW scheduler: @parallel fn / parallel fn (both yield is_parallel=true); await on parallel Future<T>; concurrent { } block joins on child tasks; structured-concurrency exception propagation; chan T (unbounded/bounded) + chan_send/recv/close/try_recv/size; chan_try_send on full channel returns false; chan_try_recv returns nullptr on empty; send on closed channel raises; parallelism() reports worker-pool size."),
     "18_raytrace_bench": ("performance", "Raytracer benchmark: 240x180 image of 3 spheres rendered with 4 samples/pixel, depth 6.  Sequential vs parallel (10 worker pool, 10 tiles via concurrent { }).  Asserts parallel render produces an identical bitmap and is >=2x faster (target: 2x+ speedup for CPU-bound work)."),
+    "19_match_propagation": ("syntax", "v0.4.1: pattern matching (wildcard / binding / literal / type / variant / chan_send / chan_recv / chan_close) + error-propagation `?` postfix + guards + exhaustiveness raising."),
 }
 
 # ---------------------------------------------------------------------------

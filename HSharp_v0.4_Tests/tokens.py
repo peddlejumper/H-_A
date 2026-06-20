@@ -31,6 +31,10 @@ class TokenType(Enum):
     CONCURRENT = 'CONCURRENT'  # `concurrent { ... }` block
     CHAN = 'CHAN'  # `chan T` channel type
     AT = 'AT'  # `@` decorator prefix
+    MATCH = 'MATCH'  # `match expr { pat => body, ... }` pattern match
+    CHAN_SEND = 'CHAN_SEND'   # `chan send` pattern (inside match)
+    CHAN_RECV = 'CHAN_RECV'   # `chan recv` pattern
+    CHAN_CLOSE = 'CHAN_CLOSE' # `chan close` pattern
     ASM = 'ASM'
     PTR = 'PTR'
     TRY = 'TRY'
@@ -57,6 +61,7 @@ class TokenType(Enum):
     EQ = 'EQ'          # =
     EQEQ = 'EQEQ'      # ==
     BANGEQ = 'BANGEQ'  # !=
+    FAT_ARROW = 'FAT_ARROW'  # => (match arm separator)
     GT = 'GT'
     LT = 'LT'
     GTE = 'GTE'
@@ -77,6 +82,7 @@ class TokenType(Enum):
     DOT = 'DOT'
     QMARK = 'QMARK'        # ?
     QMARK_CARET = 'QMARK_CARET'  # ?^
+    QMARK_COLON = 'QMARK_COLON'  # ?: (ternary head: `cond ?: a : b`)
     AND = 'AND'
     OR = 'OR'
     NOT = 'NOT'

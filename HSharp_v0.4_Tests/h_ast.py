@@ -180,6 +180,73 @@ class QuaternaryOp(AST):
         self.cond2 = cond2
         self.expr2 = expr2
 
+class MatchPattern(AST):
+    """A single pattern inside a `match` arm.
+
+    `kind` is one of:
+      - "wildcard"  : the `_` pattern — matches anything, no binding
+      - "binding"   : a bare identifier — matches anything, binds to name
+      - "literal"   : number / string / bool / null literal equality
+      - "type"      : `is T` — matches a value of type T, optional binding
+      - "variant"   : `Variant(x, y, ...)` — matches a union variant
+      - "chan_send": `chan send(v)` — channel can-send pattern
+      - "chan_recv": `chan recv(v)` — channel can-recv pattern
+      - "chan_close": `chan close` — channel is closed pattern
+
+    `bindings` is a list of (name, optional_subpattern) tuples.  For
+    `wildcard` / `literal` / `type` without a binding name it is empty.
+    For `variant("Some", x)` it is `[("x", None)]`.  For
+    `chan_send(v)` it is `[("v", None)]`.
+    """
+    def __init__(self, kind, bindings=None, literal=None, type_name=None,
+                 variant_name=None):
+        self.kind = kind
+        self.bindings = bindings or []
+        self.literal = literal          # for kind == "literal"
+        self.type_name = type_name      # for kind == "type"
+        self.variant_name = variant_name  # for kind == "variant"
+
+class MatchCase(AST):
+    """A single arm of a `match` expression: a pattern, an optional
+    guard, and a body expression (or block)."""
+    def __init__(self, pattern, body, guard=None):
+        self.pattern = pattern
+        self.body = body
+        self.guard = guard  # optional Boolean expression; None means no guard
+
+class MatchExpression(AST):
+    """`match scrutinee { pat1 => body1, pat2 => body2, ... }`.
+
+    The body of each arm is an expression.  The whole `match` form
+    evaluates to the value of the chosen arm's body.  If no arm
+    matches, a runtime `HSharpException` is raised with message
+    "non-exhaustive match" (this is a deliberate failure mode; users
+    are expected to include a `_ => ...` wildcard arm).
+    """
+    def __init__(self, scrutinee, cases):
+        self.scrutinee = scrutinee
+        self.cases = cases  # list of MatchCase
+
+class PropagateExpression(AST):
+    """`expr?` — the error-propagation postfix operator.
+
+    At runtime:
+      1. evaluate `expr`
+      2. if it raises, the current function returns immediately
+         with the raised value (the exception payload is returned
+         as-is — the caller sees a "Result"-like result)
+      3. if it succeeds, the value is unwrapped and execution
+         continues normally
+
+    In H#'s single-frame-per-function design, `?` lowers to a
+    `TRY_PUSH` followed by the expr's code, then `TRY_POP` on
+    the success path.  On failure the VM marks the current frame
+    as halted-with-return-value = raised-payload and unwinds to
+    the call site.
+    """
+    def __init__(self, expr):
+        self.expr = expr
+
 class AssignmentIndex(AST):
     def __init__(self, array, index, value):
         self.array = array

@@ -4,6 +4,31 @@ from tokens import TokenType
 # Token types for operators that might not be in TokenType yet
 _MODULO = getattr(TokenType, '_MOD', getattr(TokenType, 'MODULO', '%'))
 
+def _bool_aware_eq(a, b):
+    """Equality that does NOT conflate `True` with `1` and `False` with `0`.
+
+    Python's built-in `==` treats bool as a subclass of int, so
+    `True == 1` is `True`.  For H# match patterns (and the const-pool
+    dedup) this is wrong: a literal-`true` arm must be a different
+    const from a literal-`1` arm, and likewise for `false`/`0`.  This
+    helper compares types and identity first, then falls back to
+    recursive comparison with a special case for `bool`."""
+    if a is b:
+        return True
+    if type(a) is not type(b):
+        # Differ in Python type — bool and int must be distinguished.
+        return False
+    if isinstance(a, bool) and isinstance(b, bool):
+        return a is b  # only `True is True` and `False is False`
+    if isinstance(a, dict) and isinstance(b, dict):
+        if len(a) != len(b):
+            return False
+        return all(k in b and _bool_aware_eq(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(
+            _bool_aware_eq(x, y) for x, y in zip(a, b))
+    return a == b
+
 class CompileError(Exception):
     pass
 
@@ -25,17 +50,50 @@ class Compiler:
         self.pending_continues = old_continues
 
     def add_const(self, value):
-        if isinstance(value, bool):
-            for i, v in enumerate(self.consts):
-                if v is value:
-                    return i
-        else:
-            for i, v in enumerate(self.consts):
-                if type(v) is not bool and v == value:
-                    return i
+        # Dedup primitive values by identity (for bool) and equality.
+        # Plain `==` would conflate `True` and `1` (Python bool is an
+        # int subclass) — a serious problem for match patterns, where
+        # the literal `true` must be a separate const from the literal
+        # `1`.  We therefore use `_bool_aware_eq` for all value-vs-
+        # const-pool comparisons so bool stays distinct from int.
+        for i, v in enumerate(self.consts):
+            if _bool_aware_eq(value, v):
+                return i
         idx = len(self.consts)
         self.consts.append(value)
         return idx
+
+    def _pattern_to_const(self, pat):
+        """Convert a MatchPattern AST node into a dict suitable for
+        placing in the const pool.  The dict shape is the contract
+        the Kotlin VM uses to interpret a `MATCH_CASE` pattern:
+          {"kind": "wildcard"}
+          {"kind": "binding", "name": <str>}
+          {"kind": "literal", "literal": <H# literal>}
+          {"kind": "type", "type_name": <str>, "binding": <str|None>}
+          {"kind": "variant", "variant": <str>, "names": [<str>, ...]}
+          {"kind": "chan_send"}
+          {"kind": "chan_recv"}
+          {"kind": "chan_close"}
+        """
+        d = {"kind": pat.kind}
+        if pat.kind == "binding":
+            name = pat.bindings[0][0] if pat.bindings else "_"
+            d["name"] = name
+        elif pat.kind == "literal":
+            d["literal"] = pat.literal
+        elif pat.kind == "type":
+            d["type_name"] = pat.type_name
+            d["binding"] = pat.bindings[0][0] if pat.bindings else None
+        elif pat.kind == "variant":
+            d["variant"] = pat.variant_name
+            d["names"] = [b[0] for b in (pat.bindings or [])]
+        elif pat.kind in ("chan_send", "chan_recv", "chan_close"):
+            # The binding name (e.g. `chan send(v)` -> name="v") is
+            # carried as the first binding slot when present.
+            if pat.bindings:
+                d["name"] = pat.bindings[0][0]
+        return d
 
     def emit(self, opname, arg=None):
         self.instructions.append((opname, arg))
@@ -924,6 +982,106 @@ class Compiler:
                 )
             self.compile_expr(expr.expr)
             self.emit('AWAIT')
+        elif isinstance(expr, PropagateExpression):
+            # `expr?` — error-propagation postfix.  Compiles to a
+            # SETUP_PROPAGATE / <expr> / POP_PROPAGATE / JUMP end /
+            # <catch> triple.  The catch block pushes the unwrapped
+            # exception value as the `?` expression's result and
+            # jumps to the success continuation.  This makes `?`
+            # behaviour equivalent to
+            #   try { expr } catch (e) { e }
+            # at the value level: the postfix's value is the
+            # expression's normal value, or the exception payload
+            # if `expr` raised.  The caller is then responsible for
+            # either pattern-matching on the value or re-propagating
+            # with another `?`.
+            handler_pos = len(self.instructions)
+            self.emit('SETUP_PROPAGATE', None)  # target back-patched
+            self.compile_expr(expr.expr)
+            self.emit('POP_PROPAGATE')
+            jmp_end = len(self.instructions)
+            self.emit('JUMP', None)             # success path
+            # Catch path: SETUP_PROPAGATE dispatches the exception
+            # here with the unwrapped value on the stack.  We just
+            # fall through into the success continuation.
+            catch_pos = len(self.instructions)
+            end_pos = catch_pos                # fall through
+            # Backpatch:
+            self.instructions[handler_pos] = ('SETUP_PROPAGATE', catch_pos)
+            self.instructions[jmp_end] = ('JUMP', end_pos)
+        elif isinstance(expr, MatchExpression):
+            # `match scrutinee { pat1 => body1, pat2 => body2, ... }`.
+            # Compiles to:
+            #   compile scrutinee
+            #   for each case (in order):
+            #     DUP                       ; keep scrutinee on stack
+            #     LOAD_CONST <pattern_dict> ; pattern representation
+            #     MATCH_CASE                ; pops scrutinee+pattern,
+            #                              ; pushes bool (matched?)
+            #     JUMP_IF_FALSE <next_case> ; if not, try next case
+            #     compile body
+            #     JUMP <end>
+            #     <next_case>:
+            #   RAISE "non-exhaustive match"  ; nothing matched
+            #   <end>:
+            self.compile_expr(expr.scrutinee)
+            end_jumps = []   # JUMP positions to backpatch to end
+            case_count = len(expr.cases)
+            for idx, case in enumerate(expr.cases):
+                is_last = (idx == case_count - 1)
+                # Copy scrutinee to keep it for the next case's DUP.
+                # Each case starts with the scrutinee on the stack
+                # (from the previous case or from `compile_expr`
+                # for the first case).  We DUP it and run MATCH_CASE
+                # which pops both the dup and the pattern const, and
+                # pushes a bool.
+                self.emit('DUP')
+                pat_idx = self.add_const(
+                    self._pattern_to_const(case.pattern))
+                self.emit('LOAD_CONST', pat_idx)
+                self.emit('MATCH_CASE', pat_idx)
+                next_case_pos = len(self.instructions)
+                self.emit('JUMP_IF_FALSE', None)  # backpatch
+                # Optional guard.
+                if case.guard is not None:
+                    self.compile_expr(case.guard)
+                    guard_jmp = len(self.instructions)
+                    self.emit('JUMP_IF_FALSE', None)
+                    self.compile_expr(case.body)
+                    end_jumps.append(len(self.instructions))
+                    self.emit('JUMP', None)  # backpatch
+                    guard_fail_pos = len(self.instructions)
+                    self.instructions[guard_jmp] = ('JUMP_IF_FALSE', guard_fail_pos)
+                    self.instructions[next_case_pos] = ('JUMP_IF_FALSE', guard_fail_pos)
+                else:
+                    self.compile_expr(case.body)  # Stack: [s, body]
+                    end_jumps.append(len(self.instructions))
+                    self.emit('JUMP', None)  # backpatch
+                    fail_pos = len(self.instructions)
+                    self.instructions[next_case_pos] = ('JUMP_IF_FALSE', fail_pos)
+            # The leftover scrutinee from this arm stays on the
+            # stack — the next case's DUP will reuse it.  If this
+            # was the last case, the `RAISE` below pops it.
+            # (Earlier versions emitted a POP here, but that wiped
+            # the scrutinee the next iteration needed.)
+            # No arm matched: push a default value of `null` and
+            # raise.  This is more diagnostic than a bare RAISE with
+            # an empty stack.
+            none_idx = self.add_const(None)
+            self.emit('LOAD_CONST', none_idx)
+            err_idx = self.add_const("non-exhaustive match")
+            self.emit('LOAD_CONST', err_idx)
+            self.emit('RAISE')
+            end_pos = len(self.instructions)
+            for j in end_jumps:
+                self.instructions[j] = ('JUMP', end_pos)
+            # The success path leaves the body's result on top of
+            # the leftover scrutinee (which MATCH_CASE never
+            # consumed).  Swap them so the body's result is on
+            # top and the scrutinee gets discarded, matching
+            # `match` evaluation = body value, nothing else.
+            self.emit('SWAP')  # Stack: [body, s]
+            self.emit('POP')   # Stack: [body]
         elif isinstance(expr, TernaryOp):
             # condition ? true_expr : false_expr
             # compile condition, then JUMP_IF_FALSE to false_branch

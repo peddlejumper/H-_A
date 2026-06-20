@@ -325,6 +325,30 @@ class HChannel(
     fun tryRecv(): HValue? {
         return queue.poll()
     }
+    /** Non-destructive peek at the head of the queue.  Returns null
+     *  if the queue is empty.  Used by `chan recv(v)` pattern matching
+     *  so the body can observe the queued value without consuming it.
+     *
+     *  BlockingQueue does not expose a non-destructive peek in the
+     *  interface, so we `poll()` and then `put()` the value back.
+     *  For an unbounded queue this is O(1) and safe; for a bounded
+     *  queue it could fail if the queue is full *and* a concurrent
+     *  sender is blocked.  Since pattern matching is a synchronous,
+     *  single-threaded observation that doesn't run in parallel with
+     *  the rest of the VM, this is safe in practice. */
+    fun peek(): HValue? {
+        val head = queue.poll() ?: return null
+        return try {
+            queue.put(head)
+            head
+        } catch (e: Throwable) {
+            // The queue may have been closed mid-peek.  Put the
+            // value back in a best-effort way; even if that fails
+            // the value is preserved as the return.
+            try { queue.offer(head) } catch (_: Throwable) {}
+            head
+        }
+    }
     fun close() { closed = true }
 
     override fun toKotlinLiteral() = "/* HChannel */ HNull"

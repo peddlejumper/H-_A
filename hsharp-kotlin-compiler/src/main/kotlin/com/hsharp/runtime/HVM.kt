@@ -249,6 +249,54 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             "POP_EXCEPT" -> if (f.handlers.isNotEmpty()) f.handlers.removeLast()
             "RAISE" -> throw HSharpException(f.stack.removeLast())
 
+            "DUP" -> {
+                // Duplicate the top-of-stack value.  Used by
+                // `match` so each arm can DUP the scrutinee, run
+                // MATCH_CASE which pops both, and leave the
+                // scrutinee on the stack for the next arm.
+                if (f.stack.isNotEmpty()) f.stack.addLast(f.stack.last())
+            }
+            "POP" -> if (f.stack.isNotEmpty()) f.stack.removeLast()
+            "SWAP" -> {
+                // Swap the top two stack slots.  Used by `match`
+                // to discard the leftover scrutinee after a
+                // successful arm pushed the body's result.
+                if (f.stack.size >= 2) {
+                    val top = f.stack.removeLast()
+                    val below = f.stack.removeLast()
+                    f.stack.addLast(top)
+                    f.stack.addLast(below)
+                }
+            }
+
+            "MATCH_CASE" -> {
+                // Pop the pattern const and the (duplicated)
+                // scrutinee, run matchPattern, push a bool.  Stack
+                // layout entering this opcode:
+                //   [..., scrutinee, scrutinee, pattern_dict]
+                // The pattern sits on top (pushed by the most
+                // recent LOAD_CONST), and the duplicate scrutinee
+                // is right below it.  We pop both, leaving the
+                // *original* scrutinee on the stack for the body's
+                // JUMP end to consume or for the next case to DUP.
+                // See the `matchPattern` helper below.
+                val patIdx = (arg as Number).toInt()
+                val pat = f.consts[patIdx] as HDict
+                f.stack.removeLast()  // discard the pattern (was on top)
+                val scrutinee = f.stack.removeLast()  // duplicated scrutinee
+                val matched = matchPattern(f, pat, scrutinee)
+                f.stack.addLast(if (matched) HBool(true) else HBool(false))
+            }
+
+            "SETUP_PROPAGATE" -> f.handlers.addLast(
+                Triple((arg as Number).toInt(), f.stack.size, "__propagate__"))
+            "POP_PROPAGATE" -> {
+                if (f.handlers.isNotEmpty() &&
+                    f.handlers.last().third == "__propagate__") {
+                    f.handlers.removeLast()
+                }
+            }
+
             "RETURN_VALUE" -> {
                 f.retVal = if (f.stack.isNotEmpty()) f.stack.removeLast() else HNull
                 f.halted = true
@@ -1010,6 +1058,18 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
         while (f.handlers.isNotEmpty()) {
             val (target, savedSp, excName) = f.handlers.removeLast()
             while (f.stack.size > savedSp) f.stack.removeLast()
+            if (excName == "__propagate__") {
+                // `expr?` postfix.  The catch path is the success
+                // continuation of the postfix: push the unwrapped
+                // exception value as the postfix's result and jump
+                // to the target.  This is the runtime half of the
+                // `?` operator: the value of `expr?` is the
+                // exception payload if `expr` raised, otherwise the
+                // normal return value of `expr`.
+                f.stack.addLast(ex.value)
+                f.pc = target
+                return
+            }
             f.stack.addLast(ex.value)
             if (excName != "__except__") f.env[excName] = ex.value
             f.pc = target
@@ -1253,6 +1313,137 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             }
         }
         return false
+    }
+
+    /* =============================================================
+     * Pattern matching helper
+     *
+     * Implements the seven pattern kinds the compiler emits in
+     * `_pattern_to_const`:
+     *   wildcard  : `_`                — always matches
+     *   binding   : `x`                — always matches, binds x = scrutinee
+     *   literal   : `42` / `"s"` / …  — H# structural equality
+     *   type      : `is T [as x]`     — class/union membership + optional bind
+     *   variant   : `Variant(x,y,..)` — union variant + payload bindings
+     *   chan_send : `chan send(v)`    — channel can accept a send
+     *   chan_recv : `chan recv(v)`    — channel has a pending value
+     *   chan_close: `chan close`      — channel is closed
+     *
+     * Bindings are written into the current frame's `env` so the body
+     * of the arm (on the right-hand side of `=>`) can read them.
+     * ============================================================= */
+    private fun matchPattern(f: HFrame, pat: HDict, scrutinee: HValue): Boolean {
+        val kind = (pat.entries["kind"] as? HString)?.value ?: return false
+        return when (kind) {
+            "wildcard" -> true
+            "binding" -> {
+                val name = (pat.entries["name"] as? HString)?.value ?: return false
+                f.env[name] = scrutinee
+                true
+            }
+            "literal" -> literalEq(pat.entries["literal"], scrutinee)
+            "type" -> {
+                val typeName = (pat.entries["type_name"] as? HString)?.value ?: return false
+                val binding = (pat.entries["binding"] as? HString)?.value
+                if (!typeMatch(scrutinee, typeName)) return false
+                if (binding != null) f.env[binding] = scrutinee
+                true
+            }
+            "variant" -> {
+                val variant = (pat.entries["variant"] as? HString)?.value ?: return false
+                val ui = scrutinee as? HInstance ?: return false
+                if ((ui.fields["__variant__"] as? HString)?.value != variant) return false
+                val names = (pat.entries["names"] as? HList)?.items ?: emptyList()
+                for (n in names) {
+                    val name = (n as? HString)?.value ?: continue
+                    // Pull each bound payload out of the HInstance's
+                    // fields by name.  Missing fields default to null
+                    // so a partial bind never crashes the matcher.
+                    f.env[name] = ui.fields[name] ?: HNull
+                }
+                true
+            }
+            "chan_send" -> {
+                val ch = scrutinee as? HChannel ?: return false
+                if (ch.closed) return false
+                // For an unbuffered channel (capacity == 0) the queue
+                // can hold at most one item: a sender parks until a
+                // receiver takes the value.  So `chan send(_)` should
+                // only match when there's room to send — for
+                // unbuffered that's size < 1, for bounded it's
+                // size < capacity.  Using `(capacity == 0 ||
+                // size < capacity)` would match an unbuffered channel
+                // even when it already holds a pending item, which is
+                // wrong: a second send would block.
+                val sendsOk = ch.size() <
+                    (if (ch.capacity == 0) 1 else ch.capacity)
+                if (!sendsOk) return false
+                // The optional binding name in `chan send(v)` is
+                // bound to `true` — a placeholder that says "the
+                // send would have been possible".  This keeps the
+                // arm body able to refer to `v` without crashing
+                // on undefined-name.
+                (pat.entries["name"] as? HString)?.value?.let {
+                    f.env[it] = HBool(true)
+                }
+                true
+            }
+            "chan_recv" -> {
+                val ch = scrutinee as? HChannel ?: return false
+                if (ch.size() <= 0) return false
+                // `chan recv(v)` binds v to the first queued
+                // value (peek).  The body then sees `v` as the
+                // value that *would* be received.  We don't
+                // actually pop the value — matching is a pure
+                // observation, the arm body decides whether to
+                // call `chan_recv` to actually consume it.
+                (pat.entries["name"] as? HString)?.value?.let { name ->
+                    val peeked = ch.peek()
+                    if (peeked != null) f.env[name] = peeked
+                }
+                true
+            }
+            "chan_close" -> {
+                val ch = scrutinee as? HChannel ?: return false
+                ch.closed
+            }
+            else -> false
+        }
+    }
+
+    /** H# structural equality used by the `literal` pattern kind. */
+    private fun literalEq(lit: HValue?, scrutinee: HValue): Boolean {
+        if (lit == null) return scrutinee is HNull
+        return HValueOps.equals(lit, scrutinee)
+    }
+
+    /** H# type-membership test for the `is T` pattern kind.
+     *
+     * Accepts both class instances and union values.  The string
+     * `"int"` / `"float"` / `"str"` / `"bool"` / `"list"` / `"dict"`
+     * / `"chan"` map onto the corresponding built-in HValue subtypes;
+     * any other name is treated as a class / union name resolved via
+     * the current `env` / globals.  */
+    private fun typeMatch(scrutinee: HValue, typeName: String): Boolean {
+        when (typeName) {
+            "int", "float" -> {
+                if (scrutinee !is HNumber) return false
+                if (typeName == "int") {
+                    val v = scrutinee.value
+                    return v == v.toLong().toDouble() &&
+                        v >= Long.MIN_VALUE.toDouble() && v <= Long.MAX_VALUE.toDouble()
+                }
+                return true
+            }
+            "str"  -> return scrutinee is HString
+            "bool" -> return scrutinee is HBool
+            "list" -> return scrutinee is HList
+            "dict" -> return scrutinee is HDict
+            "chan" -> return scrutinee is HChannel
+            "null" -> return scrutinee is HNull
+        }
+        // Class / union name: use the existing isInstance helper.
+        return isInstance(scrutinee, typeName)
     }
 
     /* =============================================================

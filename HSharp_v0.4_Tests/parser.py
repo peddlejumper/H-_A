@@ -152,7 +152,16 @@ class Parser:
                 self.eat(TokenType.SEMI)
                 return AssignmentMember(expr.left, expr.name, value)
             else:
-                self.eat(TokenType.SEMI)
+                # Allow block-terminated expression statements to omit
+                # the trailing `;` (e.g. the last statement of a fn
+                # body — `match x { ... }` on its own line).  We
+                # tolerate RBRACE / EOF / RPAREN as terminators in
+                # addition to SEMI.
+                if self.current_token[0] == TokenType.SEMI:
+                    self.eat(TokenType.SEMI)
+                elif self.current_token[0] not in (
+                        TokenType.RBRACE, TokenType.EOF, TokenType.RPAREN):
+                    self.eat(TokenType.SEMI)
                 return expr
 
     def let_statement(self):
@@ -715,9 +724,12 @@ class Parser:
 
     def ternary(self):
         node = self.logical_or()
-        # Check for ternary ? or quaternary ?^
-        if self.current_token[0] == TokenType.QMARK:
-            self.eat(TokenType.QMARK)
+        # Ternary `cond ?: a : b` and quaternary `cond ?^ a : b : c`
+        # use dedicated token heads (`?:` and `?^`).  Bare `?` is
+        # reserved for the postfix error-propagation operator and is
+        # handled in `term()` as a postfix.
+        if self.current_token[0] == TokenType.QMARK_COLON:
+            self.eat(TokenType.QMARK_COLON)
             true_expr = self.expression()
             self.eat(TokenType.COLON)
             false_expr = self.expression()
@@ -773,11 +785,25 @@ class Parser:
         return node
 
     def term(self):
-        node = self.factor()
+        node = self._additive_unit()
         while self.current_token[0] in (TokenType.PLUS, TokenType.MINUS):
             token = self.current_token
             self.eat(token[0])
-            node = BinaryOp(left=node, op=token[0], right=self.factor())
+            node = BinaryOp(left=node, op=token[0], right=self._additive_unit())
+        return node
+
+    def _additive_unit(self):
+        """A factor followed by zero or more `?` postfixes.
+
+        This is the operand side of the additive operators `+` / `-`,
+        hoisted out of `term()` so the postfix error-propagation binds
+        correctly: `a + b?` parses as `a + (b?)`, not `(a + b)?`.
+        Multiple `?` chain left-associatively (so `a??` is
+        `PropagateExpression(PropagateExpression(a))`)."""
+        node = self.factor()
+        while self.current_token[0] == TokenType.QMARK:
+            self.eat(TokenType.QMARK)
+            node = PropagateExpression(node)
         return node
 
     def factor(self):
@@ -809,7 +835,203 @@ class Parser:
             # `async fn` body is performed by the compiler.
             self.eat(TokenType.AWAIT)
             return AwaitExpression(self.unary())
+        if self.current_token[0] == TokenType.MATCH:
+            # `match scrutinee { pat => body, ... }` — the keyword
+            # form.  Reserved.
+            return self.match_expression()
+        # `match` is also accepted as a soft keyword identifier: when
+        # the user writes `match x { ... }` where `match` is parsed as
+        # a plain identifier but is immediately followed by an
+        # expression-start token and `{`, treat the whole thing as a
+        # `match` expression.  This lets the existing H# code base use
+        # `match` as a regular variable name (e.g.
+        # `let match = false;`) without a parser conflict.
+        if (self.current_token[0] == TokenType.IDENTIFIER
+                and self.current_token[1] == 'match'):
+            nxt = self.lexer.peek_token()
+            # Only treat as a keyword if the next token can start an
+            # expression (an identifier, number, string, `(`, `[`, ...
+            # or a unary prefix).  Otherwise `match` is just a name.
+            if nxt[0] in (TokenType.IDENTIFIER, TokenType.NUMBER,
+                          TokenType.STRING, TokenType.BOOL, TokenType.NULL,
+                          TokenType.LPAREN, TokenType.LBRACKET, TokenType.LBRACE,
+                          TokenType.MINUS, TokenType.NOT, TokenType.TILDE,
+                          TokenType.AWAIT, TokenType.STAR):
+                return self.match_expression()
         return self.primary()
+
+    def match_expression(self):
+        """Parse `match expr { case, case, ... }`.
+
+        Cases are comma-separated.  Each case is `pattern [if guard] => body`.
+        `pattern` is parsed by `parse_pattern()`.  `body` is an
+        expression (or a `{ stmt; ... }` block whose last expression
+        is the result)."""
+        # Accept either the reserved `MATCH` token or the soft-keyword
+        # `match` identifier.  Soft-keyword dispatch happens in
+        # `unary()` — when we get here the token is whichever flavour
+        # was used at the call site.
+        if self.current_token[0] == TokenType.MATCH:
+            self.eat(TokenType.MATCH)
+        else:
+            assert (self.current_token[0] == TokenType.IDENTIFIER
+                    and self.current_token[1] == 'match')
+            self.eat(TokenType.IDENTIFIER)
+        scrutinee = self.expression()
+        self.eat(TokenType.LBRACE)
+        cases = []
+        # Allow empty body?  No — at least one case is required.
+        while self.current_token[0] != TokenType.RBRACE:
+            pat = self.parse_pattern()
+            guard = None
+            if self.current_token[0] == TokenType.IF:
+                self.eat(TokenType.IF)
+                guard = self.expression()
+            self.eat(TokenType.FAT_ARROW)
+            body = self.expression()
+            cases.append(MatchCase(pat, body, guard))
+            if self.current_token[0] == TokenType.COMMA:
+                self.eat(TokenType.COMMA)
+            else:
+                break
+        self.eat(TokenType.RBRACE)
+        return MatchExpression(scrutinee, cases)
+
+    def parse_pattern(self):
+        """Parse a single `match` arm pattern.
+
+        Patterns recognised:
+          - `_`                              wildcard
+          - `<number> | <string> | <bool> | null`   literal
+          - `is <TypeName> [as x]`          type pattern (matches a value of type T,
+                                             optionally binding to name `x`)
+          - `<identifier>`                   binding (matches anything, binds name)
+          - `Variant(x, y, ...)`             union variant (identifier is the variant)
+          - `chan send(v)` | `chan recv(v)` | `chan close`   channel patterns
+        """
+        tok = self.current_token
+        if tok[0] == TokenType.IDENTIFIER and tok[1] == '_':
+            self.eat(TokenType.IDENTIFIER)
+            return MatchPattern(kind='wildcard')
+        if tok[0] in (TokenType.NUMBER, TokenType.STRING, TokenType.BOOL,
+                      TokenType.NULL):
+            lit = self._literal_to_python(tok)
+            self.eat(tok[0])
+            return MatchPattern(kind='literal', literal=lit)
+        if tok[0] == TokenType.IS:
+            # `is T [as x]` — type pattern.  The runtime can only
+            # match the H# runtime types (number, string, bool, list,
+            # dict, channel, future).  User class types are matched
+            # by name.
+            self.eat(TokenType.IS)
+            tname_tok = self.current_token
+            # Accept a regular identifier OR a primitive-type keyword
+            # like `null`/`true`/`false` (the lexer promotes them to
+            # dedicated token kinds, but the runtime still maps them
+            # to type strings).
+            if tname_tok[0] == TokenType.IDENTIFIER:
+                tname = tname_tok[1]
+                self.eat(TokenType.IDENTIFIER)
+            elif tname_tok[0] == TokenType.NULL:
+                tname = 'null'
+                self.eat(TokenType.NULL)
+            elif tname_tok[0] == TokenType.BOOL:
+                tname = 'bool'
+                self.eat(TokenType.BOOL)
+            else:
+                raise SyntaxError("expected type name after 'is', got %s" %
+                                  tname_tok[0].value)
+            binding = None
+            if ((self.current_token[0] == TokenType.IDENTIFIER
+                 and self.current_token[1] == 'as')
+                or self.current_token[0] == TokenType.AS):
+                if self.current_token[0] == TokenType.AS:
+                    self.eat(TokenType.AS)
+                else:
+                    self.eat(TokenType.IDENTIFIER)
+                bind_tok = self.current_token
+                if bind_tok[0] != TokenType.IDENTIFIER:
+                    raise SyntaxError("expected binding name after 'as', got %s" %
+                                      bind_tok[0].value)
+                binding = bind_tok[1]
+                self.eat(TokenType.IDENTIFIER)
+            pat = MatchPattern(kind='type', type_name=tname)
+            if binding:
+                pat.bindings = [(binding, None)]
+            return pat
+        if tok[0] == TokenType.CHAN:
+            # `chan send(v)` / `chan recv(v)` / `chan close`
+            self.eat(TokenType.CHAN)
+            sub = self.current_token
+            if sub[0] == TokenType.IDENTIFIER and sub[1] == 'send':
+                self.eat(TokenType.IDENTIFIER)
+                self.eat(TokenType.LPAREN)
+                name = None
+                if self.current_token[0] == TokenType.IDENTIFIER:
+                    name = self.current_token[1]
+                    self.eat(TokenType.IDENTIFIER)
+                self.eat(TokenType.RPAREN)
+                return MatchPattern(
+                    kind='chan_send',
+                    bindings=([(name, None)] if name else []))
+            if sub[0] == TokenType.IDENTIFIER and sub[1] == 'recv':
+                self.eat(TokenType.IDENTIFIER)
+                self.eat(TokenType.LPAREN)
+                name = None
+                if self.current_token[0] == TokenType.IDENTIFIER:
+                    name = self.current_token[1]
+                    self.eat(TokenType.IDENTIFIER)
+                self.eat(TokenType.RPAREN)
+                return MatchPattern(
+                    kind='chan_recv',
+                    bindings=([(name, None)] if name else []))
+            if sub[0] == TokenType.IDENTIFIER and sub[1] == 'close':
+                self.eat(TokenType.IDENTIFIER)
+                return MatchPattern(kind='chan_close')
+            raise SyntaxError("expected 'send', 'recv', or 'close' after 'chan' in pattern")
+        if tok[0] == TokenType.IDENTIFIER:
+            # Could be a binding (matches anything) or a variant
+            # `Variant(x, y, ...)` if followed by `(`.
+            name = tok[1]
+            self.eat(TokenType.IDENTIFIER)
+            if self.current_token[0] == TokenType.LPAREN:
+                # Variant pattern: `Variant(x, y, ...)`.
+                self.eat(TokenType.LPAREN)
+                bindings = []
+                if self.current_token[0] != TokenType.RPAREN:
+                    while True:
+                        b = self.current_token
+                        if b[0] != TokenType.IDENTIFIER:
+                            raise SyntaxError("expected binding name in variant pattern, got %s" %
+                                              b[0].value)
+                        bindings.append((b[1], None))
+                        self.eat(TokenType.IDENTIFIER)
+                        if self.current_token[0] == TokenType.COMMA:
+                            self.eat(TokenType.COMMA)
+                        else:
+                            break
+                self.eat(TokenType.RPAREN)
+                return MatchPattern(kind='variant',
+                                    variant_name=name,
+                                    bindings=bindings)
+            return MatchPattern(kind='binding', bindings=[(name, None)])
+        raise SyntaxError("unexpected token in match pattern: %s" %
+                          tok[0].value)
+
+    def _literal_to_python(self, tok):
+        """Convert a literal token tuple (type, value) into a Python
+        value usable in the bytecode const pool (mirrors what the
+        literal parsers do for the same shape of token)."""
+        kind, val = tok
+        if kind == TokenType.NUMBER:
+            return val
+        if kind == TokenType.STRING:
+            return val
+        if kind == TokenType.BOOL:
+            return val
+        if kind == TokenType.NULL:
+            return None
+        raise SyntaxError("not a literal token: %s" % kind)
 
     def primary(self):
         token = self.current_token
