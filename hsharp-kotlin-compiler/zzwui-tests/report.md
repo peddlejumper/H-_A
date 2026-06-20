@@ -16,33 +16,33 @@ to the test body.  The H# Python compiler does not yet process
 native GUI calls return deterministic stubs from `HNativeBridge.kt`;
 no real display is opened.
 
-**Generated:** 2026-06-20 12:02:16  
-**Total wall time:** 3.451 s  
+**Generated:** 2026-06-20 12:26:57  
+**Total wall time:** 3.782 s  
 **Pipeline:** `build.py` (composition) → `compile_test.py` (Python parser) → `.hbc` → `hsharp-runtime.jar` (Kotlin VM)
 
 ## 1. Executive Summary
 
 | Metric | Value |
 | --- | --- |
-| Total test files | **18** |
-| Test files passed (all cases) | **18** |
+| Total test files | **19** |
+| Test files passed (all cases) | **19** |
 | Test files with at least one failing case | 0 |
 | Test files failed at compile | 0 |
 | Test files failed at runtime | 0 |
 | Test files timed out (> 60s) | 0 |
 | File-level pass rate | **100.0%** |
-| Total individual check() cases | **687** |
-| Total individual cases passed | **687** |
+| Total individual check() cases | **705** |
+| Total individual cases passed | **705** |
 | Total individual cases failed | **0** |
 | Case-level pass rate | **100.00%** |
-| Avg compile time |    85.0 ms |
-| Avg run time (Kotlin VM) |   106.3 ms |
+| Avg compile time |    84.6 ms |
+| Avg run time (Kotlin VM) |   114.0 ms |
 
 ## 2. Per-Category Results
 
 | Category | Files | Files OK | Files with cases failing | Case Pass Rate |
 | --- | ---: | ---: | ---: | ---: |
-| `?` | 4 | 4 | 0 | 100.0% |
+| `?` | 5 | 5 | 0 | 100.0% |
 | `clip` | 1 | 1 | 0 | 100.0% |
 | `collection` | 1 | 1 | 0 | 100.0% |
 | `event` | 1 | 1 | 0 | 100.0% |
@@ -62,24 +62,25 @@ no real display is opened.
 
 | # | Test | Cat | Compile | Run | Exit | Total Time | PASS | FAIL | Status |
 | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
-| 1 | `01_widget_core` | `widget` |    83.4 ms |   111.4 ms | 0 |   194.8 ms | 120 | 0 | **OK** |
-| 2 | `02_renderer` | `renderer` |    88.2 ms |   110.6 ms | 0 |   198.8 ms | 51 | 0 | **OK** |
-| 3 | `03_window` | `window` |    85.4 ms |   108.7 ms | 0 |   194.1 ms | 29 | 0 | **OK** |
-| 4 | `04_native` | `native` |    78.6 ms |   103.1 ms | 0 |   181.7 ms | 35 | 0 | **OK** |
-| 5 | `05_layout_stress` | `layout` |    77.8 ms |   111.6 ms | 0 |   189.4 ms | 31 | 0 | **OK** |
-| 6 | `06_event_dispatch` | `event` |    77.4 ms |    92.6 ms | 0 |   170.0 ms | 16 | 0 | **OK** |
-| 7 | `07_widget_tree` | `tree` |    76.2 ms |   120.1 ms | 0 |   196.3 ms | 22 | 0 | **OK** |
-| 8 | `08_primitives` | `primitive` |    86.8 ms |   117.4 ms | 0 |   204.2 ms | 25 | 0 | **OK** |
-| 9 | `09_style` | `styling` |    76.7 ms |    92.9 ms | 0 |   169.6 ms | 44 | 0 | **OK** |
-| 10 | `10_state_machines` | `state` |   103.7 ms |    94.6 ms | 0 |   198.3 ms | 32 | 0 | **OK** |
-| 11 | `11_collections` | `collection` |    76.3 ms |    92.1 ms | 0 |   168.4 ms | 33 | 0 | **OK** |
-| 12 | `12_text_input` | `input` |    76.7 ms |   108.4 ms | 0 |   185.1 ms | 34 | 0 | **OK** |
-| 13 | `13_renderer_clip` | `clip` |    87.6 ms |    97.0 ms | 0 |   184.6 ms | 27 | 0 | **OK** |
-| 14 | `14_perf` | `performance` |    86.0 ms |   147.0 ms | 0 |   233.0 ms | 22 | 0 | **OK** |
-| 15 | `_hconcepts_smoke` | `?` |    81.7 ms |   104.7 ms | 0 |   186.5 ms | 0 | 0 | **OK** |
-| 16 | `h_concepts` | `?` |    99.9 ms |    74.6 ms | 0 |   174.5 ms | 0 | 0 | **OK** |
-| 17 | `test_concepts` | `?` |   101.9 ms |   121.2 ms | 0 |   223.1 ms | 166 | 0 | **OK** |
-| 18 | `test_generics` | `?` |    85.4 ms |   105.3 ms | 0 |   190.7 ms | 0 | 0 | **OK** |
+| 1 | `01_widget_core` | `widget` |    84.9 ms |   122.3 ms | 0 |   207.2 ms | 120 | 0 | **OK** |
+| 2 | `02_renderer` | `renderer` |    89.4 ms |   117.9 ms | 0 |   207.3 ms | 51 | 0 | **OK** |
+| 3 | `03_window` | `window` |    88.4 ms |   113.3 ms | 0 |   201.7 ms | 29 | 0 | **OK** |
+| 4 | `04_native` | `native` |    79.1 ms |   107.0 ms | 0 |   186.1 ms | 35 | 0 | **OK** |
+| 5 | `05_layout_stress` | `layout` |    79.0 ms |   107.2 ms | 0 |   186.2 ms | 31 | 0 | **OK** |
+| 6 | `06_event_dispatch` | `event` |    78.2 ms |    96.7 ms | 0 |   174.9 ms | 16 | 0 | **OK** |
+| 7 | `07_widget_tree` | `tree` |    78.3 ms |   122.6 ms | 0 |   200.8 ms | 22 | 0 | **OK** |
+| 8 | `08_primitives` | `primitive` |    87.1 ms |   112.3 ms | 0 |   199.4 ms | 25 | 0 | **OK** |
+| 9 | `09_style` | `styling` |    77.5 ms |    96.7 ms | 0 |   174.2 ms | 44 | 0 | **OK** |
+| 10 | `10_state_machines` | `state` |    78.6 ms |   110.8 ms | 0 |   189.4 ms | 32 | 0 | **OK** |
+| 11 | `11_collections` | `collection` |    78.0 ms |    97.8 ms | 0 |   175.9 ms | 33 | 0 | **OK** |
+| 12 | `12_text_input` | `input` |    77.0 ms |   110.4 ms | 0 |   187.4 ms | 34 | 0 | **OK** |
+| 13 | `13_renderer_clip` | `clip` |    87.6 ms |   115.4 ms | 0 |   202.9 ms | 27 | 0 | **OK** |
+| 14 | `14_perf` | `performance` |    88.9 ms |   183.7 ms | 0 |   272.6 ms | 22 | 0 | **OK** |
+| 15 | `15_for_loop` | `?` |    87.8 ms |   114.0 ms | 0 |   201.7 ms | 18 | 0 | **OK** |
+| 16 | `_hconcepts_smoke` | `?` |    82.6 ms |   108.1 ms | 0 |   190.7 ms | 0 | 0 | **OK** |
+| 17 | `h_concepts` | `?` |   104.0 ms |    87.1 ms | 0 |   191.1 ms | 0 | 0 | **OK** |
+| 18 | `test_concepts` | `?` |    94.6 ms |   128.8 ms | 0 |   223.3 ms | 166 | 0 | **OK** |
+| 19 | `test_generics` | `?` |    85.9 ms |   113.9 ms | 0 |   199.9 ms | 0 | 0 | **OK** |
 
 ## 4. Test Catalogue
 
@@ -99,10 +100,11 @@ no real display is opened.
 | 12 | `12_text_input` | `input` | TextInput lifecycle: placeholder, value, max_length, password flag, append/backspace round-trip, clear, set/get value identity, unicode/empty boundary. |
 | 13 | `13_renderer_clip` | `clip` | Clip stack: pushClip/popClip single, push/pop push/pop, popClip on empty, nested clip with theme rect, native_set_clip/native_clear_clip callability. |
 | 14 | `14_perf` | `performance` | Performance: create 200 widgets, build a 3-level deep tree, iterate children 200 times, list ops on 100 items, repeated layout do_layout cycle, dict-style access 200 times. |
-| 15 | `_hconcepts_smoke` | `?` | ? |
-| 16 | `h_concepts` | `?` | ? |
-| 17 | `test_concepts` | `?` | ? |
-| 18 | `test_generics` | `?` | ? |
+| 15 | `15_for_loop` | `?` | ? |
+| 16 | `_hconcepts_smoke` | `?` | ? |
+| 17 | `h_concepts` | `?` | ? |
+| 18 | `test_concepts` | `?` | ? |
+| 19 | `test_generics` | `?` | ? |
 
 ## 5. Per-Test Standard Output (parsed summary lines)
 
@@ -204,6 +206,13 @@ no real display is opened.
 ```
 - **PASS=22, FAIL=0**
 
+### `15_for_loop` — `?`
+
+```text
+FOR_LOOP_TEST : PASS=18 FAIL=0
+```
+- **PASS=18, FAIL=0**
+
 ### `_hconcepts_smoke` — `?`
 
 ```text
@@ -232,7 +241,7 @@ HCONCEPTS_TEST : PASS=166 FAIL=0
 
 ## 7. Findings & Coverage Analysis
 
-- All **18** zzwui test files pass; all **687** individual
+- All **19** zzwui test files pass; all **705** individual
   `check()` cases pass.  H# v0.4's zzwui library (widget class
   hierarchy, `ZzwRenderer`, `ZzwWindow`, native GUI bridge, and
   the composable minimal `hwdui_min.hto` module) is fully functional

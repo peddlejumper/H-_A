@@ -360,6 +360,20 @@ class HVM(private val file: HbcFile, val entryName: String? = null, val hbcDir: 
             }
 
             "FOR_ITER" -> forIter((arg as Number).toInt())
+            "CLEANUP_FOR" -> {
+                // Pop the for-loop iterator dict that the current `for`
+                // pushed onto the stack.  This is only meaningful on the
+                // `break` path (where forIter's normal end-of-iteration
+                // pop was skipped).  On the normal end-of-iteration
+                // path, forIter has already set f.pc past this
+                // instruction, so we never get here.
+                if (f.stack.isNotEmpty()) {
+                    val top = f.stack.last()
+                    if (top is HDict && top.entries["__is_iter"] == HBool(true)) {
+                        f.stack.removeLast()
+                    }
+                }
+            }
             "CONTINUE" -> { /* no-op: continue targets are baked in by compiler */ }
             "BREAK" -> {
                 // C VM behaviour: scan forward past the next backward JUMP

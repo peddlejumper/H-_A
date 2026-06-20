@@ -637,10 +637,20 @@ class Compiler:
             for s in stmt.body.statements:
                 self.compile_stmt(s)
             self.emit('JUMP', for_start)
-            for_end = len(self.instructions)
+            # CLEANUP_FOR sits at the for-end position.  Two control
+            # flows reach it:
+            #   * `break` jumps here.  The iterator dict was pushed
+            #     onto the stack by forIter and never popped, so
+            #     CLEANUP_FOR pops it.
+            #   * Normal end-of-iteration reaches it via FOR_ITER's
+            #     jump-target field, but we point that field past
+            #     CLEANUP_FOR (see for_end below) so the dict that
+            #     forIter already popped is not popped again.
+            self.emit('CLEANUP_FOR', None)
+            for_end = len(self.instructions)         # position *after* CLEANUP_FOR
             self.instructions[for_start - 1] = ('FOR_ITER', for_end)
 
-            self._backpatch_breaks(for_end, old_breaks, old_continues)
+            self._backpatch_breaks(for_end - 1, old_breaks, old_continues)
         elif isinstance(stmt, ModuleDeclaration):
             for s in stmt.body.statements:
                 self.compile_stmt(s)

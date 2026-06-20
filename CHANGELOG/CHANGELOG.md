@@ -41,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`H#_v0.4.1_Package/`** — single-directory distribution of every useful
   artifact of v0.4.1 (Kotlin compiler source + jars, zzwui, bootstrap, VS Code
   extension, IDE, launcher, website, docs, CHANGELOG).
+- **`for x in y` syntax** — already supported (class fields, range, list,
+  string, dict, k/v unpacking), but a latent stack-leak bug in the
+  nested-`for` + `break` interaction was fixed.  The compiler now emits
+  a `CLEANUP_FOR` opcode at the for-end position: `break` jumps there
+  and pops the iterator dict that `FOR_ITER` pushed but didn't get to
+  pop; the normal end-of-iteration path skips it because `FOR_ITER`
+  has already set `f.pc` past it.  New test file `15_for_loop.hto`
+  (18 cases) covers list / string / dict / `k, v` / range (1- and
+  2-arg) / break / continue / nested for / empty iterables / state
+  isolation between back-to-back for loops.
 - **Generics / Templates support (`<T>` syntax)** — class and function
   type-parameter declarations (`class Box<T>`, `class Pair<K, V>`,
   `fn identity<T>(x)`) and explicit type-argument call sites
