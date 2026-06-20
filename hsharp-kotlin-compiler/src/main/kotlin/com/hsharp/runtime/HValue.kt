@@ -1,21 +1,4 @@
-/*
- * H# Runtime Value System
- * -----------------------
- * Dynamic, boxed value type that mirrors the JSON shape of values in an .hbc file.
- * Every cell of the VM stack / env / const-pool is one of these.
- *
- * The .hbc file format (see hsvm.c) serialises values as JSON:
- *   - null                  -> HNull
- *   - true/false            -> HBool
- *   - integer / real number -> HNumber (always double precision, like Python VM)
- *   - "..."                 -> HString
- *   - [v0, v1, ...]         -> HList
- *   - { k: v, ... }         -> HDict
- *   - {"name":.., "args":[..], "bytecode":[[op,arg]...], "consts":[..], ...} -> HFunction
- *   - {"name":.., "methods":.., "fields":.., "private":[..], "base":.., ...}    -> HClass
- *   - {"__type__":"union", "name":.., "variants":[...]}                         -> HUnion
- *   - {"__class__":..., ...}                                                    -> HInstance
- */
+
 package com.hsharp.runtime
 
 /** Discriminator used for pattern matching and toJson(). */

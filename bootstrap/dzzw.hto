@@ -1,27 +1,3 @@
-# DZZW — Parallel Multi-Tasking Runtime for H#  v2.0
-# Work-stealing thread pool, VM reuse, memory pooling,
-# futures, channels, mutex, parallel-for/reduce, continuations
-#
-# Builtins available:
-#   dzzw_spawn(fn, args_list) -> future_handle
-#   dzzw_await(handle) -> result
-#   dzzw_try_await(handle) -> result (nil if pending)
-#   dzzw_await_any(handle_list) -> index (first completed)
-#   dzzw_await_all(handle_list) -> nil
-#   dzzw_parallel_map(fn, list) -> results_list
-#   dzzw_worker_count() -> int
-#   dzzw_pending_count() -> int
-#   dzzw_total_completed() -> int
-#   dzzw_total_submitted() -> int
-#   dzzw_dump_stats() -> 1 (prints to stderr)
-#   dzzw_channel_create(capacity) -> channel_handle
-#   dzzw_channel_send(ch, value)
-#   dzzw_channel_recv(ch) -> value
-#   dzzw_channel_free(ch)
-#   dzzw_mutex_create() -> mutex_handle
-#   dzzw_mutex_lock(m)
-#   dzzw_mutex_unlock(m)
-#   dzzw_mutex_free(m)
 
 fn dzzw_info() {
     let w = dzzw_worker_count();

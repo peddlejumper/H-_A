@@ -1,7 +1,4 @@
-# H# Network Module
-# Provides HTTP client, URL utilities, socket wrappers, and encoding tools
 
-# Constants
 let NET_DEFAULT_TIMEOUT = 30;
 let NET_HTTP_GET = "GET";
 let NET_HTTP_POST = "POST";
@@ -10,10 +7,6 @@ let NET_HTTP_DELETE = "DELETE";
 let NET_CONTENT_TYPE_JSON = "application/json";
 let NET_CONTENT_TYPE_FORM = "application/x-www-form-urlencoded";
 let NET_CONTENT_TYPE_TEXT = "text/plain";
-
-# ============================================
-# HTTP Client Functions
-# ============================================
 
 # Simple HTTP GET request
 fn http_get(url) {

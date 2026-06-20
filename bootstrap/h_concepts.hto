@@ -1,0 +1,815 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# h_concepts.hto — 100 H# concepts as methods and modifiers
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Ten categories of ten entries each.  Every entry is a regular H# function
+# (a "method" of the H# standard library) or a higher-order function that
+# takes a function and returns a wrapped function (a "modifier", i.e. a
+# decorator in other languages).
+#
+# Categories:
+#   1.  Type predicates        (1-10)
+#   2.  Type coercions         (11-20)
+#   3.  String operations      (21-30)
+#   4.  List operations        (31-40)
+#   5.  Math / numeric helpers (41-50)
+#   6.  Dict operations        (51-60)
+#   7.  Functional higher-order (61-70)
+#   8.  Decorator / modifier   (71-80)
+#   9.  Control-flow helpers   (81-90)
+#  10.  I/O / system           (91-100)
+#
+# All entries are pure H# (no native calls beyond what the standard library
+# already exposes).  Tested under the Kotlin runtime; see
+# `test_concepts.hto` for the 100-call smoke test.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+# ─── Category 1: Type predicates (1-10) ─────────────────────────────────
+# Demonstrate H# `typeof` builtin, dict-shaped type info, and conditional
+# dispatch on `type() == "<typename>"` strings.
+
+fn is_int(v) { return type(v) == "int" or type(v) == "number"; }
+fn is_float(v) { return type(v) == "float" or type(v) == "number"; }
+fn is_number(v) { return type(v) == "int" or type(v) == "float" or type(v) == "number"; }
+fn is_str(v) { return type(v) == "string"; }
+fn is_bool(v) { return type(v) == "bool" or type(v) == "boolean"; }
+fn is_null(v) { return v == nullptr; }
+fn is_list(v) { return type(v) == "list"; }
+fn is_dict(v) { return type(v) == "dict"; }
+fn is_fn(v) { return type(v) == "function"; }
+fn is_empty(v) {
+    if (v == nullptr) { return true; }
+    if (type(v) == "string") { return len(v) == 0; }
+    if (type(v) == "list") { return len(v) == 0; }
+    if (type(v) == "dict") { return len(v) == 0; }
+    return false;
+}
+
+
+# ─── Category 2: Type coercions (11-20) ─────────────────────────────────
+# Demonstrate the built-in `int()`, `float()`, `str()` and manual fall-back
+# paths.  Each returns a sensible default rather than throwing when the
+# input is missing or wrong-typed.
+
+fn as_int(v) {
+    if (is_int(v)) { return v; }
+    if (is_float(v)) {
+        # Inline truncation for floats (H# int() of float can throw).
+        if (v >= 0.0) {
+            let f = v;
+            let r = 0;
+            while (f >= 1.0) { f = f - 1.0; r = r + 1; }
+            return r;
+        }
+        let f = -v;
+        let r = 0;
+        while (f >= 1.0) { f = f - 1.0; r = r + 1; }
+        return -r;
+    }
+    if (is_bool(v)) { if (v) { return 1; } else { return 0; } }
+    if (is_str(v)) {
+        # Inline parse: only accept "[digits]+" and optional leading "-".
+        if (len(v) == 0) { return 0; }
+        let i = 0;
+        if (substring(v, 0, 1) == "-") { i = 1; }
+        if (i == len(v)) { return 0; }
+        let result = 0;
+        let neg = false;
+        if (substring(v, 0, 1) == "-") { neg = true; }
+        while (i < len(v)) {
+            let c = substring(v, i, 1);
+            if (c < "0" or c > "9") { return 0; }
+            result = result * 10 + (ord(c) - 48);
+            i = i + 1;
+        }
+        if (neg) { result = -result; }
+        return result;
+    }
+    return 0;
+}
+fn is_numeric_str(s) {
+    # True if s is a valid H# int or float literal.
+    if (len(s) == 0) { return false; }
+    let saw_digit = false;
+    let saw_dot = false;
+    let i = 0;
+    if (substring(s, 0, 1) == "-") { i = 1; }
+    while (i < len(s)) {
+        let c = substring(s, i, 1);
+        if (c >= "0" and c <= "9") { saw_digit = true; }
+        else if (c == "." and not saw_dot) { saw_dot = true; }
+        else { return false; }
+        i = i + 1;
+    }
+    return saw_digit;
+}
+fn as_float(v) {
+    if (is_float(v)) { return v; }
+    if (is_int(v)) { return float(v); }
+    if (is_bool(v)) { if (v) { return 1.0; } else { return 0.0; } }
+    if (is_str(v)) {
+        if (is_numeric_str(v)) { return float(v); }
+        return 0.0;
+    }
+    return 0.0;
+}
+fn as_str(v) {
+    if (v == nullptr) { return ""; }
+    return str(v);
+}
+fn as_bool(v) {
+    if (v == nullptr) { return false; }
+    if (is_bool(v)) { return v; }
+    if (is_number(v)) { return v != 0; }
+    if (is_str(v)) { return len(v) > 0; }
+    if (is_list(v)) { return len(v) > 0; }
+    return true;
+}
+fn as_list(v) {
+    if (is_list(v)) { return v; }
+    if (v == nullptr) { return []; }
+    return [v];
+}
+fn as_dict(v) {
+    if (is_dict(v)) { return v; }
+    return {};
+}
+fn or_default(v, dflt) {
+    if (v == nullptr) { return dflt; }
+    return v;
+}
+fn or_zero(v) { return or_default(v, 0); }
+fn or_empty(v) {
+    if (v == nullptr) { return ""; }
+    if (is_list(v) and len(v) == 0) { return []; }
+    if (is_str(v) and len(v) == 0) { return ""; }
+    if (is_dict(v) and len(v) == 0) { return {}; }
+    return v;
+}
+fn parse_or(s, dflt) {
+    let n = as_int(s);
+    if (n == 0 and s != "0") { return dflt; }
+    return n;
+}
+
+
+# ─── Category 3: String operations (21-30) ──────────────────────────────
+# Demonstrates H# while-loop string scans, character-by-character
+# accumulation, and the substring() builtin.
+
+fn upper(s) {
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let c = ord(substring(s, i, 1));
+        if (c >= 97 and c <= 122) {
+            out = out + chr(c - 32);
+        } else {
+            out = out + substring(s, i, 1);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+fn lower(s) {
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let c = ord(substring(s, i, 1));
+        if (c >= 65 and c <= 90) {
+            out = out + chr(c + 32);
+        } else {
+            out = out + substring(s, i, 1);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+fn trim(s) {
+    let start = 0;
+    let end = len(s);
+    while (start < end and substring(s, start, 1) == " ") { start = start + 1; }
+    while (end > start and substring(s, end - 1, 1) == " ") { end = end - 1; }
+    return substring(s, start, end - start);
+}
+fn trim_left(s) {
+    let i = 0;
+    while (i < len(s) and substring(s, i, 1) == " ") { i = i + 1; }
+    return substring(s, i, len(s) - i);
+}
+fn trim_right(s) {
+    let i = len(s);
+    while (i > 0 and substring(s, i - 1, 1) == " ") { i = i - 1; }
+    return substring(s, 0, i);
+}
+fn reverse_str(s) {
+    let out = "";
+    let i = len(s) - 1;
+    while (i >= 0) {
+        out = out + substring(s, i, 1);
+        i = i - 1;
+    }
+    return out;
+}
+fn contains_str(s, sub) {
+    if (len(sub) == 0) { return true; }
+    if (len(sub) > len(s)) { return false; }
+    let i = 0;
+    while (i <= len(s) - len(sub)) {
+        if (substring(s, i, len(sub)) == sub) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn starts_with(s, prefix) {
+    if (len(prefix) > len(s)) { return false; }
+    return substring(s, 0, len(prefix)) == prefix;
+}
+fn ends_with(s, suffix) {
+    if (len(suffix) > len(s)) { return false; }
+    return substring(s, len(s) - len(suffix), len(suffix)) == suffix;
+}
+fn repeat_str(s, n) {
+    let out = "";
+    let i = 0;
+    while (i < n) { out = out + s; i = i + 1; }
+    return out;
+}
+
+
+# ─── Category 4: List operations (31-40) ─────────────────────────────────
+# Demonstrates H# list slicing, push/pop, while-loop iteration.
+
+fn head(lst) {
+    if (len(lst) == 0) { return nullptr; }
+    return lst[0];
+}
+fn tail(lst) {
+    let out = [];
+    let i = 1;
+    while (i < len(lst)) { push(out, lst[i]); i = i + 1; }
+    return out;
+}
+fn last(lst) {
+    if (len(lst) == 0) { return nullptr; }
+    return lst[len(lst) - 1];
+}
+fn init(lst) {
+    let out = [];
+    let i = 0;
+    while (i < len(lst) - 1) { push(out, lst[i]); i = i + 1; }
+    return out;
+}
+fn take(lst, n) {
+    let out = [];
+    let i = 0;
+    while (i < n and i < len(lst)) { push(out, lst[i]); i = i + 1; }
+    return out;
+}
+fn drop(lst, n) {
+    let out = [];
+    let i = n;
+    while (i < len(lst)) { push(out, lst[i]); i = i + 1; }
+    return out;
+}
+fn concat(a, b) {
+    let out = [];
+    let i = 0;
+    while (i < len(a)) { push(out, a[i]); i = i + 1; }
+    i = 0;
+    while (i < len(b)) { push(out, b[i]); i = i + 1; }
+    return out;
+}
+fn flatten(lst) {
+    let out = [];
+    let i = 0;
+    while (i < len(lst)) {
+        let item = lst[i];
+        if (is_list(item)) {
+            let j = 0;
+            while (j < len(item)) { push(out, item[j]); j = j + 1; }
+        } else {
+            push(out, item);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+fn distinct(lst) {
+    let out = [];
+    let i = 0;
+    while (i < len(lst)) {
+        let found = false;
+        let j = 0;
+        while (j < len(out)) {
+            if (out[j] == lst[i]) { found = true; }
+            j = j + 1;
+        }
+        if (not found) { push(out, lst[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+fn reverse_list(lst) {
+    let out = [];
+    let i = len(lst) - 1;
+    while (i >= 0) { push(out, lst[i]); i = i - 1; }
+    return out;
+}
+
+
+# ─── Category 5: Math / numeric helpers (41-50) ─────────────────────────
+
+fn clamp(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+fn lerp(a, b, t) { return a + (b - a) * t; }
+fn sign(x) {
+    if (x > 0) { return 1; }
+    if (x < 0) { return -1; }
+    return 0;
+}
+fn is_even(n) {
+    let m = n - (n / 2) * 2;
+    if (m < 0) { m = -m; }
+    return m == 0;
+}
+fn is_odd(n) { return not is_even(n); }
+fn is_prime(n) {
+    if (n < 2) { return false; }
+    if (n == 2) { return true; }
+    if (is_even(n)) { return false; }
+    let i = 3;
+    while (i * i <= n) {
+        if (n - (n / i) * i == 0) { return false; }
+        i = i + 2;
+    }
+    return true;
+}
+fn gcd(a, b) {
+    let x = a;
+    let y = b;
+    while (y != 0) {
+        let t = x - (x / y) * y;
+        x = y;
+        y = t;
+    }
+    if (x < 0) { x = -x; }
+    return x;
+}
+fn lcm(a, b) {
+    if (a == 0 or b == 0) { return 0; }
+    return (a / gcd(a, b)) * b;
+}
+fn factorial(n) {
+    let result = 1;
+    let i = 2;
+    while (i <= n) { result = result * i; i = i + 1; }
+    return result;
+}
+fn fibonacci(n) {
+    if (n < 0) { return 0; }
+    if (n == 0) { return 0; }
+    if (n == 1) { return 1; }
+    let a = 0;
+    let b = 1;
+    let i = 2;
+    while (i <= n) {
+        let t = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return b;
+}
+
+
+# ─── Category 6: Dict operations (51-60) ────────────────────────────────
+# Demonstrates H# dict CRUD, has_key, and dict-merge.
+
+fn get_or(d, k, dflt) {
+    if (has_key(d, k)) { return d[k]; }
+    return dflt;
+}
+fn set_default(d, k, v) {
+    if (not has_key(d, k)) { d[k] = v; }
+    return d;
+}
+fn merge(a, b) {
+    let out = {};
+    let keys_a = keys(a);
+    let i = 0;
+    while (i < len(keys_a)) { out[keys_a[i]] = a[keys_a[i]]; i = i + 1; }
+    let keys_b = keys(b);
+    i = 0;
+    while (i < len(keys_b)) { out[keys_b[i]] = b[keys_b[i]]; i = i + 1; }
+    return out;
+}
+fn invert(d) {
+    let out = {};
+    let ks = keys(d);
+    let i = 0;
+    while (i < len(ks)) { out[str(d[ks[i]])] = ks[i]; i = i + 1; }
+    return out;
+}
+fn pick(d, ks) {
+    let out = {};
+    let i = 0;
+    while (i < len(ks)) {
+        if (has_key(d, ks[i])) { out[ks[i]] = d[ks[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+fn omit(d, ks) {
+    let out = {};
+    let src = keys(d);
+    let i = 0;
+    while (i < len(src)) {
+        let skip = false;
+        let j = 0;
+        while (j < len(ks)) {
+            if (ks[j] == src[i]) { skip = true; }
+            j = j + 1;
+        }
+        if (not skip) { out[src[i]] = d[src[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+fn map_keys(d, f) {
+    let out = {};
+    let ks = keys(d);
+    let i = 0;
+    while (i < len(ks)) { out[f(ks[i])] = d[ks[i]]; i = i + 1; }
+    return out;
+}
+fn map_values(d, f) {
+    let out = {};
+    let ks = keys(d);
+    let i = 0;
+    while (i < len(ks)) { out[ks[i]] = f(d[ks[i]]); i = i + 1; }
+    return out;
+}
+fn has_all(d, ks) {
+    let i = 0;
+    while (i < len(ks)) {
+        if (not has_key(d, ks[i])) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+fn has_any(d, ks) {
+    let i = 0;
+    while (i < len(ks)) {
+        if (has_key(d, ks[i])) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+
+# ─── Category 7: Functional higher-order (61-70) ─────────────────────────
+# Demonstrates H# first-class functions: taking a function as an argument
+# and calling it.  Every entry here has the signature (collection, fn) and
+# returns a transformed collection.
+
+fn map(lst, f) {
+    let out = [];
+    let i = 0;
+    while (i < len(lst)) { push(out, f(lst[i])); i = i + 1; }
+    return out;
+}
+fn filter(lst, f) {
+    let out = [];
+    let i = 0;
+    while (i < len(lst)) {
+        if (f(lst[i])) { push(out, lst[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+fn reduce(lst, f, init) {
+    let acc = init;
+    let i = 0;
+    while (i < len(lst)) { acc = f(acc, lst[i]); i = i + 1; }
+    return acc;
+}
+fn fold(lst, f) {
+    if (len(lst) == 0) { return nullptr; }
+    let acc = lst[0];
+    let i = 1;
+    while (i < len(lst)) { acc = f(acc, lst[i]); i = i + 1; }
+    return acc;
+}
+fn any(lst, f) {
+    let i = 0;
+    while (i < len(lst)) {
+        if (f(lst[i])) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn all(lst, f) {
+    let i = 0;
+    while (i < len(lst)) {
+        if (not f(lst[i])) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+fn find(lst, f) {
+    let i = 0;
+    while (i < len(lst)) {
+        if (f(lst[i])) { return lst[i]; }
+        i = i + 1;
+    }
+    return nullptr;
+}
+fn partition(lst, f) {
+    let yes = [];
+    let no = [];
+    let i = 0;
+    while (i < len(lst)) {
+        if (f(lst[i])) { push(yes, lst[i]); } else { push(no, lst[i]); }
+        i = i + 1;
+    }
+    return [yes, no];
+}
+fn group_by(lst, f) {
+    let out = {};
+    let i = 0;
+    while (i < len(lst)) {
+        let k = str(f(lst[i]));
+        if (not has_key(out, k)) { out[k] = []; }
+        push(out[k], lst[i]);
+        i = i + 1;
+    }
+    return out;
+}
+fn zip(a, b) {
+    let out = [];
+    let n = len(a);
+    if (len(b) < n) { n = len(b); }
+    let i = 0;
+    while (i < n) { push(out, [a[i], b[i]]); i = i + 1; }
+    return out;
+}
+
+
+# ─── Category 8: Decorator / modifier (71-80) ────────────────────────────
+# A "modifier" in H# is a higher-order function that takes a function
+# and returns a wrapped function with extra behaviour.  These are
+# manually wired up by the caller; the language has no `@` syntax yet.
+
+# Closure-based counter for memoize
+let __memo_cache = {};
+
+fn memoize(f) {
+    # Returns a wrapper that caches results in __memo_cache by string key.
+    return fn(arg) {
+        let k = str(arg);
+        if (has_key(__memo_cache, k)) { return __memo_cache[k]; }
+        let r = f(arg);
+        __memo_cache[k] = r;
+        return r;
+    };
+}
+
+fn compose(f, g) {
+    # (f ∘ g)(x) = f(g(x))
+    return fn(x) { return f(g(x)); };
+}
+
+fn pipe(value, fns) {
+    # value |> f1 |> f2 |> …  ; passes the value through each function.
+    let v = value;
+    let i = 0;
+    while (i < len(fns)) { v = fns[i](v); i = i + 1; }
+    return v;
+}
+
+fn curry2(f) {
+    # f(a, b) → g(a)(b)
+    return fn(a) {
+        return fn(b) { return f(a, b); };
+    };
+}
+
+fn partial(f, a) {
+    # f(a, b, c) → g(b, c)  ; pre-fills the first arg.
+    return fn(b) { return f(a, b); };
+}
+
+fn tap(value, f) {
+    # Run a side-effecting function on value, return value unchanged.
+    f(value);
+    return value;
+}
+
+fn log_calls(label, f) {
+    return fn(x) {
+        print("[" + label + "] in: " + str(x));
+        let r = f(x);
+        print("[" + label + "] out: " + str(r));
+        return r;
+    };
+}
+
+fn time_it(label, f) {
+    return fn(x) {
+        let t0 = time_now();
+        let r = f(x);
+        let t1 = time_now();
+        print("[" + label + "] " + str(t1 - t0) + " ms");
+        return r;
+    };
+}
+
+fn retry(n, f) {
+    # Calls f up to n times, returning the first non-null result.
+    # f takes no args; we count iterations inside via a captured counter
+    # passed through the function's closure scope, not its signature.
+    let i = 0;
+    while (i < n) {
+        let r = f();
+        if (r != nullptr) { return r; }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn throttle(state, f) {
+    # Decorator that only calls f at most every `state["interval"]` ms.
+    let last = state["last"];
+    let now = time_now();
+    if (now - last < state["interval"]) { return state["last_value"]; }
+    state["last"] = now;
+    let v = f();
+    state["last_value"] = v;
+    return v;
+}
+
+
+# ─── Category 9: Control-flow helpers (81-90) ───────────────────────────
+# Small composable wrappers that change how many times a function runs.
+
+fn times(n, f) {
+    let i = 0;
+    while (i < n) { f(i); i = i + 1; }
+    return 0;
+}
+
+fn until(cond, f) {
+    while (not cond()) { f(); }
+    return 0;
+}
+
+fn range_step(start, stop, step) {
+    let out = [];
+    let i = start;
+    if (step > 0) {
+        while (i < stop) { push(out, i); i = i + step; }
+    } else {
+        while (i > stop) { push(out, i); i = i + step; }
+    }
+    return out;
+}
+
+fn chain(fns) {
+    # Returns a single function that applies each in turn to its arg.
+    return fn(x) {
+        let v = x;
+        let i = 0;
+        while (i < len(fns)) { v = fns[i](v); i = i + 1; }
+        return v;
+    };
+}
+
+fn when_(cond, f) {
+    return fn(x) { if (cond(x)) { return f(x); } return x; };
+}
+
+fn unless(cond, f) {
+    return when_(fn(x) { return not cond(x); }, f);
+}
+
+fn with_default(dflt, f) {
+    return fn(x) {
+        if (x == nullptr) { return dflt; }
+        return f(x);
+    };
+}
+
+fn identity(x) { return x; }
+
+fn constant(v) {
+    return fn() { return v; };
+}
+
+fn noop() { return 0; }
+
+
+# ─── Category 10: I/O / system (91-100) ─────────────────────────────────
+# Uses H#'s fs_* and file-system builtins; all path arguments are strings.
+
+fn file_size(path) {
+    # Best-effort: the standard library doesn't expose stat, so we read
+    # and count bytes via read_file().
+    if (not fs_exists(path)) { return 0; }
+    let s = read_file(path);
+    return len(s);
+}
+
+fn file_ext(path) {
+    # Returns the substring after the last '.' (or "" if none).
+    let i = len(path) - 1;
+    while (i >= 0) {
+        if (substring(path, i, 1) == ".") { return substring(path, i + 1, len(path) - i - 1); }
+        if (substring(path, i, 1) == "/") { return ""; }
+        i = i - 1;
+    }
+    return "";
+}
+
+fn file_name(path) {
+    # Returns the substring after the last '/'.
+    let i = len(path) - 1;
+    while (i >= 0) {
+        if (substring(path, i, 1) == "/") { return substring(path, i + 1, len(path) - i - 1); }
+        i = i - 1;
+    }
+    return path;
+}
+
+fn file_stem(path) {
+    # Returns the file name without the trailing extension.
+    let name = file_name(path);
+    let i = 0;
+    let last_dot = -1;
+    while (i < len(name)) {
+        if (substring(name, i, 1) == ".") { last_dot = i; }
+        i = i + 1;
+    }
+    if (last_dot < 0) { return name; }
+    return substring(name, 0, last_dot);
+}
+
+fn path_join(a, b) {
+    if (ends_with(a, "/")) { return a + b; }
+    return a + "/" + b;
+}
+
+fn read_lines(path) {
+    if (not fs_exists(path)) { return []; }
+    let s = read_file(path);
+    let out = [];
+    let i = 0;
+    let start = 0;
+    while (i < len(s)) {
+        if (substring(s, i, 1) == "\n") {
+            push(out, substring(s, start, i - start));
+            start = i + 1;
+        }
+        i = i + 1;
+    }
+    if (start < len(s)) { push(out, substring(s, start, len(s) - start)); }
+    return out;
+}
+
+fn write_lines(path, lines) {
+    let out = "";
+    let i = 0;
+    while (i < len(lines)) {
+        out = out + str(lines[i]);
+        if (i < len(lines) - 1) { out = out + "\n"; }
+        i = i + 1;
+    }
+    write_file(path, out);
+    return 0;
+}
+
+fn with_file(path, mode, f) {
+    if (mode == "r") {
+        let s = read_file(path);
+        return f(s);
+    }
+    if (mode == "w") {
+        let result = f("");
+        write_file(path, str(result));
+        return result;
+    }
+    return nullptr;
+}
+
+fn safe_div(a, b) {
+    if (b == 0) { return 0; }
+    return a / b;
+}
+
+fn in_range(x, lo, hi) {
+    return x >= lo and x <= hi;
+}

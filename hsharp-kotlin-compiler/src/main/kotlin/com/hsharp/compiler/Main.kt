@@ -1,21 +1,4 @@
-/*
- * H# Kotlin Compiler — CLI entry
- * ------------------------------
- *
- * Sub-commands:
- *   info     <file.hbc>                Show what is in the .hbc file
- *   validate <file.hbc>                Sanity-check the bytecode
- *   compile  <file.hbc> -o <out-dir>   Generate a cross-platform app
- *   run      <file.hbc>                Run the .hbc in the embedded runtime
- *   version                             Print compiler version
- *
- * "Compile" uses the package scripts in scripts/ to wrap the embedded runtime
- * together with the .hbc file as a platform-specific bundle (mac .app,
- * windows .exe, linux ELF). On a developer box with jpackage available, the
- * script will produce a real native installer. Without jpackage, the script
- * falls back to producing a runnable .jar (java -jar ...) so that
- * cross-platform artefacts are still produced.
- */
+
 package com.hsharp.compiler
 
 import com.hsharp.platform.Packager
