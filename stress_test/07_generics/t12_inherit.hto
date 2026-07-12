@@ -1,0 +1,24 @@
+# t12_inherit.hto — 泛型类继承：class Box<T> extends Base
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Base {
+    let tag = "base";
+    fn greet() { return "base"; }
+    fn base_tag() { return self.tag; }
+}
+
+class Box<T> extends Base {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+    fn get() { return self.value; }
+}
+
+let b = new Box<int>(5);
+check("12/inherited", b.greet() == "base");
+check("12/own_get", b.get() == 5);
+check("12/base_field", b.base_tag() == "base");
+try { print("12/ta0=" + str(b.__type_args__[0])); } catch (e) { print("12/ta err=" + str(e)); }
+check("12/has_typeargs", b.__type_args__[0] == "int");

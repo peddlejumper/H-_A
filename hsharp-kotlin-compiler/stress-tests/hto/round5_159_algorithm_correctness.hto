@@ -1,0 +1,908 @@
+# ============================================================
+# round5_159_algorithm_correctness.hto
+# H# v0.4.1 — 算法正确性测试 (Algorithm Correctness)
+# ------------------------------------------------------------
+# 实现 18 个经典算法, 验证结果与已知正确答案一致。
+# 每个算法用 try/catch 包裹; 输出 S{n}.{case}:PASS/FAIL/EXC 格式。
+# 已知语言特性约束:
+#   - 整数 / 整数 = floor 除法 (无浮点)
+#   - 列表用 push/pop/index/sort/reverse/contains/remove
+#   - 字典 d[k], d[k]=v, for k in d, for k,v in d
+#   - 不支持 += / ** ; 赋值是语句
+#   - 字符串索引 s[i] 返回单字符字符串
+# ============================================================
+
+print("=== R5.159 START ===");
+
+# 通用断言: 用 str() 比较以兼容标量/列表/字符串/布尔
+fn expect(label, got, want) {
+    if (str(got) == str(want)) {
+        print(label + ":PASS");
+    } else {
+        print(label + ":FAIL got=" + str(got) + " want=" + str(want));
+    }
+}
+
+# ============================================================
+# 算法函数定义
+# ============================================================
+
+# --- S1: 冒泡排序 ---
+fn bubble_sort(arr) {
+    let n = len(arr);
+    let i = 0;
+    while (i < n - 1) {
+        let j = 0;
+        let swapped = false;
+        while (j < n - 1 - i) {
+            if (arr[j] > arr[j + 1]) {
+                let tmp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = tmp;
+                swapped = true;
+            }
+            j = j + 1;
+        }
+        if (!swapped) { break; }
+        i = i + 1;
+    }
+    return arr;
+}
+
+# --- S2: 归并排序 (整数) ---
+fn merge_int(left, right) {
+    let result = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(left) && j < len(right)) {
+        if (left[i] <= right[j]) { push(result, left[i]); i = i + 1; }
+        else { push(result, right[j]); j = j + 1; }
+    }
+    while (i < len(left)) { push(result, left[i]); i = i + 1; }
+    while (j < len(right)) { push(result, right[j]); j = j + 1; }
+    return result;
+}
+fn merge_sort(arr) {
+    let n = len(arr);
+    if (n <= 1) { return arr; }
+    let mid = n / 2;
+    let left = arr[:mid];
+    let right = arr[mid:];
+    return merge_int(merge_sort(left), merge_sort(right));
+}
+
+# --- S2: 归并排序 (键值对, 测试稳定性) ---
+fn merge_pairs(left, right) {
+    let result = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(left) && j < len(right)) {
+        # 比较键 [0]; <= 保证相等时左先出 (稳定)
+        if (left[i][0] <= right[j][0]) { push(result, left[i]); i = i + 1; }
+        else { push(result, right[j]); j = j + 1; }
+    }
+    while (i < len(left)) { push(result, left[i]); i = i + 1; }
+    while (j < len(right)) { push(result, right[j]); j = j + 1; }
+    return result;
+}
+fn merge_sort_pairs(arr) {
+    let n = len(arr);
+    if (n <= 1) { return arr; }
+    let mid = n / 2;
+    let left = arr[:mid];
+    let right = arr[mid:];
+    return merge_pairs(merge_sort_pairs(left), merge_sort_pairs(right));
+}
+
+# --- S3: 二分查找 (迭代) ---
+fn binary_search(arr, target) {
+    let lo = 0;
+    let hi = len(arr) - 1;
+    while (lo <= hi) {
+        let mid = (lo + hi) / 2;
+        if (arr[mid] == target) { return mid; }
+        if (arr[mid] < target) { lo = mid + 1; }
+        else { hi = mid - 1; }
+    }
+    return -1;
+}
+
+# --- S4: BFS 广度优先搜索 ---
+fn bfs(graph, start) {
+    let n = len(graph);
+    let visited = [];
+    let vi = 0;
+    while (vi < n) { push(visited, false); vi = vi + 1; }
+    let order = [];
+    let queue = [start];
+    visited[start] = true;
+    let head = 0;
+    while (head < len(queue)) {
+        let node = queue[head];
+        head = head + 1;
+        push(order, node);
+        let nbrs = graph[node];
+        let k = 0;
+        while (k < len(nbrs)) {
+            if (!visited[nbrs[k]]) { visited[nbrs[k]] = true; push(queue, nbrs[k]); }
+            k = k + 1;
+        }
+    }
+    return order;
+}
+
+# --- S5: DFS 深度优先搜索 (递归) ---
+fn dfs_rec(graph, node, visited, order) {
+    visited[node] = true;
+    push(order, node);
+    let nbrs = graph[node];
+    let k = 0;
+    while (k < len(nbrs)) {
+        if (!visited[nbrs[k]]) { dfs_rec(graph, nbrs[k], visited, order); }
+        k = k + 1;
+    }
+    return order;
+}
+# --- S5: DFS 深度优先搜索 (栈, 迭代) ---
+fn dfs_stack(graph, start) {
+    let n = len(graph);
+    let visited = [];
+    let vi = 0;
+    while (vi < n) { push(visited, false); vi = vi + 1; }
+    let order = [];
+    let stk = [start];
+    while (len(stk) > 0) {
+        let node = stk.pop();
+        if (!visited[node]) {
+            visited[node] = true;
+            push(order, node);
+            let nbrs = graph[node];
+            # 逆序入栈, 使第一个邻居先被处理 (与递归顺序一致)
+            let k = len(nbrs) - 1;
+            while (k >= 0) { if (!visited[nbrs[k]]) { push(stk, nbrs[k]); } k = k - 1; }
+        }
+    }
+    return order;
+}
+
+# --- S6: Dijkstra 最短路径 (线性扫描取最小) ---
+fn dijkstra(graph, n, src) {
+    let dist = [];
+    let vis = [];
+    let di = 0;
+    while (di < n) { push(dist, 999999); push(vis, false); di = di + 1; }
+    dist[src] = 0;
+    let cnt = 0;
+    while (cnt < n) {
+        let u = -1;
+        let best = 999999;
+        let mi = 0;
+        while (mi < n) {
+            if (!vis[mi] && dist[mi] < best) { best = dist[mi]; u = mi; }
+            mi = mi + 1;
+        }
+        if (u == -1) { break; }
+        vis[u] = true;
+        cnt = cnt + 1;
+        let nbrs = graph[u];
+        let k = 0;
+        while (k < len(nbrs)) {
+            let v = nbrs[k][0];
+            let w = nbrs[k][1];
+            if (!vis[v] && dist[u] + w < dist[v]) { dist[v] = dist[u] + w; }
+            k = k + 1;
+        }
+    }
+    return dist;
+}
+
+# --- S7: 0/1 背包 (DP 表) ---
+fn knapsack(wt, val, cap) {
+    let n = len(wt);
+    let dp = [];
+    let i = 0;
+    while (i <= n) {
+        let row = [];
+        let j = 0;
+        while (j <= cap) { push(row, 0); j = j + 1; }
+        push(dp, row);
+        i = i + 1;
+    }
+    i = 1;
+    while (i <= n) {
+        let w = wt[i - 1];
+        let v = val[i - 1];
+        let j = 0;
+        while (j <= cap) {
+            if (w <= j) {
+                let cand = dp[i - 1][j - w] + v;
+                if (cand > dp[i - 1][j]) { dp[i][j] = cand; }
+                else { dp[i][j] = dp[i - 1][j]; }
+            } else {
+                dp[i][j] = dp[i - 1][j];
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return dp[n][cap];
+}
+
+# --- S8: 最长递增子序列 (LIS, 严格递增) ---
+fn lis(arr) {
+    let n = len(arr);
+    if (n == 0) { return 0; }
+    let dp = [];
+    let i = 0;
+    while (i < n) { push(dp, 1); i = i + 1; }
+    let best = 1;
+    i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < i) {
+            if (arr[j] < arr[i] && dp[j] + 1 > dp[i]) { dp[i] = dp[j] + 1; }
+            j = j + 1;
+        }
+        if (dp[i] > best) { best = dp[i]; }
+        i = i + 1;
+    }
+    return best;
+}
+
+# --- S9: 矩阵乘法 ---
+fn matmul(A, B) {
+    let n = len(A);
+    let m = len(B[0]);
+    let p = len(B);
+    let C = [];
+    let i = 0;
+    while (i < n) {
+        let row = [];
+        let j = 0;
+        while (j < m) { push(row, 0); j = j + 1; }
+        push(C, row);
+        i = i + 1;
+    }
+    i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < m) {
+            let s = 0;
+            let k = 0;
+            while (k < p) { s = s + A[i][k] * B[k][j]; k = k + 1; }
+            C[i][j] = s;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return C;
+}
+
+# --- S10: KMP 字符串匹配 ---
+fn kmp_prefix(p) {
+    let m = len(p);
+    let lps = [];
+    let i = 0;
+    while (i < m) { push(lps, 0); i = i + 1; }
+    let ln = 0;
+    i = 1;
+    while (i < m) {
+        if (p[i] == p[ln]) { ln = ln + 1; lps[i] = ln; i = i + 1; }
+        else { if (ln != 0) { ln = lps[ln - 1]; } else { lps[i] = 0; i = i + 1; } }
+    }
+    return lps;
+}
+fn kmp_search(text, pat) {
+    let n = len(text);
+    let m = len(pat);
+    if (m == 0) { return 0; }
+    if (m > n) { return -1; }
+    let lps = kmp_prefix(pat);
+    let i = 0;
+    let j = 0;
+    while (i < n) {
+        if (text[i] == pat[j]) { i = i + 1; j = j + 1; }
+        if (j == m) { return i - j; }
+        else if (i < n && text[i] != pat[j]) {
+            if (j != 0) { j = lps[j - 1]; }
+            else { i = i + 1; }
+        }
+    }
+    return -1;
+}
+
+# --- S11: 哈希表 (链地址法) ---
+fn ht_create(size) {
+    let buckets = [];
+    let i = 0;
+    while (i < size) { push(buckets, []); i = i + 1; }
+    return {"size": size, "buckets": buckets};
+}
+fn ht_put(table, key, value) {
+    let h = key % table["size"];
+    let bucket = table["buckets"][h];
+    let i = 0;
+    while (i < len(bucket)) {
+        if (bucket[i][0] == key) { bucket[i][1] = value; return null; }
+        i = i + 1;
+    }
+    push(bucket, [key, value]);
+    return null;
+}
+fn ht_get(table, key) {
+    let h = key % table["size"];
+    let bucket = table["buckets"][h];
+    let i = 0;
+    while (i < len(bucket)) {
+        if (bucket[i][0] == key) { return bucket[i][1]; }
+        i = i + 1;
+    }
+    return null;
+}
+
+# --- S12: 链表操作 ---
+# 注: 预置 "vis": false 字段, 因为 H# 对缺失 dict key 抛异常 (Python 语义),
+# 环检测需要先读 "vis" 再写; 预置避免 Key 'vis' not in dict。
+fn mk_ll(v) { return {"val": v, "next": null, "vis": false}; }
+fn ll_to_list(head) {
+    let out = [];
+    let cur = head;
+    while (cur != null) { push(out, cur["val"]); cur = cur["next"]; }
+    return out;
+}
+fn ll_reverse(head) {
+    let prev = null;
+    let cur = head;
+    while (cur != null) {
+        let nxt = cur["next"];
+        cur["next"] = prev;
+        prev = cur;
+        cur = nxt;
+    }
+    return prev;
+}
+fn ll_has_cycle(head) {
+    let cur = head;
+    while (cur != null) {
+        if (cur["vis"] == true) { return true; }
+        cur["vis"] = true;
+        cur = cur["next"];
+    }
+    return false;
+}
+fn ll_merge(a, b) {
+    # 合并两个升序链表, 返回新链表头 (用 dummy 节点)
+    let dummy = mk_ll(0);
+    let tail = dummy;
+    let pa = a;
+    let pb = b;
+    while (pa != null && pb != null) {
+        if (pa["val"] <= pb["val"]) {
+            tail["next"] = mk_ll(pa["val"]);
+            pa = pa["next"];
+        } else {
+            tail["next"] = mk_ll(pb["val"]);
+            pb = pb["next"];
+        }
+        tail = tail["next"];
+    }
+    while (pa != null) { tail["next"] = mk_ll(pa["val"]); pa = pa["next"]; tail = tail["next"]; }
+    while (pb != null) { tail["next"] = mk_ll(pb["val"]); pb = pb["next"]; tail = tail["next"]; }
+    return dummy["next"];
+}
+
+# --- S13: 栈/队列 + 括号匹配 ---
+fn balanced(s) {
+    let stk = [];
+    let i = 0;
+    while (i < len(s)) {
+        let c = s[i];
+        if (c == "(" || c == "[" || c == "{") { push(stk, c); }
+        else if (c == ")") { if (len(stk) == 0 || stk.pop() != "(") { return false; } }
+        else if (c == "]") { if (len(stk) == 0 || stk.pop() != "[") { return false; } }
+        else if (c == "}") { if (len(stk) == 0 || stk.pop() != "{") { return false; } }
+        i = i + 1;
+    }
+    return len(stk) == 0;
+}
+
+# --- S14: 二叉树遍历 ---
+fn mk_leaf(v) { return {"val": v, "left": null, "right": null}; }
+fn mk_tnode(v, l, r) { return {"val": v, "left": l, "right": r}; }
+fn preorder(node, acc) {
+    if (node == null) { return acc; }
+    push(acc, node["val"]);
+    preorder(node["left"], acc);
+    preorder(node["right"], acc);
+    return acc;
+}
+fn inorder(node, acc) {
+    if (node == null) { return acc; }
+    inorder(node["left"], acc);
+    push(acc, node["val"]);
+    inorder(node["right"], acc);
+    return acc;
+}
+fn postorder(node, acc) {
+    if (node == null) { return acc; }
+    postorder(node["left"], acc);
+    postorder(node["right"], acc);
+    push(acc, node["val"]);
+    return acc;
+}
+fn levelorder(root) {
+    let result = [];
+    if (root == null) { return result; }
+    let queue = [root];
+    let head = 0;
+    while (head < len(queue)) {
+        let node = queue[head];
+        head = head + 1;
+        push(result, node["val"]);
+        if (node["left"] != null) { push(queue, node["left"]); }
+        if (node["right"] != null) { push(queue, node["right"]); }
+    }
+    return result;
+}
+
+# --- S15: 表达式求值 (中缀转后缀 + 求值) ---
+fn is_op(c) {
+    return c == "+" || c == "-" || c == "*" || c == "/";
+}
+fn prec(op) {
+    if (op == "+" || op == "-") { return 1; }
+    if (op == "*" || op == "/") { return 2; }
+    return 0;
+}
+fn digit_val(c) {
+    if (c == "0") { return 0; }
+    if (c == "1") { return 1; }
+    if (c == "2") { return 2; }
+    if (c == "3") { return 3; }
+    if (c == "4") { return 4; }
+    if (c == "5") { return 5; }
+    if (c == "6") { return 6; }
+    if (c == "7") { return 7; }
+    if (c == "8") { return 8; }
+    if (c == "9") { return 9; }
+    return -1;
+}
+fn is_digit(c) {
+    return digit_val(c) >= 0;
+}
+fn infix_to_postfix(expr) {
+    let output = [];
+    let ops = [];
+    let i = 0;
+    while (i < len(expr)) {
+        let c = expr[i];
+        if (c != " ") {
+            if (is_digit(c)) { push(output, c); }
+            else if (is_op(c)) {
+                while (len(ops) > 0 && prec(ops[len(ops) - 1]) >= prec(c)) {
+                    push(output, ops.pop());
+                }
+                push(ops, c);
+            }
+            else if (c == "(") { push(ops, c); }
+            else if (c == ")") {
+                while (len(ops) > 0 && ops[len(ops) - 1] != "(") {
+                    push(output, ops.pop());
+                }
+                if (len(ops) > 0) { ops.pop(); }
+            }
+        }
+        i = i + 1;
+    }
+    while (len(ops) > 0) { push(output, ops.pop()); }
+    return output;
+}
+fn eval_postfix(postfix) {
+    let stk = [];
+    let i = 0;
+    while (i < len(postfix)) {
+        let tok = postfix[i];
+        if (is_op(tok)) {
+            let b = stk.pop();
+            let a = stk.pop();
+            let r = 0;
+            if (tok == "+") { r = a + b; }
+            else if (tok == "-") { r = a - b; }
+            else if (tok == "*") { r = a * b; }
+            else { r = a / b; }
+            push(stk, r);
+        } else {
+            push(stk, digit_val(tok));
+        }
+        i = i + 1;
+    }
+    return stk.pop();
+}
+fn eval_expr(expr) {
+    return eval_postfix(infix_to_postfix(expr));
+}
+
+# --- S16: 素数筛 (埃拉托斯特尼) ---
+fn sieve(n) {
+    let is_prime = [];
+    let i = 0;
+    while (i <= n) { push(is_prime, true); i = i + 1; }
+    if (n >= 0) { is_prime[0] = false; }
+    if (n >= 1) { is_prime[1] = false; }
+    let p = 2;
+    while (p * p <= n) {
+        if (is_prime[p]) {
+            let m = p * p;
+            while (m <= n) { is_prime[m] = false; m = m + p; }
+        }
+        p = p + 1;
+    }
+    return is_prime;
+}
+fn primes_list(n) {
+    let ip = sieve(n);
+    let result = [];
+    let i = 2;
+    while (i <= n) { if (ip[i]) { push(result, i); } i = i + 1; }
+    return result;
+}
+
+# --- S17: GCD/LCM (欧几里得) ---
+fn gcd_iter(a, b) {
+    while (b != 0) { let t = b; b = a % b; a = t; }
+    return a;
+}
+fn gcd_rec(a, b) {
+    if (b == 0) { return a; }
+    return gcd_rec(b, a % b);
+}
+fn lcm(a, b) {
+    if (a == 0 || b == 0) { return 0; }
+    return a / gcd_iter(a, b) * b;
+}
+
+# --- S18: 幂集 ---
+fn powerset(s) {
+    let result = [[]];
+    let i = 0;
+    while (i < len(s)) {
+        let new_subs = [];
+        let j = 0;
+        while (j < len(result)) {
+            push(new_subs, result[j] + [s[i]]);
+            j = j + 1;
+        }
+        let k = 0;
+        while (k < len(new_subs)) { push(result, new_subs[k]); k = k + 1; }
+        i = i + 1;
+    }
+    return result;
+}
+
+# ============================================================
+# 测试用例 (每节 try/catch)
+# ============================================================
+
+# --- S1: 冒泡排序 ---
+try {
+    print("--- S1 bubble ---");
+    expect("S1.1", bubble_sort([5, 3, 8, 1, 9, 2, 7]), [1, 2, 3, 5, 7, 8, 9]);
+    expect("S1.2", bubble_sort([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]), [1, 1, 2, 3, 3, 4, 5, 5, 5, 6, 9]);
+    expect("S1.3", bubble_sort([]), []);
+    expect("S1.4", bubble_sort([42]), [42]);
+    expect("S1.5", bubble_sort([1, 2, 3]), [1, 2, 3]);
+    expect("S1.6", bubble_sort([5, 4, 3, 2, 1]), [1, 2, 3, 4, 5]);
+    expect("S1.7", bubble_sort([-3, -1, -4, 0, 2]), [-4, -3, -1, 0, 2]);
+} catch (e) { print("S1:EXC[" + str(e) + "]"); }
+
+# --- S2: 归并排序 + 稳定性 ---
+try {
+    print("--- S2 merge ---");
+    expect("S2.1", merge_sort([5, 3, 8, 1, 9, 2, 7]), [1, 2, 3, 5, 7, 8, 9]);
+    expect("S2.2", merge_sort([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]), [1, 1, 2, 3, 3, 4, 5, 5, 5, 6, 9]);
+    expect("S2.3", merge_sort([]), []);
+    expect("S2.4", merge_sort([1]), [1]);
+    expect("S2.5", merge_sort([2, 1]), [1, 2]);
+    # 稳定性: 按 key 排序, 相同 key 的 tag 保持原序
+    let pairs = [[3, "a"], [1, "b"], [3, "c"], [2, "d"], [1, "e"]];
+    let sp = merge_sort_pairs(pairs);
+    let keys = [];
+    let tags = [];
+    let pi = 0;
+    while (pi < len(sp)) { push(keys, sp[pi][0]); push(tags, sp[pi][1]); pi = pi + 1; }
+    expect("S2.6.stab-keys", keys, [1, 1, 2, 3, 3]);
+    expect("S2.7.stab-tags", tags, ["b", "e", "d", "a", "c"]);
+} catch (e) { print("S2:EXC[" + str(e) + "]"); }
+
+# --- S3: 二分查找 ---
+try {
+    print("--- S3 binsearch ---");
+    let sorted = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+    expect("S3.1", binary_search(sorted, 1), 0);
+    expect("S3.2", binary_search(sorted, 19), 9);
+    expect("S3.3", binary_search(sorted, 9), 4);
+    expect("S3.4", binary_search(sorted, 100), -1);
+    expect("S3.5", binary_search(sorted, 8), -1);
+    expect("S3.6", binary_search([], 5), -1);
+    expect("S3.7", binary_search([42], 42), 0);
+    expect("S3.8", binary_search([42], 7), -1);
+    expect("S3.9", binary_search([1, 2, 3, 4, 5], 3), 2);
+} catch (e) { print("S3:EXC[" + str(e) + "]"); }
+
+# --- S4: BFS ---
+try {
+    print("--- S4 bfs ---");
+    # 0-1, 0-2, 1-3, 2-3, 3-4
+    let g = [[1, 2], [3], [3], [4], []];
+    expect("S4.1", bfs(g, 0), [0, 1, 2, 3, 4]);
+    expect("S4.2", bfs(g, 4), [4]);
+    expect("S4.3", bfs(g, 3), [3, 4]);
+    expect("S4.4", bfs([[1], [2], [0]], 0), [0, 1, 2]);
+} catch (e) { print("S4:EXC[" + str(e) + "]"); }
+
+# --- S5: DFS (递归 + 栈) ---
+try {
+    print("--- S5 dfs ---");
+    let g = [[1, 2], [3], [3], [4], []];
+    let visited0 = [];
+    let vi = 0;
+    while (vi < 5) { push(visited0, false); vi = vi + 1; }
+    expect("S5.1.rec", dfs_rec(g, 0, visited0, []), [0, 1, 3, 4, 2]);
+    expect("S5.2.stk", dfs_stack(g, 0), [0, 1, 3, 4, 2]);
+    expect("S5.3.stk-leaf", dfs_stack(g, 4), [4]);
+    # 线性图 0->1->2->3
+    let gl = [[1], [2], [3], []];
+    let vl = [];
+    let vli = 0;
+    while (vli < 4) { push(vl, false); vli = vli + 1; }
+    expect("S5.4.rec-linear", dfs_rec(gl, 0, vl, []), [0, 1, 2, 3]);
+    expect("S5.5.stk-linear", dfs_stack(gl, 0), [0, 1, 2, 3]);
+} catch (e) { print("S5:EXC[" + str(e) + "]"); }
+
+# --- S6: Dijkstra ---
+try {
+    print("--- S6 dijkstra ---");
+    # 0->1(4), 0->2(1), 2->1(1), 2->3(5), 1->3(2), 3->4(3)
+    let graph = [
+        [[1, 4], [2, 1]],
+        [[3, 2]],
+        [[1, 1], [3, 5]],
+        [[4, 3]],
+        []
+    ];
+    expect("S6.1", dijkstra(graph, 5, 0), [0, 2, 1, 4, 7]);
+    # 单源 4
+    expect("S6.2", dijkstra(graph, 5, 4), [999999, 999999, 999999, 999999, 0]);
+} catch (e) { print("S6:EXC[" + str(e) + "]"); }
+
+# --- S7: 0/1 背包 ---
+try {
+    print("--- S7 knapsack ---");
+    expect("S7.1", knapsack([2, 3, 4, 5], [3, 4, 5, 6], 5), 7);
+    expect("S7.2", knapsack([1, 2, 3], [6, 10, 12], 5), 22);
+    expect("S7.3", knapsack([], [], 5), 0);
+    expect("S7.4", knapsack([5], [10], 3), 0);
+    expect("S7.5", knapsack([5], [10], 5), 10);
+    expect("S7.6", knapsack([1, 1, 1, 1], [1, 2, 3, 4], 4), 10);
+} catch (e) { print("S7:EXC[" + str(e) + "]"); }
+
+# --- S8: LIS ---
+try {
+    print("--- S8 lis ---");
+    expect("S8.1", lis([10, 9, 2, 5, 3, 7, 101, 18]), 4);
+    expect("S8.2", lis([0, 1, 0, 3, 2, 3]), 4);
+    expect("S8.3", lis([7, 7, 7, 7]), 1);
+    expect("S8.4", lis([]), 0);
+    expect("S8.5", lis([1]), 1);
+    expect("S8.6", lis([1, 2, 3, 4, 5]), 5);
+    expect("S8.7", lis([5, 4, 3, 2, 1]), 1);
+} catch (e) { print("S8:EXC[" + str(e) + "]"); }
+
+# --- S9: 矩阵乘法 ---
+try {
+    print("--- S9 matmul ---");
+    expect("S9.1", matmul([[1, 2], [3, 4]], [[5, 6], [7, 8]]), [[19, 22], [43, 50]]);
+    expect("S9.2", matmul([[1, 2, 3], [4, 5, 6]], [[7, 8], [9, 10], [11, 12]]), [[58, 64], [139, 154]]);
+    expect("S9.3", matmul([[1]], [[2]]), [[2]]);
+    expect("S9.4", matmul([[2, 0], [0, 2]], [[1, 2], [3, 4]]), [[2, 4], [6, 8]]);
+} catch (e) { print("S9:EXC[" + str(e) + "]"); }
+
+# --- S10: KMP 字符串匹配 ---
+try {
+    print("--- S10 kmp ---");
+    expect("S10.1", kmp_search("hello", "ll"), 2);
+    expect("S10.2", kmp_search("aaaaaa", "aa"), 0);
+    expect("S10.3", kmp_search("abcdef", "gh"), -1);
+    expect("S10.4", kmp_search("ababcabcab", "abcab"), 2);
+    expect("S10.5", kmp_search("hello", "hello"), 0);
+    expect("S10.6", kmp_search("hello", "helloo"), -1);
+    expect("S10.7", kmp_search("xxxxxx", "x"), 0);
+    expect("S10.8", kmp_search("abc", ""), 0);
+    expect("S10.9", kmp_search("aabaaab", "aab"), 0);
+    expect("S10.10", kmp_search("mississippi", "issi"), 1);
+} catch (e) { print("S10:EXC[" + str(e) + "]"); }
+
+# --- S11: 哈希表 (链地址法) ---
+try {
+    print("--- S11 hashtable ---");
+    let ht = ht_create(5);
+    ht_put(ht, 1, "a");
+    ht_put(ht, 6, "b");   # 6 % 5 = 1, 与 key 1 冲突
+    ht_put(ht, 2, "c");
+    ht_put(ht, 11, "d");  # 11 % 5 = 1, 三重冲突
+    expect("S11.1.get-1", ht_get(ht, 1), "a");
+    expect("S11.2.get-6", ht_get(ht, 6), "b");
+    expect("S11.3.get-2", ht_get(ht, 2), "c");
+    expect("S11.4.get-11", ht_get(ht, 11), "d");
+    expect("S11.5.get-99", ht_get(ht, 99), null);
+    # 更新已有 key
+    ht_put(ht, 1, "X");
+    expect("S11.6.get-1-updated", ht_get(ht, 1), "X");
+    expect("S11.7.get-6-after-update", ht_get(ht, 6), "b");
+} catch (e) { print("S11:EXC[" + str(e) + "]"); }
+
+# --- S12: 链表操作 ---
+try {
+    print("--- S12 linkedlist ---");
+    # 1->2->3->4
+    let n4 = mk_ll(4);
+    let n3 = mk_ll(3); n3["next"] = n4;
+    let n2 = mk_ll(2); n2["next"] = n3;
+    let n1 = mk_ll(1); n1["next"] = n2;
+    expect("S12.1.tolist", ll_to_list(n1), [1, 2, 3, 4]);
+    # 反转
+    let rev_head = ll_reverse(n1);
+    expect("S12.2.reverse", ll_to_list(rev_head), [4, 3, 2, 1]);
+    # 无环
+    let n4b = mk_ll(4);
+    let n3b = mk_ll(3); n3b["next"] = n4b;
+    let n2b = mk_ll(2); n2b["next"] = n3b;
+    let n1b = mk_ll(1); n1b["next"] = n2b;
+    expect("S12.3.no-cycle", ll_has_cycle(n1b), false);
+    # 制造环: 4 -> 2
+    let n4c = mk_ll(4);
+    let n3c = mk_ll(3); n3c["next"] = n4c;
+    let n2c = mk_ll(2); n2c["next"] = n3c;
+    let n1c = mk_ll(1); n1c["next"] = n2c;
+    n4c["next"] = n2c;
+    expect("S12.4.has-cycle", ll_has_cycle(n1c), true);
+    # 合并两个有序链表: 1->3->5 与 2->4->6
+    let m3 = mk_ll(5);
+    let m1 = mk_ll(3); m1["next"] = m3;
+    let m0 = mk_ll(1); m0["next"] = m1;
+    let m4 = mk_ll(6);
+    let m2b2 = mk_ll(4); m2b2["next"] = m4;
+    let m0b = mk_ll(2); m0b["next"] = m2b2;
+    let merged = ll_merge(m0, m0b);
+    expect("S12.5.merge", ll_to_list(merged), [1, 2, 3, 4, 5, 6]);
+} catch (e) { print("S12:EXC[" + str(e) + "]"); }
+
+# --- S13: 栈/队列 + 括号匹配 ---
+try {
+    print("--- S13 stackqueue ---");
+    # 栈 LIFO
+    let st = [];
+    push(st, 1); push(st, 2); push(st, 3);
+    let st_out = [];
+    push(st_out, st.pop());
+    push(st_out, st.pop());
+    push(st_out, st.pop());
+    expect("S13.1.stack-lifo", st_out, [3, 2, 1]);
+    expect("S13.2.stack-empty-after", len(st), 0);
+    # 队列 FIFO (用切片 dequeue)
+    let q = [];
+    push(q, "a"); push(q, "b"); push(q, "c");
+    let q_out = [];
+    push(q_out, q[0]); q = q[1:];
+    push(q_out, q[0]); q = q[1:];
+    push(q_out, q[0]); q = q[1:];
+    expect("S13.3.queue-fifo", q_out, ["a", "b", "c"]);
+    expect("S13.4.queue-empty-after", len(q), 0);
+    # 括号匹配
+    expect("S13.5.bal-ok1", balanced("({[]})"), true);
+    expect("S13.6.bal-ok2", balanced("((()))"), true);
+    expect("S13.7.bal-ok3", balanced(""), true);
+    expect("S13.8.bal-ok4", balanced("()[]{}"), true);
+    expect("S13.9.bal-bad1", balanced("([)]"), false);
+    expect("S13.10.bal-bad2", balanced("("), false);
+    expect("S13.11.bal-bad3", balanced("(("), false);
+    expect("S13.12.bal-bad4", balanced("})"), false);
+} catch (e) { print("S13:EXC[" + str(e) + "]"); }
+
+# --- S14: 二叉树遍历 ---
+try {
+    print("--- S14 treetrav ---");
+    #        1
+    #       / \
+    #      2   3
+    #     / \   \
+    #    4   5   6
+    let root = mk_tnode(1,
+        mk_tnode(2, mk_leaf(4), mk_leaf(5)),
+        mk_tnode(3, null, mk_leaf(6)));
+    expect("S14.1.preorder", preorder(root, []), [1, 2, 4, 5, 3, 6]);
+    expect("S14.2.inorder", inorder(root, []), [4, 2, 5, 1, 3, 6]);
+    expect("S14.3.postorder", postorder(root, []), [4, 5, 2, 6, 3, 1]);
+    expect("S14.4.levelorder", levelorder(root), [1, 2, 3, 4, 5, 6]);
+    # 单节点
+    let single = mk_leaf(42);
+    expect("S14.5.single-pre", preorder(single, []), [42]);
+    expect("S14.6.single-lvl", levelorder(single), [42]);
+} catch (e) { print("S14:EXC[" + str(e) + "]"); }
+
+# --- S15: 表达式求值 (中缀转后缀) ---
+try {
+    print("--- S15 expr ---");
+    expect("S15.1", eval_expr("3+4*2"), 11);
+    expect("S15.2", eval_expr("(1+2)*3"), 9);
+    expect("S15.3", eval_expr("8/2/2"), 2);
+    expect("S15.4", eval_expr("1+2+3"), 6);
+    expect("S15.5", eval_expr("9/2"), 4);       # floor
+    expect("S15.6", eval_expr("2*3+4"), 10);
+    expect("S15.7", eval_expr("2+3*4-5"), 9);
+    expect("S15.8", eval_expr("((2))"), 2);
+    expect("S15.9", eval_expr("(7-3)*(2+2)"), 16);
+    expect("S15.10", eval_expr("9-2-3"), 4);    # 左结合
+} catch (e) { print("S15:EXC[" + str(e) + "]"); }
+
+# --- S16: 素数筛 ---
+try {
+    print("--- S16 sieve ---");
+    expect("S16.1", primes_list(30), [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]);
+    expect("S16.2", primes_list(2), [2]);
+    expect("S16.3", primes_list(1), []);
+    expect("S16.4", primes_list(0), []);
+    let ip = sieve(20);
+    expect("S16.5.isprime-2", ip[2], true);
+    expect("S16.6.isprime-4", ip[4], false);
+    expect("S16.7.isprime-19", ip[19], true);
+    expect("S16.8.isprime-20", ip[20], false);
+    expect("S16.9.count-100", len(primes_list(100)), 25);
+} catch (e) { print("S16:EXC[" + str(e) + "]"); }
+
+# --- S17: GCD/LCM ---
+try {
+    print("--- S17 gcdlcm ---");
+    expect("S17.1.gcd_iter-48-36", gcd_iter(48, 36), 12);
+    expect("S17.2.gcd_rec-48-36", gcd_rec(48, 36), 12);
+    expect("S17.3.gcd_iter-17-5", gcd_iter(17, 5), 1);
+    expect("S17.4.gcd_rec-17-5", gcd_rec(17, 5), 1);
+    expect("S17.5.gcd_iter-0-5", gcd_iter(0, 5), 5);
+    expect("S17.6.gcd_rec-0-5", gcd_rec(0, 5), 5);
+    expect("S17.7.gcd-100-75", gcd_iter(100, 75), 25);
+    expect("S17.8.gcd-7-7", gcd_iter(7, 7), 7);
+    expect("S17.9.lcm-4-6", lcm(4, 6), 12);
+    expect("S17.10.lcm-3-5", lcm(3, 5), 15);
+    expect("S17.11.lcm-0-5", lcm(0, 5), 0);
+    expect("S17.12.lcm-12-18", lcm(12, 18), 36);
+} catch (e) { print("S17:EXC[" + str(e) + "]"); }
+
+# --- S18: 幂集 ---
+try {
+    print("--- S18 powerset ---");
+    let ps = powerset([1, 2, 3]);
+    expect("S18.1.count", len(ps), 8);
+    # 校验: 总元素个数 = n * 2^(n-1) = 3 * 4 = 12
+    let total_size = 0;
+    let total_sum = 0;
+    let i = 0;
+    while (i < len(ps)) {
+        total_size = total_size + len(ps[i]);
+        let j = 0;
+        while (j < len(ps[i])) { total_sum = total_sum + ps[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    expect("S18.2.total-size", total_size, 12);
+    expect("S18.3.total-sum", total_sum, 24);
+    expect("S18.4.has-empty", ps.contains([]), true);
+    expect("S18.5.has-full", ps.contains([1, 2, 3]), true);
+    expect("S18.6.has-single", ps.contains([2]), true);
+    # 空集的幂集
+    let pe = powerset([]);
+    expect("S18.7.empty-powerset", pe, [[]]);
+    # 单元素
+    let p1 = powerset([5]);
+    expect("S18.8.single-count", len(p1), 2);
+} catch (e) { print("S18:EXC[" + str(e) + "]"); }
+
+print("=== R5.159 DONE ===");

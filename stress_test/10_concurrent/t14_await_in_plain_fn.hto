@@ -1,0 +1,12 @@
+# t14_await_in_plain_fn.hto
+# await 出现在普通 fn 体内（非 async/parallel）—— 编译期静态检查应拒绝。
+# 预期：HSharp_v0.4_Tests 编译器抛 CompileError("await is only allowed ...")，
+#       不产生 .hbc，Kotlin HVM 无可运行字节码。
+parallel fn para() {
+    return 1;
+}
+fn bad() {
+    let r = await para();
+    return r;
+}
+print(bad());

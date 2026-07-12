@@ -1,0 +1,9 @@
+# _probe145_s6_multiextends.hto — 探针: class C extends A, B (多继承)
+# 预期: SyntaxError (parser.py:413-416 只接受单个 base)
+# 验证: H# 不支持多继承
+class A { fn m() { return "A"; } }
+class B { fn n() { return "B"; } }
+class C extends A, B {
+    fn m() { return "C"; }
+}
+print((new C()).m());

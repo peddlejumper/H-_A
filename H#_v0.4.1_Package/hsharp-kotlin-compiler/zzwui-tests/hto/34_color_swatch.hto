@@ -1,0 +1,15 @@
+# build: hwdui_min.hto, zzw_native.hto, zzw_render_min.hto
+# 4x2 image: red, green, blue, white / black, yellow, cyan, magenta
+fn main() {
+    # 4 columns x 2 rows = 8 pixels, 24 bytes
+    let bytes = [
+        255, 0, 0,   0, 255, 0,   0, 0, 255,   255, 255, 255,
+        0, 0, 0,     255, 255, 0, 0, 255, 255, 255, 0, 255
+    ];
+    print("sending 4x2 image with " + str(len(bytes)) + " bytes");
+    print("  row 0: red, green, blue, white");
+    print("  row 1: black, yellow, cyan, magenta");
+    native_show_image("H# test 4x2 colors", 4, 2, bytes);
+    print("window closed.");
+}
+main();

@@ -1,0 +1,8 @@
+# t16
+print("READY");
+let line = input();
+print("GOT: " + line);
+let line2 = input();
+print("GOT2: " + line2);
+let line3 = input();
+print("GOT3: " + line3);

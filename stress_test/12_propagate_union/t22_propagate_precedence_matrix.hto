@@ -1,0 +1,15 @@
+# T22 - ? precedence matrix: confirm ? binds tighter than +/- but looser than * / %
+fn t7() { throw 7; return 7; }
+fn t5() { throw 5; return 5; }
+
+# (+) left-side: a? + b  -> should work, = (a?) + b
+print(t7()? + 1);
+# (-) left-side: a? - b  -> should work, = (a?) - b
+print(t7()? - 1);
+# (+) right-side: a + b? -> works (t10), = a + (b?)
+
+# (*) right-side: a * b? -> parses as (a * b)?  (t11: =7 when b throws 7)
+print(2 * t7()?);
+
+# (*) left-side with explicit parens — should work, proving it's pure precedence
+print((t7()?));

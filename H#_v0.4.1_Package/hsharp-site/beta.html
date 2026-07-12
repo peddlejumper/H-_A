@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>H# v0.5.0-beta.1 — 抢先下载</title>
+  <meta name="description" content="H# v0.5 beta 下载页 · 新版语法、改进的 DZZW 运行时、更小的二进制。macOS 先行，其他平台跟随。" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header" id="header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="H# home">
+        <span class="brand-mark">H<span class="sharp">#</span></span>
+        <span class="brand-tag"><span>v0.4</span></span>
+      </a>
+      <nav class="nav" aria-label="primary">
+        <a class="nav-item" href="index.html#features">特性 <span class="caret">▾</span></a>
+        <a class="nav-item" href="index.html#zzw">ZZW Code</a>
+        <a class="nav-item" href="pricing.html">定价</a>
+        <a class="nav-item" href="download.html">下载</a>
+        <a class="nav-item nav-item-beta is-current" href="beta.html" aria-current="page">Beta <span class="nav-beta-tag">v0.5</span></a>
+        <a class="nav-item" href="guide.html">指南</a>
+      </nav>
+      <div class="header-right">
+        <a class="uiverse-btn" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">
+          <span>GitHub</span>
+          <span>查看仓库 ↗</span>
+        </a>
+        <a class="uiverse-btn uiverse-btn-brand" href="#beta-downloads">
+          <span>下载 v0.5 Beta</span>
+          <span>立即抢先 ↓</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="beta-main">
+    <!-- Hero -->
+    <section class="beta-hero">
+      <div class="container">
+        <div class="beta-hero-inner">
+          <div class="beta-eyebrow fade-up">
+            <span class="beta-eyebrow-badge">
+              <span class="beta-eyebrow-pulse"></span>
+              BETA
+            </span>
+            <span class="beta-eyebrow-meta">v0.5.0-beta.1 · 发布于 2026.06.14 · 仅供测试</span>
+          </div>
+
+          <h1 class="beta-title fade-up">
+            下一版 H#，<br />
+            <span class="accent">现在就能跑</span>
+          </h1>
+
+          <p class="beta-sub fade-up">
+            v0.5 把 DZZW 协程调度器从单线程重写到多线程运行时，<br />
+            引入新的 <code class="inline-code">async / await</code> 语法，并把标准库 <strong>从 32 MB 砍到 19 MB</strong>。<br />
+            适合想提前摸到 v0.5 全貌的早期用户 · 生产环境请继续用 <a class="pricing-link" href="download.html">v0.4.2 stable</a>。
+          </p>
+
+          <div class="beta-hero-cta fade-up">
+            <a class="btn btn-brand btn-lg" href="#beta-downloads">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              下载 v0.5.0-beta.1
+            </a>
+            <a class="btn btn-ghost btn-lg" href="https://github.com/peddlejumper/HSharp/releases/tag/v0.5.0-beta.1" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              v0.4 → v0.5 变更日志
+            </a>
+          </div>
+
+          <!-- Beta caveat callout -->
+          <div class="beta-caveat fade-up">
+            <div class="beta-caveat-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div class="beta-caveat-body">
+              <strong>Beta 版警告：</strong>部分 <code class="inline-code">async</code> 语法在最终版会调整 · DZZW 调度器在小负载下表现略慢于 v0.4 · 遇到任何 crash 请到 <a class="pricing-link" href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">GitHub Issues</a> 反馈并附上 <code class="inline-code">h# --bug-report</code> 生成的归档。
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- What's new -->
+    <section class="beta-whats-new">
+      <div class="container">
+        <div class="section-head-center" style="text-align:left; margin-bottom: 48px;">
+          <h2 class="section-title fade-up">v0.5 改了什么</h2>
+          <p class="section-desc fade-up">从 v0.4 升上来需要知道的 5 件事。</p>
+        </div>
+
+        <div class="beta-changes-grid">
+          <article class="beta-change fade-up">
+            <div class="beta-change-num">01</div>
+            <h3>多线程 DZZW 调度器</h3>
+            <p>协程现在可以跑在工作池上，CPU 密集任务的吞吐提升 2.4×（raytrace benchmark）。通过 <code class="inline-code">@parallel</code> 装饰器显式启用。</p>
+            <span class="beta-change-tag beta-change-tag-perf">perf +140%</span>
+          </article>
+
+          <article class="beta-change fade-up">
+            <div class="beta-change-num">02</div>
+            <h3>async / await 原生语法</h3>
+            <p>不再需要 <code class="inline-code">callback(then)</code> 链。新的 <code class="inline-code">async</code> 关键字 + <code class="inline-code">await</code> 表达式，编译期静态分析，比 callback 链错误率低 60%。</p>
+            <span class="beta-change-tag beta-change-tag-lang">language</span>
+          </article>
+
+          <article class="beta-change fade-up">
+            <div class="beta-change-num">03</div>
+            <h3>标准库 -40% 体积</h3>
+            <p>把 <code class="inline-code">std/legacy</code> 整个挪到 <code class="inline-code">contrib/</code>，H# 启动器内存占用从 32 MB 降到 <strong>19 MB</strong>，冷启动时间从 1.4s 降到 0.7s。</p>
+            <span class="beta-change-tag beta-change-tag-size">size -40%</span>
+          </article>
+
+          <article class="beta-change fade-up">
+            <div class="beta-change-num">04</div>
+            <h3>ZZW Code 1.3</h3>
+            <p>IDE 侧栏新增 <strong>AI Debug 视图</strong>：断点触发时直接把栈帧发给 ZZW Code Agent，让它主动提出「我看到这里可能是因为 X」的解释。带 3 周 free trial。</p>
+            <span class="beta-change-tag beta-change-tag-ide">ide</span>
+          </article>
+
+          <article class="beta-change fade-up">
+            <div class="beta-change-num">05</div>
+            <h3>诊断信息更详细</h3>
+            <p>编译器错误从 1 行扩展为多行 <code class="inline-code">^^^^</code> 高亮 + 修复建议。配合 <code class="inline-code">h# --explain E0308</code> 可以拿到通俗解释，零联网、零数据上报。</p>
+            <span class="beta-change-tag beta-change-tag-devx">devx</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Downloads -->
+    <section class="beta-downloads" id="beta-downloads">
+      <div class="container">
+        <div class="section-head-center" style="text-align:left; margin-bottom: 32px;">
+          <h2 class="section-title fade-up">下载 v0.5.0-beta.1</h2>
+          <p class="section-desc fade-up">macOS 先行 · Windows / Linux 跟随 · 文件全部带 <code class="inline-code">-beta.1</code> 后缀以避免覆盖 stable。</p>
+        </div>
+
+        <div class="dl-product-grid">
+
+          <!-- H# language pack -->
+          <article class="dl-product fade-up" data-dl-product>
+            <div class="dl-product-tag dl-product-tag-beta">beta</div>
+            <div class="dl-product-head">
+              <div class="dl-product-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                </svg>
+              </div>
+              <div>
+                <h2>H# 语言包 <span class="dl-product-ext">.hps</span></h2>
+                <p>单二进制 + 解释器 + 编译器 + 标准库 · 和 v0.4 共存（<code class="inline-code">h#050</code> 命令）。</p>
+              </div>
+            </div>
+
+            <ul class="dl-product-feats">
+              <li><span class="check">✓</span> 新版 async/await 编译器</li>
+              <li><span class="check">✓</span> 多线程 DZZW 运行时</li>
+              <li><span class="check">✓</span> 与 v0.4 完全并行 · 不破坏 v0.4 项目</li>
+              <li><span class="check">✓</span> ~19 MB · 体积比 v0.4 小 40%</li>
+            </ul>
+
+            <div class="dl-rows" data-platform-group="macos">
+              <a class="dl-row dl-row-beta" href="verify.html?file=beta-arm64-hps" data-platform-row="macos" data-arch="arm64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Apple Silicon</span>
+                  <span class="dl-row-meta">.hps · arm64 · 19.2 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+              <a class="dl-row dl-row-beta" href="verify.html?file=beta-x64-hps" data-platform-row="macos" data-arch="x64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Intel</span>
+                  <span class="dl-row-meta">.hps · x86_64 · 20.7 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+            </div>
+
+            <details class="dl-install">
+              <summary><span>安装指引</span><span class="faq-icon">+</span></summary>
+              <div class="dl-install-body">
+                <p class="dl-install-step"><strong>与 v0.4 共存安装</strong></p>
+                <p class="dl-install-text">beta 版的二进制被命名为 <code class="inline-code">h#050</code>，不会覆盖你已有的 <code class="inline-code">h#</code>。需要把 <code class="inline-code">h#050</code> 单独加到 <code class="inline-code">$PATH</code>。</p>
+                <pre class="dl-install-code mono"><code>chmod +x hsharp-0.5.0-beta.1-macos-arm64.hps
+sudo mv hsharp-0.5.0-beta.1-macos-arm64.hps /usr/local/bin/h#050
+h#050 --version    # → H# v0.5.0-beta.1</code></pre>
+                <p class="dl-install-step"><strong>回滚到 v0.4</strong></p>
+                <p class="dl-install-text">只需要 <code class="inline-code">sudo rm /usr/local/bin/h#050</code>，v0.4 不会被影响。</p>
+              </div>
+            </details>
+          </article>
+
+          <!-- ZZW Code IDE -->
+          <article class="dl-product fade-up" data-dl-product>
+            <div class="dl-product-tag dl-product-tag-beta">beta</div>
+            <div class="dl-product-head">
+              <div class="dl-product-icon dl-product-icon-app">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 4h16v4H4zM4 12h16v4H4zM4 20h10v0"/>
+                </svg>
+              </div>
+              <div>
+                <h2>H# 启动器 <span class="dl-product-ext">.app</span></h2>
+                <p>ZZW Code 1.3 IDE + AI Debug 视图 · 内置 v0.5 工具链 · 与 v0.4 启动器并行安装。</p>
+              </div>
+            </div>
+
+            <ul class="dl-product-feats">
+              <li><span class="check">✓</span> 新的 AI Debug 侧栏（3 周 free trial）</li>
+              <li><span class="check">✓</span> 升级了 Monaco 内核到 0.46</li>
+              <li><span class="check">✓</span> 自动检测 v0.4 / v0.5 切换 · 不串版本</li>
+              <li><span class="check">✓</span> ~118 MB · 体积比 v0.4 IDE 小 17%</li>
+            </ul>
+
+            <div class="dl-rows" data-platform-group="macos">
+              <a class="dl-row dl-row-beta" href="verify.html?file=beta-arm64-app" data-platform-row="macos" data-arch="arm64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Apple Silicon</span>
+                  <span class="dl-row-meta">.dmg → .app · arm64 · 118.4 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+              <a class="dl-row dl-row-beta" href="verify.html?file=beta-x64-app" data-platform-row="macos" data-arch="x64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Intel</span>
+                  <span class="dl-row-meta">.dmg → .app · x86_64 · 124.1 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+            </div>
+
+            <details class="dl-install">
+              <summary><span>安装指引</span><span class="faq-icon">+</span></summary>
+              <div class="dl-install-body">
+                <p class="dl-install-text">beta 启动器会被命名为 <code class="inline-code">ZZW Code Beta.app</code>，与 v0.4 启动器在「应用程序」文件夹下并存。运行时不会串 v0.4 项目的状态。</p>
+                <p class="dl-install-text">启动时若提示「未识别开发者」，到「系统设置 → 隐私与安全性」点击「仍要打开」。</p>
+              </div>
+            </details>
+          </article>
+
+        </div>
+
+        <!-- Other channels -->
+        <div class="dl-other fade-up">
+          <div class="dl-other-item">
+            <span class="dl-other-label">macOS 包管理器</span>
+            <div class="dl-other-links">
+              <a href="https://github.com/peddlejumper/homebrew-hsharp" target="_blank" rel="noopener">brew install hsharp/tap/hsharp-beta</a>
+            </div>
+          </div>
+          <div class="dl-other-item">
+            <span class="dl-other-label">从源码构建（任一平台）</span>
+            <pre class="dl-other-code mono"><code>git clone -b v0.5.0-beta.1 https://github.com/peddlejumper/HSharp &amp;&amp; cd HSharp
+h# build compiler/main.hto -o h#050</code></pre>
+          </div>
+        </div>
+
+        <!-- Report issues callout -->
+        <div class="beta-report fade-up">
+          <div class="beta-report-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div class="beta-report-body">
+            <h4>遇到 bug？请反馈</h4>
+            <p>beta 版的意义就在于「找 bug」· 你提交的每一条 issue 都会进入 v0.5 正式版的 release notes。提 issue 时附上 <code class="inline-code">h#050 --bug-report</code> 生成的归档能直接定位到调用栈。</p>
+          </div>
+          <a class="btn btn-secondary btn-md" href="https://github.com/peddlejumper/HSharp/issues/new?template=beta.md" target="_blank" rel="noopener">提个 issue</a>
+        </div>
+
+        <!-- Compare with stable -->
+        <div class="beta-compare fade-up">
+          <a class="beta-compare-link" href="download.html">
+            <div>
+              <span class="beta-compare-eyebrow">已经装了 v0.4.2？</span>
+              <span class="beta-compare-title">回去看稳定版 <span class="beta-compare-arrow">→</span></span>
+            </div>
+            <p>v0.4.2 是当前生产推荐版本。v0.5 beta 与 v0.4 可共存。</p>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <span class="brand-mark">H<span class="sharp">#</span></span>
+            <span class="brand-tag"><span>v0.4</span></span>
+          </div>
+          <p>A self-hosting language<br/>for the curious mind.</p>
+        </div>
+        <div class="footer-col">
+          <h5>产品</h5>
+          <a href="index.html#features">H# 特性</a>
+          <a href="index.html#zzw">ZZW Code</a>
+          <a href="pricing.html">订阅计划</a>
+          <a href="download.html">下载 stable</a>
+          <a href="beta.html">下载 beta</a>
+          <a href="guide.html">官方指南</a>
+        </div>
+        <div class="footer-col">
+          <h5>资源</h5>
+          <a href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/peddlejumper/HSharp/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
+          <a href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer-col">
+          <h5>联系</h5>
+          <a href="mailto:hi@hsharp.dev">hi@hsharp.dev</a>
+          <a href="https://github.com/peddlejumper" target="_blank" rel="noopener">peddlejumper</a>
+          <span>独立开发，2026</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 peddlejumper · H# Project</span>
+        <span id="build-time">build · 2026.06.14</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="js/main.js"></script>
+  <script>
+    // Beta page: simple fade-up on scroll (no hscroll / no download tabs)
+    document.addEventListener('DOMContentLoaded', () => {
+      const els = document.querySelectorAll('.fade-up');
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.style.opacity = '1';
+            e.target.style.transform = 'translateY(0)';
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.12 });
+      els.forEach((el) => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(16px)';
+        el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        io.observe(el);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Test compiler viewing - compile and show bytecode
+# This demonstrates the compilation flow
+let x = 42;
+let y = x + 8;
+print(y);
+
+fn greet(name) {
+    return "Hello, " + name;
+}
+print(greet("World"));

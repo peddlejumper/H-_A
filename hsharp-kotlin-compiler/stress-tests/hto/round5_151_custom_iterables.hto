@@ -1,0 +1,723 @@
+# ============================================================
+# Round-5 / #151 — Custom iteration protocol (高强度测试)
+# ------------------------------------------------------------
+# Tests every flavour of H#'s `for x in ...` / `for k, v in ...`
+# iteration against Python semantics.  Risky ops are wrapped in
+# try/catch so the file runs to completion; the printed text
+# reveals the actual behaviour for offline comparison.
+#
+# Convention: each case prints
+#     ===S<id>===
+#     expect:<python-semantics>
+#     actual:<h# output>
+# so diffs are easy to read.
+# ============================================================
+
+print("=== R5.151 START ===");
+
+# ============================================================
+# S1 — for-in list
+# ============================================================
+print("===S1a-list-forward===");
+let s1a = "";
+for x in [10, 20, 30] { s1a = s1a + x; }
+print("expect:102030");
+print("actual:" + s1a);
+
+print("===S1b-list-empty===");
+let s1b = 0;
+for x in [] { s1b = s1b + 1; }
+print("expect:0");
+print("actual:" + s1b);
+
+print("===S1c-list-single===");
+let s1c = "";
+for x in [42] { s1c = s1c + x; }
+print("expect:42");
+print("actual:" + s1c);
+
+print("===S1d-list-large===");
+let s1d = 0;
+for x in range(1000) { s1d = s1d + x; }
+print("expect:499500");
+print("actual:" + s1d);
+
+print("===S1e-list-nested-elem===");
+let s1e = 0;
+for p in [[1, 2], [3, 4], [5, 6]] { s1e = s1e + p[0] + p[1]; }
+print("expect:21");
+print("actual:" + s1e);
+
+# ============================================================
+# S2 — for-in dict
+# ============================================================
+print("===S2a-dict-keys===");
+let d2 = {"a": 1, "b": 2, "c": 3};
+let s2a = "";
+for k in d2 { s2a = s2a + k; }
+print("expect:abc");
+print("actual:" + s2a);
+
+print("===S2b-dict-kv===");
+let s2b = "";
+for k, v in d2 { s2b = s2b + k + ":" + v + ","; }
+print("expect:a:1,b:2,c:3,");
+print("actual:" + s2b);
+
+print("===S2c-dict-mutate-value===");
+# Mutating an EXISTING key's value during iteration.  The iterator
+# stores a snapshot of the KEYS but holds the live dict reference,
+# so the new value should be read back.  (Python: RuntimeError if
+# size changes; value mutation is allowed and visible.)
+let d2c = {"x": 1, "y": 2, "z": 3};
+let s2c = "";
+for k, v in d2c {
+    d2c[k] = v * 10;
+    s2c = s2c + k + "=" + d2c[k] + ";";
+}
+print("expect:x=10;y=20;z=30;");
+print("actual:" + s2c);
+
+print("===S2d-dict-empty===");
+let s2d = 0;
+for k in {} { s2d = s2d + 1; }
+print("expect:0");
+print("actual:" + s2d);
+
+# ============================================================
+# S3 — for-in range
+# ============================================================
+print("===S3a-range0===");
+let s3a = 0;
+for i in range(0) { s3a = s3a + 1; }
+print("expect:0");
+print("actual:" + s3a);
+
+print("===S3b-range1===");
+let s3b = "";
+for i in range(1) { s3b = s3b + i; }
+print("expect:0");
+print("actual:" + s3b);
+
+print("===S3c-range-neg5-to-5===");
+let s3c = 0;
+for i in range(-5, 5) { s3c = s3c + i; }
+print("expect:-5");   # -5+-4+-3+-2+-1+0+1+2+3+4 = -5
+print("actual:" + s3c);
+
+print("===S3d-range-0-10-step2===");
+let s3d = "";
+for i in range(0, 10, 2) { s3d = s3d + i + ","; }
+print("expect:0,2,4,6,8,");
+print("actual:" + s3d);
+
+print("===S3e-range-10-0-step-neg1===");
+let s3e = "";
+for i in range(10, 0, -1) { s3e = s3e + i + ","; }
+print("expect:10,9,8,7,6,5,4,3,2,1,");
+print("actual:" + s3e);
+
+print("===S3f-range-0-10-step3===");
+let s3f = "";
+for i in range(0, 10, 3) { s3f = s3f + i + ","; }
+print("expect:0,3,6,9,");
+print("actual:" + s3f);
+
+print("===S3g-range-step0-error===");
+let s3g = "no-err";
+try {
+    for i in range(0, 5, 0) { s3g = "ran"; }
+} catch (e) { s3g = "caught:" + e; }
+print("expect:caught:...");
+print("actual:" + s3g);
+
+# ============================================================
+# S4 — for-in string
+# ============================================================
+print("===S4a-string-chars===");
+let s4a = "";
+for ch in "abc" { s4a = s4a + ch; }
+print("expect:abc");
+print("actual:" + s4a);
+
+print("===S4b-string-empty===");
+let s4b = 0;
+for ch in "" { s4b = s4b + 1; }
+print("expect:0");
+print("actual:" + s4b);
+
+print("===S4c-string-unicode-latin===");
+let s4c = "";
+for ch in "héllo" { s4c = s4c + ch + "."; }
+print("expect:h.é.l.l.o.");
+print("actual:" + s4c);
+
+print("===S4d-string-emoji===");
+# Emoji 😀 is a supplementary-plane char (1 code point, 2 UTF-16
+# units).  Iteration by code point should yield 3 elements: a, 😀, b.
+let s4d = 0;
+let s4d_str = "";
+for ch in "a😀b" { s4d = s4d + 1; s4d_str = s4d_str + ch; }
+print("expect:3 a😀b");
+print("actual:" + s4d + " " + s4d_str);
+
+print("===S4e-string-two-vars===");
+# `for i, c in "abc"` — Python raises "cannot unpack".  H# parser
+# accepts it; runtime: var1=char, var2 is NEVER set (string path
+# has no __dict and no else-branch).  If c was never bound before,
+# this should raise "Undefined name: c".
+let s4e = "no-err";
+let c = "PREBOUND";   # pre-bind so the name exists in scope
+try {
+    for i, c in "abc" {
+        s4e = s4e + "[" + i + "," + c + "]";
+    }
+    print("expect:ERROR (Python) / stale-or-char (H#)");
+    print("actual:" + s4e);
+} catch (e) {
+    print("expect:ERROR (Python) / stale-or-char (H#)");
+    print("actual:caught:" + e);
+}
+
+print("===S4f-string-cjk===");
+# CJK chars are 1 code point each in the BMP — iteration should be
+# straightforward, but verify no off-by-one.
+let s4f = "";
+for ch in "你好世界" { s4f = s4f + ch + "-"; }
+print("expect:你-好-世-界-");
+print("actual:" + s4f);
+
+# ============================================================
+# S5 — Variable scope (function-level, like Python)
+# ============================================================
+print("===S5a-var-visible-after===");
+for v5a in [1, 2, 3] { }
+print("expect:3");
+print("actual:" + v5a);
+
+print("===S5b-var-overwrites-outer===");
+let v5b = 100;
+for v5b in [7, 8] { }
+print("expect:8");
+print("actual:" + v5b);
+
+print("===S5c-var-fn-scope===");
+# Loop var inside a function must NOT leak to module scope.
+fn loop_fn() {
+    for v5c in [10, 20, 30] { }
+    return v5c;   # visible inside the function
+}
+print("expect:30");
+print("actual:" + loop_fn());
+
+print("===S5d-var-not-leaked-to-module===");
+# After calling loop_fn, v5c should NOT be visible at module scope.
+let s5d = "no-err";
+try {
+    s5d = "leaked:" + v5c;
+} catch (e) { s5d = "not-leaked:" + e; }
+print("expect:not-leaked:...");
+print("actual:" + s5d);
+
+print("===S5e-empty-iter-no-bind===");
+# Iterating an empty list should not bind the loop variable.
+let v5e = "untouched";
+for v5e in [] { v5e = "bound"; }
+print("expect:untouched");
+print("actual:" + v5e);
+
+# ============================================================
+# S6 — Nested for
+# ============================================================
+print("===S6a-double-loop===");
+let s6a = "";
+for i in [1, 2] {
+    for j in [10, 20] {
+        s6a = s6a + (i * j) + ",";
+    }
+}
+print("expect:10,20,20,40,");
+print("actual:" + s6a);
+
+print("===S6b-inner-break===");
+# break only breaks the inner loop.
+let s6b = "";
+for i in [1, 2, 3] {
+    for j in [1, 2, 3] {
+        if (j == 2) { break; }
+        s6b = s6b + i + "" + j + " ";
+    }
+}
+print("expect:11 21 31 ");
+print("actual:" + s6b);
+
+print("===S6c-inner-continue===");
+let s6c = "";
+for i in [1, 2, 3] {
+    for j in [1, 2, 3] {
+        if (j == 2) { continue; }
+        s6c = s6c + i + "" + j + " ";
+    }
+}
+print("expect:11 13 21 23 31 33 ");
+print("actual:" + s6c);
+
+print("===S6d-outer-break-via-flag===");
+# Simulating "break outer" with a flag — H# has no labelled break.
+let s6d = "";
+let done6d = false;
+for i in [1, 2, 3] {
+    if (done6d) { break; }
+    for j in [1, 2, 3] {
+        if (i == 2 && j == 1) { done6d = true; break; }
+        s6d = s6d + i + "" + j + " ";
+    }
+}
+print("expect:11 12 13 ");
+print("actual:" + s6d);
+
+print("===S6e-nested-var-shadow===");
+let s6e = "";
+for i in [1, 2] {
+    for i in [10, 20] {   # inner i shadows outer i (function scope)
+        s6e = s6e + i + " ";
+    }
+    s6e = s6e + "(" + i + ") ";
+}
+# Python: function-level scope, so inner `for i in [10,20]` overwrites
+# the outer i.  After the inner loop, i == 20, so "(20)" is appended.
+# Then outer loop sets i = 2, inner loop runs again, i ends at 20.
+print("expect:10 20 (20) 10 20 (20) ");
+print("actual:" + s6e);
+
+# ============================================================
+# S7 — Modify collection during iteration (safety)
+# ============================================================
+print("===S7a-push-during-iter===");
+# Python: `for x in lst` iterates the LIVE list, so push() during
+# iteration would loop forever (or until memory runs out).  H#:
+# the iterator snapshots the items, so the loop runs only for the
+# original 3 elements.  This is a SEMANTIC DIVERGENCE.
+let lst7a = [1, 2, 3];
+let s7a = "";
+let cnt7a = 0;
+for x in lst7a {
+    push(lst7a, x * 10);
+    s7a = s7a + x + ",";
+    cnt7a = cnt7a + 1;
+    if (cnt7a > 10) { s7a = s7a + "ABORT"; break; }   # safety
+}
+print("expect-h#:1,2,3,   (snapshot; Python would infinite-loop)");
+print("actual:" + s7a);
+
+print("===S7b-pop-during-iter===");
+let lst7b = [1, 2, 3, 4, 5];
+let s7b = "";
+for x in lst7b {
+    pop(lst7b);   # shrink the live list; iterator still has snapshot
+    s7b = s7b + x + ",";
+}
+print("expect-h#:1,2,3,4,5,  (snapshot)");
+print("actual:" + s7b);
+print("lst-after:" + lst7b);
+
+print("===S7c-dict-delete-during-iter===");
+# Iterator snapshots keys but holds live dict ref.  Deleting a key
+# that is yet to be visited: the key STILL appears in iteration
+# (from the snapshot), but dict.entries[key] returns null (via ?: HNull).
+# Python: RuntimeError "dictionary changed size during iteration".
+let d7c = {"a": 1, "b": 2, "c": 3};
+let s7c = "";
+for k, v in d7c {
+    if (k == "a") { d7c.remove("b"); }   # remove a not-yet-visited key
+    s7c = s7c + k + ":" + v + ";";
+}
+print("expect-h#:a:1;b:null;c:3;  (b iterates from snapshot, value null)");
+print("actual:" + s7c);
+
+print("===S7d-dict-add-during-iter===");
+let d7d = {"a": 1};
+let s7d = "";
+let cnt7d = 0;
+for k in d7d {
+    s7d = s7d + k + ",";
+    d7d["new" + k] = 99;   # add new keys
+    cnt7d = cnt7d + 1;
+    if (cnt7d > 10) { s7d = s7d + "ABORT"; break; }
+}
+print("expect-h#:a,  (snapshot; Python RuntimeError)");
+print("actual:" + s7d);
+
+print("===S7e-rebind-name-inside-iter===");
+# Rebinding the iterable's NAME *inside* the loop body must not
+# affect iteration — the iterator already holds a snapshot copy
+# of the original list, so the rebound name is irrelevant.
+let lst7e = [1, 2, 3];
+let s7e = "";
+for x in lst7e {
+    s7e = s7e + x + ",";
+    lst7e = [9, 8, 7];   # rebind the name mid-iteration
+}
+print("expect:1,2,3,  (iter holds original snapshot)");
+print("actual:" + s7e);
+print("lst-after:" + lst7e);
+
+# ============================================================
+# S8 — for k, v in list  (index, element)
+# ============================================================
+print("===S8a-list-kv-basic===");
+let s8a = "";
+for k, v in [10, 20, 30] { s8a = s8a + k + ":" + v + ","; }
+print("expect:0:10,1:20,2:30,");
+print("actual:" + s8a);
+
+print("===S8b-list-kv-empty===");
+let s8b = 0;
+for k, v in [] { s8b = s8b + 1; }
+print("expect:0");
+print("actual:" + s8b);
+
+print("===S8c-list-kv-single===");
+let s8c = "";
+for k, v in [42] { s8c = s8c + k + ":" + v; }
+print("expect:0:42");
+print("actual:" + s8c);
+
+print("===S8d-list-kv-nested===");
+let s8d = "";
+for k, v in [[1, 2], [3, 4]] { s8d = s8d + k + ":" + v + ","; }
+print("expect:0:[1, 2],1:[3, 4],");
+print("actual:" + s8d);
+
+print("===S8e-range-kv===");
+# range() returns an HList, so two-var iteration gives index:element
+# (which happen to be identical here).
+let s8e = "";
+for k, v in range(3) { s8e = s8e + k + ":" + v + ","; }
+print("expect:0:0,1:1,2:2,");
+print("actual:" + s8e);
+
+# ============================================================
+# S9 — break / continue
+# ============================================================
+print("===S9a-break-single===");
+let s9a = "";
+for i in [1, 2, 3, 4, 5] {
+    if (i == 3) { break; }
+    s9a = s9a + i;
+}
+print("expect:12");
+print("actual:" + s9a);
+
+print("===S9b-continue-single===");
+let s9b = "";
+for i in [1, 2, 3, 4, 5] {
+    if (i == 3) { continue; }
+    s9b = s9b + i;
+}
+print("expect:1245");
+print("actual:" + s9b);
+
+print("===S9c-break-first-iter===");
+let s9c = "";
+for i in [1, 2, 3] {
+    break;
+    s9c = s9c + i;   # dead
+}
+print("expect:");
+print("actual:" + s9c);
+
+print("===S9d-continue-last-iter===");
+let s9d = "";
+for i in [1, 2, 3] {
+    if (i == 3) { continue; }
+    s9d = s9d + i;
+}
+print("expect:12");
+print("actual:" + s9d);
+
+print("===S9e-break-nested-only-inner===");
+let s9e = "";
+for i in [1, 2] {
+    for j in [1, 2, 3] {
+        if (j == 2) { break; }
+        s9e = s9e + i + "" + j + ",";
+    }
+}
+print("expect:11,21,");
+print("actual:" + s9e);
+
+print("===S9f-continue-in-for-with-post-body===");
+# After continue, the post-continue statement should NOT run.
+let s9f = "";
+for i in [1, 2, 3] {
+    if (i == 2) { continue; }
+    s9f = s9f + "pre" + i + ";";
+}
+print("expect:pre1;pre3;");
+print("actual:" + s9f);
+
+# ============================================================
+# S10 — Empty iteration
+# ============================================================
+print("===S10a-empty-list===");
+let s10a = 0;
+for x in [] { s10a = s10a + 1; }
+print("expect:0");
+print("actual:" + s10a);
+
+print("===S10b-empty-dict===");
+let s10b = 0;
+for k in {} { s10b = s10b + 1; }
+print("expect:0");
+print("actual:" + s10b);
+
+print("===S10c-empty-range===");
+let s10c = 0;
+for i in range(0) { s10c = s10c + 1; }
+print("expect:0");
+print("actual:" + s10c);
+
+print("===S10d-empty-string===");
+let s10d = 0;
+for ch in "" { s10d = s10d + 1; }
+print("expect:0");
+print("actual:" + s10d);
+
+print("===S10e-empty-kv-list===");
+let s10e = 0;
+for k, v in [] { s10e = s10e + 1; }
+print("expect:0");
+print("actual:" + s10e);
+
+# ============================================================
+# S11 — for + return
+# ============================================================
+print("===S11a-return-in-for===");
+fn find11(needle) {
+    for x in [1, 2, 3, 4, 5] {
+        if (x == needle) { return x * 100; }
+    }
+    return -1;
+}
+print("expect:300");
+print("actual:" + find11(3));
+
+print("===S11b-return-not-found===");
+print("expect:-1");
+print("actual:" + find11(99));
+
+print("===S11c-return-bare-in-for===");
+# `return;` inside a for must return null, NOT the iterator dict.
+fn bare11() {
+    for x in [1, 2, 3] {
+        if (x == 2) { return; }
+    }
+    return 999;
+}
+let r11c = bare11();
+print("expect:null");
+print("actual:" + r11c);
+
+print("===S11d-return-in-nested-for===");
+fn nested11() {
+    for i in [1, 2, 3] {
+        for j in [10, 20] {
+            if (i == 2 && j == 20) { return i * 100 + j; }
+        }
+    }
+    return -1;
+}
+print("expect:220");
+print("actual:" + nested11());
+
+print("===S11e-return-first-iter===");
+fn first11() {
+    for x in [7, 8, 9] { return x; }
+    return -1;
+}
+print("expect:7");
+print("actual:" + first11());
+
+# ============================================================
+# S12 — for + try
+# ============================================================
+print("===S12a-try-catch-in-for===");
+let s12a = "";
+for i in [1, 2, 3, 4] {
+    try {
+        if (i == 2) { throw "boom"; }
+        s12a = s12a + i + ",";
+    } catch (e) {
+        s12a = s12a + "err" + i + ",";
+    }
+}
+print("expect:1,err2,3,4,");
+print("actual:" + s12a);
+
+print("===S12b-break-in-try===");
+let s12b = "";
+for i in [1, 2, 3, 4] {
+    try {
+        if (i == 3) { break; }
+        s12b = s12b + i + ",";
+    } catch (e) {
+        s12b = s12b + "err;";
+    }
+}
+print("expect:1,2,");
+print("actual:" + s12b);
+
+print("===S12c-continue-in-try===");
+let s12c = "";
+for i in [1, 2, 3, 4] {
+    try {
+        if (i == 2) { continue; }
+        s12c = s12c + i + ",";
+    } catch (e) {
+        s12c = s12c + "err;";
+    }
+}
+print("expect:1,3,4,");
+print("actual:" + s12c);
+
+print("===S12d-throw-uncaught-in-for===");
+# An uncaught throw inside a for should propagate out, leaving the
+# iterator on the stack (cleaned up with the frame).
+let s12d = "no-err";
+try {
+    for i in [1, 2, 3] {
+        if (i == 2) { throw "propagated"; }
+    }
+    s12d = "no-throw";
+} catch (e) {
+    s12d = "caught:" + e;
+}
+print("expect:caught:propagated");
+print("actual:" + s12d);
+
+print("===S12e-for-in-catch===");
+# A for loop inside a catch block.
+let s12e = "";
+try {
+    throw [1, 2, 3];
+} catch (e) {
+    for x in e { s12e = s12e + x + ","; }
+}
+print("expect:1,2,3,");
+print("actual:" + s12e);
+
+# ============================================================
+# S13 — Custom iterator (class with iter/next)
+# ============================================================
+print("===S13a-class-as-iterable===");
+# H# has no __iter__/__next__ protocol: forIterFirst's `else` branch
+# throws "FOR_ITER: unsupported iterable instance".  Python would
+# call __iter__/__next__.
+class Counter13 {
+    fn __init__(self, n) { self.n = n; self.i = 0; }
+    fn __iter__(self) { return self; }
+    fn __next__(self) {
+        if (self.i >= self.n) { throw "StopIteration"; }
+        let v = self.i;
+        self.i = self.i + 1;
+        return v;
+    }
+}
+let c13 = new Counter13(3);
+let s13a = "no-err";
+try {
+    for x in c13 { s13a = s13a + x + ","; }
+    print("expect:ERROR (unsupported iterable) / 0,1,2, (if protocol)");
+    print("actual:" + s13a);
+} catch (e) {
+    print("expect:ERROR (unsupported iterable) / 0,1,2, (if protocol)");
+    print("actual:caught:" + e);
+}
+
+print("===S13b-instance-field-iter===");
+# Verify the instance itself is otherwise usable (methods work).
+let c13b = new Counter13(2);
+let s13b = "";
+try {
+    s13b = s13b + c13b.__next__() + ",";
+    s13b = s13b + c13b.__next__();
+    print("expect:0,1");
+    print("actual:" + s13b);
+} catch (e) {
+    print("expect:0,1");
+    print("actual:caught:" + e);
+}
+
+# ============================================================
+# S14 — while equivalence (for vs while over same data)
+# ============================================================
+print("===S14a-for-vs-while-list===");
+let data14 = [5, 10, 15, 20];
+let for14 = 0;
+for x in data14 { for14 = for14 + x; }
+let while14 = 0;
+let wi14 = 0;
+while (wi14 < len(data14)) {
+    while14 = while14 + data14[wi14];
+    wi14 = wi14 + 1;
+}
+print("expect:for=50 while=50");
+print("actual:for=" + for14 + " while=" + while14);
+
+print("===S14b-for-vs-while-range===");
+let for14b = 0;
+for i in range(1, 6) { for14b = for14b + i; }
+let while14b = 0;
+let wi14b = 1;
+while (wi14b < 6) {
+    while14b = while14b + wi14b;
+    wi14b = wi14b + 1;
+}
+print("expect:for=15 while=15");
+print("actual:for=" + for14b + " while=" + while14b);
+
+print("===S14c-for-vs-while-break===");
+let for14c = 0;
+for i in range(10) {
+    if (i == 5) { break; }
+    for14c = for14c + i;
+}
+let while14c = 0;
+let wi14c = 0;
+while (wi14c < 10) {
+    if (wi14c == 5) { break; }
+    while14c = while14c + wi14c;
+    wi14c = wi14c + 1;
+}
+print("expect:for=10 while=10");
+print("actual:for=" + for14c + " while=" + while14c);
+
+# ============================================================
+# S15 — Multi-level destructuring in for header
+# ============================================================
+# `for [a, b] in [[1,2],[3,4]] { ... }` is NOT supported by the
+# parser (for_statement only accepts IDENT or IDENT, IDENT).  This
+# would be a COMPILE-TIME SyntaxError, so it lives in a sibling
+# probe file _probe151_S15_for_destruct.hto.  Here we exercise the
+# two workarounds instead.
+print("===S15a-workaround-destructure-in-body===");
+let pairs15 = [[1, 2], [3, 4], [5, 6]];
+let s15a = 0;
+for pr in pairs15 {
+    let [a15, b15] = pr;
+    s15a = s15a + a15 + b15;
+}
+print("expect:21");
+print("actual:" + s15a);
+
+print("===S15b-workaround-kv-then-index===");
+let s15b = "";
+for idx, el in pairs15 {
+    let [a15b, b15b] = el;
+    s15b = s15b + idx + ":" + (a15b + b15b) + ",";
+}
+print("expect:0:3,1:7,2:11,");
+print("actual:" + s15b);
+
+print("=== R5.151 DONE ===");

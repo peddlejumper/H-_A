@@ -1,0 +1,40 @@
+# t14_neg_index.hto - 负索引访问
+# 列表/字符串负索引
+let lst = [10, 20, 30, 40, 50];
+print("lst[-1] try:");
+try {
+    print(lst[-1]);
+} catch (e) {
+    print("caught: ");
+    print(e);
+}
+print("lst[-5] try:");
+try {
+    print(lst[-5]);
+} catch (e) {
+    print("caught: ");
+    print(e);
+}
+print("lst[-6] try:");
+try {
+    print(lst[-6]);
+} catch (e) {
+    print("caught: ");
+    print(e);
+}
+let s = "abcde";
+print("str[-1] try:");
+try {
+    print(s[-1]);
+} catch (e) {
+    print("caught: ");
+    print(e);
+}
+print("str[-6] try:");
+try {
+    print(s[-6]);
+} catch (e) {
+    print("caught: ");
+    print(e);
+}
+print("done");

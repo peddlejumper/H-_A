@@ -33,6 +33,13 @@ from host_functions import (
     # Network functions
     builtin_net_http_get,
     builtin_net_http_post,
+    builtin_net_http_get_with_headers,
+    builtin_net_http_post_json,
+    builtin_net_http_post_with_headers,
+    builtin_net_http_put_json,
+    builtin_net_http_delete,
+    builtin_get_http_body,
+    builtin_get_http_status,
     builtin_net_url_parse,
     builtin_net_url_build,
     builtin_net_tcp_connect,
@@ -46,7 +53,10 @@ from host_functions import (
     builtin_net_base64_decode,
     builtin_net_json_stringify,
     builtin_net_json_parse,
-    # Database functions
+    builtin_net_json_stringify_alias,
+    builtin_net_json_parse_alias,
+    # Math functions
+    builtin_float,
     builtin_db_connect,
     builtin_db_close,
     builtin_db_execute,
@@ -68,6 +78,19 @@ from host_functions import (
     builtin_htable_size,
     builtin_htable_keys,
     builtin_htable_values,
+    builtin_sys_run,
+    builtin_read_line,
+    builtin_rand_int,
+    # HwdUI host functions
+    builtin_hwdui_init,
+    builtin_hwdui_theme_dark,
+    builtin_hwdui_create_window,
+    builtin_ui_run,
+    builtin_ui_quit,
+    builtin_notify_info,
+    builtin_notify_error,
+    builtin_notify_warning,
+    builtin_new_widget,
 )
 import time
 
@@ -121,6 +144,10 @@ class ContinueException(Exception):
 
 class BreakException(Exception):
     pass
+
+class ThrowException(Exception):
+    def __init__(self, value):
+        self.value = value
 
 class HSharpError(Exception):
     pass
@@ -710,6 +737,10 @@ class Interpreter:
         self.global_env = global_env or Environment()
         self.functions = functions or {}
         self.interfaces = {}
+        # Host-defined widget classes for H#'s `new WidgetName()` syntax.
+        # Populated lazily by _hwdui_register_widget or auto-loaded on first use.
+        self._host_widgets = {}
+        self._hwdui_loaded = False
         self.builtins = {
             'len': builtin_len,
             '_tag': builtin_tag,
@@ -734,6 +765,7 @@ class Interpreter:
             'chr': builtin_chr,
             'int': builtin_int,
             'str': builtin_str,
+            'float': builtin_float,
             # Date and Time functions
             'date_now': builtin_date_now,
             'date_timestamp': builtin_date_timestamp,
@@ -759,6 +791,13 @@ class Interpreter:
             # Network functions
             'http_get': builtin_net_http_get,
             'http_post': builtin_net_http_post,
+            'http_get_with_headers': builtin_net_http_get_with_headers,
+            'http_post_json': builtin_net_http_post_json,
+            'http_post_with_headers': builtin_net_http_post_with_headers,
+            'http_put_json': builtin_net_http_put_json,
+            'http_delete': builtin_net_http_delete,
+            'http_get_body': builtin_get_http_body,
+            'http_get_status': builtin_get_http_status,
             'url_parse': builtin_net_url_parse,
             'url_build': builtin_net_url_build,
             'tcp_connect': builtin_net_tcp_connect,
@@ -772,6 +811,8 @@ class Interpreter:
             'base64_decode': builtin_net_base64_decode,
             'json_stringify': builtin_net_json_stringify,
             'json_parse': builtin_net_json_parse,
+            'net_json_stringify': builtin_net_json_stringify_alias,
+            'net_json_parse': builtin_net_json_parse_alias,
             # Database functions
             'db_connect': builtin_db_connect,
             'db_close': builtin_db_close,
@@ -794,6 +835,19 @@ class Interpreter:
             'htable_size': builtin_htable_size,
             'htable_keys': builtin_htable_keys,
             'htable_values': builtin_htable_values,
+            # System / process / I/O
+            'sys_run': builtin_sys_run,
+            'read_line': builtin_read_line,
+            'rand_int': builtin_rand_int,
+            # HwdUI / desktop GUI
+            'hwdui_init': builtin_hwdui_init,
+            'hwdui_theme_dark': builtin_hwdui_theme_dark,
+            'hwdui_create_window': builtin_hwdui_create_window,
+            'ui_run': builtin_ui_run,
+            'ui_quit': builtin_ui_quit,
+            'notify_info': builtin_notify_info,
+            'notify_error': builtin_notify_error,
+            'notify_warning': builtin_notify_warning,
             # Math functions
             'math_sin': builtin_math_sin,
             'math_cos': builtin_math_cos,
@@ -849,6 +903,13 @@ class Interpreter:
             'list_fill': builtin_list_fill,
             'list_reserve': builtin_list_reserve,
         }
+
+        # 注册 tkinter GUI 后端（gui_* host 函数）
+        try:
+            import gui_tkinter as _gui_tk
+            _gui_tk.register(self)
+        except Exception:
+            pass
 
         self._current_coroutine = None
         self._event_waiters = {}
@@ -1193,6 +1254,11 @@ class Interpreter:
 
     def interpret(self, program, env=None):
         env = env or self.global_env
+        # Publish self to host_functions so HwdUI builtin can register
+        # widget factories on the right interpreter instance.
+        import host_functions as _hf
+        prev = _hf._interp_ref.get("current")
+        _hf._interp_ref["current"] = self
         try:
             for stmt in program.statements:
                 result = self.execute(stmt, env)
@@ -1202,6 +1268,8 @@ class Interpreter:
             print(f"Runtime Error: {e}")
         except Exception as e:
             print(f"Unexpected error: {e}")
+        finally:
+            _hf._interp_ref["current"] = prev
 
     def execute(self, stmt, env):
         method_name = f'visit_{type(stmt).__name__}'
@@ -1214,6 +1282,38 @@ class Interpreter:
     def visit_LetStatement(self, stmt, env):
         value = self.eval_expr(stmt.value, env)
         env.define(stmt.name, value)
+
+    def visit_DestructureLet(self, stmt, env):
+        # `let [a, b, _] = expr;` — evaluate RHS once, then index.
+        coll = self.eval_expr(stmt.value, env)
+        for i, name in enumerate(stmt.names):
+            if name is None:
+                continue
+            env.define(name, self._index_value(coll, i))
+
+    def _index_value(self, coll, idx):
+        """Helper for visit_DestructureLet — index `coll` at `idx`."""
+        if isinstance(coll, str):
+            if 0 <= idx < len(coll):
+                return coll[idx]
+            raise Exception(
+                f"destructure index {idx} out of range for string of length {len(coll)}")
+        if isinstance(coll, list):
+            if 0 <= idx < len(coll):
+                return coll[idx]
+            raise Exception(
+                f"destructure index {idx} out of range for list of length {len(coll)}")
+        if isinstance(coll, dict):
+            # Allow destructuring a dict by positional key 0..n-1 —
+            # useful in tests but not idiomatic.  We iterate the dict
+            # in insertion order.
+            keys = list(coll.keys())
+            if 0 <= idx < len(keys):
+                return coll[keys[idx]]
+            raise Exception(
+                f"destructure index {idx} out of range for dict of size {len(coll)}")
+        raise Exception(
+            f"destructure RHS must be string/list/dict, got {type(coll).__name__}")
 
     def visit_PrintStatement(self, stmt, env):
         value = self.eval_expr(stmt.expr, env)
@@ -1567,6 +1667,26 @@ class Interpreter:
 
     def visit_BreakStatement(self, stmt, env):
         raise BreakException()
+
+    def visit_ThrowStatement(self, stmt, env):
+        value = self.eval_expr(stmt.expr, env)
+        raise ThrowException(value)
+
+    def visit_TryStatement(self, stmt, env):
+        try:
+            self.execute_block(stmt.body, env)
+        except ThrowException as te:
+            handler_env = Environment(parent=env)
+            handler_env.define(stmt.exception_name, te.value)
+            self.execute_block(stmt.handler, handler_env)
+        except HSharpError as he:
+            handler_env = Environment(parent=env)
+            handler_env.define(stmt.exception_name, str(he))
+            self.execute_block(stmt.handler, handler_env)
+        except (ZeroDivisionError, KeyError, IndexError, TypeError) as ee:
+            handler_env = Environment(parent=env)
+            handler_env.define(stmt.exception_name, str(ee))
+            self.execute_block(stmt.handler, handler_env)
 
     def visit_ForStatement(self, stmt, env):
         iterable = self.eval_expr(stmt.iterable, env)
@@ -2119,7 +2239,59 @@ class Interpreter:
         raise ReturnException(value)
 
     def visit_Function(self, stmt, env):
+        # Evaluate default-value expressions once at registration time
+        # and store the *values* (not AST nodes) on the function.  This
+        # matches Python's "default evaluated once at def time" rule
+        # and lets the call path use them directly without re-evaluating
+        # on every call.
+        if getattr(stmt, 'defaults', None):
+            stmt._evaluated_defaults = [
+                self.eval_expr(d, env) for d in stmt.defaults
+            ]
         self.functions[stmt.name] = stmt
+
+    def _apply_defaults(self, func, args, name):
+        """Fill in missing trailing arguments from the function's
+        evaluated defaults list.  Mirrors the Python/Kotlin convention:
+        `defaults` aligns with the tail of `params`, so e.g.
+        `fn f(a, b, c=1, d=2)` has params=[a,b,c,d] and
+        defaults=[1,2].  Calling `f(10,20)` yields [10,20,1,2]."""
+        params = func.params
+        defaults = getattr(func, '_evaluated_defaults', None) or []
+        n_def = len(defaults)
+        if not n_def:
+            if len(args) != len(params):
+                raise HSharpError(
+                    f"Function '{name}' expects {len(params)} arguments, got {len(args)}")
+            return args
+        min_args = len(params) - n_def
+        if len(args) == len(params):
+            return args
+        if min_args <= len(args) < len(params):
+            skip = len(args) - min_args
+            return list(args) + list(defaults[skip:])
+        raise HSharpError(
+            f"Function '{name}' expects {len(params)} arguments (min {min_args}), got {len(args)}")
+
+    def _bind_call_args(self, func, args, name):
+        """Bind positional `args` to `func`'s parameters in a fresh
+        call environment, handling both default values and variadic
+        (`...args`) parameters.  `func` is a Function AST node."""
+        call_env = Environment(parent=self.global_env)
+        params = func.params
+        if getattr(func, 'is_variadic', False):
+            nfixed = len(params) - 1
+            if len(args) < nfixed:
+                raise HSharpError(
+                    f"Function '{name}' expects at least {nfixed} arguments, got {len(args)}")
+            for i in range(nfixed):
+                call_env.define(params[i], args[i])
+            call_env.define(params[-1], list(args[nfixed:]))
+        else:
+            args = self._apply_defaults(func, args, name)
+            for param, arg in zip(params, args):
+                call_env.define(param, arg)
+        return call_env
 
     def visit_CoroFunction(self, stmt, env):
         # register coroutine function; mark as coroutine for runtime
@@ -2139,6 +2311,13 @@ class Interpreter:
         proxy = {}
         for k, v in mod_env.vars.items():
             proxy[k] = v
+        # visit_Function stores functions in self.functions, not mod_env;
+        # export any Function declarations from the module body into the proxy.
+        for s in stmt.body.statements:
+            if isinstance(s, Function):
+                fname = s.name
+                if fname in self.functions:
+                    proxy[fname] = self.functions[fname]
         try:
             env.define(stmt.name, proxy)
         except Exception:
@@ -2264,16 +2443,18 @@ class Interpreter:
                         except ReturnException as e:
                             return e.value
                         return None
+                    # class object: instantiate (ClassName() behaves like new ClassName())
+                    if 'methods' in val:
+                        inst = {'__class__': val}
+                        for k, v in val.get('fields', {}).items():
+                            inst[k] = v
+                        return inst
                 # H# Function object stored as variable
                 if isinstance(val, Function):
                     if getattr(val, 'is_coro', False):
                         coro = Coroutine(val, self, args)
                         return coro
-                    if len(args) != len(val.params):
-                        raise HSharpError(f"Function '{name}' expects {len(val.params)} arguments, got {len(args)}")
-                    call_env = Environment(parent=self.global_env)
-                    for param, arg in zip(val.params, args):
-                        call_env.define(param, arg)
+                    call_env = self._bind_call_args(val, args, name)
                     try:
                         self.visit_BlockStatement(val.body, call_env)
                     except ReturnException as e:
@@ -2290,11 +2471,7 @@ class Interpreter:
             if (isinstance(func, Function) or isinstance(func, CoroFunction)) and getattr(func, 'is_coro', False):
                 coro = Coroutine(func, self, args)
                 return coro
-            if len(args) != len(func.params):
-                raise HSharpError(f"Function '{name}' expects {len(func.params)} arguments, got {len(args)}")
-            call_env = Environment(parent=self.global_env)
-            for param, arg in zip(func.params, args):
-                call_env.define(param, arg)
+            call_env = self._bind_call_args(func, args, name)
             try:
                 self.visit_BlockStatement(func.body, call_env)
             except ReturnException as e:
@@ -2381,9 +2558,15 @@ class Interpreter:
                 method = methods[attr]
                 call_env = Environment(parent=self.global_env)
                 call_env.define('self', left)
-                if len(args) != len(method.params):
-                    raise HSharpError(f"Method '{attr}' expects {len(method.params)} arguments, got {len(args)}")
-                for param, arg in zip(method.params, args):
+                # If the method declares `self` as first param, it is bound
+                # automatically to the instance; do not count it against the
+                # caller-supplied arguments.
+                mparams = method.params
+                if mparams and mparams[0] == 'self':
+                    mparams = mparams[1:]
+                if len(args) != len(mparams):
+                    raise HSharpError(f"Method '{attr}' expects {len(mparams)} arguments, got {len(args)}")
+                for param, arg in zip(mparams, args):
                     call_env.define(param, arg)
                 try:
                     self.visit_BlockStatement(method.body, call_env)
@@ -2644,7 +2827,7 @@ class Interpreter:
 
     def visit_AssignmentMember(self, stmt, env):
         obj = self.eval_expr(stmt.left, env)
-        if not isinstance(obj, dict) or '__class__' not in obj:
+        if not isinstance(obj, dict):
             raise HSharpError('Left side of member assignment is not an object')
         value = self.eval_expr(stmt.value, env)
         obj[stmt.name] = value
@@ -2973,11 +3156,31 @@ class Interpreter:
         elif isinstance(expr, NewExpression):
             cname = expr.class_name.name if isinstance(expr.class_name, Identifier) else None
             args = [self.eval_expr(a, env) for a in expr.args]
+            # Host-defined widget classes (HwdUI) take priority over user H# classes
+            if hasattr(self, "_host_widgets") and cname in self._host_widgets:
+                return self._host_widgets[cname](args)
             if cname in self.functions:
                 cls = self.functions[cname]
                 inst = {'__class__': cls}
                 for k, v in cls.get('fields', {}).items():
                     inst[k] = v
+                # call init (constructor) if defined
+                methods = cls.get('methods', {})
+                if 'init' in methods:
+                    init = methods['init']
+                    call_env = Environment(parent=self.global_env)
+                    call_env.define('self', inst)
+                    iparams = init.params
+                    if iparams and iparams[0] == 'self':
+                        iparams = iparams[1:]
+                    if len(args) != len(iparams):
+                        raise HSharpError(f"init expects {len(iparams)} arguments, got {len(args)}")
+                    for param, arg in zip(iparams, args):
+                        call_env.define(param, arg)
+                    try:
+                        self.visit_BlockStatement(init.body, call_env)
+                    except ReturnException:
+                        pass
                 return inst
             raise HSharpError(f"Class '{cname}' not found")
         elif isinstance(expr, UnionConstructExpression):

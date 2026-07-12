@@ -1,0 +1,9 @@
+# t01: async fn declaration + call returns HFuture.
+# Call foo() without await; print the result.  Per HVM.kt:954 an
+# `async fn` call wraps the return value in HFuture(resolved=true),
+# so `f` should be a Future, not the bare 42.
+async fn foo() {
+    return 42;
+}
+let f = foo();
+print(f);

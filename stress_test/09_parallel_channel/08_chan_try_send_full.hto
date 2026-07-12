@@ -1,0 +1,56 @@
+# 08 — chan_try_send on full bounded channel returns false
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Capacity 1
+let ch1 = chan_new(1);
+let s_a = chan_try_send(ch1, "a");
+check("try_send_empty_ok", s_a == true, "s_a=" + str(s_a));
+# Already full
+let s_b = chan_try_send(ch1, "b");
+check("try_send_full_false", s_b == false, "s_b=" + str(s_b));
+# Still full
+check("size_still_1", chan_size(ch1) == 1, "size=" + str(chan_size(ch1)));
+# Recv then try_send succeeds
+let r_a = chan_recv(ch1);
+check("recv_a", r_a == "a", "r_a=" + str(r_a));
+let s_c = chan_try_send(ch1, "c");
+check("try_send_after_drain", s_c == true, "s_c=" + str(s_c));
+
+# Capacity 3: fill all then try_send fails
+let ch3 = chan_new(3);
+let k = 0;
+let fill_ok = true;
+while (k < 3) {
+    let ok = chan_try_send(ch3, k);
+    if (ok == false) {
+        fill_ok = false;
+    }
+    k = k + 1;
+}
+check("fill_cap3_all_ok", fill_ok == true, "fill_ok=" + str(fill_ok));
+let full_res = chan_try_send(ch3, 999);
+check("cap3_full_false", full_res == false, "full_res=" + str(full_res));
+
+# try_send on unbounded always succeeds (no capacity limit)
+let chu = chan_new(0);
+let all_ok = true;
+let m = 0;
+while (m < 100) {
+    if (chan_try_send(chu, m) == false) {
+        all_ok = false;
+    }
+    m = m + 1;
+}
+check("unbounded_try_send_always_ok", all_ok == true, "all_ok=" + str(all_ok));
+check("unbounded_size_100", chan_size(chu) == 100, "size=" + str(chan_size(chu)));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

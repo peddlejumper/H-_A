@@ -1,0 +1,29 @@
+# t16_call_new.hto - CALL_NEW 路径（实例化类）
+class Animal {
+    let name = "";
+    let sound = "";
+    fn init(n, s) {
+        self.name = n;
+        self.sound = s;
+    }
+    fn describe() {
+        return self.name + " says " + self.sound;
+    }
+}
+let a = new Animal("Dog", "Woof");
+print(a.describe());
+
+# 无参 init
+class Empty {
+    let v = 0;
+    fn init() { self.v = 42; }
+}
+let e = new Empty();
+print(e.v);
+
+# 多个实例互不干扰
+let a1 = new Animal("Cat", "Meow");
+let a2 = new Animal("Cow", "Moo");
+print(a1.describe());
+print(a2.describe());
+print(a.describe());

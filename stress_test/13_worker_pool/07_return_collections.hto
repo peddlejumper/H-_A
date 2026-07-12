@@ -1,0 +1,96 @@
+# 07 — parallel fn returns list / dict / instance
+# Covers: parallel fn 返回 list/dict/instance，验证跨线程返回值正确
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+class Point {
+    fn __init__(self, x, y) {
+        self.x = x;
+        self.y = y;
+    }
+    fn mag(self) {
+        return self.x * self.x + self.y * self.y;
+    }
+}
+
+parallel fn make_list(n) {
+    let r = [];
+    let i = 0;
+    while (i < n) {
+        push(r, i * i);
+        i = i + 1;
+    }
+    return r;
+}
+
+parallel fn make_dict(n) {
+    let d = {};
+    d["a"] = n;
+    d["b"] = n + 1;
+    d["sum"] = n + (n + 1);
+    return d;
+}
+
+parallel fn make_point(x, y) {
+    let p = new Point(x, y);
+    return p;
+}
+
+parallel fn make_nested(n) {
+    return {"list": [n, n + 1, n + 2], "meta": {"k": n}};
+}
+
+# list
+let fl = make_list(5);
+let vl = await fl;
+check("list_len", len(vl) == 5, "len=" + str(len(vl)));
+check("list_0", vl[0] == 0, "vl[0]=" + str(vl[0]));
+check("list_4", vl[4] == 16, "vl[4]=" + str(vl[4]));
+
+# dict
+let fd = make_dict(10);
+let vd = await fd;
+check("dict_a", vd["a"] == 10, "a=" + str(vd["a"]));
+check("dict_b", vd["b"] == 11, "b=" + str(vd["b"]));
+check("dict_sum", vd["sum"] == 21, "sum=" + str(vd["sum"]));
+
+# instance
+let fp = make_point(3, 4);
+let vp = await fp;
+check("instance_x", vp.x == 3, "x=" + str(vp.x));
+check("instance_y", vp.y == 4, "y=" + str(vp.y));
+check("instance_method", vp.mag() == 25, "mag=" + str(vp.mag()));
+
+# nested
+let fn2 = make_nested(7);
+let vn = await fn2;
+check("nested_list", vn["list"][2] == 9, "got " + str(vn["list"][2]));
+check("nested_meta", vn["meta"]["k"] == 7, "got " + str(vn["meta"]["k"]));
+
+# 100 个返回 list 的任务
+parallel fn make_range(a, b) {
+    let r = [];
+    let i = a;
+    while (i < b) { push(r, i); i = i + 1; }
+    return r;
+}
+let futs = [];
+let i = 0;
+while (i < 100) {
+    push(futs, make_range(i, i + 5));
+    i = i + 1;
+}
+let all_ok = true;
+let j = 0;
+while (j < 100) {
+    let lst = await futs[j];
+    if (len(lst) != 5) { all_ok = false; }
+    if (lst[0] != j or lst[4] != j + 4) { all_ok = false; }
+    j = j + 1;
+}
+check("100_list_returns", all_ok, "some list return wrong");
+
+print("T07_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

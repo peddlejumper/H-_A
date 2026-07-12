@@ -1,0 +1,103 @@
+# T62 - Advanced arithmetic & operator stress tests
+# Probing edge cases: division semantics, modulo signs, float precision,
+# bitwise ops, mixed types, unary chains, comparison chaining, short-circuit
+# side effects, overflow, and `not` on non-bools.
+
+# ── Case 1: integer division semantics (`/` is floor div, like Python `//`)
+#   7/2  -> 3 (floor)  | -7/2 -> -4 (floor) or -3 (trunc)?
+print("C1 7/2=");     print(7 / 2);
+print("C1 -7/2=");    print(-7 / 2);
+print("C1 7/-2=");    print(7 / -2);
+print("C1 -7/-2=");   print(-7 / -2);
+
+# ── Case 2: float division & precision
+#   0.1+0.2 -> 0.30000000000000004 (IEEE-754)
+#   1.0/3.0 -> 0.333...  (if `/` is floor div on floats: 0.0!)
+print("C2 0.1+0.2=");       print(0.1 + 0.2);
+print("C2 1.0/3.0=");       print(1.0 / 3.0);
+print("C2 7.0/2.0=");       print(7.0 / 2.0);
+print("C2 3.0/2.0=");       print(3.0 / 2.0);
+print("C2 5.5-0.5=");       print(5.5 - 0.5);
+print("C2 10.0/4.0=");      print(10.0 / 4.0);
+
+# ── Case 3: modulo with negative operands
+#   Python: -7 % 3 = 2, 7 % -3 = -2, -7 % -3 = -1
+print("C3 -7%3=");    print(-7 % 3);
+print("C3 7%-3=");    print(7 % -3);
+print("C3 -7%-3=");   print(-7 % -3);
+print("C3 5.5%2=");   print(5.5 % 2);
+
+# ── Case 4: mixed-type arithmetic
+#   int+float, bool+int (True==1), int+str (auto-coerce?), str*int
+print("C4 1+2.5=");       print(1 + 2.5);
+print("C4 true+1=");      print(true + 1);
+print("C4 false+10=");    print(false + 10);
+print("C4 1+\"a\"=");      print(1 + "a");
+print("C4 \"ab\"*3=");     print("ab" * 3);
+
+# ── Case 5: division & modulo by zero (should raise, not crash)
+let dz = "no-err";
+try { print(5 / 0); } catch (e) { dz = e; }
+print("C5 div0=");    print(dz);
+let mz = "no-err";
+try { print(5 % 0); } catch (e) { mz = e; }
+print("C5 mod0=");    print(mz);
+
+# ── Case 6: unary minus chains  (-x compiled as 0 - x)
+print("C6 -5=");      print(-5);
+print("C6 --5=");     print(--5);
+print("C6 ---5=");    print(---5);
+print("C6 ----5=");   print(----5);
+
+# ── Case 7: bitwise operators  (& | ^ ~ << >>)
+print("C7 12&10=");   print(12 & 10);
+print("C7 12|10=");   print(12 | 10);
+print("C7 12^10=");   print(12 ^ 10);
+print("C7 ~5=");      print(~5);
+print("C7 1<<4=");    print(1 << 4);
+print("C7 256>>2=");  print(256 >> 2);
+
+# ── Case 8: operator precedence & complex compound expr
+#   a + b * c - d / e % f  with a=1,b=2,c=3,d=20,e=3,f=4
+#   => 1 + (2*3) - ((20/3) % 4) = 1 + 6 - (6 % 4) = 1 + 6 - 2 = 5
+let a = 1; let b = 2; let c = 3; let d = 20; let e = 3; let f = 4;
+print("C8 1+2*3-20/3%4=");  print(a + b * c - d / e % f);
+print("C8 2+3*4=");         print(2 + 3 * 4);
+print("C8 (2+3)*4=");       print((2 + 3) * 4);
+
+# ── Case 9: comparison chaining
+#   Python: 1<2<3 = 1<2 and 2<3 = True
+#   H# parses left-assoc: (1<2)<3 = True<3 = 1<3 = True
+#   3<2<1 -> (3<2)<1 = False<1 = 0<1 = True  (BUG if True; Python=False)
+print("C9 1<2<3=");   print(1 < 2 < 3);
+print("C9 3<2<1=");   print(3 < 2 < 1);
+print("C9 5<10<20="); print(5 < 10 < 20);
+
+# ── Case 10: short-circuit `and`/`or` with side effects
+# Use a list (mutable reference) so side effects survive across call boundary.
+let counter = [0];
+fn bump() { counter[0] = counter[0] + 1; return true; }
+let r1 = false and bump();   # bump should NOT run
+print("C10 and-skip counter=");  print(counter[0]);
+let r2 = true or bump();     # bump should NOT run
+print("C10 or-skip counter=");   print(counter[0]);
+let r3 = true and bump();    # bump runs once -> counter 1
+print("C10 and-run counter=");   print(counter[0]);
+let r4 = false or bump();    # bump runs once more -> counter 2
+print("C10 or-run counter=");    print(counter[0]);
+
+# ── Case 11: `not` on bool and on non-bool (Python: not 5 = False)
+print("C11 not true=");   print(not true);
+print("C11 not false=");  print(not false);
+let nb = "no-err";
+try { print(not 5); } catch (e) { nb = e; }
+print("C11 not-5=");      print(nb);
+let nz = "no-err";
+try { print(not 0); } catch (e) { nz = e; }
+print("C11 not-0=");      print(nz);
+
+# ── Case 12: large integers / overflow (Kotlin Long is 64-bit)
+print("C12 big*2=");   print(9223372036854775807 * 2);
+print("C12 2^62=");    print(4611686018427387904);
+print("C12 pow2_63="); print(9223372036854775807);
+print("C12 +1=");      print(9223372036854775807 + 1);

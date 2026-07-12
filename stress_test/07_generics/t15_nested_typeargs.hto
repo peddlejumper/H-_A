@@ -1,0 +1,27 @@
+# t15_nested_typeargs.hto — 嵌套类型参数：Box<Pair<K,V>>
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Pair<K, V> {
+    let k = nullptr;
+    let v = nullptr;
+    fn init(a, b) { self.k = a; self.v = b; }
+}
+
+class Box<T> {
+    let value = nullptr;
+    fn init(x) { self.value = x; }
+    fn get() { return self.value; }
+}
+
+try {
+    let bp = new Box<Pair<K, V>>(new Pair<string, int>("a", 1));
+    print("15/nested_ok=" + str(bp.get().k));
+    check("15/nested", bp.get().k == "a");
+} catch (err) {
+    print("15/nested_err=" + str(err));
+}
+
+print("15/done");

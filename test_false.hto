@@ -1,0 +1,7 @@
+# test_false.hto
+let x = false;
+print(str(x));
+let y = true;
+print(str(y));
+let z = null;
+print(str(z));

@@ -1,0 +1,388 @@
+# ============================================================
+# round5_157_type_conversion.hto — H# v0.4.1 类型转换函数全面测试
+# 测试工程师: round5 #157, 覆盖 15 个子领域 S1..S15
+#
+# 转换函数: int(x) / float(x) / str(x) / bool(x) / list(x) / dict(x) / type(x)
+# 对照基准: Python 3 语义 (Python 是 H# 的语义蓝本)
+#
+# 实现要点 (源码摘要):
+#   int(x)   = HValueOps.toDouble(x).toLong().toDouble()  -- 截断向 0
+#   float(x) = HValueOps.toDouble(x)
+#   str(x)   = x.toDisplayString()
+#   bool(x)  = HValueOps.truthy(x)
+#   list(x)  = HList(copy) / HString(chars) / HDict(keys) / else EXC
+#   dict(x)  = HDict(copy) / HList(pairs) / else EXC   (arity=0 -> 空 dict)
+#   type(x)  = HInstance->klass.name / HFunction->"function"
+#              / HChannel->"channel" / else v.type.name.lowercase()
+#   toDouble = HNumber.value / HBool->1.0|0.0 / HString.toDoubleOrNull()??EXC
+#              / HNull->0.0 / else EXC
+#   toDisplayString: HNumber 整数值 -> toLong().toString() (丢 .0)
+#                    HList -> "[a, b]" (元素不加分隔引号)
+#                    HDict -> "{k: v}" (键不加分隔引号)
+# ============================================================
+
+# ============================================================
+# 工具: 安全执行包装 — 捕获异常, 输出 r157_<name>:<result>
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# 标记一个 bool 结果 (Python 语义对照)
+fn ok(label, got, expect) {
+    if (got == expect) {
+        print(label + ":PASS got=" + str(got));
+    } else {
+        print(label + ":FAIL got=" + str(got) + " expect=" + str(expect));
+    }
+}
+
+print("===== R5-157 TYPE CONVERSION (v0.4.1) =====");
+
+# 顶层类声明 (函数内 class 声明会引发 "Undefined name", 故放顶层)
+class Klass157 { fn __init__() { } }
+
+# 构造 Inf/NaN (float("inf")/"nan" 在 H# 中抛异常, 改用溢出)
+let INF_VAL = float("1e308") * float("1e308");   # Inf
+let NAN_VAL = float("1e400") - float("1e400");   # Inf - Inf = NaN
+
+# ============================================================
+# === S1: int() 转换 ===
+# ============================================================
+print("=== S1. int() conversion ===");
+safe("r157_s1_int_3p9", fn() { return int(3.9); });                  # Py: 3 (trunc toward 0)
+safe("r157_s1_int_3p0", fn() { return int(3.0); });                  # Py: 3
+safe("r157_s1_int_neg3p9", fn() { return int(0 - 3.9); });           # Py: -3 (trunc toward 0)
+safe("r157_s1_int_neg3p0", fn() { return int(0 - 3.0); });           # Py: -3
+safe("r157_s1_int_str_42", fn() { return int("42"); });              # Py: 42
+safe("r157_s1_int_str_3p14", fn() { return int("3.14"); });          # Py: ValueError!  H#?: toDouble ok->3
+safe("r157_s1_int_str_0x1F", fn() { return int("0x1F"); });          # Py: 31.  H#?: toDoubleOrNull=null->EXC
+safe("r157_s1_int_str_ws", fn() { return int("  12  "); });          # Py: 12 (strip). H#?: toDoubleOrNull trims -> 12
+safe("r157_s1_int_str_neg", fn() { return int("-7"); });             # Py: -7
+safe("r157_s1_int_str_exp", fn() { return int("1e3"); });            # Py: ValueError. H#?: toDouble ok=1000->1000
+safe("r157_s1_int_true", fn() { return int(true); });                # Py: 1
+safe("r157_s1_int_false", fn() { return int(false); });              # Py: 0
+safe("r157_s1_int_null", fn() { return int(null); });                # Py: TypeError. H#?: EXC (显式 null 拒绝)
+safe("r157_s1_int_list1", fn() { return int([1]); });                # Py: TypeError. H#?: EXC
+safe("r157_s1_int_list_empty", fn() { return int([]); });            # Py: TypeError. H#?: EXC
+safe("r157_s1_int_dict", fn() { return int({"a": 1}); });            # Py: TypeError. H#?: EXC
+safe("r157_s1_int_empty_str", fn() { return int(""); });             # Py: ValueError. H#?: EXC
+safe("r157_s1_int_ws_only", fn() { return int("   "); });            # Py: ValueError. H#?: trim->""->EXC
+safe("r157_s1_int_abc", fn() { return int("abc"); });                # Py: ValueError. H#?: EXC
+safe("r157_s1_int_inf", fn() { return int(INF_VAL); });              # Py: OverflowError. H#?: toLong clamps to Long.MAX
+safe("r157_s1_int_nan", fn() { return int(NAN_VAL); });             # Py: ValueError. H#?: toLong of NaN
+safe("r157_s1_int_big", fn() { return int(9999999999999999.0); });   # Py: 9999999999999999. H#?: precision loss
+
+# ============================================================
+# === S2: float() 转换 ===
+# ============================================================
+print("=== S2. float() conversion ===");
+safe("r157_s2_float_5", fn() { return float(5); });                  # Py: 5.0.  H#: 5 (display 整数值丢 .0)
+safe("r157_s2_float_str_3p14", fn() { return float("3.14"); });      # Py: 3.14
+safe("r157_s2_float_str_42", fn() { return float("42"); });          # Py: 42.0.  H#: 42 (display)
+safe("r157_s2_float_str_1e10", fn() { return float("1e10"); });      # Py: 1e10
+safe("r157_s2_float_str_inf", fn() { return float("inf"); });        # Py: inf.  H#: Infinity (display)
+safe("r157_s2_float_str_nan", fn() { return float("nan"); });        # Py: nan.  H#: NaN (display)
+safe("r157_s2_float_str_neg_inf", fn() { return float("-inf"); });   # Py: -inf. H#: -Infinity
+safe("r157_s2_float_true", fn() { return float(true); });            # Py: 1.0.  H#: 1
+safe("r157_s2_float_false", fn() { return float(false); });          # Py: 0.0.  H#: 0
+safe("r157_s2_float_null", fn() { return float(null); });            # Py: TypeError. H#?: EXC
+safe("r157_s2_float_list_empty", fn() { return float([]); });        # Py: TypeError. H#?: EXC
+safe("r157_s2_float_str_ws", fn() { return float("  3.5  "); });     # Py: 3.5.  H#?: trim -> 3.5
+safe("r157_s2_float_str_abc", fn() { return float("xyz"); });        # Py: ValueError. H#?: EXC
+safe("r157_s2_float_str_empty", fn() { return float(""); });         # Py: ValueError. H#?: EXC
+safe("r157_s2_float_str_0x", fn() { return float("0x1F"); });        # Py: 31.0 (float() 支持!). H#?: EXC
+
+# ============================================================
+# === S3: str() 转换 ===
+# ============================================================
+print("=== S3. str() conversion ===");
+safe("r157_s3_str_42", fn() { return str(42); });                    # Py: "42"
+safe("r157_s3_str_3p14", fn() { return str(3.14); });                # Py: "3.14"
+safe("r157_s3_str_true", fn() { return str(true); });                # Py: "True".  H#: "true" (小写)
+safe("r157_s3_str_false", fn() { return str(false); });              # Py: "False". H#: "false"
+safe("r157_s3_str_null", fn() { return str(null); });                # Py: "None".  H#: "null"
+safe("r157_s3_str_list_num", fn() { return str([1, 2, 3]); });       # Py: "[1, 2, 3]"
+safe("r157_s3_str_list_mixed", fn() { return str([1, "a", true, null]); });  # Py: "[1, 'a', True, None]". H#?: "[1, a, true, null]" (字符串不加引号!)
+safe("r157_s3_str_list_nested_str", fn() { return str(["a", "b"]); });  # Py: "['a', 'b']". H#?: "[a, b]"
+safe("r157_s3_str_dict", fn() { return str({"a": 1}); });            # Py: "{'a': 1}". H#?: "{a: 1}"
+safe("r157_s3_str_dict_nested", fn() { return str({"a": [1, 2]}); }); # Py: "{'a': [1, 2]}". H#?: "{a: [1, 2]}"
+safe("r157_s3_str_empty_list", fn() { return str([]); });            # Py: "[]"
+safe("r157_s3_str_empty_dict", fn() { return str({}); });            # Py: "{}"
+safe("r157_s3_str_str", fn() { return str("already"); });            # Py: "already"
+safe("r157_s3_str_fn", fn() { return str(fn() { return 1; }); });    # Py: "<function ...>". H#?: "<function .../0>"
+safe("r157_s3_str_float_intval", fn() { return str(3.0); });         # Py: "3.0".  H#?: "3" (整数值丢 .0)
+safe("r157_s3_str_neg0", fn() { return str(0 - 0.0); });             # Py: "0.0".  H#?: "0"
+safe("r157_s3_str_0p1", fn() { return str(0.1); });                  # Py: "0.1"
+safe("r157_s3_str_1e20", fn() { return str(float("1e20")); });       # Py: "1e+20". H#?: Kotlin Double.toString -> "1.0E20"
+safe("r157_s3_str_1e_neg7", fn() { return str(float("1e-7")); });    # Py: "1e-07". H#?: "1.0E-7"
+safe("r157_s3_str_inf", fn() { return str(INF_VAL); });              # Py: "inf".  H#?: "Infinity"
+safe("r157_s3_str_nan", fn() { return str(NAN_VAL); });             # Py: "nan".  H#?: "NaN"
+safe("r157_s3_str_class", fn() {
+    return str(Klass157);
+});                                                                  # H#?: "<class Klass157>"
+
+# ============================================================
+# === S4: bool() 转换 ===
+# ============================================================
+print("=== S4. bool() conversion ===");
+safe("r157_s4_bool_0", fn() { return bool(0); });                    # Py: False
+safe("r157_s4_bool_0p0", fn() { return bool(0.0); });                # Py: False
+safe("r157_s4_bool_1", fn() { return bool(1); });                    # Py: True
+safe("r157_s4_bool_neg1", fn() { return bool(0 - 1); });             # Py: True
+safe("r157_s4_bool_empty_str", fn() { return bool(""); });           # Py: False
+safe("r157_s4_bool_str_a", fn() { return bool("a"); });              # Py: True
+safe("r157_s4_bool_str_0", fn() { return bool("0"); });              # Py: True (非空串). H#?: true
+safe("r157_s4_bool_str_false", fn() { return bool("false"); });      # Py: True (非空串)
+safe("r157_s4_bool_empty_list", fn() { return bool([]); });          # Py: False
+safe("r157_s4_bool_list0", fn() { return bool([0]); });              # Py: True (非空)
+safe("r157_s4_bool_empty_dict", fn() { return bool({}); });          # Py: False
+safe("r157_s4_bool_dict1", fn() { return bool({"a": 1}); });         # Py: True
+safe("r157_s4_bool_null", fn() { return bool(null); });              # Py: False (None)
+safe("r157_s4_bool_nan", fn() { return bool(NAN_VAL); });            # Py: True (NaN is truthy). H#?: NaN != 0.0 -> true
+safe("r157_s4_bool_inf", fn() { return bool(INF_VAL); });            # Py: True
+safe("r157_s4_bool_neg_inf", fn() { return bool(0 - INF_VAL); });    # Py: True
+
+# ============================================================
+# === S5: list() 转换 ===
+# ============================================================
+print("=== S5. list() conversion ===");
+safe("r157_s5_list_copy", fn() { return list([1, 2, 3]); });         # Py: [1,2,3]
+safe("r157_s5_list_str", fn() { return list("abc"); });              # Py: ['a','b','c']. H#?: ["a","b","c"]
+safe("r157_s5_list_str_unicode", fn() { return list("héllo"); });    # Py: ['h','é','l','l','o']. H#?: per-char
+safe("r157_s5_list_dict", fn() { return list({"a": 1, "b": 2}); });  # Py: ['a','b'] (keys)
+safe("r157_s5_list_empty_dict", fn() { return list({}); });          # Py: []
+safe("r157_s5_list_num", fn() { return list(42); });                 # Py: TypeError. H#?: EXC
+safe("r157_s5_list_null", fn() { return list(null); });              # Py: TypeError. H#?: EXC
+safe("r157_s5_list_range5", fn() { return list(range(5)); });        # Py: [0,1,2,3,4]. H#?: range 已是 list, 复制
+safe("r157_s5_list_empty_str", fn() { return list(""); });           # Py: []
+safe("r157_s5_list_independence", fn() {
+    let a = [1, 2];
+    let b = list(a);
+    push(b, 3);
+    return len(a);                                                   # Py: 2 (list() 是浅拷贝)
+});
+
+# ============================================================
+# === S6: dict() 转换 ===
+# ============================================================
+print("=== S6. dict() conversion ===");
+safe("r157_s6_dict_copy", fn() { return dict({"a": 1}); });          # Py: {'a':1}
+safe("r157_s6_dict_pairs", fn() { return dict([["a", 1], ["b", 2]]); });  # Py: {'a':1,'b':2}
+safe("r157_s6_dict_empty", fn() { return dict([]); });               # Py: {}
+safe("r157_s6_dict_noargs", fn() { return dict(); });                # Py: {}.  H#?: arity=0 -> {}
+safe("r157_s6_dict_num", fn() { return dict(42); });                 # Py: TypeError. H#?: EXC
+safe("r157_s6_dict_str", fn() { return dict("a"); });                # Py: ValueError. H#?: EXC
+safe("r157_s6_dict_null", fn() { return dict(null); });              # Py: TypeError. H#?: EXC
+safe("r157_s6_dict_bad_pair_len", fn() { return dict([["a", 1, 2]]); });  # Py: ValueError. H#?: EXC
+safe("r157_s6_dict_bad_pair_type", fn() { return dict([1, 2]); });   # Py: TypeError. H#?: EXC (1 不是 pair)
+safe("r157_s6_dict_numkey_pair", fn() { return dict([[1, "v"]]); }); # Py: {1:'v'}. H#?: key 用 toDisplayString -> "1"
+safe("r157_s6_dict_copy_independence", fn() {
+    let a = {"a": 1};
+    let b = dict(a);
+    b["b"] = 2;
+    return len(a);                                                   # Py: 1 (dict() 是拷贝)
+});
+
+# ============================================================
+# === S7: type() 一致性 ===
+# ============================================================
+print("=== S7. type() consistency ===");
+safe("r157_s7_type_42", fn() { return type(42); });                  # Py: "int".   H#?: "number"
+safe("r157_s7_type_3p14", fn() { return type(3.14); });              # Py: "float". H#?: "number"
+safe("r157_s7_type_str", fn() { return type("hi"); });               # Py: "str".   H#?: "string"
+safe("r157_s7_type_true", fn() { return type(true); });              # Py: "bool".  H#?: "bool"
+safe("r157_s7_type_null", fn() { return type(null); });              # Py: "NoneType". H#?: "null"
+safe("r157_s7_type_list", fn() { return type([1]); });               # Py: "list".  H#?: "list"
+safe("r157_s7_type_dict", fn() { return type({"a":1}); });           # Py: "dict".  H#?: "dict"
+safe("r157_s7_type_fn", fn() { return type(fn(){ return 1; }); });   # H#?: "function"
+safe("r157_s7_type_class", fn() {
+    return type(Klass157);
+});                                                                  # H#?: "class"
+safe("r157_s7_type_instance", fn() {
+    let x = new Klass157();
+    return type(x);
+});                                                                  # H#? 预期 "instance", 实际? klass.name="Klass157"
+safe("r157_s7_type_channel", fn() { return type(chan_new(0)); });    # H#?: "channel"
+safe("r157_s7_type_native", fn() { return type(len); });             # H#?: "native"
+safe("r157_s7_type_0_is_intfloat", fn() { return str(type(0)); });   # 文档声称 int/float->"number"
+
+# ============================================================
+# === S8: 隐式转换 (算术/拼接/比较) ===
+# ============================================================
+print("=== S8. implicit conversion (arith/concat/compare) ===");
+safe("r157_s8_str_plus_int", fn() { return "x" + 1; });              # Py: TypeError.  H#?: "x1" (str+any->concat)
+safe("r157_s8_int_plus_str", fn() { return 1 + "x"; });              # Py: TypeError.  H#?: "1x" (any+str->concat)
+safe("r157_s8_int_plus_true", fn() { return 1 + true; });            # Py: TypeError.  H#?: 2 (toDouble)
+safe("r157_s8_true_plus_1", fn() { return true + 1; });              # Py: TypeError.  H#?: 2
+safe("r157_s8_str_plus_true", fn() { return "v=" + true; });         # H#?: "v=true"
+safe("r157_s8_str_plus_null", fn() { return "n=" + null; });         # H#?: "n=null"
+safe("r157_s8_null_plus_int", fn() { return null + 1; });            # Py: TypeError.  H#?: 1 (toDouble(null)=0)
+safe("r157_s8_null_plus_str", fn() { return null + "s"; });          # H#?: "nulls" (any+str->concat)
+safe("r157_s8_null_plus_null", fn() { return null + null; });        # Py: TypeError.  H#?: toDouble(0)+toDouble(0)=0
+safe("r157_s8_true_mul_3", fn() { return true * 3; });               # Py: TypeError.  H#?: 3
+safe("r157_s8_eq_1_true", fn() { return 1 == true; });               # Py: False (1 != True by identity; 1==1.0 True but bool!=int). H#?: HBool vs HNumber -> false
+safe("r157_s8_eq_0_false", fn() { return 0 == false; });             # Py: False.  H#?: HNumber vs HBool -> false
+safe("r157_s8_eq_1_1p0", fn() { return 1 == 1.0; });                 # Py: True.  H#?: both HNumber -> true
+safe("r157_s8_eq_null_0", fn() { return null == 0; });               # Py: False.  H#?: HNull vs HNumber -> false
+safe("r157_s8_eq_emptystr_null", fn() { return "" == null; });       # Py: False.  H#?: HString vs HNull -> false
+safe("r157_s8_eq_str_1_int_1", fn() { return "1" == 1; });           # Py: False.  H#?: HString vs HNumber -> false
+safe("r157_s8_eq_true_1p0", fn() { return true == 1.0; });           # Py: False.  H#?: HBool vs HNumber -> false
+
+# ============================================================
+# === S9: 转换链 ===
+# ============================================================
+print("=== S9. conversion chains ===");
+safe("r157_s9_chain_ifs", fn() { return int(float(str(42))); });     # 42
+safe("r157_s9_chain_sbi", fn() { return str(bool(int("1"))); });     # "true"
+safe("r157_s9_chain_sbi_0", fn() { return str(bool(int("0"))); });   # "false"
+safe("r157_s9_chain_list_str", fn() { return list(str(123)); });     # ["1","2","3"]
+safe("r157_s9_chain_list_str_len", fn() { return len(list(str(123))); });  # 3
+safe("r157_s9_chain_int_str_back", fn() { return int(str(42)); });   # 42
+safe("r157_s9_chain_float_str_back", fn() { return str(float(str(3.14))); });  # "3.14"
+safe("r157_s9_chain_neg", fn() { return str(int(float("-2.9"))); }); # "-2"
+safe("r157_s9_chain_dict_list_roundtrip", fn() {
+    let d = {"a": 1, "b": 2};
+    return dict(list(items(d)));                                     # 依赖 items()/dict(pairs)
+});
+safe("r157_s9_chain_type_int_float", fn() { return type(int(float("3"))); });  # "number"
+safe("r157_s9_chain_bool_str_empty", fn() { return str(bool(str(""))); });     # bool("")=false -> "false"
+
+# ============================================================
+# === S10: toDisplayString vs str() 行为对照 ===
+# 注: str(x) 内部直接调 x.toDisplayString() (HNativeBridge.kt:203).
+#     toDisplayString 是 Kotlin 内部方法, H# 用户代码不可直接调用
+#     (CALL_METHOD 报 "Unknown list method" / "non-instance").
+#     因此二者恒等是源码层面的事实, 无法从 H# 侧对比验证.
+#     这里改测: print(x) 与 str(x) 是否一致 (都走 toDisplayString).
+# ============================================================
+print("=== S10. toDisplayString vs str() ===");
+safe("r157_s10_print_vs_str", fn() {
+    # print 直接走 toDisplayString; str() 也走 toDisplayString -> 应一致
+    let v = [1, "a", null];
+    return str(v);                                                   # 期望与 print(v) 一致: [1, a, null]
+});
+safe("r157_s10_nested_list_str", fn() {
+    return str([[1, 2], [3, 4]]);                                    # Py: "[[1, 2], [3, 4]]". H#?: 同
+});
+safe("r157_s10_dict_with_fn_val", fn() {
+    return str({"f": fn(){ return 1; }});                            # 值为函数的字典字符串化
+});
+safe("r157_s10_circular_list_guard", fn() {
+    # 循环引用保护: HList.toDisplayString 用 displayStack 防溢出
+    let a = [1];
+    push(a, a);                                                      # a = [1, a] 自引用
+    return str(a);                                                   # 期望 "[1, [...]]"
+});
+
+# ============================================================
+# === S11: 数字格式化 ===
+# ============================================================
+print("=== S11. number formatting ===");
+safe("r157_s11_str_1p0", fn() { return str(1.0); });                 # Py: "1.0".  H#?: "1" (丢 .0)
+safe("r157_s11_str_0p1", fn() { return str(0.1); });                 # Py: "0.1"
+safe("r157_s11_str_0p1p0p2", fn() { return str(0.1 + 0.2); });       # Py: "0.30000000000000004"
+safe("r157_s11_str_1e20", fn() { return str(float("1e20")); });       # Py: "1e+20". H#?: "1.0E20"
+safe("r157_s11_str_1e_neg7", fn() { return str(float("1e-7")); });    # Py: "1e-07". H#?: "1.0E-7"
+safe("r157_s11_str_1e21", fn() { return str(float("1e21")); });       # Py: "1e+21". H#?: "1.0E21"
+safe("r157_s11_str_big_int", fn() { return str(1234567890123456); });# Py: "1234567890123456"
+safe("r157_s11_str_max_long", fn() { return str(9223372036854775807); });  # 整数值, toLong 范围内
+safe("r157_s11_str_over_long", fn() { return str(float("1e19")); });  # 1e19 > Long.MAX? 1e19=1e19, MAX~9.2e18 -> 超范围
+safe("r157_s11_str_1_div_3_fdiv", fn() { return str(fdiv(1, 3)); }); # 真除: 0.333...
+safe("r157_s11_str_1_div_3", fn() { return str(1 / 3); });           # H#: bothInt -> floor(1/3)=0. Py: 0.333 (Py / 是真除!)
+safe("r157_s11_str_neg0p5", fn() { return str(0 - 0.5); });          # "-0.5"
+safe("r157_s11_str_100p0", fn() { return str(100.0); });             # Py: "100.0". H#?: "100"
+safe("r157_s11_str_int_valued_neg", fn() { return str(0 - 5.0); });  # Py: "-5.0". H#?: "-5"
+
+# ============================================================
+# === S12: 列表/字典字符串化格式 ===
+# ============================================================
+print("=== S12. list/dict stringification ===");
+safe("r157_s12_list_mixed", fn() { return str([1, "a", true, null]); });  # H#?: "[1, a, true, null]"
+safe("r157_s12_list_strs", fn() { return str(["a", "b", "c"]); });   # H#?: "[a, b, c]" (无引号!)
+safe("r157_s12_list_with_space_str", fn() { return str(["a b", "c"]); }); # H#?: "[a b, c]" (空格保留, 无引号)
+safe("r157_s12_list_with_comma_str", fn() { return str(["a,b", "c"]); }); # H#?: "[a,b, c]" (逗号混淆!)
+safe("r157_s12_dict_str_val", fn() { return str({"k": "v"}); });     # H#?: "{k: v}" (值无引号)
+safe("r157_s12_dict_nested_list", fn() { return str({"a": [1, 2]}); });  # H#?: "{a: [1, 2]}"
+safe("r157_s12_dict_multi", fn() { return str({"a": 1, "b": 2}); }); # H#?: "{a: 1, b: 2}"
+safe("r157_s12_empty_list", fn() { return str([]); });               # "[]"
+safe("r157_s12_empty_dict", fn() { return str({}); });               # "{}"
+safe("r157_s12_list_roundtrip_fail", fn() {
+    # str() 不加引号 -> 无法 round-trip
+    let s = str(["a", "b"]);
+    return s;                                                        # "[a, b]" 与 [a,b] 数值列表同形
+});
+
+# ============================================================
+# === S13: 类型检查 is ===
+# ============================================================
+print("=== S13. type check 'is' ===");
+safe("r157_s13_42_is_int", fn() { return 42 is int; });              # H#?: true (整数)
+safe("r157_s13_42_is_float", fn() { return 42 is float; });          # Py: False. H#?: true (HNumber 统一!)
+safe("r157_s13_42_is_number", fn() { return 42 is number; });        # H#?: true
+safe("r157_s13_3p14_is_int", fn() { return 3.14 is int; });          # H#?: false (非整数值)
+safe("r157_s13_3p14_is_float", fn() { return 3.14 is float; });      # H#?: true
+safe("r157_s13_3p14_is_number", fn() { return 3.14 is number; });    # H#?: true
+safe("r157_s13_str_is_str", fn() { return "hi" is str; });           # H#?: true
+safe("r157_s13_str_is_string", fn() { return "hi" is string; });     # H#?: true (别名)
+safe("r157_s13_true_is_bool", fn() { return true is bool; });        # H#?: true
+safe("r157_s13_list_is_list", fn() { return [1] is list; });         # H#?: true
+safe("r157_s13_dict_is_dict", fn() { return {"a":1} is dict; });     # H#?: true
+safe("r157_s13_null_is_null", fn() { return null is null; });        # H#?: true
+safe("r157_s13_42_is_str", fn() { return 42 is str; });              # H#?: false
+safe("r157_s13_chan_is_channel", fn() { return chan_new(0) is channel; });  # H#?: true
+safe("r157_s13_chan_is_chan", fn() { return chan_new(0) is chan; }); # H#?: true (别名)
+safe("r157_s13_fn_is_function", fn() { return (fn(){return 1;}) is function; });  # H#?: true
+safe("r157_s13_fn_is_fn", fn() { return (fn(){return 1;}) is fn; }); # H#?: true (别名)
+
+# ============================================================
+# === S14: null 转换 (所有转换函数对 null) ===
+# ============================================================
+print("=== S14. null conversions (all funcs) ===");
+safe("r157_s14_int_null", fn() { return int(null); });               # EXC (显式拒绝)
+safe("r157_s14_float_null", fn() { return float(null); });           # EXC (显式拒绝)
+safe("r157_s14_str_null", fn() { return str(null); });               # "null"
+safe("r157_s14_bool_null", fn() { return bool(null); });             # false
+safe("r157_s14_list_null", fn() { return list(null); });             # EXC (else 分支)
+safe("r157_s14_dict_null", fn() { return dict(null); });             # EXC (else 分支)
+safe("r157_s14_type_null", fn() { return type(null); });             # "null"
+safe("r157_s14_null_is_null", fn() { return null is null; });        # true
+safe("r157_s14_null_truthy", fn() { if (null) { return "t"; } return "f"; });  # "f"
+safe("r157_s14_null_eq_null", fn() { return null == null; });        # true
+safe("r157_s14_null_to_double_via_arith", fn() { return null + 0; }); # toDouble(null)=0 -> 0 (隐式!)
+
+# ============================================================
+# === S15: 错误转换 (异常类型/消息) ===
+# ============================================================
+print("=== S15. error conversion (exception behavior) ===");
+safe("r157_s15_int_abc", fn() { return int("abc"); });               # EXC "cannot coerce STRING 'abc' to number"
+safe("r157_s15_float_xyz", fn() { return float("xyz"); });           # EXC 同上
+safe("r157_s15_int_empty", fn() { return int(""); });                # EXC
+safe("r157_s15_int_list", fn() { return int([1]); });                # EXC "cannot coerce LIST to number"
+safe("r157_s15_int_dict", fn() { return int({"a":1}); });            # EXC "cannot coerce DICT to number"
+safe("r157_s15_float_list", fn() { return float([]); });             # EXC
+safe("r157_s15_list_num", fn() { return list(42); });                # EXC "list() not supported on number"
+safe("r157_s15_dict_num", fn() { return dict(42); });                # EXC "dict() not supported on number"
+safe("r157_s15_dict_str", fn() { return dict("a"); });               # EXC "dict() not supported on string"
+safe("r157_s15_int_noargs", fn() { return int(); });                 # EXC "requires 1 argument"
+safe("r157_s15_float_noargs", fn() { return float(); });             # EXC
+safe("r157_s15_str_noargs", fn() { return str(); });                 # EXC
+safe("r157_s15_bool_noargs", fn() { return bool(); });               # EXC
+safe("r157_s15_dict_noargs_ok", fn() { return dict(); });            # Py: {}. H#?: {} (arity=0)
+safe("r157_s15_type_noargs", fn() { return type(); });               # EXC
+safe("r157_s15_int_str_float", fn() { return int("3.14"); });        # Py: ValueError. H#?: 3 (不报错! 静默截断)
+safe("r157_s15_int_str_exp", fn() { return int("1e3"); });           # Py: ValueError. H#?: 1000 (不报错!)
+safe("r157_s15_float_str_0x", fn() { return float("0x1F"); });       # Py: 31.0. H#?: EXC (不识别 0x)
+
+print("===== R5-157 DONE (list-noargs crash isolated below) =====");
+
+# 注: list() 无参在 H# 中触发未捕获的 IndexOutOfBounds (Kotlin args[0] on empty),
+#     H# try/catch 无法拦截 -> Fatal.  故放最后隔离.
+#     Py: list() -> [].  H# 期望: 应返回 [] 或抛可捕获的 HSharpRuntimeError.
+print("r157_s15_list_noargs (ISOLATED, expect crash):");
+safe("r157_s15_list_noargs", fn() { return list(); });               # Py: []. H#?: Fatal IndexOutOfBounds

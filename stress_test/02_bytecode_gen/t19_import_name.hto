@@ -1,0 +1,6 @@
+# t19_import_name.hto - IMPORT_NAME（导入模块名）
+# IMPORT_NAME 由 compiler 在 import <Identifier> 时发射
+# 这里测试 opcode 发射与运行时行为
+import json;
+import os;
+print("imported");

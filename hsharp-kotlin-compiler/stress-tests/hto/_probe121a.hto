@@ -1,0 +1,28 @@
+# probe for default params behavior - literal defaults only
+fn f1(a=1, b=2, c=3) { return a + b + c; }
+print(f1());
+print(f1(10));
+print(f1(10, 20));
+print(f1(10, 20, 30));
+
+# null as default
+fn f3(x=null) { return x; }
+print(f3());
+print(f3(null));
+print(f3(10));
+
+# variadic + default
+fn f4(a, b=2, ...rest) { return [a, b, rest]; }
+print(f4(1));
+print(f4(1, 20));
+print(f4(1, 20, 30, 40));
+
+# bool default
+fn f7(x=true) { return x; }
+print(f7());
+print(f7(false));
+
+# string default
+fn f8(s="hi") { return s; }
+print(f8());
+print(f8("bye"));

@@ -1,0 +1,28 @@
+# t02_multi_param.hto — 多类型参数：Pair<K,V> / Triple<A,B,C>
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Pair<K, V> {
+    let k = nullptr;
+    let v = nullptr;
+    fn init(kk, vv) { self.k = kk; self.v = vv; }
+    fn first() { return self.k; }
+    fn second() { return self.v; }
+}
+
+class Triple<A, B, C> {
+    let a = nullptr;
+    let b = nullptr;
+    let c = nullptr;
+    fn init(x, y, z) { self.a = x; self.b = y; self.c = z; }
+    fn sum() { return self.a + self.b + self.c; }
+}
+
+let p = new Pair<string, int>("age", 30);
+check("2/pair_first", p.first() == "age");
+check("2/pair_second", p.second() == 30);
+
+let t = new Triple<int, int, int>(1, 2, 3);
+check("2/triple_sum", t.sum() == 6);

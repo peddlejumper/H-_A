@@ -1,0 +1,184 @@
+# 70_union_pattern.hto — Union 类型与模式匹配高强度测试
+# 目标：在 Kotlin HVM 上全面测试 union 定义/构造/字段访问 + match 7 种模式 + 嵌套/默认/顺序/守卫/混用。
+# 每个用例输出带 "cN_" 前缀，便于比对预期。
+
+# ===== 用例 1：单变体 union + 变体模式 =====
+union Single {
+    Only: n;
+}
+fn only(s) {
+    return match s {
+        Only(v) => v,
+        _ => -1
+    };
+}
+print("c1_single:" + str(only(Single{Only: 7})));
+
+# ===== 用例 2：多字段变体 Point(x,y) + 按名字段访问 =====
+union Point {
+    P: x, y;
+}
+let pt = Point{P: 3, 4};
+print("c2_x:" + str(pt.x));
+print("c2_y:" + str(pt.y));
+print("c2_sum:" + str(pt.x + pt.y));
+
+# ===== 用例 3：多字段变体匹配（绑定名 == 字段名）=====
+fn pmatch(p) {
+    return match p {
+        P(x, y) => x * y,
+        _ => 0
+    };
+}
+print("c3_prod:" + str(pmatch(Point{P: 5, 6})));
+
+# ===== 用例 4：变体绑定按名匹配 BUG 复现（绑定名 != 字段名）=====
+# 字段名为 value/message，绑定名为 v/m。若按位置匹配应得 99/"bad"；
+# 若 HVM 按绑定名查 fields（已知 bug），则得 null。
+union Result {
+    Ok: value;
+    Err: message;
+}
+fn unwrap_diff(r) {
+    return match r {
+        Ok(v) => "ok:" + str(v),
+        Err(m) => "err:" + str(m)
+    };
+}
+print("c4_ok_diff:" + unwrap_diff(Result{Ok: 99}));
+print("c4_err_diff:" + unwrap_diff(Result{Err: "bad"}));
+
+# ===== 用例 5：嵌套 union（变体字段值为另一个 union 实例）+ 嵌套 match =====
+union Box {
+    B: inner;
+}
+fn open_box(b) {
+    return match b {
+        B(inner) => match inner {
+            Ok(value) => "ok:" + str(value),
+            Err(message) => "err:" + message,
+            _ => "empty"
+        },
+        _ => "no-box"
+    };
+}
+print("c5_nested_ok:" + open_box(Box{B: Result{Ok: 42}}));
+print("c5_nested_err:" + open_box(Box{B: Result{Err: "x"}}));
+
+# ===== 用例 6：Option 类型 —— 空变体 None + 单值变体 Some =====
+# None() 为真变体匹配；bare None 是 binding（匹配任意值，已知 quirk）。
+union Opt {
+    Some: v;
+    None;
+}
+fn opt(o) {
+    return match o {
+        Some(v) => "some:" + str(v),
+        None() => "none",
+        _ => "other"
+    };
+}
+print("c6_some:" + opt(Opt{Some: 5}));
+print("c6_none:" + opt(Opt{None}));
+print("c6_other:" + opt(42));
+
+# ===== 用例 7：bool / int / string 字面量区分（true vs 1 vs "true"）=====
+fn lit(x) {
+    return match x {
+        true => "bool-true",
+        1 => "int-one",
+        "true" => "str-true",
+        _ => "other"
+    };
+}
+print("c7_true:" + lit(true));
+print("c7_one:" + lit(1));
+print("c7_str:" + lit("true"));
+print("c7_two:" + lit(2));
+
+# ===== 用例 8：类型模式 is bool / is int / is str / is list 顺序 =====
+fn typ(x) {
+    return match x {
+        is bool => "bool",
+        is int => "int",
+        is str => "str",
+        is list => "list",
+        _ => "other"
+    };
+}
+print("c8_bool:" + typ(true));
+print("c8_int:" + typ(42));
+print("c8_str:" + typ("hi"));
+print("c8_list:" + typ([1, 2]));
+print("c8_dict:" + typ({"a": 1}));
+
+# ===== 用例 9：match 作为表达式值 + match 作为语句 =====
+fn val(x) {
+    let r = match x {
+        1 => 10,
+        2 => 20,
+        _ => 0
+    };
+    return r + 1;
+}
+print("c9_val1:" + str(val(1)));
+print("c9_val9:" + str(val(9)));
+fn emit(s) { print(s); }
+fn stmt(x) {
+    match x {
+        1 => emit("c9_one"),
+        _ => emit("c9_other")
+    };
+}
+stmt(1);
+stmt(99);
+
+# ===== 用例 10：union 作为函数参数与返回值 =====
+union Res {
+    Ok: v;
+    Err: e;
+}
+fn make_ok(v) { return Res{Ok: v}; }
+fn make_err(e) { return Res{Err: e}; }
+fn handle(r) {
+    return match r {
+        Ok(v) => v + 1,
+        Err(e) => -1
+    };
+}
+print("c10_ok:" + str(handle(make_ok(10))));
+print("c10_err:" + str(handle(make_err("x"))));
+
+# ===== 用例 11：守卫 + 变体模式优先于类型模式 + 分支调用函数 =====
+fn double(x) { return x * 2; }
+fn proc(x) {
+    return match x {
+        Ok(v) if v > 3 => "big:" + str(double(v)),
+        Ok(v) => "small:" + str(v),
+        is int => "int:" + str(x),
+        _ => "other"
+    };
+}
+print("c11_big:" + proc(Res{Ok: 5}));
+print("c11_small:" + proc(Res{Ok: 2}));
+print("c11_int:" + proc(7));
+print("c11_other:" + proc("z"));
+
+# ===== 用例 12：union 与 class 混用（类持有 union 实例）=====
+class Container {
+    fn init(self, v) { self.val = v; }
+}
+union Tag {
+    A: n;
+    B: s;
+}
+let c = new Container(Tag{A: 100});
+fn describe(item) {
+    return match item {
+        A(n) => "A:" + str(n),
+        B(s) => "B:" + s,
+        _ => "none"
+    };
+}
+print("c12_class_union:" + describe(c.val));
+print("c12_direct:" + describe(Tag{B: "hi"}));

@@ -1,0 +1,287 @@
+# H# Library Test 01 — Math Library
+# Self-contained math library tests, no host functions required.
+
+# =====================================================
+# Test framework (inline)
+# =====================================================
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Math library: abs / sign / min / max / clamp
+# =====================================================
+fn math_abs(x) {
+    if (x < 0) { return -x; }
+    return x;
+}
+fn math_sign(x) {
+    if (x > 0) { return 1; }
+    if (x < 0) { return -1; }
+    return 0;
+}
+fn math_min(a, b) { if (a < b) { return a; } return b; }
+fn math_max(a, b) { if (a > b) { return a; } return b; }
+fn math_clamp(v, lo, hi) {
+    if (v < lo) { return lo; }
+    if (v > hi) { return hi; }
+    return v;
+}
+
+check("abs/positive",  math_abs(5) == 5);
+check("abs/negative",  math_abs(-7) == 7);
+check("abs/zero",      math_abs(0) == 0);
+check("abs/expr",      math_abs(-3 - 2) == 5);
+check("sign/pos",      math_sign(5) == 1);
+check("sign/neg",      math_sign(-5) == -1);
+check("sign/zero",     math_sign(0) == 0);
+check("min/1",         math_min(3, 7) == 3);
+check("min/2",         math_min(7, 3) == 3);
+check("min/eq",        math_min(5, 5) == 5);
+check("max/1",         math_max(3, 7) == 7);
+check("max/2",         math_max(7, 3) == 7);
+check("max/eq",        math_max(5, 5) == 5);
+check("clamp/inside",  math_clamp(5, 0, 10) == 5);
+check("clamp/low",     math_clamp(-3, 0, 10) == 0);
+check("clamp/high",    math_clamp(15, 0, 10) == 10);
+
+# =====================================================
+# floor / ceil / round / trunc
+# =====================================================
+fn math_floor(x) {
+    let i = int(x);
+    if (x >= 0 or i == x) { return i; }
+    return i - 1;
+}
+fn math_ceil(x) {
+    let i = int(x);
+    if (x <= 0 or i == x) { return i; }
+    return i + 1;
+}
+fn math_round(x) {
+    let i = int(x);
+    let f = x - i;
+    if (f >= 0.5) { return i + 1; }
+    if (f <= -0.5) { return i - 1; }
+    return i;
+}
+fn math_trunc(x) { return int(x); }
+
+check("floor/pos",     math_floor(3.7) == 3);
+check("floor/neg",     math_floor(-3.2) == -4);
+check("floor/int",     math_floor(5) == 5);
+check("ceil/pos",      math_ceil(3.2) == 4);
+check("ceil/neg",      math_ceil(-3.7) == -3);
+check("ceil/int",      math_ceil(5) == 5);
+check("round/pos-up",  math_round(3.7) == 4);
+check("round/pos-dn",  math_round(3.2) == 3);
+check("round/neg-up",  math_round(-3.2) == -3);
+check("round/half-up", math_round(3.5) == 4);
+check("trunc/pos",     math_trunc(3.7) == 3);
+check("trunc/neg",     math_trunc(-3.7) == -3);
+
+# =====================================================
+# power / sqrt
+# =====================================================
+fn math_pow_int(base, exp) {
+    if (exp < 0) { return 0; }
+    let r = 1;
+    let i = 0;
+    while (i < exp) {
+        r = r * base;
+        i = i + 1;
+    }
+    return r;
+}
+fn math_sqrt(x) {
+    if (x < 0) { return 0; }
+    if (x == 0) { return 0; }
+    if (x == 1) { return 1; }
+    # Use a safe initial guess — H# uses floor division, so x/2 is unsafe
+    # for small x (1/2 floors to 0, then x/g divides by zero).
+    let g = x;
+    if (x > 4) { g = x / 2; }
+    let i = 0;
+    while (i < 50) {
+        g = (g + x / g) / 2;
+        i = i + 1;
+    }
+    return g;
+}
+
+check("pow/0",         math_pow_int(2, 0) == 1);
+check("pow/1",         math_pow_int(2, 1) == 2);
+check("pow/5",         math_pow_int(2, 5) == 32);
+check("pow/10",        math_pow_int(3, 10) == 59049);
+check("sqrt/0",        math_sqrt(0) == 0);
+check("sqrt/1",        math_sqrt(1) == 1);
+check("sqrt/4",        math_sqrt(4) == 2);
+check("sqrt/9",        math_sqrt(9) == 3);
+check("sqrt/16",       math_sqrt(16) == 4);
+check("sqrt/100",      math_sqrt(100) == 10);
+
+# =====================================================
+# gcd / lcm
+# =====================================================
+fn math_gcd(a, b) {
+    a = math_abs(a);
+    b = math_abs(b);
+    while (b != 0) {
+        let t = b;
+        b = a - int(a / b) * b;
+        a = t;
+    }
+    return a;
+}
+fn math_lcm(a, b) {
+    if (a == 0 or b == 0) { return 0; }
+    return math_abs(a * b) / math_gcd(a, b);
+}
+
+check("gcd/12,8",      math_gcd(12, 8) == 4);
+check("gcd/8,12",      math_gcd(8, 12) == 4);
+check("gcd/17,5",      math_gcd(17, 5) == 1);
+check("gcd/0,5",       math_gcd(0, 5) == 5);
+check("gcd/100,75",    math_gcd(100, 75) == 25);
+check("lcm/4,6",       math_lcm(4, 6) == 12);
+check("lcm/3,5",       math_lcm(3, 5) == 15);
+check("lcm/0,5",       math_lcm(0, 5) == 0);
+
+# =====================================================
+# factorial / fibonacci
+# =====================================================
+fn math_factorial(n) {
+    if (n < 0) { return -1; }
+    if (n == 0 or n == 1) { return 1; }
+    let r = 1;
+    let i = 2;
+    while (i <= n) {
+        r = r * i;
+        i = i + 1;
+    }
+    return r;
+}
+fn math_fib(n) {
+    if (n <= 0) { return 0; }
+    if (n == 1) { return 1; }
+    let a = 0;
+    let b = 1;
+    let i = 2;
+    while (i <= n) {
+        let t = a + b;
+        a = b;
+        b = t;
+        i = i + 1;
+    }
+    return b;
+}
+
+check("fact/0",        math_factorial(0) == 1);
+check("fact/1",        math_factorial(1) == 1);
+check("fact/5",        math_factorial(5) == 120);
+check("fact/10",       math_factorial(10) == 3628800);
+check("fact/12",       math_factorial(12) == 479001600);
+check("fib/0",         math_fib(0) == 0);
+check("fib/1",         math_fib(1) == 1);
+check("fib/10",        math_fib(10) == 55);
+check("fib/15",        math_fib(15) == 610);
+check("fib/20",        math_fib(20) == 6765);
+
+# =====================================================
+# is_prime
+# =====================================================
+fn math_is_prime(n) {
+    if (n <= 1) { return false; }
+    if (n <= 3) { return true; }
+    if (n - int(n / 2) * 2 == 0) { return false; }
+    if (n - int(n / 3) * 3 == 0) { return false; }
+    let i = 5;
+    while (i * i <= n) {
+        if (n - int(n / i) * i == 0) { return false; }
+        if (n - int(n / (i + 2)) * (i + 2) == 0) { return false; }
+        i = i + 6;
+    }
+    return true;
+}
+
+check("prime/2",       math_is_prime(2) == true);
+check("prime/3",       math_is_prime(3) == true);
+check("prime/4",       math_is_prime(4) == false);
+check("prime/5",       math_is_prime(5) == true);
+check("prime/7",       math_is_prime(7) == true);
+check("prime/9",       math_is_prime(9) == false);
+check("prime/11",      math_is_prime(11) == true);
+check("prime/13",      math_is_prime(13) == true);
+check("prime/15",      math_is_prime(15) == false);
+check("prime/97",      math_is_prime(97) == true);
+check("prime/100",     math_is_prime(100) == false);
+check("prime/101",     math_is_prime(101) == true);
+
+# =====================================================
+# Statistics: sum / average / min / max / variance / std
+# =====================================================
+fn stat_sum(a) {
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { s = s + a[i]; i = i + 1; }
+    return s;
+}
+fn stat_average(a) { return stat_sum(a) / len(a); }
+fn stat_min(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] < m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+fn stat_max(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] > m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+fn stat_variance(a) {
+    let avg = stat_average(a);
+    let ss = 0;
+    let i = 0;
+    while (i < len(a)) {
+        let d = a[i] - avg;
+        ss = ss + d * d;
+        i = i + 1;
+    }
+    return ss / len(a);
+}
+
+check("sum/empty",     stat_sum([]) == 0);
+check("sum/basic",     stat_sum([1, 2, 3, 4, 5]) == 15);
+check("sum/neg",       stat_sum([-1, 1, -2, 2]) == 0);
+check("avg/3",         stat_average([10, 20, 30]) == 20);
+check("min/1",         stat_min([3, 1, 4, 1, 5, 9, 2, 6]) == 1);
+check("max/1",         stat_max([3, 1, 4, 1, 5, 9, 2, 6]) == 9);
+
+# =====================================================
+# Trigonometric constants
+# =====================================================
+let MATH_PI = 3.141592653589793;
+let MATH_E = 2.718281828459045;
+check("const/pi",      MATH_PI > 3.14 and MATH_PI < 3.15);
+check("const/e",       MATH_E > 2.71 and MATH_E < 2.72);
+
+# =====================================================
+# Report
+# =====================================================
+print("MATH_LIB  : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

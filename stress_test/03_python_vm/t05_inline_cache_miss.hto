@@ -1,0 +1,33 @@
+# t05_inline_cache_miss.hto - inline cache 未命中：不同类对象交替访问
+# 两个不同类的实例交替访问同一 LOAD_ATTR 位置，触发 cache miss
+class A {
+    let v = 0;
+    fn set(x) {
+        self.v = x;
+    }
+    fn get() {
+        return self.v;
+    }
+}
+class B {
+    let v = 0;
+    fn set(x) {
+        self.v = x;
+    }
+    fn get() {
+        return self.v;
+    }
+}
+let a = new A();
+let b = new B();
+a.set(100);
+b.set(200);
+let total = 0;
+let i = 0;
+while (i < 10) {
+    total = total + a.get();
+    total = total + b.get();
+    i = i + 1;
+}
+print("total=");
+print(total);

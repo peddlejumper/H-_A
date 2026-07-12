@@ -1,0 +1,9 @@
+# T24 - String ops advanced
+print("  hello  ".strip());
+print("a,b,c".split(","));
+print(",".join(["x", "y", "z"]));
+print("Hello World".lower());
+print("Hello World".upper());
+print("Hello World".replace("World", "H#"));
+print("abcabc".find("a"));
+print("  ".is_empty());

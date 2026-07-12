@@ -1,0 +1,56 @@
+# H# project structure demonstration
+# Simulates a simple module system
+
+# math_utils module simulation
+fn factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+fn fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    let a = 0;
+    let b = 1;
+    let i = 2;
+    while (i <= n) {
+        let temp = a + b;
+        a = b;
+        b = temp;
+        i = i + 1;
+    }
+    return b;
+}
+
+fn is_prime(n) {
+    if (n < 2) {
+        return false;
+    }
+    let i = 2;
+    while (i * i <= n) {
+        if (n % i == 0) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+# Test
+print("5! = " + str(factorial(5)));
+print("fib(10) = " + str(fibonacci(10)));
+print("Is 17 prime? " + str(is_prime(17)));
+print("Is 18 prime? " + str(is_prime(18)));
+
+# Find primes up to 20
+print("Primes up to 20:");
+let i = 2;
+while (i <= 20) {
+    if (is_prime(i)) {
+        print("  " + str(i));
+    }
+    i = i + 1;
+}

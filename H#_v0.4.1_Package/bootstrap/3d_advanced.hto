@@ -1,0 +1,1897 @@
+# ═══════════════════════════════════════════════════════════════════
+# H# 3D Advanced Programming Library — 150+ Advanced 3D Methods
+# ═══════════════════════════════════════════════════════════════════
+# 
+# Categories:
+#   1. Vector Math (vec2, vec3, vec4) — 35 functions
+#   2. Matrix Math (mat3, mat4) — 25 functions
+#   3. Quaternion Math — 15 functions
+#   4. 3D Primitives — 20 functions
+#   5. Mesh Operations — 15 functions
+#   6. Camera — 10 functions
+#   7. Lighting / Color — 15 functions
+#   8. Ray Casting / Intersection — 15 functions
+#   9. Curves — 10 functions
+#   10. Noise — 8 functions
+#   11. Particle System — 8 functions
+#   12. Bounding Volume — 5 functions
+#   13. Frustum / Projection — 5 functions
+#   14. Interpolation / Easing — 8 functions
+#   15. Spline / Path — 5 functions
+# ═══════════════════════════════════════════════════════════════════
+
+import "bootstrap/math_utils.hto";
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 1: Vector Math — vec2, vec3, vec4 (35 functions)
+# ═══════════════════════════════════════════════════════════════════
+
+# ── vec2 ──
+fn vec2(x, y) { return [x, y]; }
+fn v2_add(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+fn v2_sub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+fn v2_mul(a, s) { return [a[0] * s, a[1] * s]; }
+fn v2_div(a, s) { return [a[0] / s, a[1] / s]; }
+fn v2_dot(a, b) { return a[0] * b[0] + a[1] * b[1]; }
+fn v2_cross(a, b) { return a[0] * b[1] - a[1] * b[0]; }
+fn v2_length(v) { return math_sqrt(v[0] * v[0] + v[1] * v[1]); }
+fn v2_length_sq(v) { return v[0] * v[0] + v[1] * v[1]; }
+fn v2_normalize(v) {
+    let l = v2_length(v);
+    if (l > 0.0) { return [v[0] / l, v[1] / l]; }
+    return [0.0, 0.0];
+}
+fn v2_lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
+fn v2_distance(a, b) { return v2_length(v2_sub(a, b)); }
+fn v2_angle(a, b) {
+    let d = v2_dot(a, b);
+    let la = v2_length(a);
+    let lb = v2_length(b);
+    if (la == 0.0 or lb == 0.0) { return 0.0; }
+    let cos_a = d / (la * lb);
+    if (cos_a > 1.0) { cos_a = 1.0; }
+    if (cos_a < -1.0) { cos_a = -1.0; }
+    return math_acos(cos_a);
+}
+fn v2_reflect(v, n) {
+    let d = v2_dot(v, n) * 2.0;
+    return [v[0] - n[0] * d, v[1] - n[1] * d];
+}
+fn v2_refract(v, n, eta) {
+    let d = v2_dot(v, n);
+    let k = 1.0 - eta * eta * (1.0 - d * d);
+    if (k < 0.0) { return [0.0, 0.0]; }
+    let s = eta * d + math_sqrt(k);
+    return [eta * v[0] - s * n[0], eta * v[1] - s * n[1]];
+}
+fn v2_rotate(v, angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
+}
+fn v2_scale(v, s) { return [v[0] * s, v[1] * s]; }
+fn v2_clamp(v, min, max) {
+    let x = v[0];
+    if (x < min) { x = min; }
+    if (x > max) { x = max; }
+    let y = v[1];
+    if (y < min) { y = min; }
+    if (y > max) { y = max; }
+    return [x, y];
+}
+fn v2_abs(v) {
+    let x = v[0];
+    if (x < 0.0) { x = -x; }
+    let y = v[1];
+    if (y < 0.0) { y = -y; }
+    return [x, y];
+}
+fn v2_equals(a, b) { return a[0] == b[0] and a[1] == b[1]; }
+fn v2_perpendicular(v) { return [-v[1], v[0]]; }
+fn v2_from_angle(angle) { return [math_cos(angle), math_sin(angle)]; }
+fn v2_negate(v) { return [-v[0], -v[1]]; }
+fn v2_min(a, b) {
+    let x = a[0];
+    if (b[0] < x) { x = b[0]; }
+    let y = a[1];
+    if (b[1] < y) { y = b[1]; }
+    return [x, y];
+}
+fn v2_max(a, b) {
+    let x = a[0];
+    if (b[0] > x) { x = b[0]; }
+    let y = a[1];
+    if (b[1] > y) { y = b[1]; }
+    return [x, y];
+}
+
+# ── vec3 ──
+fn vec3(x, y, z) { return [x, y, z]; }
+fn v3_add(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+fn v3_sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+fn v3_mul(a, s) { return [a[0] * s, a[1] * s, a[2] * s]; }
+fn v3_div(a, s) { return [a[0] / s, a[1] / s, a[2] / s]; }
+fn v3_dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+fn v3_cross(a, b) {
+    return [a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0]];
+}
+fn v3_length(v) { return math_sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]); }
+fn v3_length_sq(v) { return v[0] * v[0] + v[1] * v[1] + v[2] * v[2]; }
+fn v3_normalize(v) {
+    let l = v3_length(v);
+    if (l > 0.0) { return [v[0] / l, v[1] / l, v[2] / l]; }
+    return [0.0, 0.0, 0.0];
+}
+fn v3_lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+fn v3_distance(a, b) { return v3_length(v3_sub(a, b)); }
+fn v3_angle(a, b) {
+    let d = v3_dot(a, b);
+    let la = v3_length(a);
+    let lb = v3_length(b);
+    if (la == 0.0 or lb == 0.0) { return 0.0; }
+    let cos_a = d / (la * lb);
+    if (cos_a > 1.0) { cos_a = 1.0; }
+    if (cos_a < -1.0) { cos_a = -1.0; }
+    return math_acos(cos_a);
+}
+fn v3_reflect(v, n) {
+    let d = v3_dot(v, n) * 2.0;
+    return [v[0] - n[0] * d, v[1] - n[1] * d, v[2] - n[2] * d];
+}
+fn v3_refract(v, n, eta) {
+    let d = v3_dot(v, n);
+    let k = 1.0 - eta * eta * (1.0 - d * d);
+    if (k < 0.0) { return [0.0, 0.0, 0.0]; }
+    let s = eta * d + math_sqrt(k);
+    return [eta * v[0] - s * n[0], eta * v[1] - s * n[1], eta * v[2] - s * n[2]];
+}
+fn v3_rotate_x(v, angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [v[0], v[1] * c - v[2] * s, v[1] * s + v[2] * c];
+}
+fn v3_rotate_y(v, angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c];
+}
+fn v3_rotate_z(v, angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]];
+}
+fn v3_scale(v, s) { return [v[0] * s, v[1] * s, v[2] * s]; }
+fn v3_clamp(v, min, max) {
+    let x = v[0];
+    if (x < min) { x = min; }
+    if (x > max) { x = max; }
+    let y = v[1];
+    if (y < min) { y = min; }
+    if (y > max) { y = max; }
+    let z = v[2];
+    if (z < min) { z = min; }
+    if (z > max) { z = max; }
+    return [x, y, z];
+}
+fn v3_abs(v) {
+    let x = v[0];
+    if (x < 0.0) { x = -x; }
+    let y = v[1];
+    if (y < 0.0) { y = -y; }
+    let z = v[2];
+    if (z < 0.0) { z = -z; }
+    return [x, y, z];
+}
+fn v3_equals(a, b) { return a[0] == b[0] and a[1] == b[1] and a[2] == b[2]; }
+fn v3_negate(v) { return [-v[0], -v[1], -v[2]]; }
+fn v3_project(v, onto) {
+    let d = v3_dot(onto, onto);
+    if (d == 0.0) { return [0.0, 0.0, 0.0]; }
+    return v3_mul(onto, v3_dot(v, onto) / d);
+}
+fn v3_reject(v, onto) { return v3_sub(v, v3_project(v, onto)); }
+fn v3_orthogonal(v) {
+    let ax = v[0];
+    if (ax < 0.0) { ax = -ax; }
+    let ay = v[1];
+    if (ay < 0.0) { ay = -ay; }
+    let az = v[2];
+    if (az < 0.0) { az = -az; }
+    if (ax < ay and ax < az) { return v3_normalize(v3_cross(v, [1.0, 0.0, 0.0])); }
+    if (ay < az) { return v3_normalize(v3_cross(v, [0.0, 1.0, 0.0])); }
+    return v3_normalize(v3_cross(v, [0.0, 0.0, 1.0]));
+}
+fn v3_lerp_angle(a, b, t) {
+    let dot = v3_dot(a, b);
+    if (dot > 0.9995) { return v3_normalize(v3_lerp(a, b, t)); }
+    if (dot < -0.9995) { return v3_normalize(v3_lerp(a, b, t)); }
+    let theta = math_acos(dot) * t;
+    let c = v3_normalize(v3_sub(b, v3_mul(a, dot)));
+    return [a[0] * math_cos(theta) + c[0] * math_sin(theta),
+            a[1] * math_cos(theta) + c[1] * math_sin(theta),
+            a[2] * math_cos(theta) + c[2] * math_sin(theta)];
+}
+fn v3_min(a, b) {
+    let x = a[0];
+    if (b[0] < x) { x = b[0]; }
+    let y = a[1];
+    if (b[1] < y) { y = b[1]; }
+    let z = a[2];
+    if (b[2] < z) { z = b[2]; }
+    return [x, y, z];
+}
+fn v3_max(a, b) {
+    let x = a[0];
+    if (b[0] > x) { x = b[0]; }
+    let y = a[1];
+    if (b[1] > y) { y = b[1]; }
+    let z = a[2];
+    if (b[2] > z) { z = b[2]; }
+    return [x, y, z];
+}
+
+# ── vec4 ──
+fn vec4(x, y, z, w) { return [x, y, z, w]; }
+fn v4_add(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]]; }
+fn v4_sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]]; }
+fn v4_mul(a, s) { return [a[0] * s, a[1] * s, a[2] * s, a[3] * s]; }
+fn v4_div(a, s) { return [a[0] / s, a[1] / s, a[2] / s, a[3] / s]; }
+fn v4_dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3]; }
+fn v4_length(v) { return math_sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]); }
+fn v4_normalize(v) {
+    let l = v4_length(v);
+    if (l > 0.0) { return [v[0] / l, v[1] / l, v[2] / l, v[3] / l]; }
+    return [0.0, 0.0, 0.0, 0.0];
+}
+fn v4_lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t]; }
+fn v4_scale(v, s) { return [v[0] * s, v[1] * s, v[2] * s, v[3] * s]; }
+fn v4_equals(a, b) { return a[0] == b[0] and a[1] == b[1] and a[2] == b[2] and a[3] == b[3]; }
+fn v4_to_v3(v) { return [v[0] / v[3], v[1] / v[3], v[2] / v[3]]; }
+fn v4_from_v3(v, w) { return [v[0], v[1], v[2], w]; }
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 2: Matrix Math — mat3, mat4 (25 functions)
+# ═══════════════════════════════════════════════════════════════════
+
+# ── mat3 (stored as 9-element flat array, row-major) ──
+fn mat3_identity() { return [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]; }
+fn mat3_zeros() { return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; }
+fn mat3_mul(a, b) {
+    return [
+        a[0]*b[0] + a[1]*b[3] + a[2]*b[6], a[0]*b[1] + a[1]*b[4] + a[2]*b[7], a[0]*b[2] + a[1]*b[5] + a[2]*b[8],
+        a[3]*b[0] + a[4]*b[3] + a[5]*b[6], a[3]*b[1] + a[4]*b[4] + a[5]*b[7], a[3]*b[2] + a[4]*b[5] + a[5]*b[8],
+        a[6]*b[0] + a[7]*b[3] + a[8]*b[6], a[6]*b[1] + a[7]*b[4] + a[8]*b[7], a[6]*b[2] + a[7]*b[5] + a[8]*b[8]
+    ];
+}
+fn mat3_mul_vec3(m, v) {
+    return [m[0]*v[0] + m[1]*v[1] + m[2]*v[2],
+            m[3]*v[0] + m[4]*v[1] + m[5]*v[2],
+            m[6]*v[0] + m[7]*v[1] + m[8]*v[2]];
+}
+fn mat3_transpose(m) { return [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]; }
+fn mat3_determinant(m) {
+    return m[0]*(m[4]*m[8] - m[5]*m[7]) - m[1]*(m[3]*m[8] - m[5]*m[6]) + m[2]*(m[3]*m[7] - m[4]*m[6]);
+}
+fn mat3_inverse(m) {
+    let det = mat3_determinant(m);
+    if (det == 0.0) { return mat3_identity(); }
+    let invDet = 1.0 / det;
+    return [
+        (m[4]*m[8] - m[5]*m[7]) * invDet, (m[2]*m[7] - m[1]*m[8]) * invDet, (m[1]*m[5] - m[2]*m[4]) * invDet,
+        (m[5]*m[6] - m[3]*m[8]) * invDet, (m[0]*m[8] - m[2]*m[6]) * invDet, (m[2]*m[3] - m[0]*m[5]) * invDet,
+        (m[3]*m[7] - m[4]*m[6]) * invDet, (m[1]*m[6] - m[0]*m[7]) * invDet, (m[0]*m[4] - m[1]*m[3]) * invDet
+    ];
+}
+fn mat3_scale(sx, sy) {
+    return [sx, 0.0, 0.0, 0.0, sy, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat3_rotate(angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [c, -s, 0.0, s, c, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat3_translate(tx, ty) {
+    return [1.0, 0.0, tx, 0.0, 1.0, ty, 0.0, 0.0, 1.0];
+}
+fn mat3_from_axes(x_axis, y_axis) {
+    return [x_axis[0], x_axis[1], 0.0, y_axis[0], y_axis[1], 0.0, 0.0, 0.0, 1.0];
+}
+fn mat3_to_mat4(m) {
+    return [m[0], m[1], 0.0, m[2], m[3], m[4], 0.0, m[5], 0.0, 0.0, 1.0, 0.0, m[6], m[7], 0.0, m[8]];
+}
+
+# ── mat4 (stored as 16-element flat array, row-major) ──
+fn mat4_identity() {
+    return [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_zeros() { return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; }
+fn mat4_mul(a, b) {
+    let r = mat4_zeros();
+    let row = 0;
+    while (row < 4) {
+        let col = 0;
+        while (col < 4) {
+            r[row * 4 + col] = a[row*4+0]*b[0*4+col] + a[row*4+1]*b[1*4+col] + a[row*4+2]*b[2*4+col] + a[row*4+3]*b[3*4+col];
+            col = col + 1;
+        }
+        row = row + 1;
+    }
+    return r;
+}
+fn mat4_mul_vec3(m, v) {
+    let x = m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3];
+    let y = m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7];
+    let z = m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11];
+    return [x, y, z];
+}
+fn mat4_mul_vec4(m, v) {
+    return [m[0]*v[0] + m[1]*v[1] + m[2]*v[2] + m[3]*v[3],
+            m[4]*v[0] + m[5]*v[1] + m[6]*v[2] + m[7]*v[3],
+            m[8]*v[0] + m[9]*v[1] + m[10]*v[2] + m[11]*v[3],
+            m[12]*v[0] + m[13]*v[1] + m[14]*v[2] + m[15]*v[3]];
+}
+fn mat4_transpose(m) {
+    return [m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2], m[6], m[10], m[14], m[3], m[7], m[11], m[15]];
+}
+fn mat4_determinant(m) {
+    let a0 = m[0]*m[5] - m[1]*m[4];
+    let a1 = m[0]*m[6] - m[2]*m[4];
+    let a2 = m[0]*m[7] - m[3]*m[4];
+    let a3 = m[1]*m[6] - m[2]*m[5];
+    let a4 = m[1]*m[7] - m[3]*m[5];
+    let a5 = m[2]*m[7] - m[3]*m[6];
+    let b0 = m[8]*m[13] - m[9]*m[12];
+    let b1 = m[8]*m[14] - m[10]*m[12];
+    let b2 = m[8]*m[15] - m[11]*m[12];
+    let b3 = m[9]*m[14] - m[10]*m[13];
+    let b4 = m[9]*m[15] - m[11]*m[13];
+    let b5 = m[10]*m[15] - m[11]*m[14];
+    return a0*b5 - a1*b4 + a2*b3 + a3*b2 - a4*b1 + a5*b0;
+}
+fn mat4_inverse(m) {
+    let det = mat4_determinant(m);
+    if (det == 0.0) { return mat4_identity(); }
+    let invDet = 1.0 / det;
+    let r = mat4_zeros();
+    r[0] = (m[5]*(m[10]*m[15]-m[11]*m[14]) - m[6]*(m[9]*m[15]-m[11]*m[13]) + m[7]*(m[9]*m[14]-m[10]*m[13])) * invDet;
+    r[1] = -(m[1]*(m[10]*m[15]-m[11]*m[14]) - m[2]*(m[9]*m[15]-m[11]*m[13]) + m[3]*(m[9]*m[14]-m[10]*m[13])) * invDet;
+    r[2] = (m[1]*(m[6]*m[15]-m[7]*m[14]) - m[2]*(m[5]*m[15]-m[7]*m[13]) + m[3]*(m[5]*m[14]-m[6]*m[13])) * invDet;
+    r[3] = -(m[1]*(m[6]*m[11]-m[7]*m[10]) - m[2]*(m[5]*m[11]-m[7]*m[9]) + m[3]*(m[5]*m[10]-m[6]*m[9])) * invDet;
+    r[4] = -(m[4]*(m[10]*m[15]-m[11]*m[14]) - m[6]*(m[8]*m[15]-m[11]*m[12]) + m[7]*(m[8]*m[14]-m[10]*m[12])) * invDet;
+    r[5] = (m[0]*(m[10]*m[15]-m[11]*m[14]) - m[2]*(m[8]*m[15]-m[11]*m[12]) + m[3]*(m[8]*m[14]-m[10]*m[12])) * invDet;
+    r[6] = -(m[0]*(m[6]*m[15]-m[7]*m[14]) - m[2]*(m[4]*m[15]-m[7]*m[12]) + m[3]*(m[4]*m[14]-m[6]*m[12])) * invDet;
+    r[7] = (m[0]*(m[6]*m[11]-m[7]*m[10]) - m[2]*(m[4]*m[11]-m[7]*m[8]) + m[3]*(m[4]*m[10]-m[6]*m[8])) * invDet;
+    r[8] = (m[4]*(m[9]*m[15]-m[11]*m[13]) - m[5]*(m[8]*m[15]-m[11]*m[12]) + m[7]*(m[8]*m[13]-m[9]*m[12])) * invDet;
+    r[9] = -(m[0]*(m[9]*m[15]-m[11]*m[13]) - m[1]*(m[8]*m[15]-m[11]*m[12]) + m[3]*(m[8]*m[13]-m[9]*m[12])) * invDet;
+    r[10] = (m[0]*(m[5]*m[15]-m[7]*m[13]) - m[1]*(m[4]*m[15]-m[7]*m[12]) + m[3]*(m[4]*m[13]-m[5]*m[12])) * invDet;
+    r[11] = -(m[0]*(m[5]*m[11]-m[7]*m[9]) - m[1]*(m[4]*m[11]-m[7]*m[8]) + m[3]*(m[4]*m[9]-m[5]*m[8])) * invDet;
+    r[12] = -(m[4]*(m[9]*m[14]-m[10]*m[13]) - m[5]*(m[8]*m[14]-m[10]*m[12]) + m[6]*(m[8]*m[13]-m[9]*m[12])) * invDet;
+    r[13] = (m[0]*(m[9]*m[14]-m[10]*m[13]) - m[1]*(m[8]*m[14]-m[10]*m[12]) + m[2]*(m[8]*m[13]-m[9]*m[12])) * invDet;
+    r[14] = -(m[0]*(m[5]*m[14]-m[6]*m[13]) - m[1]*(m[4]*m[14]-m[6]*m[12]) + m[2]*(m[4]*m[13]-m[5]*m[12])) * invDet;
+    r[15] = (m[0]*(m[5]*m[10]-m[6]*m[9]) - m[1]*(m[4]*m[10]-m[6]*m[8]) + m[2]*(m[4]*m[9]-m[5]*m[8])) * invDet;
+    return r;
+}
+fn mat4_scale(sx, sy, sz) {
+    return [sx, 0.0, 0.0, 0.0, 0.0, sy, 0.0, 0.0, 0.0, 0.0, sz, 0.0, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_rotate_x(angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [1.0, 0.0, 0.0, 0.0, 0.0, c, -s, 0.0, 0.0, s, c, 0.0, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_rotate_y(angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [c, 0.0, s, 0.0, 0.0, 1.0, 0.0, 0.0, -s, 0.0, c, 0.0, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_rotate_z(angle) {
+    let c = math_cos(angle);
+    let s = math_sin(angle);
+    return [c, -s, 0.0, 0.0, s, c, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_translate(tx, ty, tz) {
+    return [1.0, 0.0, 0.0, tx, 0.0, 1.0, 0.0, ty, 0.0, 0.0, 1.0, tz, 0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_perspective(fov, aspect, near, far) {
+    let f = 1.0 / math_tan(fov * 0.5);
+    let r = 1.0 / (near - far);
+    return [f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 0.0, (near + far) * r, 2.0 * near * far * r, 0.0, 0.0, -1.0, 0.0];
+}
+fn mat4_ortho(left, right, bottom, top, near, far) {
+    let rl = 1.0 / (right - left);
+    let tb = 1.0 / (top - bottom);
+    let fn_inv = 1.0 / (near - far);
+    return [2.0 * rl, 0.0, 0.0, -(right + left) * rl,
+            0.0, 2.0 * tb, 0.0, -(top + bottom) * tb,
+            0.0, 0.0, 2.0 * fn_inv, -(near + far) * fn_inv,
+            0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_look_at(eye, target, up) {
+    let f = v3_normalize(v3_sub(target, eye));
+    let r = v3_normalize(v3_cross(f, up));
+    let u = v3_cross(r, f);
+    return [r[0], r[1], r[2], -v3_dot(r, eye),
+            u[0], u[1], u[2], -v3_dot(u, eye),
+            -f[0], -f[1], -f[2], v3_dot(f, eye),
+            0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_from_quat(q) {
+    let x = q[0];
+    let y = q[1];
+    let z = q[2];
+    let w = q[3];
+    let xx = x * x;
+    let yy = y * y;
+    let zz = z * z;
+    let xy = x * y;
+    let xz = x * z;
+    let yz = y * z;
+    let wx = w * x;
+    let wy = w * y;
+    let wz = w * z;
+    return [1.0 - 2.0*(yy + zz), 2.0*(xy - wz), 2.0*(xz + wy), 0.0,
+            2.0*(xy + wz), 1.0 - 2.0*(xx + zz), 2.0*(yz - wx), 0.0,
+            2.0*(xz - wy), 2.0*(yz + wx), 1.0 - 2.0*(xx + yy), 0.0,
+            0.0, 0.0, 0.0, 1.0];
+}
+fn mat4_extract_translation(m) { return [m[3], m[7], m[11]]; }
+fn mat4_extract_rotation(m) {
+    return [m[0], m[1], m[2], m[4], m[5], m[6], m[8], m[9], m[10]];
+}
+fn mat4_extract_scale(m) {
+    return [v3_length([m[0], m[4], m[8]]), v3_length([m[1], m[5], m[9]]), v3_length([m[2], m[6], m[10]])];
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 3: Quaternion Math (15 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn quat_identity() { return [0.0, 0.0, 0.0, 1.0]; }
+fn quat_mul(a, b) {
+    return [a[3]*b[0] + a[0]*b[3] + a[1]*b[2] - a[2]*b[1],
+            a[3]*b[1] + a[1]*b[3] + a[2]*b[0] - a[0]*b[2],
+            a[3]*b[2] + a[2]*b[3] + a[0]*b[1] - a[1]*b[0],
+            a[3]*b[3] - a[0]*b[0] - a[1]*b[1] - a[2]*b[2]];
+}
+fn quat_conjugate(q) { return [-q[0], -q[1], -q[2], q[3]]; }
+fn quat_inverse(q) {
+    let d = q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3];
+    if (d == 0.0) { return quat_identity(); }
+    return [-q[0]/d, -q[1]/d, -q[2]/d, q[3]/d];
+}
+fn quat_normalize(q) {
+    let l = math_sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+    if (l == 0.0) { return quat_identity(); }
+    return [q[0]/l, q[1]/l, q[2]/l, q[3]/l];
+}
+fn quat_length(q) { return math_sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]); }
+fn quat_dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2] + a[3]*b[3]; }
+fn quat_slerp(a, b, t) {
+    let d = quat_dot(a, b);
+    let b0 = b;
+    if (d < 0.0) { d = -d; b0 = [-b[0], -b[1], -b[2], -b[3]]; }
+    if (d > 0.9995) {
+        let r = quat_normalize([a[0] + (b0[0]-a[0])*t, a[1] + (b0[1]-a[1])*t, a[2] + (b0[2]-a[2])*t, a[3] + (b0[3]-a[3])*t]);
+        return r;
+    }
+    let theta = math_acos(d);
+    let s = math_sin(theta);
+    let w1 = math_sin((1.0 - t) * theta) / s;
+    let w2 = math_sin(t * theta) / s;
+    return [a[0]*w1 + b0[0]*w2, a[1]*w1 + b0[1]*w2, a[2]*w1 + b0[2]*w2, a[3]*w1 + b0[3]*w2];
+}
+fn quat_nlerp(a, b, t) {
+    return quat_normalize([a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t, a[2] + (b[2]-a[2])*t, a[3] + (b[3]-a[3])*t]);
+}
+fn quat_from_axis_angle(axis, angle) {
+    let half = angle * 0.5;
+    let s = math_sin(half);
+    return [axis[0]*s, axis[1]*s, axis[2]*s, math_cos(half)];
+}
+fn quat_from_euler(pitch, yaw, roll) {
+    let cp = math_cos(pitch * 0.5);
+    let sp = math_sin(pitch * 0.5);
+    let cy = math_cos(yaw * 0.5);
+    let sy = math_sin(yaw * 0.5);
+    let cr = math_cos(roll * 0.5);
+    let sr = math_sin(roll * 0.5);
+    return [sp*cy*cr - cp*sy*sr, cp*sy*cr + sp*cy*sr, cp*cy*sr - sp*sy*cr, cp*cy*cr + sp*sy*sr];
+}
+fn quat_to_euler(q) {
+    let x = q[0];
+    let y = q[1];
+    let z = q[2];
+    let w = q[3];
+    let sinr = 2.0*(w*x + y*z);
+    let cosr = 1.0 - 2.0*(x*x + y*y);
+    let roll = math_atan2(sinr, cosr);
+    let sinp = 2.0*(w*y - z*x);
+    let pitch = 0.0;
+    if (sinp <= -1.0) { pitch = -MATH_PI * 0.5; }
+    else { if (sinp >= 1.0) { pitch = MATH_PI * 0.5; } else { pitch = math_asin(sinp); } }
+    let siny = 2.0*(w*z + x*y);
+    let cosy = 1.0 - 2.0*(y*y + z*z);
+    let yaw = math_atan2(siny, cosy);
+    return [pitch, yaw, roll];
+}
+fn quat_to_mat3(q) {
+    let x = q[0];
+    let y = q[1];
+    let z = q[2];
+    let w = q[3];
+    return [1.0-2.0*(y*y+z*z), 2.0*(x*y-w*z), 2.0*(x*z+w*y),
+            2.0*(x*y+w*z), 1.0-2.0*(x*x+z*z), 2.0*(y*z-w*x),
+            2.0*(x*z-w*y), 2.0*(y*z+w*x), 1.0-2.0*(x*x+y*y)];
+}
+fn quat_rotate_vector(q, v) {
+    let qv = [q[0], q[1], q[2]];
+    let uv = v3_cross(qv, v);
+    let uuv = v3_cross(qv, uv);
+    let s = v3_mul(uv, q[3] * 2.0);
+    let t = v3_mul(uuv, 2.0);
+    return [v[0] + s[0] + t[0], v[1] + s[1] + t[1], v[2] + s[2] + t[2]];
+}
+fn quat_look_rotation(forward, up) {
+    let f = v3_normalize(forward);
+    let r = v3_normalize(v3_cross(f, up));
+    let u = v3_cross(f, r);
+    let m00 = r[0];
+    let m01 = r[1];
+    let m02 = r[2];
+    let m10 = u[0];
+    let m11 = u[1];
+    let m12 = u[2];
+    let m20 = f[0];
+    let m21 = f[1];
+    let m22 = f[2];
+    let tr = m00 + m11 + m22;
+    let q = [0.0, 0.0, 0.0, 1.0];
+    if (tr > 0.0) {
+        let s = math_sqrt(tr + 1.0) * 2.0;
+        q[3] = 0.25 * s;
+        q[0] = (m12 - m21) / s;
+        q[1] = (m20 - m02) / s;
+        q[2] = (m01 - m10) / s;
+    } else {
+        if (m00 > m11 and m00 > m22) {
+            let s = math_sqrt(1.0 + m00 - m11 - m22) * 2.0;
+            q[3] = (m12 - m21) / s;
+            q[0] = 0.25 * s;
+            q[1] = (m01 + m10) / s;
+            q[2] = (m20 + m02) / s;
+        } else { if (m11 > m22) {
+            let s = math_sqrt(1.0 + m11 - m00 - m22) * 2.0;
+            q[3] = (m20 - m02) / s;
+            q[0] = (m01 + m10) / s;
+            q[1] = 0.25 * s;
+            q[2] = (m12 + m21) / s;
+        } else {
+            let s = math_sqrt(1.0 + m22 - m00 - m11) * 2.0;
+            q[3] = (m01 - m10) / s;
+            q[0] = (m20 + m02) / s;
+            q[1] = (m12 + m21) / s;
+            q[2] = 0.25 * s;
+        }}
+    }
+    return quat_normalize(q);
+}
+fn quat_from_to(from_v, to_v) {
+    let f = v3_normalize(from_v);
+    let t = v3_normalize(to_v);
+    let d = v3_dot(f, t);
+    if (d > 0.999999) { return quat_identity(); }
+    if (d < -0.999999) {
+        let axis = v3_orthogonal(f);
+        return quat_from_axis_angle(axis, MATH_PI);
+    }
+    let axis = v3_normalize(v3_cross(f, t));
+    let angle = math_acos(d);
+    return quat_from_axis_angle(axis, angle);
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 4: 3D Primitives — Mesh Generation (20 functions)
+# ═══════════════════════════════════════════════════════════════════
+# Each primitive returns a dict: { "vertices": [...], "normals": [...], "faces": [...], "uvs": [...] }
+
+fn mesh_create() {
+    return { "vertices":[], "normals":[], "faces":[], "uvs":[] };
+}
+fn mesh_add_vertex(mesh, v) {
+    push(mesh["vertices"], v);
+    return len(mesh["vertices"]) - 1;
+}
+fn mesh_add_face(mesh, a, b, c) {
+    push(mesh["faces"], [a, b, c]);
+}
+fn mesh_compute_normals(mesh) {
+    let verts = mesh["vertices"];
+    let vc = len(verts);
+    mesh["normals"] = [];
+    let i = 0;
+    while (i < vc) {
+        push(mesh["normals"], [0.0, 0.0, 0.0]);
+        i = i + 1;
+    }
+    let faces = mesh["faces"];
+    let fc = len(faces);
+    let fi = 0;
+    while (fi < fc) {
+        let f = faces[fi];
+        let a = verts[f[0]];
+        let b = verts[f[1]];
+        let c = verts[f[2]];
+        let ab = v3_sub(b, a);
+        let ac = v3_sub(c, a);
+        let n = v3_normalize(v3_cross(ab, ac));
+        mesh["normals"][f[0]] = v3_add(mesh["normals"][f[0]], n);
+        mesh["normals"][f[1]] = v3_add(mesh["normals"][f[1]], n);
+        mesh["normals"][f[2]] = v3_add(mesh["normals"][f[2]], n);
+        fi = fi + 1;
+    }
+    let ni = 0;
+    while (ni < vc) {
+        mesh["normals"][ni] = v3_normalize(mesh["normals"][ni]);
+        ni = ni + 1;
+    }
+}
+fn mesh_transform(mesh, matrix) {
+    let verts = mesh["vertices"];
+    let vc = len(verts);
+    let i = 0;
+    while (i < vc) {
+        verts[i] = mat4_mul_vec3(matrix, verts[i]);
+        i = i + 1;
+    }
+    if (len(mesh["normals"]) > 0) {
+        let norms = mesh["normals"];
+        let nc = len(norms);
+        let j = 0;
+        while (j < nc) {
+            norms[j] = v3_normalize(mat4_mul_vec3(matrix, norms[j]));
+            j = j + 1;
+        }
+    }
+}
+fn mesh_compute_bounds(mesh) {
+    let verts = mesh["vertices"];
+    let vc = len(verts);
+    if (vc == 0) { return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; }
+    let minx = verts[0][0];
+    let miny = verts[0][1];
+    let minz = verts[0][2];
+    let maxx = minx;
+    let maxy = miny;
+    let maxz = minz;
+    let i = 1;
+    while (i < vc) {
+        let v = verts[i];
+        if (v[0] < minx) { minx = v[0]; }
+        if (v[1] < miny) { miny = v[1]; }
+        if (v[2] < minz) { minz = v[2]; }
+        if (v[0] > maxx) { maxx = v[0]; }
+        if (v[1] > maxy) { maxy = v[1]; }
+        if (v[2] > maxz) { maxz = v[2]; }
+        i = i + 1;
+    }
+    return [minx, miny, minz, maxx, maxy, maxz];
+}
+fn mesh_center(mesh) {
+    let b = mesh_compute_bounds(mesh);
+    return [(b[0]+b[3])*0.5, (b[1]+b[4])*0.5, (b[2]+b[5])*0.5];
+}
+fn mesh_clone(mesh) {
+    let nm = mesh_create();
+    let i = 0;
+    while (i < len(mesh["vertices"])) { push(nm["vertices"], mesh["vertices"][i]); i = i + 1; }
+    i = 0;
+    while (i < len(mesh["faces"])) { push(nm["faces"], mesh["faces"][i]); i = i + 1; }
+    i = 0;
+    while (i < len(mesh["normals"])) { push(nm["normals"], mesh["normals"][i]); i = i + 1; }
+    i = 0;
+    while (i < len(mesh["uvs"])) { push(nm["uvs"], mesh["uvs"][i]); i = i + 1; }
+    return nm;
+}
+fn mesh_merge(a, b) {
+    let nm = mesh_clone(a);
+    let offset = len(nm["vertices"]);
+    let i = 0;
+    while (i < len(b["vertices"])) { push(nm["vertices"], b["vertices"][i]); i = i + 1; }
+    i = 0;
+    while (i < len(b["faces"])) {
+        let f = b["faces"][i];
+        push(nm["faces"], [f[0]+offset, f[1]+offset, f[2]+offset]);
+        i = i + 1;
+    }
+    return nm;
+}
+
+# ── Primitives ──
+fn mesh_create_cube(size) {
+    let s = size * 0.5;
+    let m = mesh_create();
+    push(m["vertices"], [-s, -s, -s]); push(m["vertices"], [s, -s, -s]);
+    push(m["vertices"], [s, s, -s]); push(m["vertices"], [-s, s, -s]);
+    push(m["vertices"], [-s, -s, s]); push(m["vertices"], [s, -s, s]);
+    push(m["vertices"], [s, s, s]); push(m["vertices"], [-s, s, s]);
+    m["faces"] = [[0,1,2],[0,2,3],[4,6,5],[4,7,6],[0,4,5],[0,5,1],
+                  [1,5,6],[1,6,2],[2,6,7],[2,7,3],[3,7,4],[3,4,0]];
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_sphere(radius, segments) {
+    let m = mesh_create();
+    let lat = 0;
+    while (lat <= segments) {
+        let theta = lat * MATH_PI / segments;
+        let sinTheta = math_sin(theta);
+        let cosTheta = math_cos(theta);
+        let lon = 0;
+        while (lon <= segments) {
+            let phi = lon * 2.0 * MATH_PI / segments;
+            let sinPhi = math_sin(phi);
+            let cosPhi = math_cos(phi);
+            let x = cosPhi * sinTheta;
+            let y = cosTheta;
+            let z = sinPhi * sinTheta;
+            push(m["vertices"], [x*radius, y*radius, z*radius]);
+            lon = lon + 1;
+        }
+        lat = lat + 1;
+    }
+    let sp1 = segments + 1;
+    lat = 0;
+    while (lat < segments) {
+        let lon = 0;
+        while (lon < segments) {
+            let first = lat * sp1 + lon;
+            let second = first + sp1;
+            push(m["faces"], [first, second, first+1]);
+            push(m["faces"], [second, second+1, first+1]);
+            lon = lon + 1;
+        }
+        lat = lat + 1;
+    }
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_cylinder(radius, height, segments) {
+    let m = mesh_create();
+    let hh = height * 0.5;
+    let i = 0;
+    while (i <= segments) {
+        let angle = i * 2.0 * MATH_PI / segments;
+        let x = math_cos(angle) * radius;
+        let z = math_sin(angle) * radius;
+        push(m["vertices"], [x, -hh, z]);
+        push(m["vertices"], [x, hh, z]);
+        i = i + 1;
+    }
+    push(m["vertices"], [0.0, -hh, 0.0]);
+    let bottomCenter = len(m["vertices"]) - 1;
+    push(m["vertices"], [0.0, hh, 0.0]);
+    let topCenter = len(m["vertices"]) - 1;
+    i = 0;
+    while (i < segments) {
+        let b0 = i * 2;
+        let b1 = i * 2 + 1;
+        let b2 = (i + 1) * 2;
+        let b3 = (i + 1) * 2 + 1;
+        push(m["faces"], [b0, b2, b1]);
+        push(m["faces"], [b1, b2, b3]);
+        push(m["faces"], [b0, bottomCenter, b2]);
+        push(m["faces"], [b1, b3, topCenter]);
+        i = i + 1;
+    }
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_cone(radius, height, segments) {
+    let m = mesh_create();
+    let hh = height * 0.5;
+    push(m["vertices"], [0.0, hh, 0.0]);
+    let tip = 0;
+    let i = 0;
+    while (i <= segments) {
+        let angle = i * 2.0 * MATH_PI / segments;
+        let x = math_cos(angle) * radius;
+        let z = math_sin(angle) * radius;
+        push(m["vertices"], [x, -hh, z]);
+        i = i + 1;
+    }
+    push(m["vertices"], [0.0, -hh, 0.0]);
+    let bottomCenter = len(m["vertices"]) - 1;
+    i = 0;
+    while (i < segments) {
+        let b = i + 1;
+        let nb = i + 2;
+        push(m["faces"], [tip, b, nb]);
+        push(m["faces"], [b, bottomCenter, nb]);
+        i = i + 1;
+    }
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_torus(outerRadius, innerRadius, segments, sides) {
+    let m = mesh_create();
+    let i = 0;
+    while (i <= segments) {
+        let theta = i * 2.0 * MATH_PI / segments;
+        let cosTheta = math_cos(theta);
+        let sinTheta = math_sin(theta);
+        let j = 0;
+        while (j <= sides) {
+            let phi = j * 2.0 * MATH_PI / sides;
+            let cosPhi = math_cos(phi);
+            let sinPhi = math_sin(phi);
+            let r = outerRadius + innerRadius * cosPhi;
+            push(m["vertices"], [cosTheta * r, sinTheta * r, sinPhi * innerRadius]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let sp1 = sides + 1;
+    i = 0;
+    while (i < segments) {
+        let j = 0;
+        while (j < sides) {
+            let a = i * sp1 + j;
+            let b = a + sp1;
+            push(m["faces"], [a, b, a+1]);
+            push(m["faces"], [b, b+1, a+1]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_plane(width, height, wSegs, hSegs) {
+    let m = mesh_create();
+    let hw = width * 0.5;
+    let hh = height * 0.5;
+    let y = 0;
+    while (y <= hSegs) {
+        let z = hh - y * height / hSegs;
+        let x = 0;
+        while (x <= wSegs) {
+            let px = -hw + x * width / wSegs;
+            push(m["vertices"], [px, 0.0, z]);
+            push(m["uvs"], [x / wSegs, y / hSegs]);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    let wp1 = wSegs + 1;
+    y = 0;
+    while (y < hSegs) {
+        let x = 0;
+        while (x < wSegs) {
+            let a = y * wp1 + x;
+            push(m["faces"], [a, a+wp1, a+1]);
+            push(m["faces"], [a+wp1, a+wp1+1, a+1]);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_icosahedron(radius) {
+    let m = mesh_create();
+    let t = (1.0 + math_sqrt(5.0)) * 0.5;
+    push(m["vertices"], v3_normalize([-1.0, t, 0.0]));
+    push(m["vertices"], v3_normalize([1.0, t, 0.0]));
+    push(m["vertices"], v3_normalize([-1.0, -t, 0.0]));
+    push(m["vertices"], v3_normalize([1.0, -t, 0.0]));
+    push(m["vertices"], v3_normalize([0.0, -1.0, t]));
+    push(m["vertices"], v3_normalize([0.0, 1.0, t]));
+    push(m["vertices"], v3_normalize([0.0, -1.0, -t]));
+    push(m["vertices"], v3_normalize([0.0, 1.0, -t]));
+    push(m["vertices"], v3_normalize([t, 0.0, -1.0]));
+    push(m["vertices"], v3_normalize([t, 0.0, 1.0]));
+    push(m["vertices"], v3_normalize([-t, 0.0, -1.0]));
+    push(m["vertices"], v3_normalize([-t, 0.0, 1.0]));
+    m["faces"] = [[0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],
+                  [1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],
+                  [3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],
+                  [4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]];
+    let i = 0;
+    while (i < len(m["vertices"])) {
+        m["vertices"][i] = v3_mul(m["vertices"][i], radius);
+        i = i + 1;
+    }
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_tetrahedron(size) {
+    let m = mesh_create();
+    let s = size * 0.5;
+    push(m["vertices"], [s, s, s]);
+    push(m["vertices"], [s, -s, -s]);
+    push(m["vertices"], [-s, s, -s]);
+    push(m["vertices"], [-s, -s, s]);
+    m["faces"] = [[0,1,2],[0,2,3],[0,3,1],[1,3,2]];
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_octahedron(size) {
+    let m = mesh_create();
+    let s = size * 0.5;
+    push(m["vertices"], [s, 0.0, 0.0]); push(m["vertices"], [-s, 0.0, 0.0]);
+    push(m["vertices"], [0.0, s, 0.0]); push(m["vertices"], [0.0, -s, 0.0]);
+    push(m["vertices"], [0.0, 0.0, s]); push(m["vertices"], [0.0, 0.0, -s]);
+    m["faces"] = [[0,2,4],[0,4,3],[0,3,5],[0,5,2],[1,4,2],[1,3,4],[1,5,3],[1,2,5]];
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_capsule(radius, height, segments) {
+    let m = mesh_create();
+    let hh = height * 0.5;
+    let halfSegs = segments / 2;
+    # top hemisphere
+    let lat = 0;
+    while (lat <= halfSegs) {
+        let theta = lat * MATH_PI * 0.5 / halfSegs;
+        let sinTheta = math_sin(theta);
+        let cosTheta = math_cos(theta);
+        let lon = 0;
+        while (lon <= segments) {
+            let phi = lon * 2.0 * MATH_PI / segments;
+            let sinPhi = math_sin(phi);
+            let cosPhi = math_cos(phi);
+            push(m["vertices"], [cosPhi*sinTheta*radius, hh + cosTheta*radius, sinPhi*sinTheta*radius]);
+            lon = lon + 1;
+        }
+        lat = lat + 1;
+    }
+    # cylinder middle
+    let i = 0;
+    while (i <= segments) {
+        let angle = i * 2.0 * MATH_PI / segments;
+        let x = math_cos(angle) * radius;
+        let z = math_sin(angle) * radius;
+        push(m["vertices"], [x, hh, z]);
+        push(m["vertices"], [x, -hh, z]);
+        i = i + 1;
+    }
+    # bottom hemisphere
+    lat = 0;
+    while (lat <= halfSegs) {
+        let theta = MATH_PI * 0.5 + lat * MATH_PI * 0.5 / halfSegs;
+        let sinTheta = math_sin(theta);
+        let cosTheta = math_cos(theta);
+        let lon = 0;
+        while (lon <= segments) {
+            let phi = lon * 2.0 * MATH_PI / segments;
+            let sinPhi = math_sin(phi);
+            let cosPhi = math_cos(phi);
+            push(m["vertices"], [cosPhi*sinTheta*radius, -hh + cosTheta*radius, sinPhi*sinTheta*radius]);
+            lon = lon + 1;
+        }
+        lat = lat + 1;
+    }
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_pyramid(size, height) {
+    let m = mesh_create();
+    let hs = size * 0.5;
+    push(m["vertices"], [0.0, height, 0.0]);
+    push(m["vertices"], [-hs, 0.0, -hs]);
+    push(m["vertices"], [hs, 0.0, -hs]);
+    push(m["vertices"], [hs, 0.0, hs]);
+    push(m["vertices"], [-hs, 0.0, hs]);
+    m["faces"] = [[0,1,2],[0,2,3],[0,3,4],[0,4,1],[1,4,3],[1,3,2]];
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_quad() {
+    let m = mesh_create();
+    push(m["vertices"], [-0.5, -0.5, 0.0]); push(m["vertices"], [0.5, -0.5, 0.0]);
+    push(m["vertices"], [0.5, 0.5, 0.0]); push(m["vertices"], [-0.5, 0.5, 0.0]);
+    m["faces"] = [[0,1,2],[0,2,3]];
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_triangle() {
+    let m = mesh_create();
+    push(m["vertices"], [-0.5, -0.5, 0.0]); push(m["vertices"], [0.5, -0.5, 0.0]);
+    push(m["vertices"], [0.0, 0.5, 0.0]);
+    m["faces"] = [[0,1,2]];
+    mesh_compute_normals(m);
+    return m;
+}
+
+fn mesh_create_grid(size, divisions) {
+    let m = mesh_create();
+    let hs = size * 0.5;
+    let step = size / divisions;
+    let i = 0;
+    while (i <= divisions) {
+        let pos = -hs + i * step;
+        push(m["vertices"], [pos, 0.0, -hs]); push(m["vertices"], [pos, 0.0, hs]);
+        push(m["vertices"], [-hs, 0.0, pos]); push(m["vertices"], [hs, 0.0, pos]);
+        i = i + 1;
+    }
+    return m;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 5: Camera (10 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn camera_create() {
+    return { "pos":[0.0,0.0,5.0], "target":[0.0,0.0,0.0], "up":[0.0,1.0,0.0], "fov":MATH_PI/4.0, "near":0.1, "far":100.0, "aspect":1.333 };
+}
+fn camera_view_matrix(cam) { return mat4_look_at(cam["pos"], cam["target"], cam["up"]); }
+fn camera_projection_matrix(cam) { return mat4_perspective(cam["fov"], cam["aspect"], cam["near"], cam["far"]); }
+fn camera_vp_matrix(cam) { return mat4_mul(camera_projection_matrix(cam), camera_view_matrix(cam)); }
+fn camera_forward(cam) { return v3_normalize(v3_sub(cam["target"], cam["pos"])); }
+fn camera_right(cam) { return v3_normalize(v3_cross(camera_forward(cam), cam["up"])); }
+fn camera_world_to_screen(cam, worldPos) {
+    let vp = camera_vp_matrix(cam);
+    let clip = mat4_mul_vec4(vp, [worldPos[0], worldPos[1], worldPos[2], 1.0]);
+    if (clip[3] == 0.0) { return [0.0, 0.0]; }
+    return [clip[0]/clip[3], clip[1]/clip[3]];
+}
+fn camera_orbit(cam, horizAngle, vertAngle) {
+    let dir = v3_sub(cam["pos"], cam["target"]);
+    let dist = v3_length(dir);
+    let rotH = quat_from_axis_angle(cam["up"], horizAngle);
+    let right = v3_normalize(v3_cross(dir, cam["up"]));
+    let rotV = quat_from_axis_angle(right, vertAngle);
+    let q = quat_mul(rotH, rotV);
+    let newDir = quat_rotate_vector(q, v3_normalize(dir));
+    cam["pos"] = v3_add(cam["target"], v3_mul(newDir, dist));
+}
+fn camera_fps_move(cam, forward, right) {
+    let f = camera_forward(cam);
+    let r = camera_right(cam);
+    let move = v3_add(v3_mul(f, forward), v3_mul(r, right));
+    cam["pos"] = v3_add(cam["pos"], move);
+    cam["target"] = v3_add(cam["target"], move);
+}
+fn camera_frustum_planes(cam) {
+    let vp = camera_vp_matrix(cam);
+    let planes = [];
+    # Left, Right, Bottom, Top, Near, Far
+    push(planes, [vp[3]+vp[0], vp[7]+vp[4], vp[11]+vp[8], vp[15]+vp[12]]);
+    push(planes, [vp[3]-vp[0], vp[7]-vp[4], vp[11]-vp[8], vp[15]-vp[12]]);
+    push(planes, [vp[3]+vp[1], vp[7]+vp[5], vp[11]+vp[9], vp[15]+vp[13]]);
+    push(planes, [vp[3]-vp[1], vp[7]-vp[5], vp[11]-vp[9], vp[15]-vp[13]]);
+    push(planes, [vp[3]+vp[2], vp[7]+vp[6], vp[11]+vp[10], vp[15]+vp[14]]);
+    push(planes, [vp[3]-vp[2], vp[7]-vp[6], vp[11]-vp[10], vp[15]-vp[14]]);
+    let i = 0;
+    while (i < 6) {
+        let p = planes[i];
+        let l = math_sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+        if (l > 0.0) { planes[i] = [p[0]/l, p[1]/l, p[2]/l, p[3]/l]; }
+        i = i + 1;
+    }
+    return planes;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 6: Lighting / Color (15 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn color_rgb(r, g, b) { return [r, g, b]; }
+fn color_rgba(r, g, b, a) { return [r, g, b, a]; }
+fn color_hsv_to_rgb(h, s, v) {
+    let c = v * s;
+    let hp = h * 6.0;
+    let x = c * (1.0 - math_abs(math_fmod(hp, 2.0) - 1.0));
+    let r = 0.0;
+    let g = 0.0;
+    let b = 0.0;
+    if (hp < 1.0) { r = c; g = x; }
+    else { if (hp < 2.0) { r = x; g = c; }
+    else { if (hp < 3.0) { g = c; b = x; }
+    else { if (hp < 4.0) { g = x; b = c; }
+    else { if (hp < 5.0) { r = x; b = c; }
+    else { r = c; b = x; }}}}}
+    let m = v - c;
+    return [r + m, g + m, b + m];
+}
+fn color_rgb_to_hsv(r, g, b) {
+    let max = r;
+    if (g > max) { max = g; }
+    if (b > max) { max = b; }
+    let min = r;
+    if (g < min) { min = g; }
+    if (b < min) { min = b; }
+    let d = max - min;
+    let h = 0.0;
+    if (d != 0.0) {
+        if (max == r) { h = math_fmod((g - b) / d, 6.0); }
+        else { if (max == g) { h = (b - r) / d + 2.0; }
+        else { h = (r - g) / d + 4.0; }}
+        h = h / 6.0;
+    }
+    let s = 0.0;
+    if (max != 0.0) { s = d / max; }
+    return [h, s, max];
+}
+fn color_lerp(a, b, t) {
+    return [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t, a[2] + (b[2]-a[2])*t];
+}
+fn color_gamma(c, gamma) {
+    let r = math_pow(c[0], 1.0/gamma);
+    let g = math_pow(c[1], 1.0/gamma);
+    let b = math_pow(c[2], 1.0/gamma);
+    return [r, g, b];
+}
+fn color_grayscale(c) {
+    let gray = c[0]*0.299 + c[1]*0.587 + c[2]*0.114;
+    return [gray, gray, gray];
+}
+fn color_invert(c) { return [1.0-c[0], 1.0-c[1], 1.0-c[2]]; }
+fn color_brightness(c, factor) { return [c[0]*factor, c[1]*factor, c[2]*factor]; }
+fn color_contrast(c, amount) {
+    let f = (amount + 1.0) * (amount + 1.0);
+    return [(c[0]-0.5)*f+0.5, (c[1]-0.5)*f+0.5, (c[2]-0.5)*f+0.5];
+}
+fn color_to_hex(c) {
+    let r = math_floor(c[0] * 255);
+    let g = math_floor(c[1] * 255);
+    let b = math_floor(c[2] * 255);
+    if (r < 0) { r = 0; }
+    if (r > 255) { r = 255; }
+    if (g < 0) { g = 0; }
+    if (g > 255) { g = 255; }
+    if (b < 0) { b = 0; }
+    if (b > 255) { b = 255; }
+    return r * 65536 + g * 256 + b;
+}
+fn color_from_hex(hex) {
+    let r = (hex / 65536) / 255.0;
+    let g = ((hex % 65536) / 256) / 255.0;
+    let b = (hex % 256) / 255.0;
+    return [r, g, b];
+}
+
+# ── Lighting ──
+fn light_ambient(color, intensity) {
+    return { "type":"ambient", "color":color, "intensity":intensity };
+}
+fn light_directional(direction, color, intensity) {
+    return { "type":"directional", "direction":v3_normalize(direction), "color":color, "intensity":intensity };
+}
+fn light_point(position, color, intensity, range) {
+    return { "type":"point", "pos":position, "color":color, "intensity":intensity, "range":range };
+}
+fn light_spot(position, direction, color, intensity, range, innerAngle, outerAngle) {
+    return { "type":"spot", "pos":position, "direction":v3_normalize(direction), "color":color, "intensity":intensity, "range":range, "innerAngle":innerAngle, "outerAngle":outerAngle };
+}
+fn light_attenuation(distance, range) {
+    if (distance > range) { return 0.0; }
+    let t = distance / range;
+    if (t > 1.0) { t = 1.0; }
+    return 1.0 - t * t;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 7: Ray Casting / Intersection (15 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn ray_create(origin, direction) { return { "origin":origin, "dir":v3_normalize(direction) }; }
+fn ray_point_at(ray, t) { return v3_add(ray["origin"], v3_mul(ray["dir"], t)); }
+
+fn ray_sphere_intersect(ray, center, radius) {
+    let oc = v3_sub(ray["origin"], center);
+    let a = v3_dot(ray["dir"], ray["dir"]);
+    let b = 2.0 * v3_dot(oc, ray["dir"]);
+    let c = v3_dot(oc, oc) - radius * radius;
+    let d = b * b - 4.0 * a * c;
+    if (d < 0.0) { return []; }
+    let t = (-b - math_sqrt(d)) / (2.0 * a);
+    if (t > 0.0) { return [t, (-b + math_sqrt(d)) / (2.0 * a)]; }
+    return [];
+}
+
+fn ray_plane_intersect(ray, planePoint, planeNormal) {
+    let d = v3_dot(planeNormal, ray["dir"]);
+    if (d == 0.0) { return []; }
+    let t = v3_dot(planeNormal, v3_sub(planePoint, ray["origin"])) / d;
+    if (t < 0.0) { return []; }
+    return [t];
+}
+
+fn ray_triangle_intersect(ray, v0, v1, v2) {
+    let e1 = v3_sub(v1, v0);
+    let e2 = v3_sub(v2, v0);
+    let h = v3_cross(ray["dir"], e2);
+    let a = v3_dot(e1, h);
+    if (a > -0.000001 and a < 0.000001) { return []; }
+    let f = 1.0 / a;
+    let s = v3_sub(ray["origin"], v0);
+    let u = f * v3_dot(s, h);
+    if (u < 0.0 or u > 1.0) { return []; }
+    let q = v3_cross(s, e1);
+    let v = f * v3_dot(ray["dir"], q);
+    if (v < 0.0 or u + v > 1.0) { return []; }
+    let t = f * v3_dot(e2, q);
+    if (t > 0.0) { return [t]; }
+    return [];
+}
+
+fn ray_aabb_intersect(ray, bmin, bmax) {
+    let tmin = -999999.0;
+    let tmax = 999999.0;
+    let inv_d = 1.0;
+    let t0 = 0.0;
+    let t1 = 0.0;
+    # X slab
+    if (ray["dir"][0] != 0.0) {
+        t0 = (bmin[0] - ray["origin"][0]) / ray["dir"][0];
+        t1 = (bmax[0] - ray["origin"][0]) / ray["dir"][0];
+        if (t0 > t1) { let tmp = t0; t0 = t1; t1 = tmp; }
+        if (t0 > tmin) { tmin = t0; }
+        if (t1 < tmax) { tmax = t1; }
+        if (tmin > tmax) { return []; }
+    } else {
+        if (ray["origin"][0] < bmin[0] or ray["origin"][0] > bmax[0]) { return []; }
+    }
+    # Y slab
+    if (ray["dir"][1] != 0.0) {
+        t0 = (bmin[1] - ray["origin"][1]) / ray["dir"][1];
+        t1 = (bmax[1] - ray["origin"][1]) / ray["dir"][1];
+        if (t0 > t1) { let tmp = t0; t0 = t1; t1 = tmp; }
+        if (t0 > tmin) { tmin = t0; }
+        if (t1 < tmax) { tmax = t1; }
+        if (tmin > tmax) { return []; }
+    } else {
+        if (ray["origin"][1] < bmin[1] or ray["origin"][1] > bmax[1]) { return []; }
+    }
+    # Z slab
+    if (ray["dir"][2] != 0.0) {
+        t0 = (bmin[2] - ray["origin"][2]) / ray["dir"][2];
+        t1 = (bmax[2] - ray["origin"][2]) / ray["dir"][2];
+        if (t0 > t1) { let tmp = t0; t0 = t1; t1 = tmp; }
+        if (t0 > tmin) { tmin = t0; }
+        if (t1 < tmax) { tmax = t1; }
+        if (tmin > tmax) { return []; }
+    } else {
+        if (ray["origin"][2] < bmin[2] or ray["origin"][2] > bmax[2]) { return []; }
+    }
+    return [tmin, tmax];
+}
+
+fn sphere_contains_point(center, radius, point) {
+    let d = v3_distance(center, point);
+    return d <= radius;
+}
+
+fn sphere_sphere_intersect(c1, r1, c2, r2) {
+    let d = v3_distance(c1, c2);
+    return d <= r1 + r2;
+}
+
+fn aabb_contains_point(bmin, bmax, point) {
+    if (point[0] < bmin[0] or point[0] > bmax[0]) { return false; }
+    if (point[1] < bmin[1] or point[1] > bmax[1]) { return false; }
+    if (point[2] < bmin[2] or point[2] > bmax[2]) { return false; }
+    return true;
+}
+
+fn aabb_aabb_intersect(amin, amax, bmin, bmax) {
+    if (amin[0] > bmax[0] or amax[0] < bmin[0]) { return false; }
+    if (amin[1] > bmax[1] or amax[1] < bmin[1]) { return false; }
+    if (amin[2] > bmax[2] or amax[2] < bmin[2]) { return false; }
+    return true;
+}
+
+fn triangle_area(v0, v1, v2) {
+    let a = v3_sub(v1, v0);
+    let b = v3_sub(v2, v0);
+    return v3_length(v3_cross(a, b)) * 0.5;
+}
+
+fn triangle_normal(v0, v1, v2) {
+    return v3_normalize(v3_cross(v3_sub(v1, v0), v3_sub(v2, v0)));
+}
+
+fn triangle_barycentric(point, v0, v1, v2) {
+    let v0v1 = v3_sub(v1, v0);
+    let v0v2 = v3_sub(v2, v0);
+    let v0p = v3_sub(point, v0);
+    let d00 = v3_dot(v0v1, v0v1);
+    let d01 = v3_dot(v0v1, v0v2);
+    let d11 = v3_dot(v0v2, v0v2);
+    let d20 = v3_dot(v0p, v0v1);
+    let d21 = v3_dot(v0p, v0v2);
+    let denom = d00 * d11 - d01 * d01;
+    if (denom == 0.0) { return [0.0, 0.0, 0.0]; }
+    let v = (d11 * d20 - d01 * d21) / denom;
+    let w = (d00 * d21 - d01 * d20) / denom;
+    let u = 1.0 - v - w;
+    return [u, v, w];
+}
+
+fn point_in_triangle(point, v0, v1, v2) {
+    let bc = triangle_barycentric(point, v0, v1, v2);
+    let u = bc[0];
+    let v = bc[1];
+    let w = bc[2];
+    return u >= 0.0 and v >= 0.0 and w >= 0.0 and u <= 1.0 and v <= 1.0 and w <= 1.0;
+}
+
+fn ray_mesh_intersect(ray, mesh) {
+    let verts = mesh["vertices"];
+    let faces = mesh["faces"];
+    let closest = [];
+    let closestT = 999999.0;
+    let i = 0;
+    let fc = len(faces);
+    while (i < fc) {
+        let f = faces[i];
+        let t = ray_triangle_intersect(ray, verts[f[0]], verts[f[1]], verts[f[2]]);
+        if (len(t) > 0 and t[0] < closestT) {
+            closestT = t[0];
+            closest = [t[0], f[0], f[1], f[2]];
+        }
+        i = i + 1;
+    }
+    return closest;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 8: Curves (10 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn curve_lerp(a, b, t) { return v3_lerp(a, b, t); }
+
+fn curve_bezier_quadratic(p0, p1, p2, t) {
+    let u = 1.0 - t;
+    let x = u*u*p0[0] + 2.0*u*t*p1[0] + t*t*p2[0];
+    let y = u*u*p0[1] + 2.0*u*t*p1[1] + t*t*p2[1];
+    let z = u*u*p0[2] + 2.0*u*t*p1[2] + t*t*p2[2];
+    return [x, y, z];
+}
+
+fn curve_bezier_cubic(p0, p1, p2, p3, t) {
+    let u = 1.0 - t;
+    let u2 = u * u;
+    let u3 = u2 * u;
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let x = u3*p0[0] + 3.0*u2*t*p1[0] + 3.0*u*t2*p2[0] + t3*p3[0];
+    let y = u3*p0[1] + 3.0*u2*t*p1[1] + 3.0*u*t2*p2[1] + t3*p3[1];
+    let z = u3*p0[2] + 3.0*u2*t*p1[2] + 3.0*u*t2*p2[2] + t3*p3[2];
+    return [x, y, z];
+}
+
+fn curve_catmull_rom(p0, p1, p2, p3, t) {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let x = 0.5 * ((2.0*p1[0]) + (-p0[0]+p2[0])*t + (2.0*p0[0]-5.0*p1[0]+4.0*p2[0]-p3[0])*t2 + (-p0[0]+3.0*p1[0]-3.0*p2[0]+p3[0])*t3);
+    let y = 0.5 * ((2.0*p1[1]) + (-p0[1]+p2[1])*t + (2.0*p0[1]-5.0*p1[1]+4.0*p2[1]-p3[1])*t2 + (-p0[1]+3.0*p1[1]-3.0*p2[1]+p3[1])*t3);
+    let z = 0.5 * ((2.0*p1[2]) + (-p0[2]+p2[2])*t + (2.0*p0[2]-5.0*p1[2]+4.0*p2[2]-p3[2])*t2 + (-p0[2]+3.0*p1[2]-3.0*p2[2]+p3[2])*t3);
+    return [x, y, z];
+}
+
+fn curve_hermite(p0, p1, m0, m1, t) {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let h00 = 2.0*t3 - 3.0*t2 + 1.0;
+    let h10 = t3 - 2.0*t2 + t;
+    let h01 = -2.0*t3 + 3.0*t2;
+    let h11 = t3 - t2;
+    let x = h00*p0[0] + h10*m0[0] + h01*p1[0] + h11*m1[0];
+    let y = h00*p0[1] + h10*m0[1] + h01*p1[1] + h11*m1[1];
+    let z = h00*p0[2] + h10*m0[2] + h01*p1[2] + h11*m1[2];
+    return [x, y, z];
+}
+
+fn curve_circle_point(radius, angle) {
+    return [math_cos(angle)*radius, math_sin(angle)*radius, 0.0];
+}
+
+fn curve_ellipse_point(rx, ry, angle) {
+    return [math_cos(angle)*rx, math_sin(angle)*ry, 0.0];
+}
+
+fn curve_spiral_point(radius, height, turns, t) {
+    let angle = t * 2.0 * MATH_PI * turns;
+    let r = radius * t;
+    return [math_cos(angle)*r, height*t, math_sin(angle)*r];
+}
+
+fn curve_helix_point(radius, height, turns, t) {
+    let angle = t * 2.0 * MATH_PI * turns;
+    return [math_cos(angle)*radius, height*t, math_sin(angle)*radius];
+}
+
+fn curve_lissajous_point(ax, ay, az, fx, fy, fz, t) {
+    return [ax * math_sin(fx * t), ay * math_sin(fy * t), az * math_sin(fz * t)];
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 9: Noise Functions (8 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn noise_fade(t) { return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+fn noise_lerp_n(a, b, t) { return a + t * (b - a); }
+
+fn noise_grad_2d(hash, x, y) {
+    let h = math_fmod(hash, 4.0);
+    if (h == 0.0) { return x + y; }
+    if (h == 1.0) { return -x + y; }
+    if (h == 2.0) { return x - y; }
+    return -x - y;
+}
+
+fn noise_grad_3d(hash, x, y, z) {
+    let h = math_fmod(hash, 16.0);
+    let u = x;
+    if (h < 8.0) { u = x; } else { u = y; }
+    let v = y;
+    if (h < 4.0) { v = y; } else { if (h == 12.0 or h == 14.0) { v = x; } else { v = z; } }
+    if (math_fmod(h, 2.0) == 0.0) { u = -u; }
+    if (math_fmod(h, 2.0) == 0.0) { v = -v; }
+    return u + v;
+}
+
+fn noise_perlin_2d(x, y) {
+    let xi = math_floor(x);
+    let yi = math_floor(y);
+    let xf = x - xi;
+    let yf = y - yi;
+    let u = noise_fade(xf);
+    let v = noise_fade(yf);
+    let a = math_fmod(xi, 256.0) + math_fmod(yi, 256.0) * 313.0;
+    let b = math_fmod(xi + 1.0, 256.0) + math_fmod(yi, 256.0) * 313.0;
+    let c = math_fmod(xi, 256.0) + math_fmod(yi + 1.0, 256.0) * 313.0;
+    let d = math_fmod(xi + 1.0, 256.0) + math_fmod(yi + 1.0, 256.0) * 313.0;
+    let x1 = noise_lerp_n(noise_grad_2d(a, xf, yf), noise_grad_2d(b, xf-1.0, yf), u);
+    let x2 = noise_lerp_n(noise_grad_2d(c, xf, yf-1.0), noise_grad_2d(d, xf-1.0, yf-1.0), u);
+    return noise_lerp_n(x1, x2, v);
+}
+
+fn noise_perlin_3d(x, y, z) {
+    let xi = math_floor(x);
+    let yi = math_floor(y);
+    let zi = math_floor(z);
+    let xf = x - xi;
+    let yf = y - yi;
+    let zf = z - zi;
+    let u = noise_fade(xf);
+    let v = noise_fade(yf);
+    let w = noise_fade(zf);
+    let a = math_fmod(xi, 256.0) + math_fmod(yi, 256.0) * 157.0 + math_fmod(zi, 256.0) * 113.0;
+    let b = math_fmod(xi+1.0, 256.0) + math_fmod(yi, 256.0) * 157.0 + math_fmod(zi, 256.0) * 113.0;
+    let c = math_fmod(xi, 256.0) + math_fmod(yi+1.0, 256.0) * 157.0 + math_fmod(zi, 256.0) * 113.0;
+    let d = math_fmod(xi+1.0, 256.0) + math_fmod(yi+1.0, 256.0) * 157.0 + math_fmod(zi, 256.0) * 113.0;
+    let e = math_fmod(xi, 256.0) + math_fmod(yi, 256.0) * 157.0 + math_fmod(zi+1.0, 256.0) * 113.0;
+    let f = math_fmod(xi+1.0, 256.0) + math_fmod(yi, 256.0) * 157.0 + math_fmod(zi+1.0, 256.0) * 113.0;
+    let g = math_fmod(xi, 256.0) + math_fmod(yi+1.0, 256.0) * 157.0 + math_fmod(zi+1.0, 256.0) * 113.0;
+    let h = math_fmod(xi+1.0, 256.0) + math_fmod(yi+1.0, 256.0) * 157.0 + math_fmod(zi+1.0, 256.0) * 113.0;
+    let k0 = noise_lerp_n(noise_grad_3d(a, xf, yf, zf), noise_grad_3d(b, xf-1.0, yf, zf), u);
+    let k1 = noise_lerp_n(noise_grad_3d(c, xf, yf-1.0, zf), noise_grad_3d(d, xf-1.0, yf-1.0, zf), u);
+    let k2 = noise_lerp_n(noise_grad_3d(e, xf, yf, zf-1.0), noise_grad_3d(f, xf-1.0, yf, zf-1.0), u);
+    let k3 = noise_lerp_n(noise_grad_3d(g, xf, yf-1.0, zf-1.0), noise_grad_3d(h, xf-1.0, yf-1.0, zf-1.0), u);
+    let k4 = noise_lerp_n(k0, k1, v);
+    let k5 = noise_lerp_n(k2, k3, v);
+    return noise_lerp_n(k4, k5, w);
+}
+
+fn noise_value_2d(x, y) {
+    let xi = math_floor(x);
+    let yi = math_floor(y);
+    let xf = x - xi;
+    let yf = y - yi;
+    let u = noise_fade(xf);
+    let v = noise_fade(yf);
+    let a = math_fmod(math_fmod(xi, 256.0) * 313.0 + math_fmod(yi, 256.0) * 157.0, 1.0);
+    let b = math_fmod(math_fmod(xi+1.0, 256.0) * 313.0 + math_fmod(yi, 256.0) * 157.0, 1.0);
+    let c = math_fmod(math_fmod(xi, 256.0) * 313.0 + math_fmod(yi+1.0, 256.0) * 157.0, 1.0);
+    let d = math_fmod(math_fmod(xi+1.0, 256.0) * 313.0 + math_fmod(yi+1.0, 256.0) * 157.0, 1.0);
+    let x1 = noise_lerp_n(a, b, u);
+    let x2 = noise_lerp_n(c, d, u);
+    return noise_lerp_n(x1, x2, v);
+}
+
+fn noise_fbm_2d(x, y, octaves, persistence, lacunarity) {
+    let val = 0.0;
+    let amp = 1.0;
+    let freq = 1.0;
+    let maxVal = 0.0;
+    let i = 0;
+    while (i < octaves) {
+        val = val + noise_perlin_2d(x * freq, y * freq) * amp;
+        maxVal = maxVal + amp;
+        amp = amp * persistence;
+        freq = freq * lacunarity;
+        i = i + 1;
+    }
+    if (maxVal == 0.0) { return 0.0; }
+    return val / maxVal;
+}
+
+fn noise_turbulence_2d(x, y, octaves, persistence, lacunarity) {
+    let val = 0.0;
+    let amp = 1.0;
+    let freq = 1.0;
+    let maxVal = 0.0;
+    let i = 0;
+    while (i < octaves) {
+        let n = noise_perlin_2d(x * freq, y * freq);
+        if (n < 0.0) { n = -n; }
+        val = val + n * amp;
+        maxVal = maxVal + amp;
+        amp = amp * persistence;
+        freq = freq * lacunarity;
+        i = i + 1;
+    }
+    if (maxVal == 0.0) { return 0.0; }
+    return val / maxVal;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 10: Particle System (8 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn particle_create(pos, vel, life) {
+    return { "pos":pos, "vel":vel, "life":life, "maxLife":life, "color":[1.0,1.0,1.0], "size":1.0, "alive":true };
+}
+fn particle_update(p, dt) {
+    p["pos"] = v3_add(p["pos"], v3_mul(p["vel"], dt));
+    p["life"] = p["life"] - dt;
+    if (p["life"] <= 0.0) { p["alive"] = false; }
+}
+fn particle_apply_gravity(p, gravity, dt) {
+    p["vel"] = v3_add(p["vel"], v3_mul(gravity, dt));
+}
+fn particle_apply_wind(p, wind, dt) {
+    p["vel"] = v3_add(p["vel"], v3_mul(wind, dt));
+}
+fn particle_apply_drag(p, drag) {
+    p["vel"] = v3_mul(p["vel"], 1.0 - drag);
+}
+fn particle_reset(p, pos, vel, life) {
+    p["pos"] = pos;
+    p["vel"] = vel;
+    p["life"] = life;
+    p["maxLife"] = life;
+    p["alive"] = true;
+}
+fn particle_is_alive(p) { return p["alive"]; }
+fn particle_get_color(p) {
+    let t = p["life"] / p["maxLife"];
+    return [p["color"][0] * t, p["color"][1] * t, p["color"][2] * t];
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 11: Bounding Volumes (5 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn bv_sphere_create(center, radius) { return { "type":"sphere", "center":center, "radius":radius }; }
+fn bv_aabb_create(min, max) { return { "type":"aabb", "min":min, "max":max }; }
+fn bv_obb_create(center, axes, halfExtents) { return { "type":"obb", "center":center, "axes":axes, "halfExtents":halfExtents }; }
+fn bv_merge(bv, point) {
+    if (bv["type"] == "aabb") {
+        if (point[0] < bv["min"][0]) { bv["min"][0] = point[0]; }
+        if (point[1] < bv["min"][1]) { bv["min"][1] = point[1]; }
+        if (point[2] < bv["min"][2]) { bv["min"][2] = point[2]; }
+        if (point[0] > bv["max"][0]) { bv["max"][0] = point[0]; }
+        if (point[1] > bv["max"][1]) { bv["max"][1] = point[1]; }
+        if (point[2] > bv["max"][2]) { bv["max"][2] = point[2]; }
+    }
+}
+fn bv_transform(bv, matrix) {
+    if (bv["type"] == "sphere") {
+        let c = mat4_mul_vec3(matrix, bv["center"]);
+        let s = v3_length(mat4_mul_vec3(matrix, [bv["radius"], 0.0, 0.0]));
+        return bv_sphere_create(c, s);
+    }
+    if (bv["type"] == "aabb") {
+        let corners = [[bv["min"][0], bv["min"][1], bv["min"][2]],
+                       [bv["max"][0], bv["min"][1], bv["min"][2]],
+                       [bv["min"][0], bv["max"][1], bv["min"][2]],
+                       [bv["min"][0], bv["min"][1], bv["max"][2]],
+                       [bv["max"][0], bv["max"][1], bv["min"][2]],
+                       [bv["max"][0], bv["min"][1], bv["max"][2]],
+                       [bv["min"][0], bv["max"][1], bv["max"][2]],
+                       [bv["max"][0], bv["max"][1], bv["max"][2]]];
+        let newMin = mat4_mul_vec3(matrix, corners[0]);
+        let newMax = newMin;
+        let i = 1;
+        while (i < 8) {
+            let tc = mat4_mul_vec3(matrix, corners[i]);
+            if (tc[0] < newMin[0]) { newMin[0] = tc[0]; }
+            if (tc[1] < newMin[1]) { newMin[1] = tc[1]; }
+            if (tc[2] < newMin[2]) { newMin[2] = tc[2]; }
+            if (tc[0] > newMax[0]) { newMax[0] = tc[0]; }
+            if (tc[1] > newMax[1]) { newMax[1] = tc[1]; }
+            if (tc[2] > newMax[2]) { newMax[2] = tc[2]; }
+            i = i + 1;
+        }
+        return bv_aabb_create(newMin, newMax);
+    }
+    return bv;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 12: Frustum / Projection (5 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn frustum_from_matrix(vp) {
+    let planes = [];
+    push(planes, [vp[3]+vp[0], vp[7]+vp[4], vp[11]+vp[8], vp[15]+vp[12]]);
+    push(planes, [vp[3]-vp[0], vp[7]-vp[4], vp[11]-vp[8], vp[15]-vp[12]]);
+    push(planes, [vp[3]+vp[1], vp[7]+vp[5], vp[11]+vp[9], vp[15]+vp[13]]);
+    push(planes, [vp[3]-vp[1], vp[7]-vp[5], vp[11]-vp[9], vp[15]-vp[13]]);
+    push(planes, [vp[3]+vp[2], vp[7]+vp[6], vp[11]+vp[10], vp[15]+vp[14]]);
+    push(planes, [vp[3]-vp[2], vp[7]-vp[6], vp[11]-vp[10], vp[15]-vp[14]]);
+    let i = 0;
+    while (i < 6) {
+        let p = planes[i];
+        let l = math_sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+        if (l > 0.0) { planes[i] = [p[0]/l, p[1]/l, p[2]/l, p[3]/l]; }
+        i = i + 1;
+    }
+    return planes;
+}
+
+fn frustum_plane_distance(plane, point) {
+    return plane[0]*point[0] + plane[1]*point[1] + plane[2]*point[2] + plane[3];
+}
+
+fn frustum_contains_point(planes, point) {
+    let i = 0;
+    while (i < 6) {
+        let d = frustum_plane_distance(planes[i], point);
+        if (d < 0.0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn frustum_contains_sphere(planes, center, radius) {
+    let i = 0;
+    while (i < 6) {
+        let d = frustum_plane_distance(planes[i], center);
+        if (d < -radius) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn project_3d_to_2d(point, vpMatrix, screenWidth, screenHeight) {
+    let clip = mat4_mul_vec4(vpMatrix, [point[0], point[1], point[2], 1.0]);
+    if (clip[3] == 0.0) { return [0.0, 0.0]; }
+    let ndcX = clip[0] / clip[3];
+    let ndcY = clip[1] / clip[3];
+    return [(ndcX + 1.0) * 0.5 * screenWidth, (1.0 - ndcY) * 0.5 * screenHeight];
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 13: Interpolation / Easing (8 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn lerp(a, b, t) { return a + (b - a) * t; }
+fn lerp_angle(a, b, t) {
+    let diff = b - a;
+    while (diff > MATH_PI) { diff = diff - 2.0 * MATH_PI; }
+    while (diff < -MATH_PI) { diff = diff + 2.0 * MATH_PI; }
+    return a + diff * t;
+}
+fn inverse_lerp(a, b, value) {
+    if (a == b) { return 0.0; }
+    return (value - a) / (b - a);
+}
+fn smoothstep(edge0, edge1, x) {
+    let t = (x - edge0) / (edge1 - edge0);
+    if (t < 0.0) { t = 0.0; }
+    if (t > 1.0) { t = 1.0; }
+    return t * t * (3.0 - 2.0 * t);
+}
+fn smootherstep(edge0, edge1, x) {
+    let t = (x - edge0) / (edge1 - edge0);
+    if (t < 0.0) { t = 0.0; }
+    if (t > 1.0) { t = 1.0; }
+    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+}
+fn remap(value, fromA, fromB, toA, toB) {
+    let t = (value - fromA) / (fromB - fromA);
+    return toA + (toB - toA) * t;
+}
+fn ping_pong(t, length) {
+    let q = math_fmod(t, length * 2.0) / length;
+    if (q > 1.0) { return 2.0 - q; }
+    return q;
+}
+fn move_towards(current, target, maxDelta) {
+    let diff = target - current;
+    if (diff < 0.0) { diff = -diff; }
+    if (diff <= maxDelta) { return target; }
+    if (current < target) { return current + maxDelta; }
+    return current - maxDelta;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 14: Spline / Path (5 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn spline_create() { return { "points":[], "closed":false }; }
+fn spline_add_point(spline, point) { push(spline["points"], point); }
+fn spline_get_point(spline, t) {
+    let pts = spline["points"];
+    let n = len(pts);
+    if (n == 0) { return [0.0, 0.0, 0.0]; }
+    if (n == 1) { return pts[0]; }
+    if (n == 2) { return v3_lerp(pts[0], pts[1], t); }
+    let segCount = n;
+    if (spline["closed"] == false) { segCount = n - 1; }
+    let segF = t * segCount;
+    let seg = math_floor(segF);
+    if (seg >= segCount) { seg = segCount - 1; }
+    let localT = segF - seg;
+    let i0 = seg;
+    if (i0 >= n) { i0 = n - 1; }
+    let i1 = seg + 1;
+    if (i1 >= n) { i1 = n - 1; }
+    let i2 = seg + 2;
+    if (i2 >= n) { i2 = n - 1; }
+    if (spline["closed"]) {
+        if (i0 >= n) { i0 = i0 - n; }
+        if (i1 >= n) { i1 = i1 - n; }
+        if (i2 >= n) { i2 = i2 - n; }
+    }
+    let p0 = pts[seg];
+    if (seg > 0) { p0 = pts[seg - 1]; }
+    let p3 = pts[i2];
+    return curve_catmull_rom(p0, pts[i0], pts[i1], p3, localT);
+}
+fn spline_get_length(spline, samples) {
+    let total = 0.0;
+    let prev = spline_get_point(spline, 0.0);
+    let i = 1;
+    while (i <= samples) {
+        let t = i / samples;
+        let curr = spline_get_point(spline, t);
+        total = total + v3_distance(prev, curr);
+        prev = curr;
+        i = i + 1;
+    }
+    return total;
+}
+fn spline_get_closest_point(spline, point, samples) {
+    let bestDist = 999999.0;
+    let bestT = 0.0;
+    let i = 0;
+    while (i <= samples) {
+        let t = i / samples;
+        let p = spline_get_point(spline, t);
+        let d = v3_distance(p, point);
+        if (d < bestDist) { bestDist = d; bestT = t; }
+        i = i + 1;
+    }
+    return bestT;
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# SECTION 15: Tone Mapping / Post-Processing (5 functions)
+# ═══════════════════════════════════════════════════════════════════
+fn tonemap_reinhard(color) {
+    return [color[0]/(1.0+color[0]), color[1]/(1.0+color[1]), color[2]/(1.0+color[2])];
+}
+fn tonemap_aces(color) {
+    let a = 2.51;
+    let b = 0.03;
+    let c = 2.43;
+    let d = 0.59;
+    let e = 0.14;
+    let r = (color[0]*(a*color[0]+b))/(color[0]*(c*color[0]+d)+e);
+    let g = (color[1]*(a*color[1]+b))/(color[1]*(c*color[1]+d)+e);
+    let bl = (color[2]*(a*color[2]+b))/(color[2]*(c*color[2]+d)+e);
+    if (r < 0.0) { r = 0.0; }
+    if (r > 1.0) { r = 1.0; }
+    if (g < 0.0) { g = 0.0; }
+    if (g > 1.0) { g = 1.0; }
+    if (bl < 0.0) { bl = 0.0; }
+    if (bl > 1.0) { bl = 1.0; }
+    return [r, g, bl];
+}
+fn tonemap_filmic(color) {
+    let r = color[0] * 6.2 + 0.5;
+    let g = color[1] * 6.2 + 0.5;
+    let b = color[2] * 6.2 + 0.5;
+    r = r * r * 2.4 / (r * r + 1.7) - 0.6;
+    g = g * g * 2.4 / (g * g + 1.7) - 0.6;
+    b = b * b * 2.4 / (b * b + 1.7) - 0.6;
+    if (r < 0.0) { r = 0.0; }
+    if (r > 1.0) { r = 1.0; }
+    if (g < 0.0) { g = 0.0; }
+    if (g > 1.0) { g = 1.0; }
+    if (b < 0.0) { b = 0.0; }
+    if (b > 1.0) { b = 1.0; }
+    return [r, g, b];
+}
+fn srgb_to_linear(c) {
+    let r = c[0];
+    if (r <= 0.04045) { r = r / 12.92; } else { r = math_pow((r + 0.055) / 1.055, 2.4); }
+    let g = c[1];
+    if (g <= 0.04045) { g = g / 12.92; } else { g = math_pow((g + 0.055) / 1.055, 2.4); }
+    let b = c[2];
+    if (b <= 0.04045) { b = b / 12.92; } else { b = math_pow((b + 0.055) / 1.055, 2.4); }
+    return [r, g, b];
+}
+fn linear_to_srgb(c) {
+    let r = c[0];
+    if (r <= 0.0031308) { r = r * 12.92; } else { r = 1.055 * math_pow(r, 1.0/2.4) - 0.055; }
+    let g = c[1];
+    if (g <= 0.0031308) { g = g * 12.92; } else { g = 1.055 * math_pow(g, 1.0/2.4) - 0.055; }
+    let b = c[2];
+    if (b <= 0.0031308) { b = b * 12.92; } else { b = 1.055 * math_pow(b, 1.0/2.4) - 0.055; }
+    return [r, g, b];
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# Library Summary
+# ═══════════════════════════════════════════════════════════════════
+fn d3_advanced_summary() {
+    print("═══ H# 3D Advanced Library v1.0 ═══");
+    print("150+ Advanced 3D Programming Methods");
+    print("");
+    print("1. Vector Math: vec2/vec3/vec4 — 35 functions");
+    print("   add, sub, mul, div, dot, cross, length, normalize,");
+    print("   lerp, distance, angle, reflect, refract, rotate, clamp");
+    print("");
+    print("2. Matrix Math: mat3/mat4 — 25 functions");
+    print("   identity, mul, transpose, inverse, determinant,");
+    print("   scale, rotate, translate, perspective, ortho, look_at");
+    print("");
+    print("3. Quaternion Math — 15 functions");
+    print("   slerp, nlerp, from_axis_angle, from_euler, to_euler,");
+    print("   look_rotation, from_to, rotate_vector");
+    print("");
+    print("4. 3D Primitives — 20 functions");
+    print("   cube, sphere, cylinder, cone, torus, plane, icosahedron,");
+    print("   tetrahedron, octahedron, capsule, pyramid, quad, triangle, grid");
+    print("");
+    print("5. Camera — 10 functions");
+    print("   view_matrix, projection_matrix, world_to_screen,");
+    print("   orbit, fps_move, frustum_planes");
+    print("");
+    print("6. Lighting/Color — 15 functions");
+    print("   hsv_to_rgb, rgb_to_hsv, gamma, grayscale, invert,");
+    print("   ambient, directional, point, spot, attenuation");
+    print("");
+    print("7. Ray Casting — 15 functions");
+    print("   sphere, plane, triangle, aabb, mesh intersection,");
+    print("   barycentric, point_in_triangle");
+    print("");
+    print("8. Curves — 10 functions");
+    print("   bezier, catmull_rom, hermite, circle, ellipse,");
+    print("   spiral, helix, lissajous");
+    print("");
+    print("9. Noise — 8 functions");
+    print("   perlin_2d, perlin_3d, value_2d, fbm_2d, turbulence_2d");
+    print("");
+    print("10. Particle System — 8 functions");
+    print("    create, update, gravity, wind, drag, reset");
+    print("");
+    print("11. Bounding Volumes — 5 functions");
+    print("    sphere, aabb, obb, merge, transform");
+    print("");
+    print("12. Frustum/Projection — 5 functions");
+    print("    from_matrix, contains_point, contains_sphere, 3d_to_2d");
+    print("");
+    print("13. Interpolation/Easing — 8 functions");
+    print("    lerp, smoothstep, remap, ping_pong, move_towards");
+    print("");
+    print("14. Spline/Path — 5 functions");
+    print("    create, add_point, get_point, length, closest_point");
+    print("");
+    print("15. Tone Mapping — 5 functions");
+    print("    reinhard, aces, filmic, srgb_to_linear, linear_to_srgb");
+    print("");
+    print("Total: 150+ functions");
+}
+
+print("H# 3D Advanced Library v1.0 loaded — 150+ functions ready");

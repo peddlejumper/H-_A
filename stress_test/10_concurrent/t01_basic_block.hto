@@ -1,0 +1,8 @@
+# t01_basic_block.hto
+# concurrent {} 基本块 —— 块内无 parallel 任务，仅顺序语句。
+# 预期：CONCURRENT_ENTER/EXIT 正常配对，块正常结束，打印 1 / 2 / done。
+concurrent {
+    print(1);
+    print(2);
+}
+print("done");

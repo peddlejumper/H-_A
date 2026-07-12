@@ -1,0 +1,5 @@
+# test06: number boundary - zero
+let a = 0;
+let b = 0.0;
+print(a);
+print(b);

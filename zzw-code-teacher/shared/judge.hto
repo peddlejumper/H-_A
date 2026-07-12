@@ -1,0 +1,158 @@
+# shared/judge.hto
+# 评测引擎
+# 流程: 把学员代码 + 模板拼成完整源码 -> 写临时文件
+#       -> 用 hsvm 解释器跑 -> 收集 stdout/stderr/time
+#       -> 跟 expected 对比
+
+# ============= 单测评测 =============
+
+# 评测单组样本
+# 返回: {"status": ..., "stdout": ..., "stderr": ..., "time_ms": ...}
+fn judge_one(source, stdin, expected, time_limit_ms) {
+    # 1. 写学员源码到临时文件
+    let tmp_dir = "./data/uploads";
+    if (not fs_exists(tmp_dir)) {
+        fs_mkdir(tmp_dir);
+    }
+    let sub_id = "judge_" + str(time_now()) + "_" + str(rand_int(1000, 9999));
+    let src_path = fs_join_path(tmp_dir, sub_id + ".hto");
+    let in_path = fs_join_path(tmp_dir, sub_id + ".in");
+    let out_path = fs_join_path(tmp_dir, sub_id + ".out");
+    let err_path = fs_join_path(tmp_dir, sub_id + ".err");
+    write_file(src_path, source);
+    write_file(in_path, stdin);
+    # 2. 拼命令:hsvm --time <src> < <in> > <out> 2> <err>
+    let hsvm_path = "./hsvm";
+    let cmd = hsvm_path + " " + src_path + " < " + in_path + " > " + out_path + " 2> " + err_path;
+    # 3. 计时
+    let t0 = time_now();
+    let rc = sys_run(cmd, time_limit_ms);
+    let t1 = time_now();
+    let dt = t1 - t0;
+    # 4. 读输出
+    let actual = "";
+    if (fs_exists(out_path)) {
+        actual = read_file(out_path);
+    }
+    let err = "";
+    if (fs_exists(err_path)) {
+        err = read_file(err_path);
+    }
+    let result = {
+        "status": "accepted",
+        "stdout": actual,
+        "stderr": err,
+        "time_ms": dt,
+        "exit_code": rc
+    };
+    if (dt > time_limit_ms) {
+        result["status"] = "time_limit";
+        return result;
+    }
+    if (rc != 0) {
+        result["status"] = "runtime_error";
+        return result;
+    }
+    if (not _output_match(actual, expected)) {
+        result["status"] = "wrong_answer";
+    }
+    return result;
+}
+
+# 输出对比(忽略尾部空白)
+fn _output_match(actual, expected) {
+    if (actual == nullptr) {
+        actual = "";
+    }
+    if (expected == nullptr) {
+        expected = "";
+    }
+    return _trim_trailing(actual) == _trim_trailing(expected);
+}
+
+fn _trim_trailing(s) {
+    let n = len(s);
+    while (n > 0 and (s[n-1] == "\n" or s[n-1] == " " or s[n-1] == "\r" or s[n-1] == "\t")) {
+        n = n - 1;
+    }
+    return substring(s, 0, n);
+}
+
+# ============= 整题评测 =============
+
+# 对单个提交跑完所有测试用例
+# submission: 已填好 user_id / problem_id / code 的对象
+# 返回: 更新过的 submission
+fn judge_submission(submission, problem, judge_cfg) {
+    if (judge_cfg == nullptr) {
+        judge_cfg = {
+            "time_limit_ms": 2000,
+            "memory_limit_kb": 65536,
+            "hsvm_path": "./hsvm"
+        };
+    }
+    # 1. 拼接完整源码(学员代码 + 模板后置) + 自动注入 stdlib
+    let prelude = _judge_prelude();
+    let source = prelude + "\n" + submission["code"];
+    # 仅当学员代码未定义 solve() 时,才追加模板(避免重复定义)
+    if ("template" in problem and problem["template"] != "" and problem["template"] != nullptr
+            and str_index_of(submission["code"], "fn solve") == -1) {
+        source = source + "\n" + problem["template"];
+    }
+    # 2. 遍历所有测试用例(包括隐藏的)
+    let cases = problem["test_cases"];
+    let total = len(cases);
+    let passed = 0;
+    let max_time = 0;
+    let first_fail = nullptr;
+    let i = 0;
+    while (i < total) {
+        let tc = cases[i];
+        let r = judge_one(source, tc["input"], tc["output"], judge_cfg["time_limit_ms"]);
+        if (r["time_ms"] > max_time) {
+            max_time = r["time_ms"];
+        }
+        if (r["status"] == "accepted") {
+            passed = passed + 1;
+        } else {
+            if (first_fail == nullptr) {
+                first_fail = r;
+            }
+        }
+        i = i + 1;
+    }
+    # 3. 汇总
+    submission["total"] = total;
+    submission["passed"] = passed;
+    submission["time_ms"] = max_time;
+    submission["stdout"] = "";
+    submission["stderr"] = "";
+    if (passed == total and total > 0) {
+        submission["status"] = "accepted";
+        submission["score"] = 100;
+    } else if (first_fail != nullptr) {
+        submission["status"] = first_fail["status"];
+        submission["stdout"] = first_fail["stdout"];
+        submission["stderr"] = first_fail["stderr"];
+        submission["score"] = int((passed * 100) / total);
+    } else {
+        submission["status"] = "error";
+        submission["score"] = 0;
+    }
+    submission["finished_at"] = time_now();
+    return submission;
+}
+
+# ============= sys_run =============
+# 实际执行子进程由 host_functions.py 的 builtin_sys_run 实现
+
+# ============= Stdlib prelude (for judged code) =============
+# 把 shared/*.hto 中常用的工具函数内联进评测源码,
+# 这样学员代码可以直接使用 str_split / str_trim 等,不需要自己 import。
+fn _judge_prelude() {
+    let out = "";
+    if (fs_exists("./shared/string_utils.hto")) {
+        out = out + read_file("./shared/string_utils.hto") + "\n";
+    }
+    return out;
+}

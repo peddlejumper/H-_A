@@ -1,0 +1,112 @@
+# T74 - async/await 与 HFuture 全面压力测试
+# H# v0.4.1: async fn 是单线程 eagerly resolved 糖，await 是同步 unwrap。
+# 预期输出在每条 print 后的注释里。
+
+# ---------- T74-01: 基本 async fn 定义与 await (返回数字) ----------
+async fn fetch(url) {
+    return 42;
+}
+let v1 = await fetch("http://example.com");
+print(fmt("T74-01: {0}", v1));              # T74-01: 42
+
+# ---------- T74-02: 顶层 await ----------
+async fn topLevel() {
+    return "top-ok";
+}
+print(fmt("T74-02: {0}", await topLevel()));  # T74-02: top-ok
+
+# ---------- T74-03: async fn 返回字符串/列表/字典 ----------
+async fn retStr() { return "hello"; }
+async fn retList() { return [1, 2, 3]; }
+async fn retDict() { return {"x": 10, "y": 20}; }
+print(fmt("T74-03a: {0}", await retStr()));   # T74-03a: hello
+print(fmt("T74-03b: {0}", await retList()));  # T74-03b: [1, 2, 3]
+print(fmt("T74-03c: {0}", await retDict()));  # T74-03c: {x=10, y=20}
+
+# ---------- T74-04: 嵌套 await: await async_fn() ----------
+async fn inner() { return 7; }
+async fn outer() {
+    return await inner();
+}
+print(fmt("T74-04: {0}", await outer()));     # T74-04: 7
+
+# ---------- T74-05: await 表达式: await f() + 1 ----------
+async fn six() { return 6; }
+print(fmt("T74-05: {0}", await six() + 1));   # T74-05: 7
+
+# ---------- T74-06: async fn 中调用普通 fn ----------
+fn double(x) { return x * 2; }
+async fn usePlain() {
+    return double(21);
+}
+print(fmt("T74-06: {0}", await usePlain()));  # T74-06: 42
+
+# ---------- T74-07: async fn 中调用 async fn 并 await ----------
+async fn baseVal() { return 100; }
+async fn combine() {
+    let b = await baseVal();
+    return b + 5;
+}
+print(fmt("T74-07: {0}", await combine()));   # T74-07: 105
+
+# ---------- T74-08: async fn 抛异常 (throw) ----------
+async fn asyncThrow(n) {
+    if (n < 0) { throw "neg!"; }
+    return n;
+}
+let r8 = "no-throw";
+try {
+    r8 = await asyncThrow(-5);
+} catch (e) {
+    r8 = "caught:" + e;
+}
+print(fmt("T74-08a: {0}", r8));               # T74-08a: caught:neg!
+print(fmt("T74-08b: {0}", await asyncThrow(9)));  # T74-08b: 9
+
+# ---------- T74-09: HFuture 对象: 打印 + type ----------
+async fn makeFuture() { return "fval"; }
+let fut = makeFuture();
+print(fmt("T74-09a: {0}", fut));              # T74-09a: <future>
+print(fmt("T74-09b: {0}", type(fut)));        # T74-09b: future
+print(fmt("T74-09c: {0}", await fut));        # T74-09c: fval
+
+# ---------- T74-10: async fn 无 return (返回 null) ----------
+async fn noReturn() {
+    let x = 1 + 1;
+}
+print(fmt("T74-10: {0}", await noReturn()));  # T74-10: null
+
+# ---------- T74-11: async fn 作为参数 (高阶) + 返回 Future 列表 ----------
+async fn one() { return 1; }
+async fn two() { return 2; }
+fn runF(f) { return f(); }
+print(fmt("T74-11a: {0}", await runF(one)));  # T74-11a: 1
+async fn all() {
+    return [one(), two()];
+}
+let fs = await all();
+print(fmt("T74-11b: {0}", len(fs)));          # T74-11b: 2
+print(fmt("T74-11c: {0}", await fs[0]));      # T74-11c: 1
+print(fmt("T74-11d: {0}", await fs[1]));      # T74-11d: 2
+
+# ---------- T74-12: await 在 for 循环 + 递归 + 闭包捕获 ----------
+let urls = ["a", "b", "c"];
+async fn fetchUrl(u) { return "data-" + u; }
+let acc = "";
+for u in urls {
+    acc = acc + await fetchUrl(u) + ",";
+}
+print(fmt("T74-12a: {0}", acc));              # T74-12a: data-a,data-b,data-c,
+
+let factor = 10;
+async fn fact(n) {
+    if (n <= 1) { return 1; }
+    return n * await fact(n - 1);
+}
+print(fmt("T74-12b: {0}", await fact(5)));    # T74-12b: 120
+print(fmt("T74-12c: {0}", await fact(0)));    # T74-12c: 1
+
+async fn useClosure(x) {
+    return x + factor;
+}
+print(fmt("T74-12d: {0}", await useClosure(5)));  # T74-12d: 15

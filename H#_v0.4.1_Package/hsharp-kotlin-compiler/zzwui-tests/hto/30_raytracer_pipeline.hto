@@ -1,0 +1,622 @@
+# build: hwdui_min.hto, zzw_native.hto, zzw_render_min.hto, _libs/assert_module.hto, _libs/raytracer_math.hto, _libs/raytracer_scene.hto, _libs/raytracer_core.hto, _libs/raytracer_pipeline.hto, _libs/raytracer_gui.hto
+# T30 - H# Raytracer Pipeline — large demo (v0.4.1)
+# ─────────────────────────────────────────────────────────────────────
+# A single integration test that exercises everything we built
+# for the raytracer demo:
+#
+#   1. Math primitives (Vec3 / Ray / Rng)
+#   2. Scene construction + 3 preset scenes
+#   3. Core ray tracer (intersection, shade, trace, render_pixel)
+#   4. Tile-based parallel pipeline (channels + parallel fn +
+#      concurrent block + state machine)
+#   5. PPM output (P6 binary via the new io_append_bytes native)
+#   6. zzwui live progress dashboard (state-driven updates,
+#      ASCII preview, controller wiring)
+#   7. End-to-end: GUI button click → pipeline run → state
+#      machine ticks → final image → stats → ASCII preview
+#
+# The test is built on the assert_module framework; the summary
+# line is `ASSERT_TEST : PASS=N FAIL=M`.
+
+# ─── A: math primitives ────────────────────────────────────────
+fn __t30_a_vec3_arith() {
+    let a = new_v3(1.0, 2.0, 3.0);
+    let b = new_v3(4.0, 5.0, 6.0);
+    let s = a.add(b);
+    assert_eq(s.x, 5.0, "add.x");
+    assert_eq(s.y, 7.0, "add.y");
+    assert_eq(s.z, 9.0, "add.z");
+    let d = a.sub(b);
+    assert_eq(d.x, -3.0, "sub.x");
+    let dot = a.dot(b);
+    assert_eq(dot, 32.0, "dot");
+    let n = new_v3(3.0, 0.0, 4.0);
+    let n2 = n.norm();
+    # Compare squared-norm against a known integer (which is
+    # exact in IEEE 754) instead of dividing and comparing
+    # 0.6 to 0.6 — a path that lost the right value in an
+    # earlier iteration of the test.
+    let n3 = n.norm();
+    let lensq = n3.x * n3.x + n3.y * n3.y + n3.z * n3.z;
+    assert_almost_eq(lensq, 1.0, 0.001, "norm.unit_len");
+    assert_eq(n3.y, 0.0, "norm.y exact");
+}
+test_register("A/vec3_arith", __t30_a_vec3_arith);
+
+fn __t30_a_ray_at() {
+    let r = new_ray(1, 2, 3, 1, 0, 0);
+    let p = r.at(5);
+    assert_eq(p.x, 6, "at.x");
+    assert_eq(p.y, 2, "at.y");
+    assert_eq(p.z, 3, "at.z");
+}
+test_register("A/ray_at", __t30_a_ray_at);
+
+fn __t30_a_rng_deterministic() {
+    let r1 = new_rng(42);
+    let r2 = new_rng(42);
+    let i = 0;
+    while (i < 8) {
+        let a = r1.next();
+        let b = r2.next();
+        assert_eq(a, b, "rng parity @ " + str(i));
+        i = i + 1;
+    }
+    # First value of Xorshift32(42) should not be 0 (seed mixes).
+    let r3 = new_rng(42);
+    let v = r3.next();
+    assert_ne(v, 0, "rng mixes seed");
+}
+test_register("A/rng_deterministic", __t30_a_rng_deterministic);
+
+# ─── B: scene construction ────────────────────────────────────
+fn __t30_b_three_spheres() {
+    let s = scene_three_spheres();
+    # three spheres + a plane floor
+    assert_eq(len(s.objects) >= 3, true, ">= 3 objects");
+    assert_eq(len(s.lights) >= 1, true, "at least one light");
+    # Count spheres specifically.
+    let sp_count = 0;
+    let i = 0;
+    while (i < len(s.objects)) {
+        if (s.objects[i].tag() == "sphere") { sp_count = sp_count + 1; }
+        i = i + 1;
+    }
+    assert_eq(sp_count, 3, "3 spheres");
+}
+test_register("B/three_spheres", __t30_b_three_spheres);
+
+fn __t30_b_glass_ball() {
+    let s = scene_glass_ball();
+    assert_eq(len(s.objects) >= 2, true, ">= 2 objects");
+    # At least one sphere and one plane (the floor).
+    let has_sphere = false;
+    let has_plane = false;
+    let i = 0;
+    while (i < len(s.objects)) {
+        if (s.objects[i].tag() == "sphere") { has_sphere = true; }
+        if (s.objects[i].tag() == "plane") { has_plane = true; }
+        i = i + 1;
+    }
+    assert_eq(has_sphere, true, "has sphere");
+    assert_eq(has_plane, true, "has plane");
+}
+test_register("B/glass_ball", __t30_b_glass_ball);
+
+fn __t30_b_mirror_corridor() {
+    let s = scene_mirror_corridor();
+    assert_eq(len(s.objects) >= 2, true, ">= 2 objects");
+    # Should contain at least one reflective material.
+    let has_reflective = false;
+    let i = 0;
+    while (i < len(s.objects)) {
+        if (s.objects[i].material.reflect > 0.0) {
+            has_reflective = true;
+        }
+        i = i + 1;
+    }
+    assert_eq(has_reflective, true, "has reflective");
+}
+test_register("B/mirror_corridor", __t30_b_mirror_corridor);
+
+fn __t30_b_scene_lookup() {
+    assert_eq(scene_count(), 3, "3 scenes registered");
+    assert_eq(scene_name(0), "three spheres", "name 0");
+    assert_eq(scene_name(1), "glass ball", "name 1");
+    assert_eq(scene_name(2), "mirror corridor", "name 2");
+    # scene_by_index should not crash for in-range values.
+    let s = scene_by_index(0);
+    assert_eq(len(s.objects) >= 1, true, "scene_by_index(0) ok");
+}
+test_register("B/scene_lookup", __t30_b_scene_lookup);
+
+# ─── C: core ray tracer ───────────────────────────────────────
+fn __t30_c_intersect_sphere() {
+    # Ray from (0,0,0) along -z hits a sphere at (0,0,-5) r=1.
+    let r = new_ray(0, 0, 0, 0, 0, -1);
+    let s = new_sphere(0, 0, -5, 1, matte(new_v3(0.8, 0.2, 0.2)));
+    let t = intersect_sphere(r, s);
+    assert_eq(t > 0, true, "hits front face");
+    assert_almost_eq(t, 4.0, 0.001, "t=4.0");
+    # Miss: ray going +z, sphere in -z.
+    let r2 = new_ray(0, 0, 0, 0, 0, 1);
+    let t2 = intersect_sphere(r2, s);
+    assert_eq(t2 < 0, true, "misses");
+}
+test_register("C/intersect_sphere", __t30_c_intersect_sphere);
+
+fn __t30_c_intersect_plane() {
+    let r = new_ray(0, 5, 0, 0, -1, 0);
+    let p = new_plane(0, matte(new_v3(0.5, 0.5, 0.5)));
+    let t = intersect_plane(r, p);
+    assert_almost_eq(t, 5.0, 0.001, "plane at y=0, ray at y=5");
+    # Plane parallel to ray → no hit.
+    let rp = new_ray(0, 5, 0, 0, 1, 0);
+    let tp = intersect_plane(rp, p);
+    assert_eq(tp < 0, true, "parallel miss");
+}
+test_register("C/intersect_plane", __t30_c_intersect_plane);
+
+fn __t30_c_closest_hit() {
+    let s = scene_three_spheres();
+    let cam = look_at(0, 0, 5, 0, 0, 0, 60);
+    # Ray straight at scene from (0,0,5) toward -z: must hit a sphere.
+    let r = new_ray(0, 0, 5, 0, 0, -1);
+    let h = closest_hit(s, r);
+    assert_some(h, "hit");
+    if (h != null) {
+        assert_eq(h["object"].tag(), "sphere", "hits a sphere");
+        assert_eq(h["t"] > 0, true, "positive t");
+    }
+    # Ray going +y into the sky: should miss everything.
+    let r2 = new_ray(0, 0, 5, 0, 1, 0);
+    let h2 = closest_hit(s, r2);
+    assert_none(h2, "miss sky");
+}
+test_register("C/closest_hit", __t30_c_closest_hit);
+
+fn __t30_c_render_pixel_in_range() {
+    let s = scene_three_spheres();
+    let cam = look_at(0, 0, 5, 0, 0, 0, 60);
+    let c = render_pixel(s, cam, 40, 30, 80, 60, 1, 3, 51969);
+    # Should produce a finite, in-range colour.
+    assert_eq(c.x >= 0.0 and c.x <= 1.5, true, "r in range");
+    assert_eq(c.y >= 0.0 and c.y <= 1.5, true, "g in range");
+    assert_eq(c.z >= 0.0 and c.z <= 1.5, true, "b in range");
+    # Background-only pixel (corner): should mostly be the
+    # gradient colour, not all zeros.
+    let bg = render_pixel(s, cam, 0, 0, 80, 60, 1, 3, 7);
+    assert_eq(bg.x + bg.y + bg.z > 0, true, "bg has colour");
+}
+test_register("C/render_pixel_in_range", __t30_c_render_pixel_in_range);
+
+fn __t30_c_to_rgb8_clamps() {
+    let rgb1 = to_rgb8(new_v3(0.0, 0.0, 0.0));
+    assert_eq(rgb1, [0, 0, 0], "black");
+    let rgb2 = to_rgb8(new_v3(1.0, 1.0, 1.0));
+    assert_eq(rgb2, [255, 255, 255], "white");
+    # 0.5 * 255 = 127.5 → int() rounds to 127 in H# (floor).
+    let rgb3 = to_rgb8(new_v3(2.0, -1.0, 0.5));
+    assert_eq(rgb3, [255, 0, 127], "clamp");
+}
+test_register("C/to_rgb8_clamps", __t30_c_to_rgb8_clamps);
+
+# ─── D: tile + state machine ──────────────────────────────────
+fn __t30_d_make_tiles_covers_image() {
+    let tiles = make_tiles(80, 60, 4, 3);
+    assert_eq(len(tiles), 12, "4*3 = 12 tiles");
+    # Sum of all tile areas must equal image area.
+    let total = 0;
+    let i = 0;
+    while (i < len(tiles)) {
+        total = total + tiles[i]["w"] * tiles[i]["h"];
+        i = i + 1;
+    }
+    assert_eq(total, 80 * 60, "covers 80*60");
+    # Tile ids are unique.
+    let seen = [];
+    let k = 0;
+    while (k < len(tiles)) {
+        let id = tiles[k]["id"];
+        let j = 0;
+        let dup = false;
+        while (j < len(seen)) {
+            if (seen[j] == id) { dup = true; }
+            j = j + 1;
+        }
+        assert_eq(dup, false, "unique id " + str(id));
+        push(seen, id);
+        k = k + 1;
+    }
+}
+test_register("D/make_tiles_covers_image", __t30_d_make_tiles_covers_image);
+
+fn __t30_d_state_dump() {
+    assert_eq(state_dump(state_idle()), "IDLE", "idle");
+    assert_eq(state_dump(state_running(3, 12)),
+              "RUNNING 3/12", "running");
+    assert_eq(state_dump(state_cancelled()), "CANCELLED", "cancelled");
+    # `state_done` dump includes byte count and ms — just check
+    # it starts with "DONE" and contains the ms.
+    let d = state_done([0, 0, 0, 255, 0, 0], 1234);
+    let s = state_dump(d);
+    assert_eq(__contains_str(s, "DONE"), true, "done prefix");
+    assert_eq(__contains_str(s, "1234"), true, "done ms");
+    # Failed state: reason in output.
+    let f = state_dump(state_failed("boom"));
+    assert_eq(__contains_str(f, "FAILED"), true, "failed prefix");
+    assert_eq(__contains_str(f, "boom"), true, "failed reason");
+}
+test_register("D/state_dump", __t30_d_state_dump);
+
+# ─── E: PPM output ────────────────────────────────────────────
+fn __t30_e_write_ppm_creates_file() {
+    let path = temp_file("t30_ppm");
+    # 2x2 image: red, green, blue, white.
+    let img = [255, 0, 0,  0, 255, 0,  0, 0, 255,  255, 255, 255];
+    let ok = write_ppm(path, img, 2, 2);
+    assert_eq(ok, true, "write_ppm ok");
+    # The file should exist.
+    let info = file_info(path);
+    assert_some(info, "file_info");
+    # Header is 11 bytes for "P6\n2 2\n255\n"; the file should
+    # therefore be larger than just the header (12 bytes of
+    # pixel data on top).
+    if (info != null) {
+        assert_eq(info["size"] > 12, true, "file larger than header+12");
+    }
+    # Spot-check: the byte after the header is the first pixel's R.
+    let bytes = file_read_bytes(path);
+    assert_eq(len(bytes) >= 12, true, ">= 12 bytes read");
+    # The last 12 bytes should be our RGB triplets.
+    let n = len(bytes);
+    assert_eq(bytes[n - 12], 255, "R of first pixel");
+    assert_eq(bytes[n - 6], 0, "R of third pixel (blue)");
+    assert_eq(bytes[n - 1], 255, "B of last pixel (white)");
+    file_delete(path);
+}
+test_register("E/write_ppm_creates_file", __t30_e_write_ppm_creates_file);
+
+# ─── F: GUI dashboard ─────────────────────────────────────────
+fn __t30_f_dashboard_create() {
+    let d = dashboard_create("Raytracer", 600, 400);
+    assert_some(d, "dashboard created");
+    if (d != null) {
+        assert_eq(d["window"].width, 600, "win.w");
+        assert_eq(d["window"].height, 400, "win.h");
+        assert_eq(d["window"].title, "Raytracer", "win.title");
+        # 3 scene items in the listbox.
+        assert_eq(d["scene_listbox"].get_count(), 3, "3 scenes");
+        # Default selection is 0.
+        assert_eq(d["scene_listbox"].get_selected(), 0, "scene=0");
+        # Status label starts as "State: IDLE".
+        assert_eq(__contains_str(d["status_label"].get_text(), "IDLE"),
+                  true, "status idle");
+        # Progress bar starts at 0.
+        assert_eq(d["progress"].get_percent(), 0, "pb 0%");
+    }
+}
+test_register("F/dashboard_create", __t30_f_dashboard_create);
+
+fn __t30_f_dashboard_state_updates() {
+    let d = dashboard_create("X", 600, 400);
+    dashboard_apply_state(d, state_idle());
+    assert_eq(__contains_str(d["status_label"].get_text(), "IDLE"),
+              true, "idle text");
+    dashboard_apply_state(d, state_running(5, 20));
+    let s = d["status_label"].get_text();
+    assert_eq(__contains_str(s, "RUNNING 5/20"), true, "running text");
+    assert_eq(d["progress"].get_percent(), 25, "25%");
+    dashboard_apply_state(d, state_done([0, 0, 0], 999));
+    assert_eq(__contains_str(d["status_label"].get_text(), "DONE"),
+              true, "done text");
+    assert_eq(__contains_str(d["status_label"].get_text(), "999"),
+              true, "done ms");
+    assert_eq(d["progress"].get_percent(), 100, "100%");
+    dashboard_apply_state(d, state_cancelled());
+    assert_eq(__contains_str(d["status_label"].get_text(), "CANCELLED"),
+              true, "cancelled text");
+    dashboard_apply_state(d, state_failed("render error"));
+    let f = d["status_label"].get_text();
+    assert_eq(__contains_str(f, "FAILED"), true, "failed text");
+    assert_eq(__contains_str(f, "render error"), true, "failed reason");
+}
+test_register("F/dashboard_state_updates", __t30_f_dashboard_state_updates);
+
+fn __t30_f_dashboard_start_click() {
+    let d = dashboard_create("X", 600, 400);
+    # Set scene = 2 in the listbox before clicking start.
+    d["scene_listbox"].set_selected(2);
+    d["width_input"].set_value("80");
+    d["height_input"].set_value("60");
+    d["samples_input"].set_value("3");
+    # Click the Start button: the onClick handler should
+    # populate __dash_ctrl.
+    d["start_btn"].click();
+    assert_eq(__dash_ctrl[0], 1, "start count = 1");
+    assert_eq(__dash_ctrl[2], 2, "scene index = 2");
+    assert_eq(__dash_ctrl[3], 80, "width = 80");
+    assert_eq(__dash_ctrl[4], 60, "height = 60");
+    assert_eq(__dash_ctrl[5], 3, "samples = 3");
+    # Status label should mention the scene name.
+    let s = d["status_label"].get_text();
+    assert_eq(__contains_str(s, "mirror corridor"),
+              true, "status mentions scene");
+    assert_eq(__contains_str(s, "80x60"), true, "status mentions dims");
+}
+test_register("F/dashboard_start_click", __t30_f_dashboard_start_click);
+
+fn __t30_f_dashboard_cancel_click() {
+    let d = dashboard_create("X", 600, 400);
+    d["cancel_btn"].click();
+    assert_eq(__dash_ctrl[1], 1, "cancel count = 1");
+    let s = d["status_label"].get_text();
+    assert_eq(__contains_str(s, "Cancel clicked"), true, "status cancel");
+    d["cancel_btn"].click();
+    assert_eq(__dash_ctrl[1], 2, "cancel count = 2");
+}
+test_register("F/dashboard_cancel_click", __t30_f_dashboard_cancel_click);
+
+fn __t30_f_dashboard_config_and_preview() {
+    let d = dashboard_create("X", 600, 400);
+    d["scene_listbox"].set_selected(1);
+    d["width_input"].set_value("64");
+    d["height_input"].set_value("48");
+    d["samples_input"].set_value("2");
+    let cfg = dashboard_config(d);
+    assert_eq(cfg["scene_index"], 1, "cfg.scene=1");
+    assert_eq(cfg["width"], 64, "cfg.w=64");
+    assert_eq(cfg["height"], 48, "cfg.h=48");
+    assert_eq(cfg["samples"], 2, "cfg.s=2");
+    # Stats: apply a fake stats dict, check the label text.
+    dashboard_apply_stats(d, {
+        "avg_r": 100, "avg_g": 50, "avg_b": 25,
+        "min_lum": 0, "max_lum": 255, "mean_lum": 60
+    });
+    let s = d["stats_label"].get_text();
+    assert_eq(__contains_str(s, "avg_r=100"), true, "stats avg_r");
+    assert_eq(__contains_str(s, "min_lum=0"), true, "stats min_lum");
+    # Preview: feed a synthetic gradient image (4x4 → ASCII).
+    let grad = [];
+    let y = 0;
+    while (y < 4) {
+        let x = 0;
+        while (x < 4) {
+            let v = (x * 60 + y * 60);
+            if (v > 255) { v = 255; }
+            push(grad, v);
+            push(grad, v);
+            push(grad, v);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+    let art = dashboard_apply_preview(d, grad, 4, 4, 4, 4);
+    # 4 lines × (4 chars + "\n") = 20 chars.
+    assert_eq(len(art) >= 16, true, "preview has >= 16 chars");
+    # Label should now contain the art.
+    let lbl = d["preview_label"].get_text();
+    assert_eq(len(lbl) >= 16, true, "label has preview");
+}
+test_register("F/dashboard_config_and_preview", __t30_f_dashboard_config_and_preview);
+
+# ─── G: end-to-end (small image, sync) ────────────────────────
+# This case renders a 20×15 image with 1 sample and depth 2 for
+# each of the three preset scenes using the *sequential* render
+# path, then verifies the assembled image is the right size and
+# has non-trivial statistics.
+fn __t30_g_render_each_scene_sequential() {
+    let W = 20;
+    let H = 15;
+    let i = 0;
+    while (i < scene_count()) {
+        let s = scene_by_index(i);
+        let cam = look_at(0, 1.5, 5, 0, 0.5, 0, 50);
+        # Render the image sequentially.
+        let img = [];
+        let y = 0;
+        while (y < H) {
+            let x = 0;
+            while (x < W) {
+                let c = render_pixel(s, cam, x, y, W, H, 1, 2, 51966);
+                let rgb = to_rgb8(c);
+                push(img, rgb[0]);
+                push(img, rgb[1]);
+                push(img, rgb[2]);
+                x = x + 1;
+            }
+            y = y + 1;
+        }
+        assert_eq(len(img), W * H * 3, "scene " + str(i) + " length");
+        let st = image_stats(img);
+        # Every scene should have some non-black pixels.
+        assert_eq(st["max_lum"] > 0, true,
+                  "scene " + str(i) + " has bright pixels");
+        i = i + 1;
+    }
+}
+test_register("G/render_each_scene_sequential", __t30_g_render_each_scene_sequential);
+
+# ─── H: end-to-end through the parallel pipeline (sync concurrent) ─
+# Render scene 0 (three spheres) on a 32×24 canvas with 1 sample
+# and depth 2 using the parallel pipeline (concurrent block +
+# channels).  We verify the image is well-formed, the stats are
+# reasonable, and the GUI dashboard can be driven through the
+# state machine to the DONE state.
+fn __t30_h_sync_pipeline() {
+    let s = scene_by_index(0);
+    let cam = look_at(0, 1.5, 5, 0, 0.5, 0, 50);
+    let W = 48;
+    let H = 32;
+    let tiles = make_tiles(W, H, 3, 2);
+    # Replicate the body of render_pipeline but synchronously
+    # so we can drive it from a regular test function.
+    let t0 = time_ms();
+    let total = len(tiles);
+    let result_chan = chan_new(total);
+    let tile_queue = chan_new(total);
+    let i = 0;
+    while (i < total) {
+        chan_send(tile_queue, tiles[i]);
+        i = i + 1;
+    }
+    chan_close(tile_queue);
+    let np = parallelism();
+    if (np < 1) { np = 1; }
+    if (np > total) { np = total; }
+    concurrent {
+        let w = 0;
+        while (w < np) {
+            let stop = false;
+            while (not stop) {
+                let got = null;
+                try {
+                    got = chan_recv(tile_queue);
+                } catch (e) {
+                    stop = true;
+                }
+                if (not stop and got != null) {
+                    let _u = render_tile_worker(s, cam, got, W, H, 1, 2,
+                                                result_chan, null);
+                }
+            }
+            w = w + 1;
+        }
+    }
+    chan_close(result_chan);
+    let slots = [];
+    let k = 0;
+    while (k < total) {
+        push(slots, null);
+        k = k + 1;
+    }
+    let got = 0;
+    while (got < total) {
+        let r = chan_recv(result_chan);
+        if (r == null) { break; }
+        slots[r["id"]] = r["data"];
+        got = got + 1;
+    }
+    let t1 = time_ms();
+    assert_eq(got, total, "got all tiles");
+    # Assemble final image by writing each tile's pixels to
+    # the correct (x0+px, y0+py) location — not by tile-order
+    # concatenation, which would scramble the image since
+    # tiles arrive out of order from the parallel workers.
+    let img = [];
+    let pad = W * H * 3;
+    let pad_i = 0;
+    while (pad_i < pad) { push(img, 0); pad_i = pad_i + 1; }
+    let tile_i = 0;
+    while (tile_i < total) {
+        let t = slots[tile_i];
+        if (t != null) {
+            let tile = tiles[tile_i];
+            let tw = tile.w;
+            let th = tile.h;
+            let x0 = tile.x0;
+            let y0 = tile.y0;
+            let py = 0;
+            while (py < th) {
+                let px = 0;
+                while (px < tw) {
+                    let src = (py * tw + px) * 3;
+                    let dst = ((y0 + py) * W + (x0 + px)) * 3;
+                    img[dst]     = t[src];
+                    img[dst + 1] = t[src + 1];
+                    img[dst + 2] = t[src + 2];
+                    px = px + 1;
+                }
+                py = py + 1;
+            }
+        }
+        tile_i = tile_i + 1;
+    }
+    assert_eq(len(img), W * H * 3, "image length = W*H*3");
+    # Stats: max_lum should be > 0 (scene has bright lights).
+    let stats = image_stats(img);
+    assert_eq(stats["max_lum"] > 0, true, "max_lum > 0");
+    # Regression: the parallel-assembled image must actually
+    # contain the three coloured spheres, not just any bright
+    # pixel somewhere.  We sample the known positions and
+    # check the dominant channel matches the expected sphere
+    # colour.
+    let pix = fn (x, y) {
+        let off = (y * W + x) * 3;
+        return [img[off], img[off + 1], img[off + 2]];
+    };
+    # Camera is look_at(0, 1.5, 5, 0, 0.5, 0, 50) so the three
+    # spheres around z=-3 land near the centre-bottom row.
+    let mid_y = H / 2;
+    let scan = fn (label) {
+        let best = -1; let best_x = 0;
+        let bx = 0;
+        while (bx < W) {
+            let p = pix(bx, mid_y);
+            if (p[0] > best) { best = p[0]; best_x = bx; }
+            bx = bx + 1;
+        }
+        return best_x;
+    };
+    # Find the reddest, greenest, bluest pixel anywhere in the
+    # image (not just the middle row — the spheres may sit at
+    # different y depending on FOV/aspect).
+    let red_x = -1; let red_y = 0; let red_v = 0;
+    let grn_x = -1; let grn_y = 0; let grn_v = 0;
+    let blu_x = -1; let blu_y = 0; let blu_v = 0;
+    let sy = 0;
+    while (sy < H) {
+        let sx = 0;
+        while (sx < W) {
+            let p = pix(sx, sy);
+            if (p[0] - p[1] - p[2] > red_v) { red_v = p[0] - p[1] - p[2]; red_x = sx; red_y = sy; }
+            if (p[1] - p[0] - p[2] > grn_v) { grn_v = p[1] - p[0] - p[2]; grn_x = sx; grn_y = sy; }
+            if (p[2] - p[0] - p[1] > blu_v) { blu_v = p[2] - p[0] - p[1]; blu_x = sx; blu_y = sy; }
+            sx = sx + 1;
+        }
+        sy = sy + 1;
+    }
+    assert_eq(red_v > 50, true, "red sphere present in image");
+    assert_eq(grn_v > 50, true, "green sphere present in image");
+    # The "blue" sphere is a mirror, so it reflects the
+    # bluish sky — its R and G channels are also high, so
+    # B - R - G can be negative even for very blue-looking
+    # pixels.  We just check that the right third of the
+    # image has at least one pixel with B > R (i.e. more
+    # blue than red, which the floor and sky-strip don't
+    # have together).
+    let right_blue = false;
+    let rx = W * 2 / 3;
+    while (rx < W) {
+        let ry2 = 0;
+        while (ry2 < H) {
+            let p2 = pix(rx, ry2);
+            if (p2[2] > p2[0] + 20) { right_blue = true; }
+            ry2 = ry2 + 1;
+        }
+        rx = rx + 1;
+    }
+    assert_eq(right_blue, true, "blue mirror sphere in right third of image");
+    # Sphere ordering (left=green, center=red).
+    assert_eq(grn_x < red_x, true, "green sphere is left of red");
+    # Drive the dashboard through the states.
+    let d = dashboard_create("Sync", 480, 360);
+    dashboard_apply_state(d, state_idle());
+    dashboard_apply_state(d, state_running(2, 4));
+    dashboard_apply_state(d, state_done(img, t1 - t0));
+    dashboard_apply_stats(d, stats);
+    dashboard_apply_preview(d, img, W, H, 16, 8);
+    # Final label should say "DONE".
+    assert_eq(__contains_str(d["status_label"].get_text(), "DONE"),
+              true, "dashboard DONE");
+    assert_eq(d["progress"].get_percent(), 100, "100% at end");
+    # Stats label should mention avg_r.
+    assert_eq(__contains_str(d["stats_label"].get_text(), "avg_r"),
+              true, "stats label populated");
+    # We also dump the assembled image to disk for inspection
+    # (skipped on the bench — just keep the in-memory image).
+}
+test_register("H/sync_pipeline", __t30_h_sync_pipeline);
+
+# ─── Run all tests ────────────────────────────────────────────
+test_run(null);

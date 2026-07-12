@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+             xmlns:avalonEdit="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+             x:Class="ZZW.CodeTeacher.Client.Views.CodeEditorView"
+             x:DataType="vm:CodeEditorViewModel">
+
+  <!-- AvaloniaEdit 代码编辑区:自带行号、语法高亮、括号匹配、查找替换 -->
+  <!-- 背景用独立的 GlassEditorBrush,可在设置窗口单独调整编辑器透明度 -->
+  <Grid Background="{DynamicResource GlassEditorBrush}">
+    <avalonEdit:TextEditor x:Name="Editor"
+                           ShowLineNumbers="True"
+                           FontFamily="{StaticResource CodeFontFamily}"
+                           FontSize="13"
+                           Background="{DynamicResource GlassEditorBrush}"
+                           Foreground="{DynamicResource InkPrimaryBrush}"
+                           LineNumbersForeground="{DynamicResource InkMutedBrush}"
+                           Padding="10,8"
+                           WordWrap="False"
+                           HorizontalScrollBarVisibility="Auto"
+                           VerticalScrollBarVisibility="Auto" />
+  </Grid>
+</UserControl>

@@ -1,0 +1,116 @@
+# Round-2 #94 — Operator precedence & associativity
+# Probes: arithmetic, comparison, logical, bitwise, shift, unary, ternary,
+# member/index/call chaining, and parentheses.
+#
+# H# parser precedence chain (high → low), per parser.py:
+#   postfix (. [] ())  >  unary(- not ~ *)  >  factor(* / %)
+#   >  term(+ -)  >  comparison(< > <= >= in)  >  bitwise(& | ^ << >>, SAME level)
+#   >  equality(== !=)  >  logical_and(and)  >  logical_or(or)  >  ternary(?:)
+#
+# Notable deviations probed below:
+#   - all bitwise/shift ops share ONE precedence level (no & > ^ > | layering)
+#   - shift << >> is LOWER than comparison (C: shift > comparison)
+#   - bitwise & | ^ is HIGHER than equality == != (C: equality > bitwise)
+
+# ── T1: * binds tighter than +  →  1 + (2*3) = 7
+print("T1 1+2*3=");       print(1 + 2 * 3);
+
+# ── T2: mixed * and +  →  (2*3)+(4*5) = 26
+print("T2 2*3+4*5=");     print(2 * 3 + 4 * 5);
+
+# ── T3: - left-associative  →  (10-2)-3 = 5  (right-assoc would be 10-(2-3)=11)
+print("T3 10-2-3=");      print(10 - 2 - 3);
+
+# ── T4: / left-associative  →  (100/10)/2 = 5  (right-assoc would be 100/(10/2)=20)
+print("T4 100/10/2=");    print(100 / 10 / 2);
+
+# ── T7: not binds tighter than and  →  (not true) and false = false
+print("T7 not-true-and-false=");  print(not true and false);
+
+# ── T8: and binds tighter than or  →  true or (false and false) = true
+print("T8 true-or-false-and-false=");  print(true or false and false);
+
+# ── T9: comparison < higher than equality ==  →  (1<2) == true = true
+print("T9 1<2==true=");   print(1 < 2 == true);
+
+# ── T10: + higher than ==  →  (1+2) == 3 = true
+print("T10 1+2==3=");     print(1 + 2 == 3);
+
+# ── T11a: 5 & 3 | 8  — & and | same level, left-assoc  →  (5&3)|8 = 1|8 = 9
+#   Standard C (& > |): (5&3)|8 = 9  →  same result by luck of operand order
+print("T11a 5&3|8=");     print(5 & 3 | 8);
+
+# ── T11b: 8 | 5 & 3  — H# left-assoc same level  →  (8|5)&3 = 13&3 = 1
+#   Standard C (& > |): 8|(5&3) = 8|1 = 9  →  DIFFERENT (bug exposed)
+print("T11b 8|5&3=");     print(8 | 5 & 3);
+
+# ── T11c: 4 & 1 << 2  — H# same level, left-assoc  →  (4&1)<<2 = 0<<2 = 0
+#   Standard C (<< > &): 4&(1<<2) = 4&4 = 4  →  DIFFERENT (bug exposed)
+print("T11c 4&1<<2=");    print(4 & 1 << 2);
+
+# ── T12: + higher than <<  →  1<<(2+1) = 1<<3 = 8  (matches C)
+print("T12 1<<2+1=");     print(1 << 2 + 1);
+
+# ── T12b: 1 << 2 < 8  — H#: < higher than <<  →  1<<(2<8) = 1<<1 = 2
+#   Standard C (<< > <): (1<<2)<8 = 4<8 = true(1)  →  DIFFERENT (bug exposed)
+print("T12b 1<<2<8=");    print(1 << 2 < 8);
+
+# ── T12c: 5 & 3 == 1  — H#: & higher than ==  →  (5&3)==1 = 1==1 = true
+#   Standard C (== > &): 5&(3==1) = 5&0 = 0  →  DIFFERENT (bug exposed)
+print("T12c 5&3==1=");    print(5 & 3 == 1);
+
+# ── T14: member access left-associative  →  (x.y).z = 42
+class Inner { let z = 42; }
+class Outer { let y = 0; }
+let xr = new Outer();
+xr.y = new Inner();
+print("T14 x.y.z=");     print(xr.y.z);
+
+# ── T15: index left-associative  →  (m[1])[0] = 3
+let m = [[1, 2], [3, 4]];
+print("T15 m[1][0]=");    print(m[1][0]);
+
+# ── T16: call chain f()()  →  7  (inner returns constant, no closure capture)
+fn f() { return fn() { return 7; }; }
+print("T16 f()()=");      print(f()());
+
+# ── T17: obj.method().field  →  ((obj.getInner)()).value = 123
+class Inner2 { let value = 123; }
+class Outer2 {
+    fn getInner() { return new Inner2(); }
+}
+let obj = new Outer2();
+print("T17 obj.getInner().value=");  print(obj.getInner().value);
+
+# ── T18: nested ternary (right-assoc on true branch via recursive expression())
+#   true  ?: true  ?: 100 : 200 : 300  →  outer true → (true?:100:200) → 100
+print("T18a true?:true?:100:200:300=");   print(true ?: true ?: 100 : 200 : 300);
+#   false ?: true  ?: 100 : 200 : 300  →  outer false → 300
+print("T18b false?:true?:100:200:300=");  print(false ?: true ?: 100 : 200 : 300);
+#   true  ?: false ?: 100 : 200 : 300  →  outer true → (false?:100:200) → 200
+print("T18c true?:false?:100:200:300=");  print(true ?: false ?: 100 : 200 : 300);
+#   simple ternary
+print("T18d true?:11:22=");   print(true ?: 11 : 22);
+print("T18e false?:11:22=");  print(false ?: 11 : 22);
+
+# ── T19: unary with binary
+print("T19a -5+3=");     print(-5 + 3);       # (-5)+3 = -2
+print("T19b -5*3=");     print(-5 * 3);       # (-5)*3 = -15
+print("T19c 10+-5=");    print(10 + -5);      # 10+(-5) = 5
+print("T19d -2*-3=");    print(-2 * -3);      # (-2)*(-3) = 6
+print("T19e ~5+1=");     print(~5 + 1);       # (~5)+1 = -6+1 = -5
+print("T19f not-1==2="); print(not 1 == 2);   # H#: (not 1)==2 = false==2 = false
+                                               # Python: not(1==2) = not false = true
+
+# ── T20: parentheses override precedence
+print("T20a (1+2)*3=");  print((1 + 2) * 3);  # 9, not 7
+print("T20b -(2+3)=");   print(-(2 + 3));     # -5, not -1
+print("T20c (1+2)<(3+1)=");  print((1 + 2) < (3 + 1));  # 3<4 = true
+
+# ── Extra: comparison chaining (left-assoc, non-transitive)
+print("EX 1<2<3=");      print(1 < 2 < 3);    # (1<2)<3 = true<3 = 1<3 = true
+print("EX 3<2<1=");      print(3 < 2 < 1);    # (3<2)<1 = false<1 = 0<1 = true
+
+# ── Extra: and/or left-associativity
+print("EX true-and-true-and-false=");  print(true and true and false);  # false
+print("EX false-or-false-or-true=");  print(false or false or true);    # true

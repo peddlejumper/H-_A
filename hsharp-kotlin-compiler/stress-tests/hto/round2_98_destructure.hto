@@ -1,0 +1,510 @@
+# Round-2 / #98 — Destructuring assignment: nesting & boundary tests
+# Targets: basic 1-D destructure, `_` placeholder, length mismatch,
+# empty list, single element, string/dict destructure, scope, function
+# return, lambda params, duplicate names, expressions, list-of-lists,
+# list-of-dicts, destructure as fn arg.
+#
+# The H# parser ONLY supports flat `let [a, b, c] = expr;` patterns.
+# Nested patterns (`let [[a, b], [c, d]] = ...`) and `for [k, v] in ...`
+# are NOT supported and would abort compilation, so they live in
+# separate probe files (round2_98_probe_*.hto) — not here.
+#
+# All error-prone ops are wrapped in try/catch so the test runs to
+# completion; the printed text reveals the actual behaviour.
+
+print("=== R2.98 START ===");
+
+# ============================================================
+# T01 — Basic 1-D destructure (item 1)
+# ============================================================
+print("T01-basic");
+let [a, b] = [1, 2];
+print(a);                 # 1
+print(b);                 # 2
+# Three-element
+let [x, y, z] = [10, 20, 30];
+print(x);                 # 10
+print(y);                 # 20
+print(z);                 # 30
+# Mixed types
+let [s, n, bo] = ["hi", 42, true];
+print(s);                 # hi
+print(n);                 # 42
+print(bo);                # true
+
+# ============================================================
+# T02 — `_` placeholder skip (item 2)
+# ============================================================
+print("T02-underscore-skip");
+let [p, _, q] = [100, 200, 300];
+print(p);                 # 100
+print(q);                 # 300
+# `_` at first slot
+let [_, r2a, r2b] = [1, 2, 3];
+print(r2a);               # 2
+print(r2b);               # 3
+# `_` at last slot
+let [r2c, r2d, _] = [4, 5, 6];
+print(r2c);               # 4
+print(r2d);               # 5
+# Multiple `_`
+let [_, r2e, _, r2f] = [1, 2, 3, 4];
+print(r2e);               # 2
+print(r2f);               # 4
+
+# ============================================================
+# T03 — All `_` placeholders (item 3)
+# ============================================================
+print("T03-all-underscore");
+let [_, _] = [7, 8];
+print("all-underscore-ok");
+# Three slots all `_`
+let [_, _, _] = [9, 10, 11];
+print("all-underscore-3-ok");
+
+# ============================================================
+# T04 — Length mismatch: list longer than vars (item 4)
+# ============================================================
+print("T04-list-longer");
+let [m1, m2] = [1, 2, 3];
+print(m1);                # 1
+print(m2);                # 2
+# Extras should be silently ignored (per existing 36_destructure.hto)
+let [m3] = [11, 22, 33, 44];
+print(m3);                # 11
+# Very lopsided
+let [m4, m5] = [1, 2, 3, 4, 5, 6, 7, 8];
+print(m4 + m5);           # 3
+
+# ============================================================
+# T05 — Length mismatch: list shorter than vars (item 5)
+# ============================================================
+print("T05-list-shorter");
+let r5a = "no-err";
+try {
+    let [s1, s2, s3] = [1, 2];
+    print("got:" + s1 + "," + s2 + "," + s3);
+    r5a = "ok";
+} catch (e) { r5a = "caught:" + e; }
+print(r5a);               # expected: caught (index 2 out of range)
+# Single missing
+let r5b = "no-err";
+try {
+    let [s4, s5] = [10];
+    print(s4);
+    print(s5);
+    r5b = "ok";
+} catch (e) { r5b = "caught:" + e; }
+print(r5b);               # expected: caught
+# All missing (vars > 0, list empty)
+let r5c = "no-err";
+try {
+    let [s6, s7] = [];
+    r5c = "ok";
+} catch (e) { r5c = "caught:" + e; }
+print(r5c);               # expected: caught
+
+# ============================================================
+# T06 — Empty list destructure (item 6)
+# ============================================================
+print("T06-empty");
+let [] = [];
+print("empty-empty-ok");
+# Empty pattern with non-empty list (extras ignored)
+let [] = [1, 2, 3];
+print("empty-pattern-nonempty-list-ok");
+
+# ============================================================
+# T07 — Single element (item 7)
+# ============================================================
+print("T07-single");
+let [single] = [42];
+print(single);            # 42
+# Single from longer
+let [head] = [1, 2, 3];
+print(head);              # 1
+# Single with `_` is just empty
+let [onlyOne] = ["hello"];
+print(onlyOne);           # hello
+
+# ============================================================
+# T08 — Destructure a string (item 8)
+# ============================================================
+print("T08-string-destr");
+let [c0, c1, c2] = "abc";
+print(c0);                # a
+print(c1);                # b
+print(c2);                # c
+# String shorter than vars
+let r8a = "no-err";
+try {
+    let [c3, c4, c5] = "xy";
+    r8a = "ok";
+} catch (e) { r8a = "caught:" + e; }
+print(r8a);               # expected: caught
+# String longer than vars (extras ignored)
+let [c6, c7] = "hello";
+print(c6);                # h
+print(c7);                # e
+# Empty string with empty pattern
+let [] = "";
+print("empty-string-empty-pattern-ok");
+# Empty string with non-empty pattern
+let r8b = "no-err";
+try {
+    let [c8] = "";
+    r8b = "ok";
+} catch (e) { r8b = "caught:" + e; }
+print(r8b);               # expected: caught
+# `_` skip on string
+let [_, mid, _] = "XyZ";
+print(mid);               # y
+
+# ============================================================
+# T09 — Destructure a dict (item 9)
+# ============================================================
+print("T09-dict-destr");
+let d9 = {"a": 1, "b": 2, "c": 3};
+# GET_ITEM on a dict — does it return keys, values, or items?
+let r9a = "no-err";
+try {
+    let [k0, k1, k2] = d9;
+    print("k0=");  print(k0);
+    print("k1=");  print(k1);
+    print("k2=");  print(k2);
+    r9a = "ok";
+} catch (e) { r9a = "caught:" + e; }
+print(r9a);
+# Empty dict destructure
+let r9b = "no-err";
+try {
+    let [] = {};
+    r9b = "ok";
+} catch (e) { r9b = "caught:" + e; }
+print(r9b);
+# Dict with single key, single var
+let r9c = "no-err";
+try {
+    let [onlyKey] = {"x": 99};
+    print("onlyKey=");  print(onlyKey);
+    r9c = "ok";
+} catch (e) { r9c = "caught:" + e; }
+print(r9c);
+
+# ============================================================
+# T10 — Variable scope after destructure (item 10)
+# ============================================================
+print("T10-scope");
+# NOTE: H# does not support bare `{ ... }` block statements — a `{`
+# at statement position is parsed as a dict literal.  Use `if (true)`
+# as the block-introducer instead.
+if (true) {
+    let [sa, sb] = [1, 2];
+    print(sa + sb);       # 3
+}
+# sa/sb should NOT be visible outside the block
+let r10a = "no-err";
+try {
+    let probe = sa;
+    r10a = "got:" + probe;
+} catch (e) { r10a = "caught:" + e; }
+print(r10a);              # expected: caught (sa out of scope)
+# Destructure inside if
+if (true) {
+    let [ia, ib] = [5, 6];
+    print(ia * ib);       # 30
+}
+# Destructure inside for-body
+for i in [1, 2, 3] {
+    let [fa, fb] = [i, i * 10];
+    print(fa + fb);       # 11, 22, 33
+}
+
+# ============================================================
+# T11 — Nested destructure (item 11)
+# ============================================================
+# Parser only accepts IDENTIFIER or `_` inside the brackets, so
+# `let [[a, b], [c, d]] = ...` is a compile-time SyntaxError.
+# Tested in round2_98_probe_nested.hto.
+print("T11-nested: skipped (parser rejects nested patterns)");
+
+# ============================================================
+# T12 — Destructure in for-loop (item 12)
+# ============================================================
+# `for [k, v] in items(d)` is NOT supported — the for-loop parser
+# only accepts `for x in ...` or `for k, v in ...`.
+# Tested in round2_98_probe_for_destr.hto.
+print("T12-for-destr: skipped (parser rejects `for [k,v] in ...`)");
+# Verify the alternative `for k, v in items(d)` works:
+let d12 = {"x": 10, "y": 20};
+for k, v in d12 {
+    print("pair:");
+    print(k);
+    print(v);
+}
+
+# ============================================================
+# T13 — Destructure function return value (item 13)
+# ============================================================
+print("T13-fn-return");
+fn pair_fn() {
+    return [100, 200];
+}
+let [pa, pb] = pair_fn();
+print(pa);                # 100
+print(pb);                # 200
+# Triple return
+fn triple_fn() {
+    return [1, 2, 3];
+}
+let [ta, tb, tc] = triple_fn();
+print(ta + tb + tc);      # 6
+# Function returning a string, destructure chars
+fn str_fn() {
+    return "XYZ";
+}
+let [sX, sY, sZ] = str_fn();
+print(sX);                # X
+print(sY);                # Y
+print(sZ);                # Z
+# Function returns fewer elements than vars
+fn one_fn() {
+    return [42];
+}
+let r13a = "no-err";
+try {
+    let [oa, ob] = one_fn();
+    r13a = "ok";
+} catch (e) { r13a = "caught:" + e; }
+print(r13a);              # expected: caught
+# Function returns more elements than vars (extras ignored)
+fn many_fn() {
+    return [1, 2, 3, 4, 5];
+}
+let [ma, mb] = many_fn();
+print(ma + mb);           # 3
+
+# ============================================================
+# T14 — Destructure + lambda parameter (item 14)
+# ============================================================
+print("T14-lambda-param");
+# Lambda with a single param — should work
+let add1 = fn(x) { return x + 1; };
+print(add1(10));          # 11
+# Lambda with destructured param is NOT supported (`fn [a, b]` would
+# be a syntax error).  Instead, destructure INSIDE the lambda body.
+let swap_sum = fn(pair) {
+    let [aa, bb] = pair;
+    return aa + bb;
+};
+print(swap_sum([3, 4]));  # 7
+# Higher-order: build a list of pairs, sum via map-like destructure
+let pairs14 = [[1, 1], [2, 2], [3, 3]];
+let total14 = 0;
+for pr in pairs14 {
+    let [pa14, pb14] = pr;
+    total14 = total14 + pa14 + pb14;
+}
+print(total14);           # 12
+
+# ============================================================
+# T15 — Duplicate variable names (item 15)
+# ============================================================
+print("T15-dup-names");
+let r15a = "no-err";
+try {
+    let [aa, aa] = [1, 2];
+    print("aa=");  print(aa);
+    r15a = "ok";
+} catch (e) { r15a = "caught:" + e; }
+print(r15a);              # observed behaviour (likely last-wins: aa=2)
+# Duplicate with `_` interspersed
+let r15b = "no-err";
+try {
+    let [bb, _, bb] = [10, 20, 30];
+    print("bb=");  print(bb);
+    r15b = "ok";
+} catch (e) { r15b = "caught:" + e; }
+print(r15b);
+# Duplicate where second binding reads from a higher index
+let r15c = "no-err";
+try {
+    let [cc, cc, cc] = [1, 2, 3];
+    print("cc=");  print(cc);
+    r15c = "ok";
+} catch (e) { r15c = "caught:" + e; }
+print(r15c);              # expected last-wins: cc=3
+
+# ============================================================
+# T16 — Destructure with expressions on RHS (item 16)
+# ============================================================
+print("T16-rhs-expr");
+fn f16() { return 11; }
+fn g16() { return 22; }
+let [ea, eb] = [f16(), g16()];
+print(ea);                # 11
+print(eb);                # 22
+# Arithmetic expressions
+let [ea2, eb2] = [2 + 3, 4 * 5];
+print(ea2);               # 5
+print(eb2);               # 20
+# Mixed literal + expression
+let [ea3, eb3, ec3] = [1, f16(), "x" + "y"];
+print(ea3);               # 1
+print(eb3);               # 11
+print(ec3);               # xy
+# RHS is a function call returning a list (same as T13 but inline)
+let [ea4, ea5] = pair_fn();
+print(ea4 + ea5);         # 300
+
+# ============================================================
+# T17 — Re-destructure without `let` (item 17)
+# ============================================================
+print("T17-no-let");
+# `let [a, b] = ...` creates bindings.  Without `let`, the parser
+# treats `[a, b] = ...` as an expression statement — there is no
+# destructure-assignment production outside of `let`.
+# Tested in round2_98_probe_no_let.hto.
+print("T17-no-let: skipped (parser does not support bare destructure-assignment)");
+
+# ============================================================
+# T18 — Destructure list of lists (item 18)
+# ============================================================
+print("T18-list-of-lists");
+let lol = [[1, 2], [3, 4], [5, 6]];
+let [l0, l1, l2] = lol;
+print(l0);                # [1, 2]
+print(l1);                # [3, 4]
+print(l2);                # [5, 6]
+print(l0[0]);             # 1
+print(l2[1]);             # 6
+# Then destructure each inner list separately
+let [i0a, i0b] = l0;
+print(i0a + i0b);         # 3
+let [i2a, i2b] = l2;
+print(i2a + i2b);         # 11
+# Single element from list-of-lists
+let [onlyFirst] = lol;
+print(onlyFirst);         # [1, 2]
+# Fewer vars than sub-lists (extras ignored)
+let [f01, f02] = lol;
+print(f01);               # [1, 2]
+print(f02);               # [3, 4]
+# More vars than sub-lists (should error)
+let r18a = "no-err";
+try {
+    let [g01, g02, g03, g04] = lol;
+    r18a = "ok";
+} catch (e) { r18a = "caught:" + e; }
+print(r18a);              # expected: caught
+
+# ============================================================
+# T19 — Destructure list of dicts (item 19)
+# ============================================================
+print("T19-list-of-dicts");
+let lod = [{"k": 1}, {"k": 2}, {"k": 3}];
+let [d0, d1, d2] = lod;
+print(d0);                # {k: 1}
+print(d1);                # {k: 2}
+print(d2);                # {k: 3}
+print(d0["k"]);           # 1
+print(d2["k"]);           # 3
+# Single dict from list-of-dicts
+let [firstDict] = lod;
+print(firstDict["k"]);    # 1
+# More vars than dicts
+let r19a = "no-err";
+try {
+    let [dd1, dd2, dd3, dd4] = lod;
+    r19a = "ok";
+} catch (e) { r19a = "caught:" + e; }
+print(r19a);              # expected: caught
+
+# ============================================================
+# T20 — Destructure as function argument (item 20)
+# ============================================================
+print("T20-fn-arg");
+# Direct pattern `fn foo([a, b])` is NOT supported — function params
+# are plain identifiers.  Tested in round2_98_probe_fn_arg.hto.
+print("T20-fn-arg: skipped (parser does not support destructure in fn params)");
+# Workaround: accept a list, destructure inside body
+fn sum_pair(pr) {
+    let [pa20, pb20] = pr;
+    return pa20 + pb20;
+}
+print(sum_pair([7, 8]));  # 15
+
+# ============================================================
+# T21 — Bonus: destructure then re-assign one of the vars
+# ============================================================
+print("T21-reassign");
+let [ra, rb] = [1, 2];
+print(ra);                # 1
+ra = 999;
+print(ra);                # 999
+print(rb);                # 2
+# Re-assign via index expression
+let arr21 = [10, 20, 30];
+let [ia21, ib21, ic21] = arr21;
+arr21[0] = 99;
+print(ia21);              # 10 (snapshot at destructure time, not live)
+print(arr21[0]);          # 99
+
+# ============================================================
+# T22 — Bonus: destructure with `null` and `false` in source list
+# ============================================================
+print("T22-null-false");
+let [na, nb, nc] = [null, false, true];
+print(na);                # null
+print(nb);                # false
+print(nc);                # true
+# Destructure a list with mixed nested values
+let mixed22 = [null, [1, 2], {"k": "v"}];
+let [mx0, mx1, mx2] = mixed22;
+print(mx0);               # null
+print(mx1);               # [1, 2]
+print(mx2);               # {k: v}
+
+# ============================================================
+# T23 — Bonus: chained destructure (destructure, then destructure again)
+# ============================================================
+print("T23-chained");
+let [ca, cb] = [1, 2];
+let [cc, cd] = [ca + 1, cb + 1];
+print(cc);                # 2
+print(cd);                # 3
+# Destructure from a previously destructured inner list
+let outer23 = [[10, 20], [30, 40]];
+let [oa23, ob23] = outer23;
+let [oa23a, oa23b] = oa23;
+print(oa23a);             # 10
+print(oa23b);             # 20
+
+# ============================================================
+# T24 — Bonus: very large pattern (stress)
+# ============================================================
+print("T24-large-pattern");
+let big24 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let [b1, b2, b3, b4, b5, b6, b7, b8, b9, b10] = big24;
+print(b1 + b2 + b3 + b4 + b5 + b6 + b7 + b8 + b9 + b10);   # 55
+# Large pattern with `_` skips
+let [_, _, s24a, _, _, s24b, _, _, _, s24c] = big24;
+print(s24a);              # 3
+print(s24b);              # 6
+print(s24c);              # 10
+
+# ============================================================
+# T25 — Bonus: destructure with deeply nested RHS expression
+# ============================================================
+print("T25-nested-rhs");
+let m25 = {"key": [1, 2, 3]};
+# RHS is `m25["key"]` — a list, fetched via index expression
+let [v25a, v25b, v25c] = m25["key"];
+print(v25a + v25b + v25c);   # 6
+# RHS is a slice producing a new list
+let arr25 = [10, 20, 30, 40, 50];
+let [s25a, s25b] = arr25[1:3];
+print(s25a);              # 20
+print(s25b);              # 30
+
+print("=== R2.98 DONE ===");

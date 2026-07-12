@@ -1,0 +1,12 @@
+# 04 - for k,v in dict
+# 目的: 双变量 dict 迭代触发 fixForLoopJumps
+let d = {"alpha": 1, "beta": 2, "gamma": 3, "delta": 4};
+let vsum = 0;
+let pairs = "";
+for k, v in d {
+    vsum = vsum + v;
+    pairs = pairs + k + "=" + str(v) + ";";
+}
+print("vsum=" + str(vsum));
+print("expected_vsum=10");
+print("pairs=" + pairs);

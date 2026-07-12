@@ -1,0 +1,124 @@
+# 17 — many futures stress + exception-type variety
+# Covers: 大量 future 压力（验证无泄漏/无死锁）+ throw 各种类型的 payload
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# ── A: 大量 future 提交 + 部分抛异常 ──
+parallel fn maybe(n) {
+    if (n % 3 == 0) {
+        throw n;
+    }
+    return n * 2;
+}
+let futs = [];
+let i = 0;
+while (i < 300) {
+    push(futs, maybe(i));
+    i = i + 1;
+}
+let ok = 0;
+let fail = 0;
+let j = 0;
+while (j < 300) {
+    try {
+        let v = await futs[j];
+        if (v == j * 2) { ok = ok + 1; }
+    } catch (e) {
+        if (str(e) == str(j)) { fail = fail + 1; }
+    }
+    j = j + 1;
+}
+# n%3==0 -> 100 个抛；其余 200 个返回 n*2
+check("stress_300_ok_count",   ok == 200, "ok=" + str(ok));
+check("stress_300_fail_count", fail == 100, "fail=" + str(fail));
+
+# ── B: throw 各种类型 ──
+parallel fn throw_val(v) {
+    throw v;
+}
+
+# throw bool
+let fb = throw_val(true);
+let cb = "";
+try { let _ = await fb; } catch (e) { cb = str(e); }
+check("throw_bool_payload", cb == "true", "got " + cb);
+
+# throw negative number
+let fn2 = throw_val(-42);
+let cn = "";
+try { let _ = await fn2; } catch (e) { cn = str(e); }
+check("throw_negnum_payload", cn == "-42", "got " + cn);
+
+# throw float
+let ff = throw_val(3.14);
+let cf = "";
+try { let _ = await ff; } catch (e) { cf = str(e); }
+check("throw_float_payload", cf == "3.14", "got " + cf);
+
+# throw nested list
+let fl2 = throw_val([[1, 2], [3, 4]]);
+let cl = "";
+try { let _ = await fl2; } catch (e) { cl = str(len(e)); }
+check("throw_nested_list_payload", cl == "2", "got " + cl);
+
+# throw dict
+let fd2 = throw_val({"err": "x", "code": 7});
+let cd_code = "";
+try { let _ = await fd2; } catch (e) { cd_code = str(e["code"]); }
+check("throw_dict_payload", cd_code == "7", "got " + cd_code);
+
+# ── C: 在 parallel fn 内 try/catch 自己的异常（不向外传播）─
+parallel fn self_catch() {
+    try {
+        throw "internal";
+    } catch (e) {
+        return "caught:" + str(e);
+    }
+}
+check("parallel_self_catch", await self_catch() == "caught:internal",
+      "got " + str(await self_catch()));
+
+# ── D: 多轮提交（验证 worker pool 不会因前一批耗尽而卡死）─
+parallel fn unit(n) {
+    return n;
+}
+let rounds_ok = true;
+let r = 0;
+while (r < 10) {
+    let rf = [];
+    let k = 0;
+    while (k < 50) {
+        push(rf, unit(k + r * 50));
+        k = k + 1;
+    }
+    let s = 0;
+    let m = 0;
+    while (m < 50) {
+        s = s + await rf[m];
+        m = m + 1;
+    }
+    # 每轮 sum = sum(50 consecutive ints starting at r*50)
+    # = 50*(r*50) + 0+1+...+49 = 2500r + 1225
+    if (s != 2500 * r + 1225) { rounds_ok = false; }
+    r = r + 1;
+}
+check("ten_rounds_50_each", rounds_ok, "some round sum wrong");
+
+# ── E: future 先 await 再丢弃，验证 GC 不影响（不崩）─
+parallel fn quick(n) {
+    return n + 1;
+}
+let discard_ok = true;
+let d = 0;
+while (d < 1000) {
+    let f = quick(d);
+    let v = await f;
+    if (v != d + 1) { discard_ok = false; }
+    d = d + 1;
+}
+check("thousand_await_discard", discard_ok, "some value wrong");
+
+print("T17_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

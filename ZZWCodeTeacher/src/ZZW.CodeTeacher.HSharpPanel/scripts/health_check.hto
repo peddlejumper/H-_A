@@ -1,0 +1,21 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# scripts/health_check.hto — 系统健康检查脚本
+# 检查 .NET 后端 API 是否可用，返回 JSON 格式结果
+# ═══════════════════════════════════════════════════════════════════════════
+
+let API_BASE = "http://localhost:5000";
+
+print("{");
+print("  \"script\": \"health_check\",");
+print("  \"timestamp\": \"" + str(time_now()) + "\",");
+
+# 检查 API 连通性
+let resp = http_get(API_BASE + "/api/v1/dashboard/stats");
+if (resp != nullptr and len(resp) > 0) {
+    print("  \"api_status\": \"healthy\",");
+    print("  \"api_reachable\": true");
+} else {
+    print("  \"api_status\": \"unhealthy\",");
+    print("  \"api_reachable\": false");
+}
+print("}");

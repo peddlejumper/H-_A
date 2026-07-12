@@ -1,0 +1,84 @@
+# 08 — parallel fn with sleep / IO (busy-wait + time_ms)
+# Covers: parallel fn 内做耗时操作（无原生 sleep，用 busy-loop 模拟），
+# 验证多任务并发完成时间 < 串行完成时间（真并行）
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# 模拟 IO：busy-wait 烧 ~N ms 的 CPU
+parallel fn fake_io(work) {
+    let i = 0;
+    let s = 0;
+    while (i < work) {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}
+
+# 串行 4 个任务
+let t0s = time_ms();
+let s1 = await fake_io(3000000);
+let s2 = await fake_io(3000000);
+let s3 = await fake_io(3000000);
+let s4 = await fake_io(3000000);
+let sum_seq = s1 + s2 + s3 + s4;
+let t1s = time_ms();
+let seq_ms = t1s - t0s;
+
+# 并发 4 个任务
+let t0p = time_ms();
+let sum_par = 0;
+concurrent {
+    let f1 = fake_io(3000000);
+    let f2 = fake_io(3000000);
+    let f3 = fake_io(3000000);
+    let f4 = fake_io(3000000);
+    sum_par = await f1 + await f2 + await f3 + await f4;
+}
+let t1p = time_ms();
+let par_ms = t1p - t0p;
+
+check("results_match", sum_seq == sum_par,
+      "seq=" + str(sum_seq) + " par=" + str(sum_par));
+
+# 只在 >=2 核时检查加速比
+if (parallelism() >= 2) {
+    check("parallel_speedup_2x", par_ms * 2 < seq_ms,
+          "seq_ms=" + str(seq_ms) + " par_ms=" + str(par_ms));
+} else {
+    print("OK parallel_speedup_2x (skipped: 1 core, seq=" + str(seq_ms) + " par=" + str(par_ms) + ")");
+    __stats[0] = __stats[0] + 1;
+}
+
+# 单个长任务能完成（不挂死）
+parallel fn long_task() {
+    let i = 0;
+    let s = 0;
+    while (i < 5000000) { s = s + i; i = i + 1; }
+    return s;
+}
+let lt = await long_task();
+check("long_task_completes", lt > 0, "lt=" + str(lt));
+
+# 8 个并发 IO 任务全部完成
+parallel fn io_n(n) {
+    let i = 0;
+    let s = 0;
+    while (i < 1000000) { s = s + i * n; i = i + 1; }
+    return s;
+}
+let futs = [];
+let i = 0;
+while (i < 8) { push(futs, io_n(i + 1)); i = i + 1; }
+let all_done = true;
+let j = 0;
+while (j < 8) {
+    if (await futs[j] < 0) { all_done = false; }
+    j = j + 1;
+}
+check("eight_concurrent_io_done", all_done, "some io task did not finish");
+
+print("T08_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

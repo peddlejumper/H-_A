@@ -1,0 +1,293 @@
+fn D3Point(x, y, z) {
+    return [x, y, z];
+}
+
+fn d3_point_x(point) {
+    return point[0];
+}
+
+fn d3_point_y(point) {
+    return point[1];
+}
+
+fn d3_point_z(point) {
+    return point[2];
+}
+
+fn d3_point_eq(a, b) {
+    if (a[0] == b[0]) {
+        if (a[1] == b[1]) {
+            return a[2] == b[2];
+        }
+    }
+    return false;
+}
+
+fn d3_point_add(a, b) {
+    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+fn d3_point_sub(a, b) {
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+fn d3_point_dist(a, b) {
+    let dx = a[0] - b[0];
+    let dy = a[1] - b[1];
+    let dz = a[2] - b[2];
+    let sq = dx * dx + dy * dy + dz * dz;
+    let guess = sq;
+    let i = 0;
+    while (i < 20) {
+        guess = (guess + sq / guess) / 2;
+        i = i + 1;
+    }
+    return guess;
+}
+
+fn d3_point_mid(a, b) {
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+}
+
+fn d3_point_in_range(point, minX, minY, minZ, maxX, maxY, maxZ) {
+    if (point[0] < minX) {
+        return false;
+    }
+    if (point[0] > maxX) {
+        return false;
+    }
+    if (point[1] < minY) {
+        return false;
+    }
+    if (point[1] > maxY) {
+        return false;
+    }
+    if (point[2] < minZ) {
+        return false;
+    }
+    if (point[2] > maxZ) {
+        return false;
+    }
+    return true;
+}
+
+fn D3BoundingBox(minX, minY, minZ, maxX, maxY, maxZ) {
+    return [minX, minY, minZ, maxX, maxY, maxZ];
+}
+
+fn d3_bbox_min(boxVal) {
+    return [boxVal[0], boxVal[1], boxVal[2]];
+}
+
+fn d3_bbox_max(boxVal) {
+    return [boxVal[3], boxVal[4], boxVal[5]];
+}
+
+fn d3_bbox_center(boxVal) {
+    let cx = (boxVal[0] + boxVal[3]) / 2;
+    let cy = (boxVal[1] + boxVal[4]) / 2;
+    let cz = (boxVal[2] + boxVal[5]) / 2;
+    return [cx, cy, cz];
+}
+
+fn d3_bbox_volume(boxVal) {
+    let w = boxVal[3] - boxVal[0];
+    let h = boxVal[4] - boxVal[1];
+    let d = boxVal[5] - boxVal[2];
+    return w * h * d;
+}
+
+fn d3_bbox_contains(boxVal, point) {
+    return d3_point_in_range(point, boxVal[0], boxVal[1], boxVal[2], boxVal[3], boxVal[4], boxVal[5]);
+}
+
+fn d3_bbox_intersects(a, b) {
+    if (a[0] > b[3]) {
+        return false;
+    }
+    if (a[3] < b[0]) {
+        return false;
+    }
+    if (a[1] > b[4]) {
+        return false;
+    }
+    if (a[4] < b[1]) {
+        return false;
+    }
+    if (a[2] > b[5]) {
+        return false;
+    }
+    if (a[5] < b[2]) {
+        return false;
+    }
+    return true;
+}
+
+fn d3_bbox_intersection(a, b) {
+    if (d3_bbox_intersects(a, b)) {
+        let minx = a[0];
+        if (b[0] > minx) {
+            minx = b[0];
+        }
+        let miny = a[1];
+        if (b[1] > miny) {
+            miny = b[1];
+        }
+        let minz = a[2];
+        if (b[2] > minz) {
+            minz = b[2];
+        }
+        let maxx = a[3];
+        if (b[3] < maxx) {
+            maxx = b[3];
+        }
+        let maxy = a[4];
+        if (b[4] < maxy) {
+            maxy = b[4];
+        }
+        let maxz = a[5];
+        if (b[5] < maxz) {
+            maxz = b[5];
+        }
+        return [minx, miny, minz, maxx, maxy, maxz];
+    }
+    return [];
+}
+
+fn d3_size_power_get_info(d3Obj) {
+    print("=== 3D Coordinate System ===");
+    let rc = len(d3Obj.regions);
+    print("Regions: ");
+    print(rc);
+    let ric = len(d3Obj.region_interfaces);
+    print("Region Interfaces: ");
+    print(ric);
+}
+
+fn d3_find_region_by_point(d3Obj, x, y, z) {
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let r = d3Obj.regions[i];
+        let c = r.coords;
+        let found = d3_point_in_range([x, y, z], c[0], c[1], c[2], c[3], c[4], c[5]);
+        if (found) {
+            return r;
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+fn d3_find_region_by_name(d3Obj, name) {
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let r = d3Obj.regions[i];
+        if (r.name == name) {
+            return r;
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+fn d3_get_regions_intersecting(d3Obj, minX, minY, minZ, maxX, maxY, maxZ) {
+    let target = [minX, minY, minZ, maxX, maxY, maxZ];
+    let results = [];
+    let i = 0;
+    let rc = len(d3Obj.regions);
+    while (i < rc) {
+        let r = d3Obj.regions[i];
+        let c = r.coords;
+        let hits = d3_bbox_intersects(target, c);
+        if (hits) {
+            push(results, r);
+        }
+        i = i + 1;
+    }
+    return results;
+}
+
+fn D3Transform(translateX, translateY, translateZ, rotAxis, rotAngle, scaleX, scaleY, scaleZ) {
+    return [translateX, translateY, translateZ, rotAxis, rotAngle, scaleX, scaleY, scaleZ];
+}
+
+fn d3_transform_point(point, transform) {
+    let tx = point[0] + transform[0];
+    let ty = point[1] + transform[1];
+    let tz = point[2] + transform[2];
+    let sx = tx * transform[5];
+    let sy = ty * transform[6];
+    let sz = tz * transform[7];
+    return [sx, sy, sz];
+}
+
+fn d3_system_summary(d3Obj) {
+    let rc = len(d3Obj.regions);
+    let i = 0;
+    let totalVolume = 0;
+    while (i < rc) {
+        let c = d3Obj.regions[i].coords;
+        let vol = (c[3] - c[0]) * (c[4] - c[1]) * (c[5] - c[2]);
+        totalVolume = totalVolume + vol;
+        i = i + 1;
+    }
+    print("Regions: ");
+    print(rc);
+    print("Total Volume: ");
+    print(totalVolume);
+    return totalVolume;
+}
+
+fn d3_export_region_data(d3Obj, regionName) {
+    let r = d3_find_region_by_name(d3Obj, regionName);
+    if (len(r) == 0) {
+        return [];
+    }
+    let c = r.coords;
+    let export = [];
+    push(export, c[0]);
+    push(export, c[1]);
+    push(export, c[2]);
+    push(export, c[3]);
+    push(export, c[4]);
+    push(export, c[5]);
+    return export;
+}
+
+fn D3Vec3(x, y, z) {
+    return [x, y, z];
+}
+
+fn d3_vec3_dot(a, b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+fn d3_vec3_cross(a, b) {
+    let cx = a[1] * b[2] - a[2] * b[1];
+    let cy = a[2] * b[0] - a[0] * b[2];
+    let cz = a[0] * b[1] - a[1] * b[0];
+    return [cx, cy, cz];
+}
+
+fn d3_vec3_length(v) {
+    let sq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
+    let guess = sq;
+    let i = 0;
+    while (i < 20) {
+        guess = (guess + sq / guess) / 2;
+        i = i + 1;
+    }
+    return guess;
+}
+
+fn d3_vec3_normalize(v) {
+    let lenVal = d3_vec3_length(v);
+    if (lenVal > 0) {
+        return [v[0] / lenVal, v[1] / lenVal, v[2] / lenVal];
+    }
+    return [0, 0, 0];
+}
+
+print("D3System Core Library v1.0 loaded");

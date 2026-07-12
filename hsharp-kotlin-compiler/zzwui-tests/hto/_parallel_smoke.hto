@@ -1,0 +1,40 @@
+# Smoke test for chan and concurrent
+parallel fn slow_double(x) {
+    let i = 0;
+    let acc = 0;
+    while (i < 100000) {
+        acc = acc + x;
+        i = i + 1;
+    }
+    return acc;
+}
+
+# Channel test
+let ch = chan_new(0);
+parallel fn sender(ch) {
+    chan_send(ch, 100);
+    chan_send(ch, 200);
+    chan_send(ch, 300);
+    chan_close(ch);
+    return nullptr;
+}
+let sfut = sender(ch);
+let v_a = chan_recv(ch);
+let v_b = chan_recv(ch);
+let v_c = chan_recv(ch);
+print("chan recv: " + str(v_a) + " " + str(v_b) + " " + str(v_c));
+let s_done = await sfut;
+print("sender done");
+
+# concurrent block test
+let total = 0;
+concurrent {
+    let a = slow_double(5);
+    let b = slow_double(6);
+    let c = slow_double(7);
+    let va = await a;
+    let vb = await b;
+    let vc = await c;
+    total = va + vb + vc;
+}
+print("concurrent total = " + str(total));

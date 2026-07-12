@@ -1,0 +1,726 @@
+# ============================================================
+# round3_114_bitwise.hto — 位操作组合与边界测试 (Agent #114, Round 3)
+# 领域: 位运算 & | ^ << >> ~ 的组合、边界、优先级、类型强转、显示
+# 设计原则: 每个 case 独立编号; try/catch 包裹可能抛错或崩溃的项;
+#           先打印预期注释, 后打印实际结果。
+#
+# 关键实现事实 (来自源码 hsharp-kotlin-compiler):
+#   * BINARY_BITAND/OR/XOR: toLong(a) and/or/xor toLong(b) -> Double
+#   * BINARY_LSHIFT: toLong(a) shl toLong(b).toInt()  (Kotlin Long.shl, mask 0x3F)
+#   * BINARY_RSHIFT: toLong(a) shr toLong(b).toInt()  (算术右移, 符号保持)
+#   * UNARY_TILDE:   toLong(a).inv() -> Double
+#   * HValueOps.toLong: HNumber->value.toLong(); HBool->1/0; 其他抛 "cannot coerce X to int"
+#   * HNumber.toDisplayString: 若 value==toLong().toDouble() 且
+#       Long.MIN < value < Long.MAX, 打印整数; 否则打印 Double.toString()
+#       → Long.MIN_VALUE / Long.MAX_VALUE 边界会打印科学计数法!
+#   * parser: 所有位运算 (BITOR/BITXOR/BITAND/LSHIFT/RSHIFT) 同一优先级, 左结合;
+#       comparison 高于 bitwise; equality 低于 bitwise
+#   * lexer: 不支持 0x/0b/0o 字面量; 不支持 &= |= ^= <<= >>= 复合赋值
+# ============================================================
+
+print("===== R3-114 BITWISE COMPOSITION & BOUNDARY =====");
+
+# ---------- 辅助: 安全调用 ----------
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# A. 基本运算 (sanity check)
+# ============================================================
+print("----- A. Basic ops -----");
+
+# T1: 255 & 15 = 15  (0xFF & 0x0F)
+print("[T1 255 & 15]            expect=15");
+print(255 & 15);
+
+# T2: 240 | 15 = 255  (0xF0 | 0x0F)
+print("[T2 240 | 15]            expect=255");
+print(240 | 15);
+
+# T3: 255 ^ 15 = 240  (0xFF ^ 0x0F)
+print("[T3 255 ^ 15]            expect=240");
+print(255 ^ 15);
+
+# T4: 1 << 4 = 16
+print("[T4 1 << 4]              expect=16");
+print(1 << 4);
+
+# T5: 256 >> 4 = 16
+print("[T5 256 >> 4]            expect=16");
+print(256 >> 4);
+
+# T6: ~0 = -1
+print("[T6 ~0]                  expect=-1");
+print(~0);
+
+# T7: ~5 = -6
+print("[T7 ~5]                  expect=-6");
+print(~5);
+
+# T8: ~(-1) = 0   (parser: ~(0 - 1))
+print("[T8 ~(-1)]               expect=0");
+print(~(0 - 1));
+
+# ============================================================
+# B. 组合运算
+# ============================================================
+print("----- B. Combinations -----");
+
+# T9: (a | b) & c = (240 | 15) & 200 = 255 & 200 = 200
+print("[T9 (240|15)&200]        expect=200");
+print((240 | 15) & 200);
+
+# T10: 掩码提取: 255 & 15 = 15
+print("[T10 255 & 15 mask]      expect=15");
+print(255 & 15);
+
+# T11: 位设置: 0 | (1 << 3) = 8
+print("[T11 0 | (1<<3)]         expect=8");
+print(0 | (1 << 3));
+
+# T12: 位清除: 255 & ~(1 << 3) = 255 & ~8 = 255 & -9 = 247
+print("[T12 255 & ~(1<<3)]      expect=247");
+print(255 & ~(1 << 3));
+
+# T13: 位翻转: 0 ^ (1<<3) = 8; 8 ^ (1<<3) = 0
+print("[T13a 0 ^ (1<<3)]        expect=8");
+print(0 ^ (1 << 3));
+print("[T13b 8 ^ (1<<3)]        expect=0");
+print(8 ^ (1 << 3));
+
+# T14: 大数位运算: 1099511627775 (0xFFFFFFFFFF) & 4294967295 (0xFFFFFFFF) = 4294967295
+print("[T14 big & mask]         expect=4294967295");
+print(1099511627775 & 4294967295);
+
+# ============================================================
+# C. 负数位运算
+# ============================================================
+print("----- C. Negative numbers -----");
+
+# T15: -1 & 255 = 255  (parser: (0-1) & 255; -1 as Long = all 1s)
+print("[T15 -1 & 255]           expect=255");
+print((0 - 1) & 255);
+
+# T16: -1 >> 4 = -1  (算术右移保持符号)
+print("[T16 -1 >> 4]            expect=-1");
+print((0 - 1) >> 4);
+
+# T17: -1 >> 1 = -1
+print("[T17 -1 >> 1]            expect=-1");
+print((0 - 1) >> 1);
+
+# T18: -256 >> 4 = -16
+print("[T18 -256 >> 4]          expect=-16");
+print((0 - 256) >> 4);
+
+# T19: -1 << 1 = -2
+print("[T19 -1 << 1]            expect=-2");
+print((0 - 1) << 1);
+
+# ============================================================
+# D. 零操作数
+# ============================================================
+print("----- D. Zero operands -----");
+
+# T20: 0 & 255 = 0
+print("[T20 0 & 255]            expect=0");
+print(0 & 255);
+
+# T21: 0 | 255 = 255
+print("[T21 0 | 255]            expect=255");
+print(0 | 255);
+
+# T22: 0 ^ 255 = 255
+print("[T22 0 ^ 255]            expect=255");
+print(0 ^ 255);
+
+# T23: 255 ^ 255 = 0
+print("[T23 255 ^ 255]          expect=0");
+print(255 ^ 255);
+
+# ============================================================
+# E. 移位边界 (Long.shl/shr 用 mask 0x3F, 即 0..63)
+# ============================================================
+print("----- E. Shift boundaries -----");
+
+# T24: 5 << 0 = 5
+print("[T24 5 << 0]             expect=5");
+print(5 << 0);
+
+# T25: 5 >> 0 = 5
+print("[T25 5 >> 0]             expect=5");
+print(5 >> 0);
+
+# T26: 1 << 31 = 2147483648  (32位系统中会是 INT_MIN, 但 H# 用 Long, 所以为正)
+print("[T26 1 << 31]            expect=2147483648");
+print(1 << 31);
+
+# T27: 1 << 32 = 4294967296  (32位系统中会溢出为 0, 但 H# 用 Long, 仍为正)
+print("[T27 1 << 32]            expect=4294967296");
+print(1 << 32);
+
+# T28: 1 << 62 = 4611686018427387904  (Long 范围内, 精确可表示)
+print("[T28 1 << 62]            expect=4611686018427387904");
+print(1 << 62);
+
+# T29: 1 << 63 = Long.MIN_VALUE = -9223372036854775808
+#   预期显示: "-9223372036854775808"
+#   实际显示(怀疑bug): "-9.223372036854776E18" (toDisplayString 边界检查排除了 Long.MIN)
+print("[T29 1 << 63]            expect_int=-9223372036854775808");
+print(1 << 63);
+
+# T30: 1 << 64 — Kotlin shl 用 mask 0x3F, 64 and 0x3F = 0, 所以 = 1L shl 0 = 1
+#   C/标准: 未定义行为或 0; Python: 1 (Python ints 无限精度); H#: 1 (mask 行为)
+print("[T30 1 << 64]            expect=1 (Kotlin shl masks with 0x3F)]");
+print(1 << 64);
+
+# T31: 1 << 65 — 65 and 0x3F = 1, 所以 = 1L shl 1 = 2
+print("[T31 1 << 65]            expect=2 (mask -> shl 1)]");
+print(1 << 65);
+
+# T32: 1 << -1 — toLong(-1).toInt() = -1; -1 and 0x3F = 63; = 1L shl 63 = Long.MIN
+#   显示同样有 bug
+print("[T32 1 << -1]            expect_int=-9223372036854775808 (mask -1->63)]");
+print(1 << (0 - 1));
+
+# T33: 1 << -2 — -2 and 0x3F = 62; = 1L shl 62 = 4611686018427387904
+print("[T33 1 << -2]            expect=4611686018427387904 (mask -2->62)]");
+print(1 << (0 - 2));
+
+# T34: 100 << 100 — 100 and 0x3F = 36; = 100L shl 36 = 6871947673600
+print("[T34 100 << 100]         expect=6871947673600 (mask 100->36)]");
+print(100 << 100);
+
+# ============================================================
+# F. 优先级 (已知 bug: 所有位运算同一级, 左结合; 与 C/Python 不同)
+# ============================================================
+print("----- F. Precedence (known same-level bug) -----");
+
+# T35: 8 | 5 & 3
+#   H# 同级左结合: (8|5)&3 = 13&3 = 1
+#   标准 C (& > |): 8|(5&3) = 8|1 = 9
+print("[T35 8 | 5 & 3]          H#=1, C_standard=9");
+print(8 | 5 & 3);
+
+# T36: 4 & 1 << 2
+#   H# 同级左结合: (4&1)<<2 = 0<<2 = 0
+#   标准 C (<< > &): 4&(1<<2) = 4&4 = 4
+print("[T36 4 & 1 << 2]         H#=0, C_standard=4");
+print(4 & 1 << 2);
+
+# T37: 1 << 2 < 8
+#   H#: comparison 高于 bitwise, 所以 1 << (2 < 8) = 1 << true = 1 << 1 = 2
+#   标准 C (<< > <): (1<<2) < 8 = 4 < 8 = true
+print("[T37 1 << 2 < 8]         H#=2, C_standard=true");
+print(1 << 2 < 8);
+
+# T38: 5 & 3 == 1
+#   H#: bitwise 高于 equality, 所以 (5&3)==1 = 1==1 = true
+#   标准 C (== > &): 5&(3==1) = 5&0 = 0  (3==1 为 false=0)
+#   注意: H# 中 3==1 返回 HBool(false), toLong(false)=0, 5&0=0
+#         但 H# 实际解析为 (5&3)==1, 因为 & 高于 ==
+print("[T38 5 & 3 == 1]         H#=true, C_standard=0");
+print(5 & 3 == 1);
+
+# T39: 5 & 3 ^ 2
+#   H# 同级左结合: (5&3)^2 = 1^2 = 3
+#   标准 C (^ > &): 5&(3^2) = 5&1 = 1
+print("[T39 5 & 3 ^ 2]          H#=3, C_standard=1");
+print(5 & 3 ^ 2);
+
+# T40: 1 | 0 ^ 1
+#   H# 同级左结合: (1|0)^1 = 1^1 = 0
+#   标准 C (^ > |): 1|(0^1) = 1|1 = 1
+print("[T40 1 | 0 ^ 1]          H#=0, C_standard=1");
+print(1 | 0 ^ 1);
+
+# T41: 1 & 3 << 2
+#   H# 同级左结合: (1&3)<<2 = 1<<2 = 4
+#   标准 C (<< > &): 1&(3<<2) = 1&12 = 0
+print("[T41 1 & 3 << 2]         H#=4, C_standard=0");
+print(1 & 3 << 2);
+
+# T42: 1 << 2 + 1
+#   H#: + 高于 <<, 所以 1<<(2+1) = 1<<3 = 8 (与 C 一致)
+print("[T42 1 << 2 + 1]         expect=8 (matches C)]");
+print(1 << 2 + 1);
+
+# T43: 1 << 2 >> 1
+#   左结合: (1<<2)>>1 = 4>>1 = 2
+print("[T43 1 << 2 >> 1]        expect=2");
+print(1 << 2 >> 1);
+
+# T44: 8 >> 1 << 2
+#   左结合: (8>>1)<<2 = 4<<2 = 16
+print("[T44 8 >> 1 << 2]        expect=16");
+print(8 >> 1 << 2);
+
+# T45: ~5 + 1  (unary ~ 高于 +)
+#   (~5)+1 = -6+1 = -5
+print("[T45 ~5 + 1]             expect=-5");
+print(~5 + 1);
+
+# T46: ~5 & 1  (unary ~ 高于 &)
+#   (~5)&1 = -6 & 1 = 0  (-6 = ...11111010, &1 = 0)
+print("[T46 ~5 & 1]             expect=0");
+print(~5 & 1);
+
+# T47: ~5 | 1
+#   (~5)|1 = -6 | 1 = ...11111011 = -5
+print("[T47 ~5 | 1]             expect=-5");
+print(~5 | 1);
+
+# T48: ~(5 & 1)
+#   5&1=1, ~1 = -2
+print("[T48 ~(5 & 1)]           expect=-2");
+print(~(5 & 1));
+
+# ============================================================
+# G. 类型强转 (toLong 的行为)
+# ============================================================
+print("----- G. Type coercion -----");
+
+# T49: 3.14 & 1  — toLong(3.14)=3 (截断), 3&1=1. 不报错, 静默截断!
+#   Python: TypeError; C: 编译错误. H#: 静默截断为整数.
+print("[T49 3.14 & 1]           expect=1 (silent truncation, no error)]");
+print(3.14 & 1);
+
+# T50: 3.9 & 1  — toLong(3.9)=3, 3&1=1
+print("[T50 3.9 & 1]            expect=1 (truncation toward zero)]");
+print(3.9 & 1);
+
+# T51: -3.9 & 1  — toLong(-3.9)=-3 (向零截断, 非 floor), -3&1=1
+#   注意: -3.9.toLong() in Kotlin = -3 (truncation toward zero)
+print("[T51 -3.9 & 1]           expect=1 (truncation toward zero, -3)]");
+print((0 - 3.9) & 1);
+
+# T52: "a" & 1  — toLong(HString) 无对应分支, 抛 "cannot coerce STRING to int"
+safe("[T52 \"a\" & 1]", fn() { return "a" & 1; });
+
+# T53: null & 1  — toLong(HNull) 无对应分支, 抛 "cannot coerce NULL to int"
+safe("[T53 null & 1]", fn() { return null & 1; });
+
+# T54: true & false  — toLong(true)=1, toLong(false)=0, 1&0=0
+print("[T54 true & false]       expect=0");
+print(true & false);
+
+# T55: true | false  — 1|0=1
+print("[T55 true | false]       expect=1");
+print(true | false);
+
+# T56: true ^ false  — 1^0=1
+print("[T56 true ^ false]       expect=1");
+print(true ^ false);
+
+# T57: true & 1  — 1&1=1
+print("[T57 true & 1]           expect=1");
+print(true & 1);
+
+# T58: ~true  — toLong(true).inv() = 1.inv() = -2
+print("[T58 ~true]              expect=-2");
+print(~true);
+
+# T59: true << 1  — 1<<1=2
+print("[T59 true << 1]          expect=2");
+print(true << 1);
+
+# T60: 3.14 << 1  — toLong(3.14)=3, 3<<1=6. 静默截断!
+print("[T60 3.14 << 1]          expect=6 (silent truncation)]");
+print(3.14 << 1);
+
+# T61: ~3.14  — toLong(3.14)=3, ~3=-4. 静默截断!
+print("[T61 ~3.14]              expect=-4 (silent truncation)]");
+print(~3.14);
+
+# ============================================================
+# H. XOR 自反性 & 交换
+# ============================================================
+print("----- H. XOR self-inverse & swap -----");
+
+# T62: 5 ^ 5 = 0
+print("[T62 5 ^ 5]              expect=0");
+print(5 ^ 5);
+
+# T63: 5 ^ 0 = 5
+print("[T63 5 ^ 0]              expect=5");
+print(5 ^ 0);
+
+# T64: XOR 交换 (展开形式, 因 ^= 不支持)
+#   a = a^b; b = a^b; a = a^b;  应交换 a,b
+let xa = 5;
+let xb = 7;
+xa = xa ^ xb;
+xb = xa ^ xb;
+xa = xa ^ xb;
+print("[T64 XOR swap a]         expect=7 (was 5)]");
+print(xa);
+print("[T64 XOR swap b]         expect=5 (was 7)]");
+print(xb);
+
+# ============================================================
+# I. 德摩根定律
+# ============================================================
+print("----- I. De Morgan's law -----");
+
+# T65: ~(5 & 3) == (~5 | ~3)
+#   ~(5&3) = ~1 = -2;  ~5|~3 = -6|-4 = -2. 相等.
+let dm_a = 5;
+let dm_b = 3;
+let dm_left = ~(dm_a & dm_b);
+let dm_right = (~dm_a) | (~dm_b);
+print("[T65a ~(5&3)]            expect=-2");
+print(dm_left);
+print("[T65b ~5 | ~3]           expect=-2");
+print(dm_right);
+print("[T65c de_morgan_equal]   expect=true");
+print(dm_left == dm_right);
+
+# T66: ~(5 | 3) == (~5 & ~3)
+#   ~(5|3) = ~7 = -8;  ~5&~3 = -6&-4 = -8. 相等.
+let dm2_left = ~(dm_a | dm_b);
+let dm2_right = (~dm_a) & (~dm_b);
+print("[T66a ~(5|3)]            expect=-8");
+print(dm2_left);
+print("[T66b ~5 & ~3]           expect=-8");
+print(dm2_right);
+print("[T66c de_morgan2_equal]  expect=true");
+print(dm2_left == dm2_right);
+
+# ============================================================
+# J. 位运算在控制流中
+# ============================================================
+print("----- J. Bitwise in control flow -----");
+
+# T67: if (15 & 16)  — 15&16=0, falsy, 走 else
+print("[T67 if (15 & 16)]       expect=not-set]");
+if (15 & 16) {
+    print("T67:set");
+} else {
+    print("T67:not-set");
+}
+
+# T68: if (31 & 16)  — 31&16=16, truthy, 走 then
+print("[T68 if (31 & 16)]       expect=set]");
+if (31 & 16) {
+    print("T68:set");
+} else {
+    print("T68:not-set");
+}
+
+# T69: if (0 & 5)  — 0, falsy
+print("[T69 if (0 & 5)]         expect=not-set]");
+if (0 & 5) {
+    print("T69:set");
+} else {
+    print("T69:not-set");
+}
+
+# T70: match (15 & 1) { 1 => "odd"; 0 => "even"; }
+print("[T70 match (15 & 1)]     expect=odd]");
+let t70 = match (15 & 1) {
+    1 => "odd",
+    0 => "even",
+    _ => "other",
+};
+print(t70);
+
+# T71: match (10 & 1) { 1 => "odd"; 0 => "even"; }
+print("[T71 match (10 & 1)]     expect=even]");
+let t71 = match (10 & 1) {
+    1 => "odd",
+    0 => "even",
+    _ => "other",
+};
+print(t71);
+
+# T72: match (~0) { -1 => "neg-one"; 0 => "zero"; _ => "other"; }
+#   注: match 模式接受 -1 字面量 (MINUS NUMBER), 不接受 (0-1) 表达式
+print("[T72 match (~0)]         expect=neg-one]");
+let t72 = match (~0) {
+    -1 => "neg-one",
+    0 => "zero",
+    _ => "other",
+};
+print(t72);
+
+# ============================================================
+# K. Long.MIN/MAX 显示边界 (怀疑 bug)
+# ============================================================
+print("----- K. Long boundary display -----");
+
+# T73: 1 << 63 = Long.MIN_VALUE = -9223372036854775808
+#   预期: "-9223372036854775808"
+#   实际(怀疑): "-9.223372036854776E18" (toDisplayString 排除了 Long.MIN)
+let t73 = 1 << 63;
+print("[T73a 1<<63 value]       expect_int=-9223372036854775808]");
+print(t73);
+
+# T73b: 验证内部值确实是 Long.MIN — (1<<63) >> 63 应 = -1 (算术右移全填符号位)
+print("[T73b (1<<63)>>63]       expect=-1 (proves internal value is Long.MIN)]");
+print((1 << 63) >> 63);
+
+# T73c: (1<<63) | 1 = Long.MIN | 1 = -9223372036854775807
+#   作为 Double 与 Long.MIN 不可区分 (都舍入到 -9.223372036854776E18), 显示同样错误
+print("[T73c (1<<63)|1]         expect_int=-9223372036854775807]");
+print((1 << 63) | 1);
+
+# T74: Long.MAX 字面量 9223372036854775807 — 显示为科学计数法 (怀疑 bug)
+#   toDisplayString: value < Long.MAX_VALUE.toDouble() 为 false (因 Long.MAX.toDouble 舍入到 2^63)
+print("[T74 Long.MAX literal]   expect_int=9223372036854775807]");
+print(9223372036854775807);
+
+# T75: ~9223372036854775807 = ~Long.MAX = Long.MIN = -9223372036854775808
+#   显示同样 bug
+print("[T75 ~Long.MAX]          expect_int=-9223372036854775808]");
+print(~9223372036854775807);
+
+# T76: 1 << 62 = 4611686018427387904 (Long 范围内, 精确, 显示正常)
+print("[T76 1<<62 display]      expect=4611686018427387904]");
+print(1 << 62);
+
+# T77: (1 << 62) | 1 = 4611686018427387905 — 仍在 Long 范围, 但 2^62+1 是否精确?
+#   2^62 = 4611686018427387904 精确; +1 = 4611686018427387905, 仍 < 2^53*2^9 范围...
+#   实际上 4611686018427387905 > 2^53, Double 无法精确表示, 会舍入.
+#   toDisplayString: value == value.toLong().toDouble()? 若舍入后再 toLong 能还原, 则相等.
+print("[T77 (1<<62)|1 display]  expect=4611686018427387905 or rounded]");
+print((1 << 62) | 1);
+
+# ============================================================
+# L. 算术右移 vs 逻辑右移
+# ============================================================
+print("----- L. Arithmetic vs logical right shift -----");
+
+# T78: -1 >> 1 = -1  (算术右移, H# 用 shr)
+#   逻辑右移会得到大正数 (如 Java >>>1 = 9223372036854775807)
+print("[T78 -1 >> 1]            expect=-1 (arithmetic, not logical)]");
+print((0 - 1) >> 1);
+
+# T79: -256 >> 4 = -16
+print("[T79 -256 >> 4]          expect=-16]");
+print((0 - 256) >> 4);
+
+# T80: -2 >> 1 = -1
+print("[T80 -2 >> 1]            expect=-1]");
+print((0 - 2) >> 1);
+
+# T81: 256 >> 4 = 16  (正数, 算术/逻辑无差别)
+print("[T81 256 >> 4]           expect=16]");
+print(256 >> 4);
+
+# T82: -1 >> 63 = -1  (全填符号位)
+print("[T82 -1 >> 63]           expect=-1]");
+print((0 - 1) >> 63);
+
+# T83: -1 >> 64 — 64 and 0x3F = 0, = -1 shr 0 = -1
+print("[T83 -1 >> 64]           expect=-1 (mask 64->0)]");
+print((0 - 1) >> 64);
+
+# ============================================================
+# M. 位运算 + 算术
+# ============================================================
+print("----- M. Bitwise + arithmetic -----");
+
+# T84: (255 & 15) + (240 & 15) = 15 + 0 = 15
+print("[T84 (255&15)+(240&15)]  expect=15]");
+print((255 & 15) + (240 & 15));
+
+# T85: (1 << 4) * 2 = 16 * 2 = 32
+print("[T85 (1<<4)*2]           expect=32]");
+print((1 << 4) * 2);
+
+# T86: (1 << 8) - 1 = 256 - 1 = 255
+print("[T86 (1<<8)-1]           expect=255]");
+print((1 << 8) - 1);
+
+# T87: (255 & 15) << 2 = 15 << 2 = 60
+print("[T87 (255&15)<<2]        expect=60]");
+print((255 & 15) << 2);
+
+# ============================================================
+# N. 16/32/64 位边界值
+# ============================================================
+print("----- N. 16/32/64-bit boundaries -----");
+
+# T88: 65535 & 255 = 255  (0xFFFF & 0xFF)
+print("[T88 65535 & 255]        expect=255]");
+print(65535 & 255);
+
+# T89: 65536 & 65535 = 0  (刚超过 16 位)
+print("[T89 65536 & 65535]      expect=0]");
+print(65536 & 65535);
+
+# T90: 1 << 16 = 65536
+print("[T90 1 << 16]            expect=65536]");
+print(1 << 16);
+
+# T91: 4294967295 & 4294967295 = 4294967295  (0xFFFFFFFF, 32 位全 1)
+print("[T91 0xFFFFFFFF & self]  expect=4294967295]");
+print(4294967295 & 4294967295);
+
+# T92: 4294967296 | 1 = 4294967297  (0x100000000 | 1)
+print("[T92 0x100000000 | 1]    expect=4294967297]");
+print(4294967296 | 1);
+
+# T93: 4294967295 + 1 = 4294967296  (32 位溢出, 但 Long 内仍精确)
+print("[T93 0xFFFFFFFF + 1]     expect=4294967296]");
+print(4294967295 + 1);
+
+# ============================================================
+# O. Tilde 组合
+# ============================================================
+print("----- O. Tilde combinations -----");
+
+# T94: ~~5 = 5  (双取反)
+print("[T94 ~~5]                expect=5]");
+print(~~5);
+
+# T95: ~~~5 = ~5 = -6  (三取反)
+print("[T95 ~~~5]               expect=-6]");
+print(~~~5);
+
+# T96: ~5 & ~3 = -6 & -4 = -8
+print("[T96 ~5 & ~3]            expect=-8]");
+print(~5 & ~3);
+
+# T97: ~0 & 255 = -1 & 255 = 255
+print("[T97 ~0 & 255]           expect=255]");
+print(~0 & 255);
+
+# T98: ~(~0 << 4) = ~(-1 << 4) = ~(-16) = 15
+#   低 4 位全 1, 其余位 0  (经典掩码生成)
+print("[T98 ~(~0 << 4)]         expect=15 (low-4-bit mask)]");
+print(~(~0 << 4));
+
+# ============================================================
+# P. 复合赋值 (lexer 限制, 无法 inline 测试)
+# ============================================================
+print("----- P. Compound assignment (lexer limitation) -----");
+
+# T99-T103: &= |= ^= <<= >>=
+#   lexer 没有 AMP_EQ/OR_EQ/CARET_EQ/LSHIFT_EQ/RSHIFT_EQ token,
+#   `a &= b` 会被切分为 a & = b, 触发 SyntaxError "Unexpected token: EQ",
+#   中止整个文件编译. 无法 inline 测试, 仅记录.
+print("[T99  a &= b]            SKIPPED(lexer-has-no-&=-token; SyntaxError on 'a &= b')]");
+print("[T100 a |= b]            SKIPPED(lexer-has-no-|=-token; SyntaxError on 'a |= b')]");
+print("[T101 a ^= b]            SKIPPED(lexer-has-no-^=-token; SyntaxError on 'a ^= b')]");
+print("[T102 a <<= b]           SKIPPED(lexer-has-no-<<=-token; SyntaxError on 'a <<= b')]");
+print("[T103 a >>= b]           SKIPPED(lexer-has-no->>=-token; SyntaxError on 'a >>= b')]");
+
+# 验证等价展开形式可行:
+let t103a = 255;
+let t103b = 15;
+t103a = t103a & t103b;   # 等价于 t103a &= t103b
+print("[T103b expanded a &= b]  expect=15]");
+print(t103a);
+
+# ============================================================
+# Q. Hex/Bin/Oct 字面量 (lexer 限制)
+# ============================================================
+print("----- Q. Hex/Bin/Oct literals (lexer limitation) -----");
+
+# T104-T106: 0x 0b 0o 前缀字面量
+#   lexer.number() 只处理十进制数字与可选小数点, 不识别 0x/0b/0o 前缀.
+#   `0xFF` 会被切分为 NUMBER(0) 后跟 IDENTIFIER(xFF), 触发 SyntaxError,
+#   中止整个文件. 无法 inline 测试, 仅记录.
+print("[T104 0xFF literal]      SKIPPED(lexer-rejects-0x; SyntaxError on '0xFF')]");
+print("[T105 0b1010 literal]    SKIPPED(lexer-rejects-0b; SyntaxError on '0b1010')]");
+print("[T106 0o17 literal]      SKIPPED(lexer-rejects-0o; SyntaxError on '0o17')]");
+
+# ============================================================
+# R. 位运算与字符串/bool/null (混合类型, 已在 G 部分覆盖, 这里补充)
+# ============================================================
+print("----- R. Mixed type edge cases -----");
+
+# T107: "5" & 1  — toLong(HString) 抛错 (即使字符串内容是数字)
+safe("[T107 \"5\" & 1]", fn() { return "5" & 1; });
+
+# T108: 1 & "1"  — 同上, 顺序无关
+safe("[T108 1 & \"1\"]", fn() { return 1 & "1"; });
+
+# T109: null | 0  — toLong(null) 抛错
+safe("[T109 null | 0]", fn() { return null | 0; });
+
+# T110: 0 | null — 同上
+safe("[T110 0 | null]", fn() { return 0 | null; });
+
+# T111: ~null — toLong(null) 抛错
+safe("[T111 ~null]", fn() { return ~null; });
+
+# T112: null << 1 — toLong(null) 抛错
+safe("[T112 null << 1]", fn() { return null << 1; });
+
+# T113: 1 << null — toLong(null) 抛错
+safe("[T113 1 << null]", fn() { return 1 << null; });
+
+# T114: [] & 1  — toLong(HList) 抛 "cannot coerce LIST to int"
+safe("[T114 [] & 1]", fn() { return [] & 1; });
+
+# T115: {} & 1  — toLong(HDict) 抛 "cannot coerce DICT to int"
+safe("[T115 {} & 1]", fn() { return {} & 1; });
+
+# ============================================================
+# S. 位运算结果作为字典 key / 列表元素
+# ============================================================
+print("----- S. Bitwise result as key/element -----");
+
+# T116: 字典 key 为位运算结果
+let t116 = {};
+t116[15 & 1] = "value";
+print("[T116 dict[15&1]]        expect=value]");
+print(t116[15 & 1]);
+
+# T117: 列表元素为位运算结果
+let t117 = [1 << 0, 1 << 1, 1 << 2, 1 << 3];
+print("[T117 list of shifts]    expect=[1, 2, 4, 8]]");
+print(t117);
+
+# ============================================================
+# T. 长链式位运算
+# ============================================================
+print("----- T. Long chains -----");
+
+# T118: 1 | 2 | 4 | 8 | 16 = 31  (左结合)
+print("[T118 1|2|4|8|16]        expect=31]");
+print(1 | 2 | 4 | 8 | 16);
+
+# T119: 255 & 240 & 15 = 0  (左结合: (255&240)&15 = 240&15 = 0)
+print("[T119 255&240&15]        expect=0]");
+print(255 & 240 & 15);
+
+# T120: 1 ^ 2 ^ 3 ^ 4 ^ 5 = 1  (XOR 链, 左结合)
+#   1^2=3, 3^3=0, 0^4=4, 4^5=1
+print("[T120 1^2^3^4^5]         expect=1]");
+print(1 ^ 2 ^ 3 ^ 4 ^ 5);
+
+# T121: 1 << 1 << 1 << 1 = 8  (左结合: ((1<<1)<<1)<<1 = 2<<1<<1 = 4<<1 = 8)
+print("[T121 1<<1<<1<<1]        expect=8]");
+print(1 << 1 << 1 << 1);
+
+# ============================================================
+# U. 位运算结合比较
+# ============================================================
+print("----- U. Bitwise with comparison -----");
+
+# T122: (5 & 3) == 1  — 5&3=1, 1==1=true
+print("[T122 (5&3)==1]          expect=true]");
+print((5 & 3) == 1);
+
+# T123: (5 & 3) != 0  — 1!=0=true
+print("[T123 (5&3)!=0]          expect=true]");
+print((5 & 3) != 0);
+
+# T124: (5 & 3) < 2  — 1<2=true
+print("[T124 (5&3)<2]           expect=true]");
+print((5 & 3) < 2);
+
+# T125: (5 | 3) > 6  — 7>6=true
+print("[T125 (5|3)>6]           expect=true]");
+print((5 | 3) > 6);
+
+print("===== R3-114 DONE =====");

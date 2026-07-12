@@ -1,0 +1,20 @@
+# t18_closures_multi.hto - 多个闭包共享同一 cell，深度嵌套
+# 三层嵌套函数，每层捕获外层变量
+fn outer(x) {
+    fn middle(y) {
+        fn inner(z) {
+            return x + y + z;
+        }
+        return inner;
+    }
+    return middle;
+}
+let m = outer(100);
+let i = m(20);
+print(i(3));
+print(i(4));
+let m2 = outer(1000);
+let i2 = m2(200);
+print(i2(3));
+# 验证 x 仍为 100（cell 隔离）
+print(i(5));

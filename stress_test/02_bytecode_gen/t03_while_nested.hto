@@ -1,0 +1,13 @@
+# t03_while_nested.hto - JUMP 回填（嵌套 while）
+let total = 0;
+let i = 0;
+while (i < 3) {
+    let j = 0;
+    while (j < 3) {
+        total = total + i * 10 + j;
+        j = j + 1;
+    }
+    i = i + 1;
+}
+print("total=" + str(total));
+# i=0: 0+1+2=3 ; i=1: 10+11+12=33 ; i=2: 20+21+22=63 ; total=3+33+63=99

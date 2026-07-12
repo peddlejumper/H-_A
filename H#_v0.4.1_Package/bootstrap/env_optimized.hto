@@ -1,0 +1,76 @@
+# H# optimized environment with hash-based lookup
+# This module provides faster variable access using dictionary-based storage
+
+fn _create_env() {
+    # Create an environment as a dict for O(1) lookup
+    return {};
+}
+
+fn _env_get(env, name) {
+    # Direct dictionary lookup - O(1) instead of O(n) linear search
+    if (env[name] != nullptr) {
+        return env[name];
+    }
+    return nullptr;
+}
+
+fn _env_set(env, name, val) {
+    # Direct dictionary assignment - O(1)
+    env[name] = val;
+    return nullptr;
+}
+
+fn _env_has(env, name) {
+    # Check if variable exists in environment
+    return env[name] != nullptr;
+}
+
+fn _env_delete(env, name) {
+    # Remove variable from environment
+    env[name] = nullptr;
+    return nullptr;
+}
+
+fn _env_merge(parent_env, child_env) {
+    # Merge parent environment into child (for closures)
+    let result = _create_env();
+    
+    # Simple merge - copy all from parent
+    let i = 0;
+    let parent_list = _env_to_list(parent_env);
+    while (i < len(parent_list)) {
+        let pair = parent_list[i];
+        result[pair[0]] = pair[1];
+        i = i + 1;
+    }
+    
+    # Copy child bindings (override parent if same key)
+    i = 0;
+    let child_list = _env_to_list(child_env);
+    while (i < len(child_list)) {
+        let pair = child_list[i];
+        result[pair[0]] = pair[1];
+        i = i + 1;
+    }
+    
+    return result;
+}
+
+fn _env_keys(env) {
+    # Get all variable names in environment
+    let keys = [];
+    let pairs = _env_to_list(env);
+    let i = 0;
+    while (i < len(pairs)) {
+        push(keys, pairs[i][0]);
+        i = i + 1;
+    }
+    return keys;
+}
+
+fn _env_to_list(env) {
+    # Convert environment dict to list of [name, value] pairs
+    # This is a placeholder - actual implementation depends on runtime
+    # For now, return empty list as dict iteration needs host support
+    return [];
+}

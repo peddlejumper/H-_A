@@ -1,0 +1,256 @@
+# H# Library Test 06 — Recursion Library
+# Classic recursive algorithms.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Fibonacci
+# =====================================================
+fn fib(n) {
+    if (n <= 0) { return 0; }
+    if (n == 1) { return 1; }
+    return fib(n - 1) + fib(n - 2);
+}
+check("fib/0",         fib(0) == 0);
+check("fib/1",         fib(1) == 1);
+check("fib/5",         fib(5) == 5);
+check("fib/10",        fib(10) == 55);
+check("fib/15",        fib(15) == 610);
+check("fib/20",        fib(20) == 6765);
+
+# =====================================================
+# Factorial
+# =====================================================
+fn fact(n) {
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
+}
+check("fact/0",        fact(0) == 1);
+check("fact/1",        fact(1) == 1);
+check("fact/5",        fact(5) == 120);
+check("fact/10",       fact(10) == 3628800);
+check("fact/12",       fact(12) == 479001600);
+
+# =====================================================
+# Power
+# =====================================================
+fn power(b, e) {
+    if (e == 0) { return 1; }
+    if (e == 1) { return b; }
+    if (e - int(e/2)*2 == 0) {
+        let p = power(b, e/2);
+        return p * p;
+    }
+    return b * power(b, e - 1);
+}
+check("power/0",       power(5, 0) == 1);
+check("power/1",       power(5, 1) == 5);
+check("power/2",       power(5, 2) == 25);
+check("power/3",       power(5, 3) == 125);
+check("power/10",      power(2, 10) == 1024);
+check("power/15",      power(2, 15) == 32768);
+
+# =====================================================
+# Sum to n
+# =====================================================
+fn sum_to(n) {
+    if (n <= 0) { return 0; }
+    return n + sum_to(n - 1);
+}
+check("sum_to/0",      sum_to(0) == 0);
+check("sum_to/5",      sum_to(5) == 15);
+check("sum_to/10",     sum_to(10) == 55);
+check("sum_to/100",    sum_to(100) == 5050);
+
+# =====================================================
+# Sum of digits
+# =====================================================
+fn sum_digits(n) {
+    if (n < 0) { n = -n; }
+    if (n < 10) { return n; }
+    return n - int(n/10)*10 + sum_digits(int(n/10));
+}
+check("digits/0",      sum_digits(0) == 0);
+check("digits/7",      sum_digits(7) == 7);
+check("digits/123",    sum_digits(123) == 6);
+check("digits/1000",   sum_digits(1000) == 1);
+check("digits/9999",   sum_digits(9999) == 36);
+
+# =====================================================
+# GCD recursive
+# =====================================================
+fn gcd(a, b) {
+    if (b == 0) { return a; }
+    return gcd(b, a - int(a/b)*b);
+}
+check("gcd/12,8",      gcd(12, 8) == 4);
+check("gcd/17,5",      gcd(17, 5) == 1);
+check("gcd/100,75",    gcd(100, 75) == 25);
+check("gcd/0,5",       gcd(0, 5) == 5);
+
+# =====================================================
+# Reverse string
+# =====================================================
+fn reverse(s) {
+    if (len(s) <= 1) { return s; }
+    return reverse(s[1:len(s)]) + s[0];
+}
+check("rev/empty",     reverse("") == "");
+check("rev/abc",       reverse("abc") == "cba");
+check("rev/hello",     reverse("hello") == "olleh");
+
+# =====================================================
+# Palindrome
+# =====================================================
+fn is_palindrome(s) {
+    if (len(s) <= 1) { return true; }
+    if (s[0] != s[len(s) - 1]) { return false; }
+    return is_palindrome(s[1:len(s) - 1]);
+}
+check("pal/empty",     is_palindrome("") == true);
+check("pal/single",    is_palindrome("x") == true);
+check("pal/aba",       is_palindrome("aba") == true);
+check("pal/abba",      is_palindrome("abba") == true);
+check("pal/abc",       is_palindrome("abc") == false);
+check("pal/racecar",   is_palindrome("racecar") == true);
+check("pal/hello",     is_palindrome("hello") == false);
+
+# =====================================================
+# Tower of Hanoi
+# =====================================================
+# H# v0.4 top-level functions capture free variables in a
+# closure cell at definition time.  Mutating that cell from
+# inside the function does not update the module-level store
+# (and vice versa).  We work around this by using a one-cell
+# list that we mutate via STORE_DEREF.
+let hanoi_moves = [0];
+fn hanoi(n, src, dst, aux) {
+    if (n == 1) {
+        hanoi_moves[0] = hanoi_moves[0] + 1;
+        return null;
+    }
+    hanoi(n - 1, src, aux, dst);
+    hanoi_moves[0] = hanoi_moves[0] + 1;
+    hanoi(n - 1, aux, dst, src);
+}
+
+hanoi(1, "A", "C", "B");
+check("hanoi/1",       hanoi_moves[0] == 1);
+hanoi_moves[0] = 0;
+hanoi(3, "A", "C", "B");
+check("hanoi/3",       hanoi_moves[0] == 7);
+hanoi_moves[0] = 0;
+hanoi(4, "A", "C", "B");
+check("hanoi/4",       hanoi_moves[0] == 15);
+hanoi_moves[0] = 0;
+hanoi(5, "A", "C", "B");
+check("hanoi/5",       hanoi_moves[0] == 31);
+
+# =====================================================
+# Ackermann (small n)
+# =====================================================
+fn ack(m, n) {
+    if (m == 0) { return n + 1; }
+    if (n == 0) { return ack(m - 1, 1); }
+    return ack(m - 1, ack(m, n - 1));
+}
+check("ack/0,0",       ack(0, 0) == 1);
+check("ack/1,1",       ack(1, 1) == 3);
+check("ack/2,2",       ack(2, 2) == 7);
+check("ack/3,3",       ack(3, 3) == 61);
+
+# =====================================================
+# Quicksort (recursive)
+# =====================================================
+fn qsort(a) {
+    if (len(a) <= 1) { return a; }
+    let pivot = a[0];
+    let lo = [];
+    let hi = [];
+    let i = 1;
+    while (i < len(a)) {
+        if (a[i] <= pivot) {
+            push(lo, a[i]);
+        } else {
+            push(hi, a[i]);
+        }
+        i = i + 1;
+    }
+    let sorted_lo = qsort(lo);
+    let sorted_hi = qsort(hi);
+    let r = [];
+    let j = 0;
+    while (j < len(sorted_lo)) { push(r, sorted_lo[j]); j = j + 1; }
+    push(r, pivot);
+    j = 0;
+    while (j < len(sorted_hi)) { push(r, sorted_hi[j]); j = j + 1; }
+    return r;
+}
+
+fn is_sorted(a) {
+    let i = 0;
+    while (i < len(a) - 1) {
+        if (a[i] > a[i + 1]) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+check("qsort/empty",       is_sorted(qsort([])));
+check("qsort/single",      is_sorted(qsort([42])));
+check("qsort/random",      is_sorted(qsort([5, 2, 8, 1, 9, 3, 7, 4, 6])));
+check("qsort/sorted",      is_sorted(qsort([1, 2, 3, 4, 5])));
+check("qsort/reverse",     is_sorted(qsort([9, 7, 5, 3, 1])));
+check("qsort/dups",        is_sorted(qsort([3, 1, 4, 1, 5, 9, 2, 6, 5, 3])));
+
+# =====================================================
+# Merge sort
+# =====================================================
+fn merge(a, b) {
+    let r = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(a) and j < len(b)) {
+        if (a[i] <= b[j]) { push(r, a[i]); i = i + 1; } else { push(r, b[j]); j = j + 1; }
+    }
+    while (i < len(a)) { push(r, a[i]); i = i + 1; }
+    while (j < len(b)) { push(r, b[j]); j = j + 1; }
+    return r;
+}
+fn msort(a) {
+    if (len(a) <= 1) { return a; }
+    let mid = int(len(a) / 2);
+    let left = [];
+    let right = [];
+    let i = 0;
+    while (i < mid) { push(left, a[i]); i = i + 1; }
+    while (i < len(a)) { push(right, a[i]); i = i + 1; }
+    return merge(msort(left), msort(right));
+}
+
+check("msort/empty",       is_sorted(msort([])));
+check("msort/single",      is_sorted(msort([42])));
+check("msort/random",      is_sorted(msort([5, 2, 8, 1, 9, 3, 7, 4, 6])));
+check("msort/sorted",      is_sorted(msort([1, 2, 3, 4, 5])));
+
+# =====================================================
+# Report
+# =====================================================
+print("RECR_LIB  : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

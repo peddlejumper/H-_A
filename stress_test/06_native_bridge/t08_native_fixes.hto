@@ -1,0 +1,40 @@
+# t08 — HNativeBridge bug fixes (arity / null / chr surrogate / type class)
+print("== Bug1: arity (0-arg) ==");
+try { len(); print("len() 0arg: NO ERR (BUG)"); } catch (e) { print("len() 0arg ERR: " + str(e)); }
+try { abs(); print("abs() 0arg: NO ERR (BUG)"); } catch (e) { print("abs() 0arg ERR: " + str(e)); }
+try { chr(); print("chr() 0arg: NO ERR (BUG)"); } catch (e) { print("chr() 0arg ERR: " + str(e)); }
+try { ord(); print("ord() 0arg: NO ERR (BUG)"); } catch (e) { print("ord() 0arg ERR: " + str(e)); }
+try { type(); print("type() 0arg: NO ERR (BUG)"); } catch (e) { print("type() 0arg ERR: " + str(e)); }
+try { int(); print("int() 0arg: NO ERR (BUG)"); } catch (e) { print("int() 0arg ERR: " + str(e)); }
+try { float(); print("float() 0arg: NO ERR (BUG)"); } catch (e) { print("float() 0arg ERR: " + str(e)); }
+try { str(); print("str() 0arg: NO ERR (BUG)"); } catch (e) { print("str() 0arg ERR: " + str(e)); }
+
+print("== Bug2: int(null)/float(null) ==");
+try { int(null); print("int(null): NO ERR (BUG)"); } catch (e) { print("int(null) ERR: " + str(e)); }
+try { float(null); print("float(null): NO ERR (BUG)"); } catch (e) { print("float(null) ERR: " + str(e)); }
+
+print("== Bug3: chr surrogate ==");
+try { chr(55296); print("chr(55296): NO ERR (BUG)"); } catch (e) { print("chr(55296) ERR: " + str(e)); }
+try { chr(57343); print("chr(57343): NO ERR (BUG)"); } catch (e) { print("chr(57343) ERR: " + str(e)); }
+try { chr(65); print("chr(65)= " + chr(65)); } catch (e) { print("chr(65) ERR: " + str(e)); }
+try { chr(128512); print("chr(128512)= " + chr(128512)); } catch (e) { print("chr(128512) ERR: " + str(e)); }
+
+print("== Bug4: type(instance) ==");
+class Animal {
+    fn speak() {
+        print("...");
+    }
+}
+let a = new Animal();
+print("type(a)= " + type(a));
+print("type(123)= " + type(123));
+print("type(\"hi\")= " + type("hi"));
+print("type([1,2])= " + type([1, 2]));
+
+print("== normal cases still work ==");
+print("len(\"hello\")= " + str(len("hello")));
+print("abs(-5)= " + str(abs(-5)));
+print("int(3.7)= " + str(int(3.7)));
+print("float(5)= " + str(float(5)));
+print("str(42)= " + str(42));
+print("ord(\"A\")= " + str(ord("A")));

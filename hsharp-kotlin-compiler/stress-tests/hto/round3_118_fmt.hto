@@ -1,0 +1,490 @@
+# =============================================================
+# Round 3 / Test #118 — fmt 字符串格式化深度边界
+# 智能体 #118, Round 3
+# 背景: v0.4.1。fmt 仅支持 {N} 位置占位符, 不支持 {:.2f} / {} / {:10}
+# 目标: 穷尽 fmt 的 42 个边界场景, 验证实际行为与文档/常识是否一致
+# 方法: 每个用例打印 [TAG 预期] 实际; 易错项 try/catch 包裹
+# 实现 (HNativeBridge.kt:196-228):
+#   - args.isEmpty() -> ""
+#   - 首参非字符串 -> toDisplayString()
+#   - '{' + 数字 -> 解析占位符, 直到非数字; 若下一个是 '}', 替换为 rest[idx]
+#   - idx >= rest.size -> 保留字面占位符
+#   - 其它 '{' -> 字面
+# =============================================================
+
+print("===== R3-118 FMT DEEP BOUNDARY =====");
+
+# =============================================================
+# Section 1: 基本单/多参数 (T1-T2)
+# =============================================================
+print("[S1.01 fmt-one-str expect=hello] " + fmt("{0}", "hello"));
+print("[S1.02 fmt-two-str expect=a b] " + fmt("{0} {1}", "a", "b"));
+print("[S1.03 fmt-three expect=a b c] " + fmt("{0} {1} {2}", "a", "b", "c"));
+print("[S1.04 fmt-no-space expect=ab] " + fmt("{0}{1}", "a", "b"));
+
+# =============================================================
+# Section 2: 各种类型参数 (T3-T10)
+# =============================================================
+print("[S2.01 fmt-int expect=123] " + fmt("{0}", 123));
+print("[S2.02 fmt-neg-int expect=-456] " + fmt("{0}", -456));
+print("[S2.03 fmt-zero expect=0] " + fmt("{0}", 0));
+print("[S2.04 fmt-float expect=3.14] " + fmt("{0}", 3.14));
+print("[S2.05 fmt-float-whole expect=3] " + fmt("{0}", 3.0));
+print("[S2.06 fmt-bool-true expect=true] " + fmt("{0}", true));
+print("[S2.07 fmt-bool-false expect=false] " + fmt("{0}", false));
+print("[S2.08 fmt-null expect=null] " + fmt("{0}", null));
+print("[S2.09 fmt-list expect=[1, 2, 3]] " + fmt("{0}", [1, 2, 3]));
+print("[S2.10 fmt-empty-list expect=[]] " + fmt("{0}", []));
+print("[S2.11 fmt-nested-list expect=[[1, 2], 3]] " + fmt("{0}", [[1, 2], 3]));
+print("[S2.12 fmt-dict expect={a: 1}] " + fmt("{0}", {"a": 1}));
+print("[S2.13 fmt-empty-dict expect={}] " + fmt("{0}", {}));
+print("[S2.14 fmt-multi-dict expect={a: 1, b: 2}] " + fmt("{0}", {"a": 1, "b": 2}));
+
+# 函数作为参数
+fn myFn(x) { return x + 1; }
+print("[S2.15 fmt-fn expect=<function myFn/1>] " + fmt("{0}", myFn));
+
+# 类实例作为参数
+class Pt {
+    let x = 0;
+    let y = 0;
+    fn init(px, py) { x = px; y = py; }
+    fn show() { return fmt("Pt({0},{1})", x, y); }
+}
+let pt = new Pt();
+pt.init(3, 4);
+print("[S2.16 fmt-instance expect=Pt{x = 3, y = 4}] " + fmt("{0}", pt));
+print("[S2.17 fmt-instance-method expect=Pt(3,4)] " + pt.show());
+
+# =============================================================
+# Section 3: 占位符位置与组合 (T11-T12)
+# =============================================================
+print("[S3.01 fmt-tight expect=123] " + fmt("{0}{1}{2}", 1, 2, 3));
+print("[S3.02 fmt-mid-text expect=text x more] " + fmt("text {0} more", "x"));
+print("[S3.03 fmt-prefix expect=val=42] " + fmt("val={0}", 42));
+print("[S3.04 fmt-suffix expect=42-end] " + fmt("{0}-end", 42));
+print("[S3.05 fmt-multi-mid expect=a-X-b-Y-c] " + fmt("a-{0}-b-{1}-c", "X", "Y"));
+print("[S3.06 fmt-only-placeholder expect=x] " + fmt("{0}", "x"));
+
+# =============================================================
+# Section 4: 参数数量边界 (T13-T14, T16)
+# =============================================================
+# 参数过多 — 实现忽略多余参数
+print("[S4.01 fmt-extra-args expect=a] " + fmt("{0}", "a", "b", "c"));
+print("[S4.02 fmt-extra-args-2 expect=a b] " + fmt("{0} {1}", "a", "b", "c", "d"));
+
+# 参数不足 — 实现保留字面占位符
+print("[S4.03 fmt-missing-1 expect=a {1}] " + fmt("{0} {1}", "a"));
+print("[S4.04 fmt-missing-0 expect={0}] " + fmt("{0}"));
+print("[S4.05 fmt-null-mid expect=a null c] " + fmt("{0} {1} {2}", "a", null, "c"));
+
+# 索引 0 单参数
+print("[S4.06 fmt-idx0 expect=x] " + fmt("{0}", "x"));
+
+# =============================================================
+# Section 5: 索引越界 (T15)
+# =============================================================
+print("[S5.01 fmt-oob-5 expect={5}] " + fmt("{5}", "a"));
+print("[S5.02 fmt-oob-1 expect={1}] " + fmt("{1}", "a"));
+print("[S5.03 fmt-oob-mid expect=a {5} b] " + fmt("a {5} b", "x"));
+print("[S5.04 fmt-oob-high expect={100}] " + fmt("{100}", "a"));
+print("[S5.05 fmt-oob-mixed expect=a {2} x] " + fmt("a {2} {0}", "x"));
+
+# =============================================================
+# Section 6: 空模板 / 无占位符 (T17-T18)
+# =============================================================
+print("[S6.01 fmt-empty-template expect=[]] [" + fmt("") + "]");
+print("[S6.02 fmt-empty-with-args expect=[]] [" + fmt("", "a", "b") + "]");
+print("[S6.03 fmt-no-placeholder expect=no placeholders] " + fmt("no placeholders"));
+print("[S6.04 fmt-no-placeholder-with-args expect=hello] " + fmt("hello", "ignored"));
+print("[S6.05 fmt-no-args expect=[]] [" + fmt() + "]");
+
+# =============================================================
+# Section 7: 转义大括号 (T19, T25)
+# =============================================================
+# {{0}} — 实现不识别转义: 第一个 '{' (next='{', 非数字) 字面; 第二个 '{' 开始占位符; '}' 字面
+print("[S7.01 fmt-escape-double expect={x}] " + fmt("{{0}}", "x"));
+# {{{0}}} — '{' '{' '{0}' '}' '}' -> '{{x}}'
+print("[S7.02 fmt-triple-brace expect={{x}}] " + fmt("{{{0}}}", "x"));
+# {{{{0}}}} — 4个 '{' + '{0}' + 4个 '}' -> '{{{x}}}'
+print("[S7.03 fmt-quad-brace expect={{{x}}}] " + fmt("{{{{0}}}}", "x"));
+# 单独的 '{' 和 '}'
+print("[S7.04 fmt-lone-brace expect={ x }] " + fmt("{ {0} }", "x"));
+print("[S7.05 fmt-brace-only expect={] " + fmt("{"));
+print("[S7.06 fmt-close-only expect=}] " + fmt("}"));
+print("[S7.07 fmt-braces-no-digit expect={abc}] " + fmt("{abc}"));
+print("[S7.08 fmt-brace-text expect={ x } end] " + fmt("{ {0} } end", "x"));
+
+# =============================================================
+# Section 8: 自动索引 {} (T20) — 不支持
+# =============================================================
+# {} — '{' 后非数字, 字面
+print("[S8.01 fmt-auto-index expect={} {}] " + fmt("{} {}", "a", "b"));
+print("[S8.02 fmt-single-auto expect={}] " + fmt("{}", "a"));
+print("[S8.03 fmt-auto-with-text expect=val {} end] " + fmt("val {} end", "a"));
+
+# =============================================================
+# Section 9: 格式说明符 (T21-T22) — 不支持
+# =============================================================
+# {0:.2f} — 解析 {0, 然后 ':' 不是 '}', 所以 '{' 字面, '0:.2f}' 字面
+print("[S9.01 fmt-spec-float expect={0:.2f}] " + fmt("{0:.2f}", 3.14159));
+print("[S9.02 fmt-spec-width expect={0:10}] " + fmt("{0:10}", "x"));
+print("[S9.03 fmt-spec-align expect={0:>10}] " + fmt("{0:>10}", "x"));
+print("[S9.04 fmt-spec-multi expect={0:.2f} {1:.3f}] " + fmt("{0:.2f} {1:.3f}", 3.14, 2.71));
+print("[S9.05 fmt-spec-with-text expect=pi={0:.2f}] " + fmt("pi={0:.2f}", 3.14159));
+
+# =============================================================
+# Section 10: 重复索引 (T23)
+# =============================================================
+print("[S10.01 fmt-repeat-idx expect=x and x] " + fmt("{0} and {0}", "x"));
+print("[S10.02 fmt-repeat-3 expect=x-x-x] " + fmt("{0}-{0}-{0}", "x"));
+print("[S10.03 fmt-repeat-mix expect=x y x y] " + fmt("{0} {1} {0} {1}", "x", "y"));
+print("[S10.04 fmt-repeat-only expect=a a a a] " + fmt("{0} {0} {0} {0}", "a"));
+
+# =============================================================
+# Section 11: 乱序索引 (T24)
+# =============================================================
+print("[S11.01 fmt-reverse-order expect=c b a] " + fmt("{2} {1} {0}", "a", "b", "c"));
+print("[S11.02 fmt-shuffle expect=b a c] " + fmt("{1} {0} {2}", "a", "b", "c"));
+print("[S11.03 fmt-only-high expect=c] " + fmt("{2}", "a", "b", "c"));
+print("[S11.04 fmt-skip-mid expect=a c a] " + fmt("{0} {2} {0}", "a", "b", "c"));
+
+# =============================================================
+# Section 12: 多层转义大括号 (T25 — 已在 S7 覆盖, 补充)
+# =============================================================
+print("[S12.01 fmt-nested-2 expect={{x}}] " + fmt("{{{0}}}", "x"));
+print("[S12.02 fmt-nested-text expect=pre {x} post] " + fmt("pre {{0}} post", "x"));
+print("[S12.03 fmt-brace-at-end expect=x{] " + fmt("{0}{", "x"));
+print("[S12.04 fmt-brace-at-start expect=}x] " + fmt("}{0}", "x"));
+
+# =============================================================
+# Section 13: fmt 嵌套调用 (T26)
+# =============================================================
+print("[S13.01 fmt-nested expect=[inner=x]] " + fmt("{0}", fmt("[inner={0}]", "x")));
+print("[S13.02 fmt-nested-2 expect=outer:1+2=3] " + fmt("outer:{0}", fmt("{0}+{1}={2}", 1, 2, 3)));
+print("[S13.03 fmt-nested-3deep expect=a:b:c] " + fmt("{0}:{1}:{2}", fmt("{0}", "a"), fmt("{0}", "b"), fmt("{0}", "c")));
+print("[S13.04 fmt-nested-as-arg expect=x y] " + fmt("{0} {1}", fmt("{0}", "x"), fmt("{0}", "y")));
+
+# =============================================================
+# Section 14: fmt + str 混合 (T27)
+# =============================================================
+print("[S14.01 fmt-str-arg expect=123] " + fmt("{0}", str(123)));
+print("[S14.02 fmt-str-mixed expect=n=42 s=hi] " + fmt("n={0} s={1}", str(42), str("hi")));
+print("[S14.03 fmt-str-null expect=null] " + fmt("{0}", str(null)));
+print("[S14.04 fmt-str-list expect=[1, 2]] " + fmt("{0}", str([1, 2])));
+let s14same = str(42) == fmt("{0}", 42);
+print("[S14.05 fmt-str-vs-fmt-consistency expect=same] " + (s14same ?: "same" : "diff"));
+
+# =============================================================
+# Section 15: fmt + 拼接 (T28)
+# =============================================================
+print("[S15.01 fmt-concat expect=a b] " + (fmt("{0}", "a") + " " + fmt("{0}", "b")));
+print("[S15.02 fmt-concat-int expect=x=42] " + (fmt("{0}=", "x") + fmt("{0}", 42)));
+print("[S15.03 fmt-chain expect=1-2-3] " + (fmt("{0}-", 1) + fmt("{0}-", 2) + fmt("{0}", 3)));
+print("[S15.04 fmt-in-concat expect=val=42] " + ("val=" + fmt("{0}", 42)));
+
+# =============================================================
+# Section 16: fmt 在 print 中 (T29)
+# =============================================================
+print(fmt("[S16.01 fmt-in-print expect=direct] {0}", "direct"));
+print(fmt("[S16.02 fmt-print-multi expect=1+2=3] {0}+{1}={2}", 1, 2, 3));
+print(fmt("[S16.03 fmt-print-empty expect=] {0}", ""));
+
+# =============================================================
+# Section 17: fmt 在 match 中 (T30)
+# =============================================================
+fn fmtInMatch(n) {
+    return match n {
+        0 => fmt("zero-{0}", n),
+        1 => fmt("one-{0}", n),
+        _ => fmt("other-{0}", n)
+    };
+}
+print("[S17.01 fmt-match-0 expect=zero-0] " + fmtInMatch(0));
+print("[S17.02 fmt-match-1 expect=one-1] " + fmtInMatch(1));
+print("[S17.03 fmt-match-other expect=other-42] " + fmtInMatch(42));
+
+# match 用 fmt 结果作为匹配值
+let fmtResult = fmt("{0}", "match-me");
+let matchFromFmt = match fmtResult {
+    "match-me" => "hit",
+    _ => "miss"
+};
+print("[S17.04 fmt-as-match-value expect=hit] " + matchFromFmt);
+
+# =============================================================
+# Section 18: fmt 在 if 条件中 (T31)
+# =============================================================
+let ifCond = fmt("{0}", "true") == "true";
+print("[S18.01 fmt-in-if expect=condition-true] " + (ifCond ?: "condition-true" : "condition-false"));
+
+if (fmt("{0}", "x") == "x") {
+    print("[S18.02 fmt-if-direct expect=if-hit] if-hit");
+} else {
+    print("[S18.02 fmt-if-direct expect=if-hit] if-miss");
+}
+
+let ternary = fmt("{0}", 5) == "5";
+print("[S18.03 fmt-in-ternary expect=tern-yes] " + (ternary ?: "tern-yes" : "tern-no"));
+
+# =============================================================
+# Section 19: fmt 在 channel send 中 (T32)
+# =============================================================
+let ch = chan_new(2);
+chan_send(ch, fmt("msg-{0}", 1));
+chan_send(ch, fmt("{0}={1}", "key", 42));
+print("[S19.01 fmt-chan-1 expect=msg-1] " + chan_recv(ch));
+print("[S19.02 fmt-chan-2 expect=key=42] " + chan_recv(ch));
+chan_close(ch);
+
+# =============================================================
+# Section 20: 大量参数 (T33)
+# =============================================================
+print("[S20.01 fmt-10-args expect=0123456789] " + fmt("{0}{1}{2}{3}{4}{5}{6}{7}{8}{9}", 0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+print("[S20.02 fmt-10-shuffled expect=9876543210] " + fmt("{9}{8}{7}{6}{5}{4}{3}{2}{1}{0}", 0, 1, 2, 3, 4, 5, 6, 7, 8, 9));
+print("[S20.03 fmt-10-repeat expect=0000000000] " + fmt("{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}", "0"));
+
+# =============================================================
+# Section 21: 长模板 (T34)
+# =============================================================
+let longPart = "abcdefghij";
+let longTpl = "{0}{1}{2}{3}{4}{5}{6}{7}{8}{9}";
+let longResult = fmt(longTpl, longPart, longPart, longPart, longPart, longPart, longPart, longPart, longPart, longPart, longPart);
+print("[S21.01 fmt-long-len expect=100] " + str(len(longResult)));
+print("[S21.02 fmt-long-prefix expect=abcdefghij] " + longResult[0:10]);
+print("[S21.03 fmt-long-suffix expect=abcdefghij] " + longResult[90:100]);
+
+# 1000 字符模板 + 10 参数 (构造一个长模板)
+# 注: 10 个占位符 {0}..{9}, 之间有 9 个 chunk100 (900 x), 共 930 字符模板
+let chunk100 = "x" * 100;
+let bigTpl = "{0}" + chunk100 + "{1}" + chunk100 + "{2}" + chunk100 + "{3}" + chunk100 + "{4}" + chunk100 + "{5}" + chunk100 + "{6}" + chunk100 + "{7}" + chunk100 + "{8}" + chunk100 + "{9}";
+let bigResult = fmt(bigTpl, "A", "B", "C", "D", "E", "F", "G", "H", "I", "J");
+print("[S21.04 fmt-1000-len expect=910] " + str(len(bigResult)));
+print("[S21.05 fmt-1000-start expect=A] " + bigResult[0]);
+print("[S21.06 fmt-1000-end expect=J] " + bigResult[-1]);
+
+# =============================================================
+# Section 22: fmt 参数是表达式 (T35)
+# =============================================================
+print("[S22.01 fmt-expr-add expect=3] " + fmt("{0}", 1 + 2));
+print("[S22.02 fmt-expr-mul expect=12] " + fmt("{0}", 3 * 4));
+print("[S22.03 fmt-expr-paren expect=7] " + fmt("{0}", (3 + 4)));
+print("[S22.04 fmt-expr-mixed expect=3 12] " + fmt("{0} {1}", 1 + 2, 3 * 4));
+print("[S22.05 fmt-expr-concat expect=ab] " + fmt("{0}", "a" + "b"));
+print("[S22.06 fmt-expr-mod expect=1] " + fmt("{0}", 10 % 3));
+
+# =============================================================
+# Section 23: fmt 参数是函数调用 (T36)
+# =============================================================
+print("[S23.01 fmt-fn-call-len expect=3] " + fmt("{0}", len("abc")));
+print("[S23.02 fmt-fn-call-str expect=42] " + fmt("{0}", str(42)));
+print("[S23.03 fmt-fn-call-abs expect=5] " + fmt("{0}", abs(-5)));
+print("[S23.04 fmt-fn-call-user expect=6] " + fmt("{0}", myFn(5)));
+print("[S23.05 fmt-fn-call-nested expect=3] " + fmt("{0}", len(fmt("{0}", "abc"))));
+
+# =============================================================
+# Section 24: fmt 参数是索引 (T37)
+# =============================================================
+print("[S24.01 fmt-list-idx expect=2] " + fmt("{0}", [1, 2, 3][1]));
+print("[S24.02 fmt-str-idx expect=e] " + fmt("{0}", "hello"[1]));
+print("[S24.03 fmt-neg-idx expect=3] " + fmt("{0}", [1, 2, 3][-1]));
+print("[S24.04 fmt-dict-idx expect=v] " + fmt("{0}", {"k": "v"}["k"]));
+print("[S24.05 fmt-list-slice expect=[2, 3]] " + fmt("{0}", [1, 2, 3][1:3]));
+
+# =============================================================
+# Section 25: fmt 参数是字段 (T38)
+# =============================================================
+let obj = new Pt();
+obj.init(10, 20);
+print("[S25.01 fmt-field-x expect=10] " + fmt("{0}", obj.x));
+print("[S25.02 fmt-field-y expect=20] " + fmt("{0}", obj.y));
+print("[S25.03 fmt-fields expect=10,20] " + fmt("{0},{1}", obj.x, obj.y));
+print("[S25.04 fmt-field-via-method expect=Pt(10,20)] " + fmt("{0}", obj.show()));
+
+# =============================================================
+# Section 26: str vs fmt 一致性 (T39)
+# =============================================================
+print("[S26.01 str-vs-fmt-int expect=true] " + str(str(42) == fmt("{0}", 42)));
+print("[S26.02 str-vs-fmt-float expect=true] " + str(str(3.14) == fmt("{0}", 3.14)));
+print("[S26.03 str-vs-fmt-bool expect=true] " + str(str(true) == fmt("{0}", true)));
+print("[S26.04 str-vs-fmt-null expect=true] " + str(str(null) == fmt("{0}", null)));
+print("[S26.05 str-vs-fmt-str expect=true] " + str(str("abc") == fmt("{0}", "abc")));
+print("[S26.06 str-vs-fmt-list expect=true] " + str(str([1, 2]) == fmt("{0}", [1, 2])));
+print("[S26.07 str-vs-fmt-dict expect=true] " + str(str({"a": 1}) == fmt("{0}", {"a": 1})));
+
+# =============================================================
+# Section 27: + 拼接 vs fmt 一致性 (T40)
+# =============================================================
+print("[S27.01 concat-vs-fmt expect=true] " + str(("x=" + str(42)) == fmt("x={0}", 42)));
+print("[S27.02 concat-vs-fmt-multi expect=true] " + str(("a" + "b" + "c") == fmt("{0}{1}{2}", "a", "b", "c")));
+print("[S27.03 concat-vs-fmt-num expect=true] " + str(("n=" + str(123)) == fmt("n={0}", 123)));
+print("[S27.04 concat-vs-fmt-mixed expect=true] " + str(("b=" + str(true)) == fmt("b={0}", true)));
+
+# =============================================================
+# Section 28: Unicode 在 fmt 中 (T41)
+# =============================================================
+print("[S28.01 fmt-unicode-cn expect=Hello 世界] " + fmt("Hello {0}", "世界"));
+print("[S28.02 fmt-unicode-emoji expect=Emoji=😀] " + fmt("Emoji={0}", "😀"));
+print("[S28.03 fmt-unicode-mixed expect=你好 A 128512] " + fmt("{0} {1} {2}", "你好", "A", 128512));
+print("[S28.04 fmt-unicode-chr expect=Chr=😀] " + fmt("Chr={0}", chr(128512)));
+print("[S28.05 fmt-unicode-multi expect=中 文 字] " + fmt("{0} {1} {2}", "中", "文", "字"));
+print("[S28.06 fmt-unicode-template expect=模板=值] " + fmt("模板={0}", "值"));
+print("[S28.07 fmt-unicode-list expect=[中, 文]] " + fmt("{0}", ["中", "文"]));
+print("[S28.08 fmt-unicode-dict expect={键: 值}] " + fmt("{0}", {"键": "值"}));
+
+# =============================================================
+# Section 29: 多行字符串在 fmt 中 (T42)
+# =============================================================
+let ml = "line1\nline2\nline3";
+let mlFmt = fmt("multi:{0}", ml);
+# ml = 17 chars (5+1+5+1+5), "multi:" = 6, total = 23
+print("[S29.01 fmt-multiline-len expect=23] " + str(len(mlFmt)));
+print("[S29.02 fmt-multiline-contains expect=true] " + str(mlFmt.contains("multi:line1")));
+
+# fmt 模板本身含 \n
+print("[S29.03 fmt-newline-tpl expect=line1-line2] " + fmt("line1\n{0}", "line2").replace("\n", "-"));
+
+# =============================================================
+# Section 30: 多位索引边界
+# =============================================================
+# {10} 需要 11 个参数
+print("[S30.01 fmt-2digit-idx expect=k] " + fmt("{10}", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"));
+# {10} 参数不足 — 字面
+print("[S30.02 fmt-2digit-oob expect={10}] " + fmt("{10}", "a", "b", "c"));
+# 前导零 — 解析为 1
+print("[S30.03 fmt-leading-zero expect=b] " + fmt("{01}", "a", "b"));
+print("[S30.04 fmt-leading-zero-2 expect=c] " + fmt("{02}", "a", "b", "c"));
+print("[S30.05 fmt-multi-leading-zero expect=b] " + fmt("{001}", "a", "b"));
+
+# =============================================================
+# Section 31: 占位符内部异常形态
+# =============================================================
+# {0 test} — 数字后非 '}', 字面
+print("[S31.01 fmt-space-in-ph expect={0 test}] " + fmt("{0 test}", "a"));
+# {0test} — 数字后字母, 字面
+print("[S31.02 fmt-no-space-in-ph expect={0test}] " + fmt("{0test}", "a"));
+# {0.2f} — 数字后 '.', 字面
+print("[S31.03 fmt-dot-in-ph expect={0.2f}] " + fmt("{0.2f}", 3.14));
+# {0,} — 数字后 ',', 字面
+print("[S31.04 fmt-comma-in-ph expect={0,}] " + fmt("{0,}", "a"));
+# {-1} — '{' 后 '-', 字面
+print("[S31.05 fmt-neg-idx expect={-1}] " + fmt("{-1}", "a"));
+# {+1} — '{' 后 '+', 字面
+print("[S31.06 fmt-plus-idx expect={+1}] " + fmt("{+1}", "a"));
+# {0} 后跟 } — 多余的 }
+print("[S31.07 fmt-extra-close expect=x}] " + fmt("{0}}", "x"));
+# {0 — 无闭合 '}', 字面
+print("[S31.08 fmt-no-close expect={0] " + fmt("{0", "a"));
+# {}{} — 两个空占位符
+print("[S31.09 fmt-double-empty expect={}{}] " + fmt("{}{}", "a", "b"));
+
+# =============================================================
+# Section 32: fmt 返回值类型
+# =============================================================
+print("[S32.01 fmt-return-type expect=string] " + type(fmt("{0}", 1)));
+print("[S32.02 fmt-empty-return-type expect=string] " + type(fmt("")));
+print("[S32.03 fmt-no-arg-return-type expect=string] " + type(fmt()));
+print("[S32.04 fmt-return-len expect=5] " + str(len(fmt("{0}", "hello"))));
+print("[S32.05 fmt-return-idx expect=h] " + fmt("{0}", "hello")[0]);
+
+# =============================================================
+# Section 33: fmt 首参非字符串
+# =============================================================
+print("[S33.01 fmt-int-as-tpl expect=123] " + fmt(123, "a", "b"));
+print("[S33.02 fmt-bool-as-tpl expect=true] " + fmt(true));
+print("[S33.03 fmt-null-as-tpl expect=null] " + fmt(null));
+print("[S33.04 fmt-list-as-tpl expect=[1, 2]] " + fmt([1, 2]));
+print("[S33.05 fmt-dict-as-tpl expect={a: 1}] " + fmt({"a": 1}));
+
+# =============================================================
+# Section 34: fmt 与异常
+# =============================================================
+let t34a = "no-err";
+try {
+    t34a = fmt("{0}", "x");
+} catch (e) {
+    t34a = "caught:" + str(e);
+}
+print("[S34.01 fmt-no-throw expect=x] " + t34a);
+
+# fmt 在 throw 中
+let t34b = "no-err";
+try {
+    throw fmt("err-{0}", 42);
+} catch (e) {
+    t34b = "caught:" + str(e);
+}
+print("[S34.02 fmt-in-throw expect=caught:err-42] " + t34b);
+
+# =============================================================
+# Section 35: fmt 链式调用 (作为字符串)
+# =============================================================
+print("[S35.01 fmt-upper expect=HELLO] " + fmt("{0}", "hello").upper());
+print("[S35.02 fmt-len expect=5] " + str(len(fmt("{0}", "hello"))));
+print("[S35.03 fmt-replace expect=HELLO] " + fmt("{0}", "hello").replace("h", "H").upper());
+print("[S35.04 fmt-split expect=[a, b]] " + str(fmt("{0}-{1}", "a", "b").split("-")));
+print("[S35.05 fmt-contains expect=true] " + str(fmt("val={0}", 42).contains("val")));
+print("[S35.06 fmt-slice expect=ell] " + fmt("{0}", "hello")[1:4]);
+print("[S35.07 fmt-repeat expect=x x] " + (fmt("{0}", "x ") + fmt("{0}", "x")).strip());
+
+# =============================================================
+# Section 36: fmt 在数据结构中
+# =============================================================
+let fmtList = [fmt("{0}", "a"), fmt("{0}", "b"), fmt("{0}", "c")];
+print("[S36.01 fmt-in-list expect=[a, b, c]] " + str(fmtList));
+let fmtDict = {"key": fmt("val-{0}", 1), "name": fmt("{0}", "bob")};
+print("[S36.02 fmt-in-dict-key expect=val-1] " + fmtDict["key"]);
+print("[S36.03 fmt-in-dict-name expect=bob] " + fmtDict["name"]);
+
+# 列表作为 fmt 模板来源
+let tpl = "{0} = {1}";
+print("[S36.04 fmt-tpl-from-var expect=x = 42] " + fmt(tpl, "x", 42));
+
+# =============================================================
+# Section 37: fmt 与 for 循环
+# =============================================================
+let fmtAcc = "";
+for i in [1, 2, 3] {
+    fmtAcc = fmtAcc + fmt("[{0}]", i);
+}
+print("[S37.01 fmt-in-loop expect=[1][2][3]] " + fmtAcc);
+
+let nums = [10, 20, 30];
+let fmtLoop = "";
+for n in nums {
+    fmtLoop = fmtLoop + fmt("{0},", n);
+}
+print("[S37.02 fmt-in-loop-2 expect=10,20,30,] " + fmtLoop);
+
+# =============================================================
+# Section 38: fmt 在闭包中
+# =============================================================
+fn makeFmt(prefix) {
+    return fn(x) { return fmt("{0}:{1}", prefix, x); };
+}
+let f38 = makeFmt("tag");
+print("[S38.01 fmt-in-closure expect=tag:42] " + f38(42));
+print("[S38.02 fmt-in-closure-2 expect=tag:hi] " + f38("hi"));
+
+# =============================================================
+# Section 39: 边界组合 — 极端
+# =============================================================
+# 单字符模板
+print("[S39.01 fmt-one-char expect=x] " + fmt("x"));
+# 仅占位符 + 越界
+print("[S39.02 fmt-only-oob expect={99}] " + fmt("{99}"));
+# 大量重复占位符
+let manyRep = fmt("{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}{0}", "Z");
+print("[S39.03 fmt-20-rep expect=20Z] " + str(len(manyRep)) + "Z");
+# 交替占位符和文本
+print("[S39.04 fmt-alternate expect=a1b2c3] " + fmt("{0}{1}{2}{3}{4}{5}", "a", 1, "b", 2, "c", 3));
+
+# =============================================================
+# Section 40: fmt 与布尔逻辑
+# =============================================================
+let bf = fmt("{0}", true) == "true" && fmt("{0}", false) == "false";
+print("[S40.01 fmt-bool-logic expect=true] " + str(bf));
+print("[S40.02 fmt-bool-or expect=true] " + str(fmt("{0}", 1) == "1" || fmt("{0}", 2) == "x"));
+print("[S40.03 fmt-bool-not expect=false] " + str(!(fmt("{0}", "x") == "x")));
+
+print("===== DONE R3-118 =====");

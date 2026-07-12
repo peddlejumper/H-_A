@@ -1,0 +1,7 @@
+# t03_vars.hto - variable assignment and reassignment
+let x = 100;
+let y = 200;
+let z = x + y;
+print(z);
+x = z - 50;
+print(x);

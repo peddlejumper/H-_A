@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZZW Code — AI-Powered H# IDE</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap"></noscript>
+    <style>
+        :root{--bg:#09090b;--bg2:#0f0f12;--bg3:#18181b;--bg4:#27272a;--txt:#fafafa;--muted:#71717a;--accent:#a855f7;--accent2:#c084fc;--accent3:#22d3ee;--cyan:#22d3ee;--green:#4ade80}
+        *{margin:0;padding:0;box-sizing:border-box}
+        html{scroll-behavior:smooth}
+        body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--txt);line-height:1.6;overflow-x:hidden}
+        .noise-overlay{position:fixed;inset:0;opacity:.025;pointer-events:none;z-index:9999;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E")}
+        .navigation{position:fixed;top:0;left:0;width:100%;display:flex;justify-content:space-between;align-items:center;padding:1.5rem 3rem;z-index:100;background:rgba(9,9,11,.8);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.05)}
+        .nav-logo{display:flex;align-items:center;gap:.8rem;font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem}
+        .nav-logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--cyan));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+        .nav-logo span{background:linear-gradient(135deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .nav-right{display:flex;align-items:center;gap:2rem}
+        .nav-links{display:flex;gap:2rem}
+        .nav-links a{color:var(--muted);text-decoration:none;font-size:.95rem;transition:color .2s}
+        .nav-links a:hover{color:var(--txt)}
+        .nav-links a.back{color:var(--accent);display:flex;align-items:center;gap:.5rem}
+        .lang-switch{display:flex;gap:.5rem}
+        .lang-btn{padding:.4rem .8rem;border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--muted);border-radius:6px;cursor:pointer;font-size:.85rem;transition:all .2s}
+        .lang-btn:hover{border-color:var(--accent);color:var(--accent)}
+        .lang-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+        
+        .hero{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;padding:8rem 2rem 4rem;overflow:hidden}
+        .hero-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(168,85,247,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(168,85,247,.03) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 80% 50% at 50% 50%,black 40%,transparent 100%)}
+        .hero-glow{position:absolute;width:600px;height:600px;border-radius:50%;filter:blur(120px);opacity:.4}
+        .hero-glow-1{background:var(--accent);top:-10%;left:20%}
+        .hero-glow-2{background:var(--cyan);bottom:-10%;right:20%}
+        .hero-content{position:relative;z-index:2;text-align:center;max-width:900px}
+        .hero-badge{display:inline-flex;align-items:center;gap:.5rem;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);padding:.5rem 1rem;border-radius:50px;font-size:.85rem;color:var(--accent);margin-bottom:2rem;animation:fadeIn .6s ease-out}
+        .hero-badge-dot{width:8px;height:8px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        .hero-title{font-family:'Syne',sans-serif;font-size:clamp(3rem,8vw,5.5rem);font-weight:800;letter-spacing:-.04em;line-height:1.1;margin-bottom:1.5rem;animation:fadeIn .6s ease-out .1s both}
+        .hero-title-gradient{background:linear-gradient(135deg,var(--txt) 0%,var(--muted) 50%,var(--accent) 75%,var(--cyan) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .hero-subtitle{font-size:1.25rem;color:var(--muted);max-width:600px;margin:0 auto 2.5rem;line-height:1.7;animation:fadeIn .6s ease-out .2s both}
+        .hero-actions{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;animation:fadeIn .6s ease-out .3s both}
+        .btn{display:inline-flex;align-items:center;gap:.8rem;padding:.9rem 1.8rem;font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:600;text-decoration:none;border-radius:12px;transition:all .3s}
+        .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 10px 40px rgba(168,85,247,.3)}
+        .btn-primary:hover{transform:translateY(-2px);box-shadow:0 15px 50px rgba(168,85,247,.4)}
+        .btn-secondary{background:var(--bg3);color:var(--txt);border:1px solid rgba(255,255,255,.1)}
+        .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+        .btn-arrow{transition:transform .2s}
+        .btn:hover .btn-arrow{transform:translateX(3px)}
+        
+        .stats-row{display:flex;justify-content:center;gap:4rem;margin-top:4rem;animation:fadeIn .6s ease-out .4s both}
+        .stat{text-align:center}
+        .stat-value{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:var(--txt)}
+        .stat-label{font-size:.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+        
+        .preview-section{padding:6rem 2rem;background:var(--bg2)}
+        .preview-container{max-width:1300px;margin:0 auto}
+        .section-label{font-size:.8rem;text-transform:uppercase;letter-spacing:.15em;color:var(--accent);margin-bottom:1rem}
+        .section-title{font-family:'Syne',sans-serif;font-size:2.5rem;font-weight:700;margin-bottom:1rem}
+        .section-desc{color:var(--muted);max-width:600px;margin-bottom:3rem}
+        .editor-preview{border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 100px rgba(0,0,0,.5)}
+        .editor-titlebar{background:#1a1a1e;padding:.8rem 1.2rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid rgba(255,255,255,.05)}
+        .editor-dots{display:flex;gap:.5rem}
+        .editor-dot{width:12px;height:12px;border-radius:50%}
+        .editor-dot:nth-child(1){background:#ff5f57}
+        .editor-dot:nth-child(2){background:#febc2e}
+        .editor-dot:nth-child(3){background:#28c840}
+        .editor-tabs{display:flex;gap:.5rem;margin-left:2rem}
+        .editor-tab{background:rgba(255,255,255,.05);padding:.4rem 1rem;border-radius:6px 6px 0 0;font-size:.85rem;color:var(--muted);cursor:pointer}
+        .editor-tab.active{background:var(--bg);color:var(--txt)}
+        .editor-body{display:grid;grid-template-columns:220px 1fr 300px;min-height:500px}
+        .editor-sidebar{background:#141417;border-right:1px solid rgba(255,255,255,.05);padding:1rem 0}
+        .sidebar-section{margin-bottom:1.5rem}
+        .sidebar-title{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.5rem 1rem;margin-bottom:.5rem}
+        .sidebar-item{display:flex;align-items:center;gap:.6rem;padding:.5rem 1rem;color:#858585;font-size:.9rem;cursor:pointer;transition:all .2s;border-left:2px solid transparent}
+        .sidebar-item:hover{background:rgba(255,255,255,.03);color:var(--txt)}
+        .sidebar-item.active{background:rgba(168,85,247,.1);color:var(--accent);border-left-color:var(--accent)}
+        .editor-main{background:#0e0e10;overflow:auto}
+        .code-line-numbers{position:absolute;left:0;top:0;bottom:0;width:50px;background:rgba(255,255,255,.02);display:flex;flex-direction:column;padding:1rem 0;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--muted);pointer-events:none}
+        .line-num{padding:0 1rem;height:1.6rem;opacity:.5}
+        .code-content{font-family:'JetBrains Mono',monospace;font-size:.9rem;line-height:1.7;padding:1rem 1rem 1rem 60px;white-space:pre}
+        .code-keyword{color:#c678dd}.code-function{color:#61afef}.code-string{color:#98c379}.code-comment{color:#5c6370;font-style:italic}.code-number{color:#d19a66}.code-operator{color:#56b6c2}.code-type{color:#e5c07b}
+        .ai-panel{background:#141417;border-left:1px solid rgba(255,255,255,.05);display:flex;flex-direction:column}
+        .ai-header{padding:1rem;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;gap:.6rem}
+        .ai-avatar{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--cyan));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem}
+        .ai-info h4{font-size:.95rem;font-weight:600}.ai-info span{font-size:.8rem;color:var(--muted)}
+        .ai-status{display:flex;align-items:center;gap:.4rem;font-size:.8rem;color:var(--green);margin-left:auto}
+        .ai-status-dot{width:6px;height:6px;background:var(--green);border-radius:50%}
+        .ai-messages{flex:1;padding:1rem;overflow:auto;display:flex;flex-direction:column;gap:1rem}
+        .ai-msg{padding:1rem;border-radius:12px;font-size:.9rem;line-height:1.6}
+        .ai-msg.bot{background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.2)}
+        .ai-msg.user{background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.2);align-self:flex-end}
+        .ai-input-area{padding:1rem;border-top:1px solid rgba(255,255,255,.05)}
+        .ai-input{display:flex;gap:.5rem}
+        .ai-input input{flex:1;background:var(--bg);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.8rem 1rem;color:var(--txt);font-size:.9rem;outline:none}
+        .ai-input input:focus{border-color:var(--accent)}
+        .ai-input button{background:var(--accent);border:none;border-radius:8px;padding:.8rem 1rem;color:#fff;cursor:pointer;transition:all .2s}
+        .ai-input button:hover{background:var(--accent2)}
+        
+        .features-section{padding:6rem 2rem}
+        .features-container{max-width:1200px;margin:0 auto}
+        .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+        .feature-card{background:var(--bg2);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:2rem;transition:all .3s}
+        .feature-card:hover{border-color:rgba(168,85,247,.3);transform:translateY(-4px);box-shadow:0 20px 40px rgba(0,0,0,.3)}
+        .feature-icon{width:56px;height:56px;background:linear-gradient(135deg,rgba(168,85,247,.2),rgba(34,211,238,.2));border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:1.5rem}
+        .feature-card h3{font-family:'Syne',sans-serif;font-size:1.15rem;font-weight:700;margin-bottom:.8rem}
+        .feature-card p{color:var(--muted);font-size:.95rem;line-height:1.6}
+        
+        .tech-section{padding:6rem 2rem;background:var(--bg2)}
+        .tech-container{max-width:1000px;margin:0 auto;text-align:center}
+        .tech-stack{display:flex;justify-content:center;flex-wrap:wrap;gap:1.5rem;margin-top:3rem}
+        .tech-item{display:flex;align-items:center;gap:.8rem;background:var(--bg3);border:1px solid rgba(255,255,255,.05);padding:1rem 1.5rem;border-radius:12px;font-weight:500}
+        .tech-icon{font-size:1.3rem}
+        
+        .cta-section{padding:8rem 2rem;text-align:center;position:relative;overflow:hidden}
+        .cta-bg{position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(168,85,247,.15) 0%,transparent 70%)}
+        .cta-content{position:relative;z-index:2}
+        .cta-title{font-family:'Syne',sans-serif;font-size:clamp(2rem,5vw,3.5rem);font-weight:800;margin-bottom:1rem}
+        .cta-desc{color:var(--muted);font-size:1.1rem;max-width:500px;margin:0 auto 2rem}
+        
+        .footer{padding:3rem 2rem;border-top:1px solid rgba(255,255,255,.05);text-align:center;color:var(--muted);font-size:.9rem}
+        .footer a{color:var(--accent);text-decoration:none}
+        .footer a:hover{text-decoration:underline}
+        
+        @media(max-width:1100px){.editor-body{grid-template-columns:60px 1fr 260px}.editor-sidebar{display:none}.features-grid{grid-template-columns:repeat(2,1fr)}}
+        @media(max-width:768px){.navigation{padding:1rem 1.5rem}.nav-links{display:none}.hero{padding:7rem 1.5rem 3rem}.stats-row{gap:2rem;flex-wrap:wrap}.features-grid{grid-template-columns:1fr}.editor-body{grid-template-columns:1fr}.ai-panel{display:none}}
+    </style>
+</head>
+<body>
+    <div class="noise-overlay"></div>
+    
+    <nav class="navigation">
+        <div class="nav-logo">
+            <div class="nav-logo-icon">💬</div>
+            <div><span>ZZW Code</span></div>
+        </div>
+        <div class="nav-right">
+            <div class="nav-links">
+                <a href="index.html" class="back" data-i18n="nav.back">← Back to H#</a>
+            </div>
+            <div class="lang-switch">
+                <button class="lang-btn active" data-lang="en">EN</button>
+                <button class="lang-btn" data-lang="zh">中文</button>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-grid"></div>
+        <div class="hero-glow hero-glow-1"></div>
+        <div class="hero-glow hero-glow-2"></div>
+        
+        <div class="hero-content">
+            <div class="hero-badge">
+                <div class="hero-badge-dot"></div>
+                <span data-i18n="hero.badge">AI-Powered H# Development Environment</span>
+            </div>
+            
+            <h1 class="hero-title">
+                <span class="hero-title-gradient" data-i18n="hero.title">ZZW Code</span>
+            </h1>
+            
+            <p class="hero-subtitle" data-i18n="hero.subtitle">
+                A modern, intelligent IDE designed for H# development. Write code faster with AI assistance, syntax highlighting, and an integrated terminal.
+            </p>
+            
+            <div class="hero-actions">
+                <a href="https://github.com/peddlejumper/Hsharp" class="btn btn-primary" target="_blank" rel="noopener">
+                    <span data-i18n="hero.launch">Launch ZZW Code</span>
+                    <span class="btn-arrow">→</span>
+                </a>
+                <a href="https://github.com/peddlejumper/Hsharp" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <span data-i18n="hero.docs">Documentation</span>
+                </a>
+            </div>
+            
+            <div class="stats-row">
+                <div class="stat">
+                    <div class="stat-value">Monaco</div>
+                    <div class="stat-label" data-i18n="stats.editor">Code Editor</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">Claude</div>
+                    <div class="stat-label" data-i18n="stats.ai">AI Power</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">H#</div>
+                    <div class="stat-label" data-i18n="stats.lang">Language</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">Local</div>
+                    <div class="stat-label" data-i18n="stats.storage">Storage</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="preview-section">
+        <div class="preview-container">
+            <div class="section-label" data-i18n="preview.label">Sneak Peek</div>
+            <h2 class="section-title" data-i18n="preview.title">The Complete Development Experience</h2>
+            <p class="section-desc" data-i18n="preview.desc">Everything you need to build H# applications, all in one place.</p>
+            
+            <div class="editor-preview">
+                <div class="editor-titlebar">
+                    <div class="editor-dots">
+                        <div class="editor-dot"></div>
+                        <div class="editor-dot"></div>
+                        <div class="editor-dot"></div>
+                    </div>
+                    <div class="editor-tabs">
+                        <div class="editor-tab active">main.hto</div>
+                        <div class="editor-tab">utils.hto</div>
+                    </div>
+                </div>
+                <div class="editor-body">
+                    <div class="editor-sidebar">
+                        <div class="sidebar-section">
+                            <div class="sidebar-title" data-i18n="editor.explorer">Explorer</div>
+                            <div class="sidebar-item active">📄 main.hto</div>
+                            <div class="sidebar-item">📄 utils.hto</div>
+                            <div class="sidebar-item">📄 d3_demo.hto</div>
+                        </div>
+                    </div>
+                    <div class="editor-main">
+                        <div class="code-content"><span class="code-comment">// ZZW Code — H# AI IDE</span>
+<span class="code-comment">// D3 Space Computing Demo</span>
+
+<span class="code-keyword">fn</span> <span class="code-function">main</span>() {
+  <span class="code-keyword">var</span> size = <span class="code-number">8</span>
+  <span class="code-keyword">var</span> matrix = d3.<span class="code-function">create</span>(size)
+  
+  <span class="code-keyword">for</span> i <span class="code-keyword">in</span> <span class="code-number">0</span>..size {
+    matrix[i] = d3.<span class="code-function">map</span>(i, <span class="code-keyword">fn</span>(x) {
+      <span class="code-keyword">return</span> (x * x) % d3.phi
+    })
+  }
+  
+  d3.<span class="code-function">render</span>(matrix)
+  <span class="code-built_in">print</span>(<span class="code-string">"Pattern generated!"</span>)
+}
+
+<span class="code-function">main</span>()</div>
+                    </div>
+                    <div class="ai-panel">
+                        <div class="ai-header">
+                            <div class="ai-avatar">🤖</div>
+                            <div class="ai-info">
+                                <h4 data-i18n="ai.name">Claude AI</h4>
+                                <span data-i18n="ai.role">Code Assistant</span>
+                            </div>
+                            <div class="ai-status">
+                                <div class="ai-status-dot"></div>
+                                <span data-i18n="ai.online">Online</span>
+                            </div>
+                        </div>
+                        <div class="ai-messages">
+                            <div class="ai-msg bot" data-i18n="ai.msg1">Your D3 pattern generator looks great! I can see you're creating a space computing visualization. Want me to suggest some optimizations for the phi calculation?</div>
+                            <div class="ai-msg user" data-i18n="ai.msg2">Yes, show me the optimized version</div>
+                            <div class="ai-msg bot" data-i18n="ai.msg3">Here's an optimized version with memoization for better performance...</div>
+                        </div>
+                        <div class="ai-input-area">
+                            <div class="ai-input">
+                                <input type="text" placeholder="Ask AI..." data-i18n-placeholder="ai.placeholder">
+                                <button>→</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features-section">
+        <div class="features-container">
+            <div class="section-label" data-i18n="features.label">Features</div>
+            <h2 class="section-title" data-i18n="features.title">Built for H# Developers</h2>
+            <p class="section-desc" data-i18n="features.desc">Powerful features designed to enhance your H# development workflow.</p>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3 data-i18n="f1.title">AI Code Assistant</h3>
+                    <p data-i18n="f1.desc">Get intelligent code suggestions, refactoring help, and explanations powered by Claude AI. Understand complex H# patterns instantly.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📝</div>
+                    <h3 data-i18n="f2.title">Monaco Editor</h3>
+                    <p data-i18n="f2.desc">Industry-standard code editor with syntax highlighting, intelligent auto-completion, and multi-file project support.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🖥️</div>
+                    <h3 data-i18n="f3.title">Integrated Terminal</h3>
+                    <p data-i18n="f3.desc">Run H# code directly with real-time output, error highlighting, and debugging capabilities built in.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📁</div>
+                    <h3 data-i18n="f4.title">File Explorer</h3>
+                    <p data-i18n="f4.desc">Organize projects with folders, create and manage multiple .hto files with an intuitive file browser.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💾</div>
+                    <h3 data-i18n="f5.title">Local Storage</h3>
+                    <p data-i18n="f5.desc">Your files are saved locally in IndexedDB. No cloud dependency, complete privacy, work offline.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3 data-i18n="f6.title">H# Syntax</h3>
+                    <p data-i18n="f6.desc">Custom language definition for H# with beautiful syntax highlighting for keywords, functions, and comments.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="tech-section">
+        <div class="tech-container">
+            <div class="section-label" data-i18n="tech.label">Tech Stack</div>
+            <h2 class="section-title" data-i18n="tech.title">Powered By Modern Technologies</h2>
+            
+            <div class="tech-stack">
+                <div class="tech-item">
+                    <span class="tech-icon">⚛️</span>
+                    <span>React</span>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">📘</span>
+                    <span>TypeScript</span>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">🎨</span>
+                    <span>Tailwind CSS</span>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">📦</span>
+                    <span>Zustand</span>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">🔷</span>
+                    <span>Monaco Editor</span>
+                </div>
+                <div class="tech-item">
+                    <span class="tech-icon">💾</span>
+                    <span>IndexedDB</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="cta-bg"></div>
+        <div class="cta-content">
+            <h2 class="cta-title" data-i18n="cta.title">Ready to Start Coding?</h2>
+            <p class="cta-desc" data-i18n="cta.desc">Launch ZZW Code now and experience the future of H# development.</p>
+            <a href="https://github.com/peddlejumper/Hsharp" class="btn btn-primary" target="_blank" rel="noopener">
+                <span data-i18n="cta.btn">Open ZZW Code</span>
+                <span class="btn-arrow">→</span>
+            </a>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>ZZW Code — Part of the <a href="index.html">H#</a> ecosystem</p>
+    </footer>
+
+    <script>
+        var translations = {
+            en: {
+                'nav.back': '← Back to H#',
+                'hero.badge': 'AI-Powered H# Development Environment',
+                'hero.title': 'ZZW Code',
+                'hero.subtitle': 'A modern, intelligent IDE designed for H# development. Write code faster with AI assistance, syntax highlighting, and an integrated terminal.',
+                'hero.launch': 'Launch ZZW Code',
+                'hero.docs': 'Documentation',
+                'stats.editor': 'Code Editor',
+                'stats.ai': 'AI Power',
+                'stats.lang': 'Language',
+                'stats.storage': 'Storage',
+                'preview.label': 'Sneak Peek',
+                'preview.title': 'The Complete Development Experience',
+                'preview.desc': 'Everything you need to build H# applications, all in one place.',
+                'editor.explorer': 'Explorer',
+                'ai.name': 'Claude AI',
+                'ai.role': 'Code Assistant',
+                'ai.online': 'Online',
+                'ai.msg1': 'Your D3 pattern generator looks great! I can see you\'re creating a space computing visualization. Want me to suggest some optimizations for the phi calculation?',
+                'ai.msg2': 'Yes, show me the optimized version',
+                'ai.msg3': 'Here\'s an optimized version with memoization for better performance...',
+                'ai.placeholder': 'Ask AI...',
+                'features.label': 'Features',
+                'features.title': 'Built for H# Developers',
+                'features.desc': 'Powerful features designed to enhance your H# development workflow.',
+                'f1.title': 'AI Code Assistant',
+                'f1.desc': 'Get intelligent code suggestions, refactoring help, and explanations powered by Claude AI. Understand complex H# patterns instantly.',
+                'f2.title': 'Monaco Editor',
+                'f2.desc': 'Industry-standard code editor with syntax highlighting, intelligent auto-completion, and multi-file project support.',
+                'f3.title': 'Integrated Terminal',
+                'f3.desc': 'Run H# code directly with real-time output, error highlighting, and debugging capabilities built in.',
+                'f4.title': 'File Explorer',
+                'f4.desc': 'Organize projects with folders, create and manage multiple .hto files with an intuitive file browser.',
+                'f5.title': 'Local Storage',
+                'f5.desc': 'Your files are saved locally in IndexedDB. No cloud dependency, complete privacy, work offline.',
+                'f6.title': 'H# Syntax',
+                'f6.desc': 'Custom language definition for H# with beautiful syntax highlighting for keywords, functions, and comments.',
+                'tech.label': 'Tech Stack',
+                'tech.title': 'Powered By Modern Technologies',
+                'cta.title': 'Ready to Start Coding?',
+                'cta.desc': 'Launch ZZW Code now and experience the future of H# development.',
+                'cta.btn': 'Open ZZW Code'
+            },
+            zh: {
+                'nav.back': '← 返回 H#',
+                'hero.badge': 'AI 驱动的 H# 开发环境',
+                'hero.title': 'ZZW Code',
+                'hero.subtitle': '专为 H# 开发设计的现代化智能 IDE。AI 辅助、语法高亮、集成终端，让编码更快更高效。',
+                'hero.launch': '启动 ZZW Code',
+                'hero.docs': '文档',
+                'stats.editor': '代码编辑器',
+                'stats.ai': 'AI 驱动',
+                'stats.lang': '语言',
+                'stats.storage': '本地存储',
+                'preview.label': '预览',
+                'preview.title': '完整的开发体验',
+                'preview.desc': '构建 H# 应用所需的一切，尽在一处。',
+                'editor.explorer': '资源管理器',
+                'ai.name': 'Claude AI',
+                'ai.role': '代码助手',
+                'ai.online': '在线',
+                'ai.msg1': '你的 D3 图案生成器看起来很棒！我看到你在创建一个空间计算可视化。要我建议一些 phi 计算的优化吗？',
+                'ai.msg2': '好，给我看看优化版本',
+                'ai.msg3': '这里是一个使用记忆化以获得更好性能的优化版本...',
+                'ai.placeholder': '向 AI 提问...',
+                'features.label': '功能特性',
+                'features.title': '为 H# 开发者打造',
+                'features.desc': '强大的功能，专为提升 H# 开发工作流而设计。',
+                'f1.title': 'AI 代码助手',
+                'f1.desc': '获取 Claude AI 驱动的智能代码建议、重构帮助和代码解释。轻松理解复杂的 H# 模式。',
+                'f2.title': 'Monaco 编辑器',
+                'f2.desc': '业界标准的代码编辑器，支持语法高亮、智能自动补全和多文件项目支持。',
+                'f3.title': '集成终端',
+                'f3.desc': '直接运行 H# 代码，内置实时输出、错误高亮和调试功能。',
+                'f4.title': '文件浏览器',
+                'f4.desc': '用文件夹组织项目，直观的文件浏览器轻松创建和管理多个 .hto 文件。',
+                'f5.title': '本地存储',
+                'f5.desc': '文件保存在本地 IndexedDB，无云依赖，完全隐私，支持离线工作。',
+                'f6.title': 'H# 语法',
+                'f6.desc': '为 H# 定制的语言定义，关键字、函数和注释都有漂亮的语法高亮。',
+                'tech.label': '技术栈',
+                'tech.title': '现代技术驱动',
+                'cta.title': '准备开始编程？',
+                'cta.desc': '立即启动 ZZW Code，体验 H# 开发的未来。',
+                'cta.btn': '打开 ZZW Code'
+            }
+        };
+
+        function setLanguage(lang) {
+            document.documentElement.setAttribute('lang', lang);
+            localStorage.setItem('zzw-lang', lang);
+            var els = document.querySelectorAll('[data-i18n]');
+            for (var i = 0; i < els.length; i++) {
+                var key = els[i].getAttribute('data-i18n');
+                if (translations[lang][key]) els[i].textContent = translations[lang][key];
+            }
+            var btns = document.querySelectorAll('.lang-btn');
+            for (var i = 0; i < btns.length; i++) {
+                btns[i].classList.toggle('active', btns[i].getAttribute('data-lang') === lang);
+            }
+        }
+
+        document.querySelectorAll('.lang-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                setLanguage(this.getAttribute('data-lang'));
+            });
+        });
+
+        var savedLang = localStorage.getItem('zzw-lang') || 'en';
+        setLanguage(savedLang);
+    </script>
+</body>
+</html>

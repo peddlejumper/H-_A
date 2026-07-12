@@ -1,0 +1,16 @@
+# T09 - ? capture with no exception yields the normal return value
+fn id(n) {
+    return n;
+}
+let a = id(42)?;
+print(a);
+
+# chained calls, none throw
+fn inc(n) { return n + 1; }
+let b = inc(inc(inc(0)?))?;
+print(b);
+
+# ? on a call that returns a compound value
+fn pair() { return [1, 2]; }
+let c = pair()?;
+print(c);

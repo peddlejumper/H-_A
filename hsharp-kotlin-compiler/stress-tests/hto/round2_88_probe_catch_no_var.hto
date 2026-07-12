@@ -1,0 +1,9 @@
+# Probe: catch without variable name — `catch { }`
+# H# parser requires `catch ( IDENTIFIER )` — this should be a COMPILE ERROR
+print("before");
+try {
+    throw "x";
+} catch {
+    print("no var catch");
+}
+print("after");

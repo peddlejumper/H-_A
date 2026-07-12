@@ -1,0 +1,242 @@
+# H# 原生性能测试 - zzwUI 与 D3System
+# 使用纯 H# 函数调用，不依赖语言级扩展关键字
+
+import "bootstrap/hwdui.hto";
+import "bootstrap/d3system.hto";
+import "bootstrap/d3system_ops.hto";
+import "bootstrap/perf_monitor.hto";
+
+print("=== H# 原生性能测试套件 ===");
+print("");
+
+# ── 测试 1: zzwUI 控件创建性能 ──
+print("--- 测试 1: zzwUI 控件创建性能 ---");
+let t1_start = time_now();
+let widget_count = 50;
+let widgets = [];
+let i1 = 0;
+while (i1 < widget_count) {
+    let btn = new Button();
+    btn.init_btn("button_" + str(i1));
+    btn.set_pos(i1 * 5, i1 * 3);
+    btn.set_size(80, 30);
+    push(widgets, btn);
+    i1 = i1 + 1;
+}
+let t1_end = time_now();
+let t1_elapsed = t1_end - t1_start;
+print("创建 " + str(widget_count) + " 个 Button 控件");
+print("耗时: " + str(t1_elapsed) + " ms");
+print("平均: " + str(t1_elapsed / widget_count) + " ms/控件");
+print("");
+
+# ── 测试 2: zzwUI 层次树构建与遍历 ──
+print("--- 测试 2: zzwUI 层次树构建与遍历 ---");
+let win = new Window();
+win.init_win("性能测试窗口");
+win.width = 800;
+win.height = 600;
+
+let panel1 = new Panel();
+panel1.init_panel("main_panel");
+panel1.set_pos(10, 40);
+panel1.set_size(780, 500);
+win.add_child(panel1);
+
+let tree_build_start = time_now();
+let p2 = 0;
+while (p2 < 10) {
+    let sub_panel = new Panel();
+    sub_panel.init_panel("sub_" + str(p2));
+    sub_panel.set_pos(p2 * 50, p2 * 30);
+    sub_panel.set_size(200, 100);
+    panel1.add_child(sub_panel);
+    
+    let c = 0;
+    while (c < 5) {
+        let lbl = new Label();
+        lbl.init_label("lbl_" + str(p2) + "_" + str(c));
+        lbl.set_pos(c * 40, 10);
+        sub_panel.add_child(lbl);
+        c = c + 1;
+    }
+    p2 = p2 + 1;
+}
+let tree_build_end = time_now();
+let tree_build_time = tree_build_end - tree_build_start;
+print("构建 10 个子面板，每个含 5 个 Label，共 61 个控件");
+print("构建树耗时: " + str(tree_build_time) + " ms");
+
+let find_start = time_now();
+let find_count = 0;
+let f = 0;
+while (f < 20) {
+    let found = win.find_by_id("lbl_3_2");
+    if (found != nullptr) {
+        find_count = find_count + 1;
+    }
+    f = f + 1;
+}
+let find_end = time_now();
+let find_time = find_end - find_start;
+print("20 次 find_by_id 查找耗时: " + str(find_time) + " ms");
+print("");
+
+# ── 测试 3: CSS 样式计算性能 ──
+print("--- 测试 3: CSS 样式计算性能 ---");
+let css_sheet = hwdui_create_stylesheet("perf_test");
+let css_sel = new Selector();
+css_sel.init_sel();
+css_sel.setType("Button");
+css_sel.setClass("primary");
+css_sheet.addRule(css_sel, [
+    ["background-color", "#36454F"],
+    ["border-color", "#708090"],
+    ["font-size", "14"],
+    ["padding", "8"],
+    ["border-width", "2"],
+    ["border-radius", "4"]
+]);
+
+let css_start = time_now();
+let css_iter = 0;
+while (css_iter < 30) {
+    let test_btn = new Button();
+    test_btn.init_btn("css_test_" + str(css_iter));
+    test_btn.addClass("primary");
+    let computed = test_btn.getComputedStyle();
+    css_iter = css_iter + 1;
+}
+let css_end = time_now();
+let css_time = css_end - css_start;
+print("30 次 CSS 样式计算耗时: " + str(css_time) + " ms");
+print("平均: " + str(css_time / 30) + " ms/次");
+print("");
+
+# ── 测试 4: D3System 点运算性能 ──
+print("--- 测试 4: D3System 点运算性能 ---");
+let d3_start = time_now();
+let d3_iter = 0;
+while (d3_iter < 100) {
+    let p1 = D3Point(d3_iter, d3_iter * 2, d3_iter * 3);
+    let p2 = D3Point(d3_iter + 10, d3_iter + 20, d3_iter + 30);
+    let dist = d3_point_dist(p1, p2);
+    let mid = d3_point_mid(p1, p2);
+    let added = d3_point_add(p1, p2);
+    d3_iter = d3_iter + 1;
+}
+let d3_end = time_now();
+let d3_time = d3_end - d3_start;
+print("100 次点运算（距离+中点+加法）耗时: " + str(d3_time) + " ms");
+print("");
+
+# ── 测试 5: D3System 包围盒运算性能 ──
+print("--- 测试 5: D3System 包围盒运算性能 ---");
+let bbox_start = time_now();
+let bbox_iter = 0;
+while (bbox_iter < 100) {
+    let box1 = D3BoundingBox(bbox_iter, bbox_iter, bbox_iter, bbox_iter + 50, bbox_iter + 50, bbox_iter + 50);
+    let box2 = D3BoundingBox(bbox_iter + 25, bbox_iter + 25, bbox_iter + 25, bbox_iter + 75, bbox_iter + 75, bbox_iter + 75);
+    let intersects = d3_bbox_intersects(box1, box2);
+    let volume = d3_bbox_volume(box1);
+    let center = d3_bbox_center(box1);
+    bbox_iter = bbox_iter + 1;
+}
+let bbox_end = time_now();
+let bbox_time = bbox_end - bbox_start;
+print("100 次包围盒运算（相交+体积+中心）耗时: " + str(bbox_time) + " ms");
+print("");
+
+# ── 测试 6: D3System 区域查询性能 ──
+print("--- 测试 6: D3System 区域查询性能 ---");
+let world = {};
+world.regions = [];
+world.region_interfaces = [];
+world.properties = [];
+world.name = "TestWorld";
+
+let r = 0;
+while (r < 20) {
+    let region = {};
+    region.name = "Region_" + str(r);
+    region.coords = [r * 100, 0, 0, r * 100 + 50, 200, 200];
+    region.properties = [];
+    region.interfaces = [];
+    push(world.regions, region);
+    r = r + 1;
+}
+print("创建了 " + str(len(world.regions)) + " 个区域");
+
+let query_start = time_now();
+let q = 0;
+while (q < 50) {
+    let found = d3_find_region_by_point(world, q * 50 + 25, 100, 100);
+    let by_name = d3_find_region_by_name(world, "Region_5");
+    q = q + 1;
+}
+let query_end = time_now();
+let query_time = query_end - query_start;
+print("50 次区域查询（按点+按名）耗时: " + str(query_time) + " ms");
+print("");
+
+# ── 测试 7: D3System 向量运算性能 ──
+print("--- 测试 7: D3System 向量运算性能 ---");
+let vec_start = time_now();
+let vec_iter = 0;
+while (vec_iter < 100) {
+    let v1 = D3Vec3(vec_iter, vec_iter * 2, vec_iter * 3);
+    let v2 = D3Vec3(vec_iter + 1, vec_iter + 2, vec_iter + 3);
+    let dot = d3_vec3_dot(v1, v2);
+    let cross = d3_vec3_cross(v1, v2);
+    let length = d3_vec3_length(v1);
+    vec_iter = vec_iter + 1;
+}
+let vec_end = time_now();
+let vec_time = vec_end - vec_start;
+print("100 次向量运算（点积+叉积+长度）耗时: " + str(vec_time) + " ms");
+print("");
+
+# ── 测试 8: zzwUI + D3System 综合操作 ──
+print("--- 测试 8: zzwUI + D3System 综合操作 ---");
+let combo_start = time_now();
+let combo_iter = 0;
+while (combo_iter < 20) {
+    let point = D3Point(combo_iter * 10, combo_iter * 5, combo_iter * 2);
+    let bbox = D3BoundingBox(
+        d3_point_x(point) - 25,
+        d3_point_y(point) - 25,
+        d3_point_z(point) - 25,
+        d3_point_x(point) + 25,
+        d3_point_y(point) + 25,
+        d3_point_z(point) + 25
+    );
+    let vol = d3_bbox_volume(bbox);
+    
+    let card = new Panel();
+    card.init_panel("space_card_" + str(combo_iter));
+    card.set_pos(combo_iter * 30, 0);
+    card.set_size(250, 80);
+    
+    let lbl = new Label();
+    lbl.init_label("Volume: " + str(vol));
+    card.add_child(lbl);
+    
+    combo_iter = combo_iter + 1;
+}
+let combo_end = time_now();
+let combo_time = combo_end - combo_start;
+print("20 次综合操作（空间对象+UI 控件创建）耗时: " + str(combo_time) + " ms");
+print("");
+
+# ── 总结 ──
+print("=== 性能测试完成 ===");
+print("");
+print("测试环境: H# 原生执行");
+print("zzwUI 控件创建: " + str(t1_elapsed) + " ms (" + str(widget_count) + " 个控件)");
+print("zzwUI 树构建: " + str(tree_build_time) + " ms (61 个控件)");
+print("zzwUI CSS 计算: " + str(css_time) + " ms (30 次计算)");
+print("D3System 点运算: " + str(d3_time) + " ms (100 次)");
+print("D3System 包围盒: " + str(bbox_time) + " ms (100 次)");
+print("D3System 区域查询: " + str(query_time) + " ms (50 次查询, 20 区域)");
+print("D3System 向量运算: " + str(vec_time) + " ms (100 次)");
+print("综合操作: " + str(combo_time) + " ms (20 次空间+UI 组合)");

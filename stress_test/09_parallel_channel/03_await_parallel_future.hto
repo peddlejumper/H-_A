@@ -1,0 +1,66 @@
+# 03 — await parallel future semantics
+# Covers: await on resolved future, await on pending future, await on non-future raises,
+#         await in expression context, multiple awaits on same future
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+parallel fn slow_compute(n) {
+    # CPU-bound so the future is genuinely pending when we await
+    let s = 0;
+    let i = 0;
+    while (i < n) {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}
+
+# await blocks until worker completes
+let f = slow_compute(100000);
+let v = await f;
+check("await_blocks", v == 4999950000, "got " + str(v));
+
+# await in arithmetic expression
+let f2 = slow_compute(50);
+check("await_in_expr", (await f2) + 1 == 1226, "got " + str((await f2) + 1));
+
+# Multiple parallel futures awaited in sequence
+let fa = slow_compute(10);
+let fb = slow_compute(20);
+let fc = slow_compute(30);
+let sum = await fa + await fb + await fc;
+check("await_sum", sum == (45 + 190 + 435), "got " + str(sum));
+
+# await on already-resolved future (idempotent, fast path)
+let fd = slow_compute(5);
+let first = await fd;
+let second = await fd;
+check("await_idempotent", first == second and first == 10, "first=" + str(first) + " second=" + str(second));
+
+# await on a non-future should raise
+let caught = false;
+try {
+    let dummy = await 42;
+} catch (e) {
+    caught = true;
+}
+check("await_non_future_raises", caught, "no exception");
+
+# await on null should raise
+let caught2 = false;
+try {
+    let dummy = await nullptr;
+} catch (e) {
+    caught2 = true;
+}
+check("await_null_raises", caught2, "no exception");
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

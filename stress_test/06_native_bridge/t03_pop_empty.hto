@@ -1,0 +1,25 @@
+# t03 — pop() on empty list (boundary) and on non-list
+print("== t03 pop empty ==");
+try {
+    let xs = [];
+    let v = pop(xs);
+    print("pop empty OK (unexpected): " + str(v));
+} catch (e) {
+    print("pop([]) ERR: " + str(e));
+}
+try {
+    pop({"a": 1});
+    print("pop dict OK (unexpected)");
+} catch (e) {
+    print("pop(dict) ERR: " + str(e));
+}
+try {
+    pop("hi");
+    print("pop str OK (unexpected)");
+} catch (e) {
+    print("pop(str) ERR: " + str(e));
+}
+# normal pop
+let ys = [10, 20, 30];
+let last = pop(ys);
+print("pop last = " + str(last) + " ; rest = " + str(ys));

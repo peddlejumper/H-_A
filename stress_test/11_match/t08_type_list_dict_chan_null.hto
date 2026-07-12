@@ -1,0 +1,17 @@
+# t08 - type pattern: is list / is dict / is chan / is null
+fn typ(x) {
+    return match x {
+        is list as l => "list:" + str(len(l)),
+        is dict as d => "dict:" + str(len(d)),
+        is null => "null",
+        _ => "other"
+    };
+}
+print("t08_list:" + typ([1,2,3]));
+print("t08_list_empty:" + typ([]));
+print("t08_dict:" + typ({"a":1,"b":2}));
+print("t08_dict_empty:" + typ({}));
+print("t08_null:" + typ(null));
+print("t08_other:" + typ(42));
+# NOTE: `is chan` is a PARSER BUG — parse_pattern doesn't accept CHAN token after `is`
+# even though HVM.typeMatch supports "chan". Tested in t21_parser_bugs.hto

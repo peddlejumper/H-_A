@@ -1,0 +1,79 @@
+# 04 — parent-frame function access inside parallel fn
+# Covers: parallel fn 内访问模块顶层函数
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# 模块顶层普通函数
+fn helper_add(a, b) {
+    return a + b;
+}
+fn helper_fact(n) {
+    if (n <= 1) { return 1; }
+    return n * helper_fact(n - 1);
+}
+fn helper_concat(xs) {
+    let r = "";
+    let i = 0;
+    while (i < len(xs)) {
+        r = r + str(xs[i]);
+        i = i + 1;
+    }
+    return r;
+}
+
+# parallel fn 调用这些顶层函数
+parallel fn par_add(a, b) {
+    return helper_add(a, b);
+}
+parallel fn par_fact(n) {
+    return helper_fact(n);
+}
+parallel fn par_concat(xs) {
+    return helper_concat(xs);
+}
+
+check("par_calls_toplevel_add", await par_add(3, 4) == 7, "got " + str(await par_add(3, 4)));
+check("par_calls_toplevel_fact", await par_fact(5) == 120, "got " + str(await par_fact(5)));
+check("par_calls_toplevel_concat", await par_concat([1, 2, 3]) == "123",
+      "got [" + str(await par_concat([1, 2, 3])) + "]");
+
+# parallel fn 内递归调用顶层函数（深度调用栈）
+fn fib(n) {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+parallel fn par_fib(n) {
+    return fib(n);
+}
+check("par_fib_15", await par_fib(15) == 610, "got " + str(await par_fib(15)));
+
+# 100 个 worker 同时调顶层函数
+parallel fn par_fib_worker(n) {
+    return fib(n);
+}
+let futs = [];
+let i = 0;
+while (i < 100) {
+    push(futs, par_fib_worker(10));
+    i = i + 1;
+}
+let all_ok = true;
+let j = 0;
+while (j < 100) {
+    if (await futs[j] != 55) { all_ok = false; }
+    j = j + 1;
+}
+check("100_workers_call_toplevel_fn", all_ok, "some worker got wrong fib");
+
+# 顶层 async fn 驱动 parallel fn（async fn 内允许 await）
+# 注意：编译器禁止普通 fn / parallel fn 内使用 await，所以 driver 必须是 async fn。
+async fn driver(n) {
+    let f = par_fib_worker(n);
+    return await f;
+}
+check("async_fn_drives_parallel", await driver(12) == 144, "got " + str(await driver(12)));
+
+print("T04_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

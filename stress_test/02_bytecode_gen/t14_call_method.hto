@@ -1,0 +1,27 @@
+# t14_call_method.hto - CALL_METHOD 路径
+class Calculator {
+    let val = 0;
+    fn init(v) { self.val = v; }
+    fn get() { return self.val; }
+    fn add(n) { self.val = self.val + n; return self; }
+    fn mul(n) { self.val = self.val * n; return self; }
+}
+let c = new Calculator(10);
+print(c.get());
+print(c.add(5).get());
+print(c.mul(2).get());
+
+# 链式方法调用（不能用 new X().method()，需分步）
+let c2 = new Calculator(3);
+print(c2.add(4).mul(2).get());
+
+# 方法带多参数
+class Vec {
+    let x = 0;
+    let y = 0;
+    fn init(x, y) { self.x = x; self.y = y; }
+    fn dot(other) { return self.x * other.x + self.y * other.y; }
+}
+let v1 = new Vec(2, 3);
+let v2 = new Vec(4, 5);
+print(v1.dot(v2));

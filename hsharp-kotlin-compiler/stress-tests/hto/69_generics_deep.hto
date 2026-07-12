@@ -1,0 +1,168 @@
+# 69_generics_deep.hto — 泛型深度测试（H# v0.4.1）
+# 目标：对泛型类 / 函数 / 方法 / 反射 / 继承 / 组合做高强度边界测试，暴露 bug。
+# 每个用例独立 try/catch，互不影响；用 check() 输出 OK/FAIL 行。
+
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+# ===================== 共用类型与函数 =====================
+class Box<T> {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+    fn get() { return self.value; }
+    fn set(v) { self.value = v; }
+    fn echo<T>(x) { return x; }            # 方法自身的 T 遮蔽类的 T
+    fn cls_ta() { return self.__type_args__[0]; }
+}
+
+class Pair<K, V> {
+    let k = nullptr;
+    let v = nullptr;
+    fn init(a, b) { self.k = a; self.v = b; }
+    fn first() { return self.k; }
+    fn second() { return self.v; }
+}
+
+class Base {
+    let tag = "base";
+    fn base_tag() { return self.tag; }
+}
+
+class Boxed<T> extends Base {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+    fn get() { return self.value; }
+}
+
+class M<T> {
+    static fn id<V>(x) { return x; }
+    static fn first<V>(arr) { return arr[0]; }
+}
+
+class Wrap {
+    let inner = nullptr;
+    fn init(b) { self.inner = b; }
+    fn get() { return self.inner.get(); }
+    fn ta() { return self.inner.__type_args__[0]; }
+}
+
+fn identity<T>(x) { return x; }
+fn first_of<T>(arr) { return arr[0]; }
+fn make_box<T>(x) { return new Box<T>(x); }       # 泛型函数构造泛型实例
+fn pair_fn<T, U>(a, b) { return [a, b]; }          # 多类型参数泛型函数
+
+# ===================== g1: 泛型函数返回 new Box<T>(x)，内省 __type_args__ =====================
+try {
+    let b = make_box<int>(42);
+    check("g1/get", b.get() == 42);
+    print("g1/ta0=" + str(b.__type_args__[0]));
+    check("g1/ta0_is_T", b.__type_args__[0] == "T");   # T 未替换 — 语义缺口探测
+} catch (e) { print("g1/ERR :: " + str(e)); }
+
+# ===================== g2: 多类型参数泛型函数 pair_fn<int, string>(1, "a") =====================
+try {
+    let r = pair_fn<int, string>(1, "a");
+    print("g2/r=" + str(r));
+    check("g2/len", len(r) == 2);
+    check("g2/a", r[0] == 1);
+    check("g2/b", r[1] == "a");
+} catch (e) { print("g2/ERR :: " + str(e)); }
+
+# ===================== g3: 类型参数名遮蔽 — Box<T>.echo<T>(x)，cls_ta 仍返回类的 T =====================
+try {
+    let b = new Box<int>(7);
+    let r = b.echo<bool>(true);
+    check("g3/echo_val", r == true);
+    check("g3/cls_ta", b.cls_ta() == "int");
+    check("g3/inst_ta", b.__type_args__[0] == "int");
+} catch (e) { print("g3/ERR :: " + str(e)); }
+
+# ===================== g4: 泛型实例上调用泛型方法 b.echo<string>("x") =====================
+try {
+    let b = new Box<int>(5);
+    let s = b.echo<string>("z");
+    check("g4/echo_str", s == "z");
+    check("g4/cls_ta_unchanged", b.cls_ta() == "int");
+    check("g4/value_unchanged", b.get() == 5);
+} catch (e) { print("g4/ERR :: " + str(e)); }
+
+# ===================== g5: 省略类型参数 new Box(42) — __type_args__ 应为 null =====================
+try {
+    let b = new Box(42);
+    check("g5/get", b.get() == 42);
+    print("g5/ta=" + str(b.__type_args__));
+    check("g5/ta_null", b.__type_args__ == nullptr);
+} catch (e) { print("g5/ERR :: " + str(e)); }
+
+# ===================== g6: 省略类型参数调用 identity("hi") =====================
+try {
+    check("g6/omit_int", identity(99) == 99);
+    check("g6/omit_str", identity("hi") == "hi");
+    check("g6/omit_list", identity([1, 2]) == [1, 2]);
+} catch (e) { print("g6/ERR :: " + str(e)); }
+
+# ===================== g7: 泛型类上的静态泛型方法 M.id<int>(42) =====================
+try {
+    let r = M.id<int>(42);
+    print("g7/r=" + str(r));
+    check("g7/id_int", r == 42);
+    check("g7/id_str", M.id<string>("x") == "x");
+    check("g7/first", M.first<int>([7, 8, 9]) == 7);
+    print("g7/tp=" + str(M.__type_params__));
+    check("g7/cls_tp", M.__type_params__[0] == "T");
+} catch (e) { print("g7/ERR :: " + str(e)); }
+
+# ===================== g8: __type_args__ 写入尝试 =====================
+try {
+    let b = new Box<int>(1);
+    try {
+        b.__type_args__[0] = "hacked";
+        print("g8/after_write=" + str(b.__type_args__[0]));
+        check("g8/write_no_throw", true);
+    } catch (e2) {
+        print("g8/write_err=" + str(e2));
+        check("g8/write_throws", true);
+    }
+} catch (e) { print("g8/ERR :: " + str(e)); }
+
+# ===================== g9: 链式泛型方法调用 b.echo<int>(b.echo<int>(5)) =====================
+try {
+    let b = new Box<int>(0);
+    let r = b.echo<int>(b.echo<int>(5));
+    check("g9/chain", r == 5);
+} catch (e) { print("g9/ERR :: " + str(e)); }
+
+# ===================== g10: 泛型函数调用泛型函数 identity<int>(first_of<int>(arr)) =====================
+try {
+    let r = identity<int>(first_of<int>([7, 8, 9]));
+    check("g10/nested", r == 7);
+    let s = identity<string>(first_of<string>(["a", "b"]));
+    check("g10/nested_str", s == "a");
+} catch (e) { print("g10/ERR :: " + str(e)); }
+
+# ===================== g11: 泛型实例作为普通类字段（组合）=====================
+try {
+    let b = new Box<string>("deep");
+    let w = new Wrap(b);
+    check("g11/get", w.get() == "deep");
+    check("g11/ta", w.ta() == "string");
+} catch (e) { print("g11/ERR :: " + str(e)); }
+
+# ===================== g12: 泛型继承非泛型类 + 多类型参数反射 =====================
+try {
+    let b = new Boxed<string>("hi");
+    check("g12/get", b.get() == "hi");
+    check("g12/inherited", b.base_tag() == "base");
+    print("g12/ta=" + str(b.__type_args__));
+    check("g12/ta0", b.__type_args__[0] == "string");
+    check("g12/cls_tp", Boxed.__type_params__[0] == "T");
+    let p = new Pair<int, string>(2, "b");
+    check("g12/pair_first", p.first() == 2);
+    check("g12/pair_second", p.second() == "b");
+    check("g12/pair_ta_len", len(p.__type_args__) == 2);
+    check("g12/pair_tp_len", len(Pair.__type_params__) == 2);
+} catch (e) { print("g12/ERR :: " + str(e)); }
+
+print("=== 69_generics_deep DONE ===");

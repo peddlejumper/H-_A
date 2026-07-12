@@ -1,0 +1,8 @@
+# 01 - 单层 for 循环 (list)
+# 目的: 触发 fixForLoopJumps 最基本场景
+let total = 0;
+for x in [10, 20, 30, 40, 50] {
+    total = total + x;
+}
+print("sum=" + str(total));
+print("expected=150");

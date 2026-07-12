@@ -1,0 +1,9 @@
+# T02 - Integer arithmetic
+print(7 + 3);
+print(10 - 4);
+print(6 * 7);
+print(15 / 4);
+print(17 % 5);
+print(-(8 + 2));
+print(2 + 3 * 4);
+print((2 + 3) * 4);

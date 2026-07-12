@@ -1,0 +1,5 @@
+# test20: deep member access (6 levels)
+class A { fn v() { return 1; } }
+class B { fn v() { return 2; } }
+let obj = {"a": {"b": {"c": {"d": {"e": {"f": 42}}}}}};
+print(obj["a"]["b"]["c"]["d"]["e"]["f"]);

@@ -1,0 +1,26 @@
+# t13_first_error_wins.hto
+# parent-wins 重抛“第一个”错误：A 先提交但慢失败(B-err 慢)，B 后提交但快失败(A-err 快)。
+# 观察点：重抛的是 A-err（先失败）还是按提交顺序的 B-err？
+# join() 按 children 列表顺序 await，所以会重抛提交顺序首个失败的错误，
+# 而非真正“先失败”的错误 —— 这是潜在语义偏差。
+parallel fn slowFail() {
+    let i = 0;
+    while (i < 2000000) {
+        i = i + 1;
+    }
+    throw "B-err-slow";
+}
+parallel fn quickFail() {
+    throw "A-err-fast";
+}
+try {
+    concurrent {
+        let fa = slowFail();
+        let fb = quickFail();
+        let ra = await fa;
+    }
+} catch (e) {
+    print("rethrown:");
+    print(e);
+}
+print("after");

@@ -1,0 +1,131 @@
+# =============================================================
+# Round 4 / Test #122 — fmt 字符串格式化深度测试
+# 智能体 #122, Round 4
+# 背景: v0.4.1。任务规范列出 fmt 支持 {}, {N}, {:.2f}, {:10}, {:<10},
+#   {:>10}, {:^10}, {:08d}, {:+}, 进制等。本测试逐一验证。
+# 实现 (HNativeBridge.kt:200-232): 仅 {N} 位置占位符 (N 为数字)。
+#   '{' 后非数字 -> 字面; {N} 后非 '}' -> 字面; 越界 -> 字面。
+# 方法: 每个用例打印 [TAG expect=预期] 实际; 同时测试任务语法和 {N} 等价
+# =============================================================
+
+print("===== R4-122 FMT FORMAT SPEC =====");
+
+# =============================================================
+# S1: 基本占位符 — 任务语法 {} (auto-index)
+# =============================================================
+print("----- S1: basic {} auto-index -----");
+print("[S1.01 fmt-empty-ph-int expect=42] " + fmt("{}", 42));
+print("[S1.02 fmt-empty-ph-str expect=hello] " + fmt("{}", "hello"));
+print("[S1.03 fmt-empty-ph-bool expect=true] " + fmt("{}", true));
+print("[S1.04 fmt-empty-ph-null expect=null] " + fmt("{}", null));
+print("[S1.05 fmt-empty-ph-list expect=[1, 2]] " + fmt("{}", [1, 2]));
+# {N} 等价 (实际支持的形式)
+print("[S1.06 fmt-N-int expect=42] " + fmt("{0}", 42));
+print("[S1.07 fmt-N-str expect=hello] " + fmt("{0}", "hello"));
+print("[S1.08 fmt-N-bool expect=true] " + fmt("{0}", true));
+print("[S1.09 fmt-N-null expect=null] " + fmt("{0}", null));
+print("[S1.10 fmt-N-list expect=[1, 2]] " + fmt("{0}", [1, 2]));
+
+# =============================================================
+# S2: 多个占位符 — 位置参数
+# =============================================================
+print("----- S2: multiple placeholders -----");
+print("[S2.01 fmt-three expect=1 + 2 = 3] " + fmt("{} + {} = {}", 1, 2, 3));
+print("[S2.02 fmt-N-three expect=1 + 2 = 3] " + fmt("{0} + {1} = {2}", 1, 2, 3));
+print("[S2.03 fmt-repeat-idx expect=a_b_a] " + fmt("{0}_{1}_{0}", "a", "b"));
+print("[S2.04 fmt-auto-repeat expect={} {} {}] " + fmt("{} {} {}", "a", "b", "a"));
+print("[S2.05 fmt-shuffle expect=b a c] " + fmt("{1} {0} {2}", "a", "b", "c"));
+
+# =============================================================
+# S3: 宽度与对齐
+# =============================================================
+print("----- S3: width & alignment -----");
+print("[S3.01 fmt-width expect=        hi] " + fmt("{:10}", "hi"));
+print("[S3.02 fmt-width-N expect={0:10}] " + fmt("{0:10}", "hi"));
+print("[S3.03 fmt-left-align expect=hi        ] " + fmt("{:<10}", "hi"));
+print("[S3.04 fmt-right-align expect=        hi] " + fmt("{:>10}", "hi"));
+print("[S3.05 fmt-center-align expect=    hi    ] " + fmt("{:^10}", "hi"));
+# 用 {N} + 拼接模拟对齐 (实际可行的方式)
+let padRight = "hi" + "        ";
+print("[S3.06 fmt-pad-via-concat expect=hi        ] " + padRight);
+
+# =============================================================
+# S4: 精度
+# =============================================================
+print("----- S4: precision -----");
+print("[S4.01 fmt-prec-2 expect=3.14] " + fmt("{:.2f}", 3.14159));
+print("[S4.02 fmt-prec-0 expect=4] " + fmt("{:.0f}", 3.7));
+print("[S4.03 fmt-prec-5 expect=1.00000] " + fmt("{:.5f}", 1.0));
+print("[S4.04 fmt-prec-N expect={0:.2f}] " + fmt("{0:.2f}", 3.14159));
+print("[S4.05 fmt-prec-neg expect=-3.14] " + fmt("{:.2f}", -3.14));
+# 默认显示 (无精度控制)
+print("[S4.06 fmt-default-float expect=3.14159] " + fmt("{0}", 3.14159));
+print("[S4.07 fmt-default-whole expect=3] " + fmt("{0}", 3.0));
+
+# =============================================================
+# S5: 符号
+# =============================================================
+print("----- S5: sign -----");
+print("[S5.01 fmt-plus-pos expect=+42] " + fmt("{:+}", 42));
+print("[S5.02 fmt-plus-neg expect=-42] " + fmt("{:+}", -42));
+print("[S5.03 fmt-plus-float expect=+3.14] " + fmt("{:+.2f}", 3.14));
+print("[S5.04 fmt-plus-N expect={0:+}] " + fmt("{0:+}", 42));
+print("[S5.05 fmt-default-pos expect=42] " + fmt("{0}", 42));
+print("[S5.06 fmt-default-neg expect=-42] " + fmt("{0}", -42));
+
+# =============================================================
+# S6: 零填充
+# =============================================================
+print("----- S6: zero-padding -----");
+print("[S6.01 fmt-zero-pad expect=00000042] " + fmt("{:08d}", 42));
+print("[S6.02 fmt-zero-pad-float expect=0003.14] " + fmt("{:08.2f}", 3.14));
+print("[S6.03 fmt-zero-pad-N expect={0:08d}] " + fmt("{0:08d}", 42));
+print("[S6.04 fmt-zero-pad-neg expect=-0000042] " + fmt("{:08d}", -42));
+print("[S6.05 fmt-pad2 expect=  42] " + fmt("{:4d}", 42));
+
+# =============================================================
+# S7: 进制
+# =============================================================
+print("----- S7: radix -----");
+print("[S7.01 fmt-hex-lower expect=ff] " + fmt("{:x}", 255));
+print("[S7.02 fmt-hex-upper expect=FF] " + fmt("{:X}", 255));
+print("[S7.03 fmt-octal expect=10] " + fmt("{:o}", 8));
+print("[S7.04 fmt-bin expect=101] " + fmt("{:b}", 5));
+print("[S7.05 fmt-hex-N expect={0:x}] " + fmt("{0:x}", 255));
+
+# =============================================================
+# S8: 负数
+# =============================================================
+print("----- S8: negative numbers -----");
+print("[S8.01 fmt-neg-width expect=       -42] " + fmt("{:10}", -42));
+print("[S8.02 fmt-neg-zero-pad expect=-0000042] " + fmt("{:08d}", -42));
+print("[S8.03 fmt-neg-prec expect=-3.14] " + fmt("{:.2f}", -3.14));
+print("[S8.04 fmt-neg-basic expect=-42] " + fmt("{0}", -42));
+print("[S8.05 fmt-neg-float expect=-3.14] " + fmt("{0}", -3.14));
+
+# =============================================================
+# S9: Unicode/emoji
+# =============================================================
+print("----- S9: unicode/emoji -----");
+print("[S9.01 fmt-cn-width expect=中         ] " + fmt("{:10}", "中"));
+print("[S9.02 fmt-cn-N expect=中] " + fmt("{0}", "中"));
+print("[S9.03 fmt-emoji-concat expect=😀a] " + fmt("{}{}", "😀", "a"));
+print("[S9.04 fmt-emoji-N expect=😀a] " + fmt("{0}{1}", "😀", "a"));
+print("[S9.05 fmt-emoji-template expect=Emoji=😀] " + fmt("Emoji={0}", "😀"));
+
+# =============================================================
+# S10: 边界
+# =============================================================
+print("----- S10: boundary -----");
+print("[S10.01 fmt-zero expect=0] " + fmt("{}", 0));
+print("[S10.02 fmt-zero-N expect=0] " + fmt("{0}", 0));
+print("[S10.03 fmt-zero-float expect=0] " + fmt("{}", 0.0));
+print("[S10.04 fmt-empty-str expect=] [" + fmt("{}", "") + "]");
+print("[S10.05 fmt-empty-str-N expect=] [" + fmt("{0}", "") + "]");
+print("[S10.06 fmt-empty-spec expect=] [" + fmt("{:0}", "") + "]");
+print("[S10.07 fmt-big-num expect=1000000000000] " + fmt("{}", 1000000000000));
+print("[S10.08 fmt-big-num-N expect=1000000000000] " + fmt("{0}", 1000000000000));
+print("[S10.09 fmt-no-placeholder expect=plain] " + fmt("plain"));
+print("[S10.10 fmt-empty-template expect=] [" + fmt("") + "]");
+
+print("===== DONE R4-122 =====");

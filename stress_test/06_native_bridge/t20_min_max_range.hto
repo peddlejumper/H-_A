@@ -1,0 +1,42 @@
+# t20 — min/max on empty list (error), normal list; range(0), range(5,3) empty
+print("== t20 min/max/range ==");
+try {
+    print("min([3,1,2])=" + str(min([3, 1, 2])));
+} catch (e) {
+    print("min(list) ERR: " + str(e));
+}
+try {
+    print("min([])=" + str(min([])));
+} catch (e) {
+    print("min([]) ERR: " + str(e));
+}
+try {
+    print("max([3,1,2])=" + str(max([3, 1, 2])));
+} catch (e) {
+    print("max(list) ERR: " + str(e));
+}
+try {
+    print("max([])=" + str(max([])));
+} catch (e) {
+    print("max([]) ERR: " + str(e));
+}
+try {
+    print("range(0)=" + str(range(0)));
+} catch (e) {
+    print("range(0) ERR: " + str(e));
+}
+try {
+    print("range(5)=" + str(range(5)));
+} catch (e) {
+    print("range(5) ERR: " + str(e));
+}
+try {
+    print("range(5,3)=" + str(range(5, 3)));
+} catch (e) {
+    print("range(5,3) ERR: " + str(e));
+}
+try {
+    print("range(2,5)=" + str(range(2, 5)));
+} catch (e) {
+    print("range(2,5) ERR: " + str(e));
+}

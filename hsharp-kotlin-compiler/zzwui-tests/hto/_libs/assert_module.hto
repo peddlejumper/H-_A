@@ -1,0 +1,374 @@
+# H# Assert / Test Module
+# ─────────────────────────────────────────────────────────────────
+# A self-contained test/assert framework that does not depend on
+# the zzwui test convention.  Two halves:
+#
+#   1. assert_* helpers — assert_eq / assert_ne / assert_true /
+#      assert_false / assert_lt / assert_le / assert_gt / assert_ge /
+#      assert_in / assert_raises / assert_raises_with / assert_none /
+#      assert_some / assert_almost_eq / assert_approx.  Each takes a
+#      trailing `msg` argument — pass `null` for the default
+#      error message.  Helpers throw a descriptive H# exception
+#      when the predicate is false.
+#
+#   2. test_* registration & runner — test_register(name, fn) adds
+#      a test case to a global registry; test_run(filter) walks
+#      the registry, calls each fn inside a try/catch, prints
+#      "OK name" or "FAIL name detail", and finishes with the
+#      summary line "ASSERT_TEST : PASS=N FAIL=M" that the
+#      test runner parses.
+#
+# The module is independent of the check()/__stats convention
+# used by zzwui test files; both styles can coexist in the same
+# .hto because the two frameworks live in their own namespace
+# prefix (__test_*) and print distinct summary lines.
+
+# ─── Internal registry / counters ─────────────────────────────────
+let __test_registry = [];
+let __test_pass = 0;
+let __test_fail = 0;
+let __test_failures = [];
+let __test_quiet = false;
+
+# ─── Test registration ────────────────────────────────────────────
+
+# Register a test case: `test_register("math/add", cb() {...})`.
+# The callback is invoked with no arguments inside test_run.
+fn test_register(name, cb) {
+    push(__test_registry, [name, cb]);
+}
+
+# Register a batch of test cases under a common prefix.
+# `cases` is a list of [name, cb] pairs; each gets the prefix
+# prepended: `test_register_module("math/", [["add", f1], ...])`.
+fn test_register_module(prefix, cases) {
+    let i = 0;
+    while (i < len(cases)) {
+        let c = cases[i];
+        let n = c[0];
+        let f = c[1];
+        push(__test_registry, [prefix + n, f]);
+        i = i + 1;
+    }
+}
+
+# Reset the registry / counters.  Useful when a file wants to
+# run multiple test suites in the same process.
+fn test_reset() {
+    __test_registry = [];
+    __test_pass = 0;
+    __test_fail = 0;
+    __test_failures = [];
+    __test_quiet = false;
+}
+
+# Print only the summary, not the per-case OK lines.
+fn test_set_quiet(q) {
+    __test_quiet = q;
+}
+
+# ─── String helpers (local, pure H#) ─────────────────────────────
+
+# `__starts_with(s, prefix)` — does s start with prefix?
+fn __starts_with(s, prefix) {
+    if (len(prefix) > len(s)) {
+        return false;
+    }
+    let i = 0;
+    let ok = true;
+    while (i < len(prefix) and ok) {
+        if (s[i] != prefix[i]) {
+            ok = false;
+        }
+        i = i + 1;
+    }
+    return ok;
+}
+
+# `__contains_str(haystack, needle)` — substring test.
+fn __contains_str(haystack, needle) {
+    let i = 0;
+    let n = len(haystack) - len(needle);
+    let found = false;
+    while (i <= n and not found) {
+        let m = true;
+        let j = 0;
+        while (j < len(needle) and m) {
+            if (haystack[i + j] != needle[j]) {
+                m = false;
+            }
+            j = j + 1;
+        }
+        if (m) {
+            found = true;
+        }
+        i = i + 1;
+    }
+    return found;
+}
+
+# ─── Assertions ───────────────────────────────────────────────────
+
+fn assert_true(cond, msg) {
+    if (not cond) {
+        if (msg == null) {
+            throw "assert_true failed";
+        }
+        throw "assert_true failed: " + msg;
+    }
+}
+
+fn assert_false(cond, msg) {
+    if (cond) {
+        if (msg == null) {
+            throw "assert_false failed";
+        }
+        throw "assert_false failed: " + msg;
+    }
+}
+
+fn assert_eq(a, b, msg) {
+    if (a != b) {
+        if (msg == null) {
+            throw "assert_eq failed: " + str(a) + " != " + str(b);
+        }
+        throw "assert_eq failed: " + msg
+              + " (got " + str(a) + " vs " + str(b) + ")";
+    }
+}
+
+fn assert_ne(a, b, msg) {
+    if (a == b) {
+        if (msg == null) {
+            throw "assert_ne failed: " + str(a) + " == " + str(b);
+        }
+        throw "assert_ne failed: " + msg;
+    }
+}
+
+fn assert_lt(a, b, msg) {
+    if (not (a < b)) {
+        if (msg == null) {
+            throw "assert_lt failed: " + str(a) + " >= " + str(b);
+        }
+        throw "assert_lt failed: " + msg;
+    }
+}
+
+fn assert_le(a, b, msg) {
+    if (not (a <= b)) {
+        if (msg == null) {
+            throw "assert_le failed: " + str(a) + " > " + str(b);
+        }
+        throw "assert_le failed: " + msg;
+    }
+}
+
+fn assert_gt(a, b, msg) {
+    if (not (a > b)) {
+        if (msg == null) {
+            throw "assert_gt failed: " + str(a) + " <= " + str(b);
+        }
+        throw "assert_gt failed: " + msg;
+    }
+}
+
+fn assert_ge(a, b, msg) {
+    if (not (a >= b)) {
+        if (msg == null) {
+            throw "assert_ge failed: " + str(a) + " < " + str(b);
+        }
+        throw "assert_ge failed: " + msg;
+    }
+}
+
+# `assert_in(needle, haystack, msg)` — needle is contained in
+# haystack.  For strings: substring match (case sensitive).  For
+# lists: any element `==` needle.  For dicts: any key `==` needle.
+fn assert_in(needle, haystack, msg) {
+    let found = false;
+    let t = type(haystack);
+    if (t == "string") {
+        found = __contains_str(haystack, needle);
+    } else if (t == "list") {
+        let i = 0;
+        while (i < len(haystack) and not found) {
+            if (haystack[i] == needle) {
+                found = true;
+            }
+            i = i + 1;
+        }
+    } else if (t == "dict") {
+        let ks = keys(haystack);
+        let i = 0;
+        while (i < len(ks) and not found) {
+            if (ks[i] == needle) {
+                found = true;
+            }
+            i = i + 1;
+        }
+    } else {
+        throw "assert_in: unsupported haystack type " + t;
+    }
+    if (not found) {
+        if (msg == null) {
+            throw "assert_in failed: " + str(needle)
+                  + " not in " + str(haystack);
+        }
+        throw "assert_in failed: " + msg;
+    }
+}
+
+# `assert_raises(cb, msg)` — cb must throw when called.  The
+# exception payload is returned to the caller (useful for
+# further assertions on the message).
+fn assert_raises(cb, msg) {
+    let captured = null;
+    let raised = false;
+    try {
+        cb();
+    } catch (e) {
+        raised = true;
+        captured = e;
+    }
+    if (not raised) {
+        if (msg == null) {
+            throw "assert_raises failed: function did not throw";
+        }
+        throw "assert_raises failed: " + msg;
+    }
+    return captured;
+}
+
+# `assert_raises_with(cb, expected, msg)` — cb must throw and
+# the payload, when stringified, must contain `expected`.
+fn assert_raises_with(cb, expected, msg) {
+    let payload = assert_raises(cb, msg);
+    let pstr = str(payload);
+    if (not __contains_str(pstr, expected)) {
+        if (msg == null) {
+            throw "assert_raises_with failed: payload \""
+                  + pstr + "\" does not contain \"" + expected + "\"";
+        }
+        throw "assert_raises_with failed: " + msg;
+    }
+    return payload;
+}
+
+fn assert_none(v, msg) {
+    if (v != null) {
+        if (msg == null) {
+            throw "assert_none failed: got " + str(v);
+        }
+        throw "assert_none failed: " + msg;
+    }
+}
+
+fn assert_some(v, msg) {
+    if (v == null) {
+        if (msg == null) {
+            throw "assert_some failed: got null";
+        }
+        throw "assert_some failed: " + msg;
+    }
+}
+
+# `assert_almost_eq(a, b, eps, msg)` — |a - b| <= eps.  Pass
+# `eps = null` for the default 1e-9 epsilon.
+fn assert_almost_eq(a, b, eps, msg) {
+    if (eps == null) {
+        eps = 0.000000001;
+    }
+    let d = a - b;
+    if (d < 0) {
+        d = 0 - d;
+    }
+    if (d > eps) {
+        if (msg == null) {
+            throw "assert_almost_eq failed: |"
+                  + str(a) + " - " + str(b)
+                  + "| = " + str(d) + " > " + str(eps);
+        }
+        throw "assert_almost_eq failed: " + msg;
+    }
+}
+
+# Shorthand for assert_almost_eq with the default epsilon.
+fn assert_approx(a, b, msg) {
+    assert_almost_eq(a, b, null, msg);
+}
+
+# ─── Test runner ──────────────────────────────────────────────────
+
+# Run the registered tests.  `filter` is an optional name
+# prefix; only tests whose name starts with the filter are
+# executed.  Returns a 3-element list: [pass, fail, failures].
+fn test_run(filter) {
+    let i = 0;
+    while (i < len(__test_registry)) {
+        let c = __test_registry[i];
+        let name = c[0];
+        let cb = c[1];
+        let should_run = true;
+        if (filter != null) {
+            should_run = __starts_with(name, filter);
+        }
+        if (should_run) {
+            let detail = "";
+            let ok = true;
+            try {
+                cb();
+            } catch (e) {
+                ok = false;
+                detail = str(e);
+            }
+            if (ok) {
+                __test_pass = __test_pass + 1;
+                if (not __test_quiet) {
+                    print("OK " + name);
+                }
+            } else {
+                __test_fail = __test_fail + 1;
+                push(__test_failures, name);
+                print("FAIL " + name + " " + detail);
+            }
+        }
+        i = i + 1;
+    }
+    print("ASSERT_TEST : PASS=" + str(__test_pass)
+          + " FAIL=" + str(__test_fail));
+    return [__test_pass, __test_fail, __test_failures];
+}
+
+# Convenience: run all tests and list the failed names.
+fn test_run_and_exit(filter) {
+    let r = test_run(filter);
+    let i = 0;
+    while (i < len(r[2])) {
+        print("  - " + r[2][i]);
+        i = i + 1;
+    }
+}
+
+# Return the current counters without running anything.  Useful
+# when a test file wants to read its pass/fail state after the
+# runner has been called externally.
+fn test_summary() {
+    return [__test_pass, __test_fail, __test_failures];
+}
+
+# Number of registered test cases (after filtering by prefix).
+fn test_count(filter) {
+    if (filter == null) {
+        return len(__test_registry);
+    }
+    let n = 0;
+    let i = 0;
+    while (i < len(__test_registry)) {
+        if (__starts_with(__test_registry[i][0], filter)) {
+            n = n + 1;
+        }
+        i = i + 1;
+    }
+    return n;
+}

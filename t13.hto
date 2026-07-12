@@ -1,0 +1,4 @@
+# t13
+print("READY");
+let line = input();
+print("GOT: " + line);

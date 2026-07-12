@@ -1,0 +1,193 @@
+# server/routes_admin.hto
+# 管理员路由:
+#   GET    /api/admin/users              全部用户
+#   PUT    /api/admin/users/:id          修改用户(角色/状态)
+#   DELETE /api/admin/users/:id          停用/启用
+#   GET    /api/admin/stats              仪表盘数据
+#   GET    /api/admin/config             读系统配置
+#   PUT    /api/admin/config             改系统配置(AI Key 等)
+
+import "shared/json_utils.hto";
+import "shared/storage.hto";
+import "shared/models.hto";
+import "shared/auth.hto";
+import "shared/ai_client.hto";
+
+fn register() {
+    route("GET", "/api/admin/users", _users);
+    route("PUT", "/api/admin/users/:id", _update_user);
+    route("DELETE", "/api/admin/users/:id", _delete_user);
+    route("GET", "/api/admin/stats", _stats);
+    route("GET", "/api/admin/config", _get_config);
+    route("PUT", "/api/admin/config", _put_config);
+}
+
+fn _admin_only(req) {
+    if (req["user"] == nullptr or req["user"]["role"] != "admin") {
+        return http_response(403, json_stringify(json_response_err("Admin Only")), "application/json");
+    }
+    return nullptr;
+}
+
+fn _users(req) {
+    let err = _admin_only(req);
+    if (err != nullptr) { return err; }
+    let all = storage_all("users");
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        out.append(user_to_json(all[i]));
+        i = i + 1;
+    }
+    return http_response(200, json_stringify(json_response_ok(out)), "application/json");
+}
+
+fn _update_user(req) {
+    let err = _admin_only(req);
+    if (err != nullptr) { return err; }
+    let id = req["params"]["id"];
+    let body = body_json(req);
+    # 不允许直接改 password_hash
+    if ("password_hash" in body) {
+        let new_pw = json_get(body, "password");
+        if (new_pw != nullptr) {
+            body["password_hash"] = password_hash(new_pw);
+        }
+    }
+    let p = storage_update("users", id, body);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("用户不存在")), "application/json");
+    }
+    return http_response(200, json_stringify(json_response_ok(user_to_json(p))), "application/json");
+}
+
+fn _delete_user(req) {
+    let err = _admin_only(req);
+    if (err != nullptr) { return err; }
+    let id = req["params"]["id"];
+    if (id == req["user"]["id"]) {
+        return http_response(400, json_stringify(json_response_err("不能删除自己")), "application/json");
+    }
+    # 软删: 状态置 banned
+    storage_update("users", id, {"status": "banned"});
+    return http_response(200, json_stringify(json_response_ok({"banned": id})), "application/json");
+}
+
+fn _stats(req) {
+    let err = _admin_only(req);
+    if (err != nullptr) { return err; }
+    let users = storage_all("users");
+    let problems = storage_all("problems");
+    let subs = storage_all("submissions");
+    # 统计
+    let total_users = len(users);
+    let active_users = 0;
+    let total_students = 0;
+    let total_teachers = 0;
+    let total_admins = 0;
+    let i = 0;
+    while (i < len(users)) {
+        if (users[i]["status"] == "active") { active_users = active_users + 1; }
+        if (users[i]["role"] == "student") { total_students = total_students + 1; }
+        if (users[i]["role"] == "teacher") { total_teachers = total_teachers + 1; }
+        if (users[i]["role"] == "admin") { total_admins = total_admins + 1; }
+        i = i + 1;
+    }
+    # 提交统计
+    let total_subs = len(subs);
+    let accepted = 0;
+    let wrong = 0;
+    let runtime_err = 0;
+    let time_limit = 0;
+    let compile_err = 0;
+    i = 0;
+    while (i < total_subs) {
+        let s = subs[i];
+        if (s["status"] == "accepted") { accepted = accepted + 1; }
+        else if (s["status"] == "wrong_answer") { wrong = wrong + 1; }
+        else if (s["status"] == "runtime_error") { runtime_err = runtime_err + 1; }
+        else if (s["status"] == "time_limit") { time_limit = time_limit + 1; }
+        else if (s["status"] == "compile_error") { compile_err = compile_err + 1; }
+        i = i + 1;
+    }
+    # 按题目统计
+    let problem_stats = [];
+    i = 0;
+    while (i < len(problems)) {
+        let p = problems[i];
+        let rate = 0;
+        if (p["submission_count"] > 0) {
+            rate = int((p["accepted_count"] * 100) / p["submission_count"]);
+        }
+        problem_stats.append({
+            "id": p["id"],
+            "title": p["title"],
+            "difficulty": p["difficulty"],
+            "submission_count": p["submission_count"],
+            "accepted_count": p["accepted_count"],
+            "pass_rate": rate
+        });
+        i = i + 1;
+    }
+    let accept_rate = 0;
+    if (total_subs > 0) {
+        accept_rate = int((accepted * 100) / total_subs);
+    }
+    return http_response(200, json_stringify(json_response_ok({
+        "users": {
+            "total": total_users,
+            "active": active_users,
+            "students": total_students,
+            "teachers": total_teachers,
+            "admins": total_admins
+        },
+        "problems": {
+            "total": len(problems)
+        },
+        "submissions": {
+            "total": total_subs,
+            "accepted": accepted,
+            "wrong_answer": wrong,
+            "runtime_error": runtime_err,
+            "time_limit": time_limit,
+            "compile_error": compile_err,
+            "accept_rate": accept_rate
+        },
+        "problem_stats": problem_stats
+    })), "application/json");
+}
+
+fn _get_config(req) {
+    let err = _admin_only(req);
+    if (err != nullptr) { return err; }
+    let cfg = storage_load("config");
+    # 不返回 secret
+    if (cfg != nullptr and "auth" in cfg) {
+        cfg["auth"]["secret"] = "***";
+    }
+    return http_response(200, json_stringify(json_response_ok(cfg)), "application/json");
+}
+
+fn _put_config(req) {
+    let err = _admin_only(req);
+    if (err != nullptr) { return err; }
+    let body = body_json(req);
+    let cfg = storage_load("config");
+    if (cfg == nullptr) { cfg = config_default(); }
+    # 合并
+    if ("server" in body) { cfg["server"] = body["server"]; }
+    if ("judge" in body) { cfg["judge"] = body["judge"]; }
+    if ("ai" in body) {
+        cfg["ai"] = body["ai"];
+        ai_configure(cfg["ai"]);
+    }
+    if ("auth" in body and body["auth"]["secret"] != "***") {
+        cfg["auth"] = body["auth"];
+        auth_set_secret(cfg["auth"]["secret"]);
+    }
+    storage_save("config", cfg);
+    return http_response(200, json_stringify(json_response_ok(cfg)), "application/json");
+}
+
+# 自动注册
+register();

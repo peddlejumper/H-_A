@@ -1,0 +1,128 @@
+# T75 - 并行与 Channel 全面压力测试
+# H# v0.4.1: @parallel fn 基于 WorkerPool，chan T 支持 send/recv/close，concurrent { } 结构化并发
+# 注意：实测 chan_new(N) 才是创建 channel 的可用语法（chan T 字面量不被解析器接受）；
+#       chan_new(0) 表示「无界」(LinkedBlockingQueue)，而非文档所称「无缓冲」。
+# 预期输出在每条 print 后的注释里。
+
+print(fmt("T75-00: parallelism={0}", parallelism()));   # 例如 T75-00: parallelism=8
+
+# ---------- T75-01: parallel fn 定义 + await (返回数字) + future 类型 ----------
+parallel fn square(n) {
+    return n * n;
+}
+let f1 = square(7);
+print(fmt("T75-01a: {0}", type(f1)));     # T75-01a: future
+print(fmt("T75-01b: {0}", await f1));     # T75-01b: 49
+
+# ---------- T75-02: @parallel 装饰器风格 + 返回字符串 + is_parallel 反射 + 无 return ----------
+@parallel
+fn greet(name) {
+    return "hi-" + name;
+}
+@parallel
+fn noret() {
+    let x = 1 + 1;
+}
+print(fmt("T75-02a: {0}", await greet("bob")));   # T75-02a: hi-bob
+print(fmt("T75-02b: {0}", greet.is_parallel));    # T75-02b: true
+print(fmt("T75-02c: {0}", await noret()));         # T75-02c: null
+
+# ---------- T75-03: 多个 parallel fn 并发 (任务数 > WorkerPool) + await 全部 + 自由变量捕获 ----------
+let base = 1000;
+parallel fn addbase(n) { return n + base; }
+let futures = [];
+for i in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
+    futures.append(addbase(i));
+}
+let sum = 0;
+for f in futures {
+    sum = sum + await f;
+}
+print(fmt("T75-03a: {0}", len(futures)));   # T75-03a: 10
+print(fmt("T75-03b: {0}", sum));            # T75-03b: 10055
+
+# ---------- T75-04: parallel fn 抛异常 + await 重新抛出 + catch 拿到原始 payload ----------
+parallel fn thrower(msg) { throw msg; }
+let r4 = "no-throw";
+try {
+    r4 = await thrower("boom");
+} catch (e) {
+    r4 = "caught:" + e;
+}
+print(fmt("T75-04: {0}", r4));   # T75-04: caught:boom
+
+# ---------- T75-05: 有界 channel chan_new(3) — send/recv FIFO + chan_size + try_send 满 + try_recv 空 ----------
+let ch = chan_new(3);
+chan_send(ch, 10);
+chan_send(ch, 20);
+chan_send(ch, 30);
+print(fmt("T75-05a: {0}", chan_size(ch)));       # T75-05a: 3
+print(fmt("T75-05b: {0}", chan_try_send(ch, 40)));  # T75-05b: false (满)
+print(fmt("T75-05c: {0}", chan_recv(ch)));       # T75-05c: 10 (FIFO)
+print(fmt("T75-05d: {0}", chan_recv(ch)));       # T75-05d: 20
+print(fmt("T75-05e: {0}", chan_recv(ch)));       # T75-05e: 30
+print(fmt("T75-05f: {0}", chan_try_recv(ch)));   # T75-05f: null (空且未关闭)
+chan_close(ch);
+
+# ---------- T75-06: channel 在 parallel fn 与 main 间通信 (生产者/消费者, 多条消息) ----------
+let ch6 = chan_new(5);
+parallel fn producer(ch, start) {
+    for i in [start, start + 1, start + 2] {
+        chan_send(ch, i * i);
+    }
+    return "sent-3";
+}
+let f6 = producer(ch6, 4);
+print(fmt("T75-06a: {0}", chan_recv(ch6)));   # T75-06a: 16
+print(fmt("T75-06b: {0}", chan_recv(ch6)));   # T75-06b: 25
+print(fmt("T75-06c: {0}", chan_recv(ch6)));   # T75-06c: 36
+print(fmt("T75-06d: {0}", await f6));          # T75-06d: sent-3
+
+# ---------- T75-07: chan_close 语义 — 排空后 recv 抛错 + send-after-close 抛错 + 幂等 close ----------
+let ch7 = chan_new(2);
+chan_send(ch7, "a");
+chan_send(ch7, "b");
+chan_close(ch7);
+print(fmt("T75-07a: {0}", chan_recv(ch7)));   # T75-07a: a
+print(fmt("T75-07b: {0}", chan_recv(ch7)));   # T75-07b: b
+let r7c = "no-err";
+try {
+    chan_recv(ch7);
+} catch (e) {
+    r7c = "caught:" + e;
+}
+print(fmt("T75-07c: {0}", r7c));   # T75-07c: caught:recv on closed channel
+let r7d = "no-err";
+try {
+    chan_send(ch7, "c");
+} catch (e) {
+    r7d = "caught:" + e;
+}
+print(fmt("T75-07d: {0}", r7d));   # T75-07d: caught:send on closed channel
+let r7e = "no-err";
+try {
+    chan_close(ch7);
+} catch (e) {
+    r7e = "caught:" + e;
+}
+print(fmt("T75-07e: {0}", r7e));   # T75-07e: no-err (幂等)
+
+# ---------- T75-08: concurrent { } 基本结构化并发 — 内部 await 两个子任务 ----------
+parallel fn dbl(n) { return n * 2; }
+concurrent {
+    let a = await dbl(3);
+    let b = await dbl(5);
+    print(fmt("T75-08: {0}", a + b));   # T75-08: 16
+}
+
+# ---------- T75-09: concurrent { } 子任务抛异常 — 异常传播到外层 catch ----------
+parallel fn boom() { throw "boom"; }
+let caught9 = "none";
+try {
+    concurrent {
+        let r = await boom();
+    }
+} catch (e) {
+    caught9 = "caught:" + e;
+}
+print(fmt("T75-09: {0}", caught9));   # T75-09: caught:boom

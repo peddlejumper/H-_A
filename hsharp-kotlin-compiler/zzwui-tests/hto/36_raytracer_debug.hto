@@ -1,0 +1,61 @@
+# build: hwdui_min.hto, zzw_native.hto, zzw_render_min.hto, _libs/raytracer_math.hto, _libs/raytracer_scene.hto, _libs/raytracer_core.hto
+fn main() {
+    let s = scene_three_spheres();
+    let cam = look_at(0, 1.5, 5, 0, 0.5, 0, 60);
+    print("=== render_pixel probe ===");
+    # Center sphere is at (0, 0, -3), camera at (0, 1.5, 5).
+    # A ray from camera through center pixel (48, 32) at 96x64
+    # should hit it.  Sample a 5x5 grid of pixels around the
+    # middle and print the colors.
+    let W = 96; let H = 64;
+    let samples = 1;
+    let depth = 1;
+    let ys = [22, 28, 32, 36, 42];
+    let yi = 0;
+    while (yi < 5) {
+        let y = ys[yi];
+        let row = "";
+        let xs = [20, 36, 48, 60, 76];
+        let xi = 0;
+        while (xi < 5) {
+            let x = xs[xi];
+            let c = render_pixel(s, cam, x, y, W, H, samples, depth, 0);
+            let rgb = to_rgb8(c);
+            row = row + "(" + str(rgb[0]) + "," + str(rgb[1]) + "," + str(rgb[2]) + ") ";
+            xi = xi + 1;
+        }
+        print("y=" + str(y) + ": " + row);
+        yi = yi + 1;
+    }
+
+    print("");
+    print("=== primary_ray probe at center ===");
+    let r = primary_ray(cam, 48, 32, 96, 64, null);
+    print("origin  = (" + str(r.ox) + "," + str(r.oy) + "," + str(r.oz) + ")");
+    print("dir     = (" + str(r.dx) + "," + str(r.dy) + "," + str(r.dz) + ")");
+    print("|dir|^2 = " + str(r.dx*r.dx + r.dy*r.dy + r.dz*r.dz));
+
+    print("");
+    print("=== intersect_sphere direct test ===");
+    let sphere = new_sphere(0.0, 0.0, -3.0, 1.0, matte(new_v3(0.9, 0.2, 0.2)));
+    let t = intersect_sphere(r, sphere);
+    print("intersect_sphere(ray, center sphere) = " + str(t));
+    if (t > 0) {
+        let hx = r.ox + r.dx * t;
+        let hy = r.oy + r.dy * t;
+        let hz = r.oz + r.dz * t;
+        print("hit point = (" + str(hx) + "," + str(hy) + "," + str(hz) + ")");
+    }
+    print("");
+    print("=== closest_hit(scene, ray) ===");
+    let hit = closest_hit(s, r);
+    if (hit == null) {
+        print("  MISS");
+    } else {
+        print("  t=" + str(hit.t));
+        let o = hit.object;
+        print("  object tag=" + o.tag() + " cx=" + str(o.cx) + " cy=" + str(o.cy) + " cz=" + str(o.cz) + " r=" + str(o.r));
+        print("  normal=(" + str(hit.normal.x) + "," + str(hit.normal.y) + "," + str(hit.normal.z) + ")");
+    }
+}
+main();

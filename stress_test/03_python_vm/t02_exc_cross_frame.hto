@@ -1,0 +1,22 @@
+# t02_exc_cross_frame.hto - 异常传播跨帧
+# 在深层帧抛出异常，外层帧捕获，验证栈展开
+fn level3() {
+    throw "deep error";
+}
+fn level2() {
+    level3();
+    return "level2 done";
+}
+fn level1() {
+    return level2();
+}
+print("before try");
+try {
+    let v = level1();
+    print("no throw: ");
+    print(v);
+} catch (e) {
+    print("caught: ");
+    print(e);
+}
+print("after try");

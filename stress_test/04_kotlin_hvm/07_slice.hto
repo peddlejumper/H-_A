@@ -1,0 +1,16 @@
+# 07_slice.hto — (注: [a:b] slice 语法 parser.py 不支持, 无法经此流水线触发 SLICE)
+# 改为覆盖 CALL_METHOD 列表方法边界
+let arr = [1, 2, 3];
+print(arr.len());
+arr.push(4);
+print(arr);
+print(arr.pop());
+print(arr);
+print(arr.contains(2));
+let empty = [];
+try {
+    empty.pop();
+} catch (e) {
+    print("caught: " + str(e));
+}
+print("done");

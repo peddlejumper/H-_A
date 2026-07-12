@@ -1,0 +1,10 @@
+# build: hwdui_min.hto, zzw_native.hto, zzw_render_min.hto
+fn main() {
+    # 2x2 image: red, green, blue, white
+    let bytes = [255, 0, 0,   0, 255, 0,   0, 0, 255,   255, 255, 255];
+    print("sending 2x2 image with 12 bytes...");
+    print("len(bytes) = " + str(len(bytes)));
+    native_show_image("H# test 2x2", 2, 2, bytes);
+    print("window closed.");
+}
+main();

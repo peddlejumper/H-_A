@@ -1,0 +1,7 @@
+print(abs(-7));
+print(min(3, 7));
+print(max(3, 7));
+let d = {"a": 1};
+print(dict_has(d, "a"));
+print(dict_has(d, "b"));
+print(dict_get(d, "a"));

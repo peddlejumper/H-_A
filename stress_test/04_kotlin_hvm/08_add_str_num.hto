@@ -1,0 +1,8 @@
+# 08_add_str_num.hto — BINARY_ADD 字符串 + 数字/布尔
+print("count: " + 42);
+print(42 + " items");
+print("flag: " + true);
+print("n: " + nullptr);
+let lst = [1, 2];
+print("list: " + lst);
+print("done");

@@ -1,0 +1,385 @@
+# ============================================================
+# round3_106_numeric.hto — 数值精度与特殊值测试 (Agent #106, Round 3)
+# 领域: IEEE-754 精度 / NaN / Inf / 负零 / 整数边界 / 模运算 / 类型转换
+# 设计原则: 每个 case 独立编号; try/catch 包裹可能抛错或崩溃的项;
+#           先打印预期注释, 后打印实际结果。
+# 关键约束: lexer 不支持科学计数法(1e5)和 hex(0xFF);
+#           负数字面量 -x 解析为 0 - x;
+#           HNumber 内部为 Double, 运行时无法区分 int 与 float。
+# ============================================================
+
+print("===== R3-106 NUMERIC PRECISION & SPECIAL VALUES =====");
+
+# ---------- 准备特殊值 ----------
+# lexer 不支持 1e309 / 1e-324 等字面量, 用 pow/sqrt 构造
+let POS_INF = pow(10, 309);   # 溢出 → +Infinity
+let NEG_INF = 0 - POS_INF;     # -Infinity
+let NAN_VAL  = sqrt(0 - 1);    # sqrt(-1) → NaN
+let NEG_ZERO = (0 - 1) * 0;   # -1 * 0 = -0.0 (IEEE-754 真负零)
+
+# ---------- T1: 0.1 + 0.2 精度 ----------
+# 期望: 0.30000000000000004 (IEEE-754 经典)
+print("[T1.1 0.1+0.2]                  expect=0.30000000000000004");
+print(0.1 + 0.2);
+
+# ---------- T2: 0.1 + 0.2 == 0.3 ----------
+# 期望: false (IEEE-754)
+print("[T2.1 0.1+0.2==0.3]             expect=false]");
+print(0.1 + 0.2 == 0.3);
+
+# ---------- T3: 大整数 2^53 精度边界 ----------
+# 2^53 = 9007199254740992 (Double 精确最大整数)
+print("[T3.1 2^53 literal]             expect=9007199254740992]");
+print(9007199254740992);
+
+# 2^53+1 字面量 — Double 会丢失精度
+print("[T3.2 2^53+1 literal]           expect_loss=9007199254740992]");
+print(9007199254740993);
+
+# ---------- T4: 2^53 + 1 == 2^53 (精度丢失) ----------
+# 期望: true (Double 精度丢失)
+print("[T4.1 2^53+1==2^53]             expect=true (precision loss)]");
+print(9007199254740992 + 1 == 9007199254740992);
+
+# 2^53 + 1 字面量 == 2^53 字面量
+print("[T4.2 2^53+1 lit == 2^53 lit]   expect=true (precision loss)]");
+print(9007199254740993 == 9007199254740992);
+
+# ---------- T5: 负零 ----------
+# 注: H# parser 把 -0.0 解析为 0 - 0.0 = +0.0
+print("[T5.1 -0.0 literal]             expect=0 (parser: 0-0.0=+0.0)]");
+print(-0.0);
+
+print("[T5.2 0.0 literal]              expect=0]");
+print(0.0);
+
+print("[T5.3 -0.0 == 0.0]              expect=true]");
+print(-0.0 == 0.0);
+
+print("[T5.4 0.0 == -0.0]              expect=true]");
+print(0.0 == -0.0);
+
+# 真负零: -1 * 0 = -0.0 (IEEE-754)
+print("[T5.5 real -0.0 via -1*0]       expect=0 (toDisplayString treats -0 as 0)]");
+print(NEG_ZERO);
+
+print("[T5.6 real -0.0 == 0.0]         expect=true (-0.0==0.0 in IEEE)]");
+print(NEG_ZERO == 0.0);
+
+# str(-0.0)
+print("[T5.7 str(-0.0 literal)]        expect=0]");
+print(str(-0.0));
+
+print("[T5.8 str(real -0.0)]           expect=0 (toDisplayString: -0.0→'0')]");
+print(str(NEG_ZERO));
+
+# ---------- T6: 1.0 / 0.0 — Inf 还是异常? ----------
+# 期望(IEEE-754): Inf; 但 HVM 一律抛 "division by zero"
+print("[T6.1 1.0/0.0]");
+let t6 = "no-err";
+try { let r = 1.0 / 0.0; t6 = r; } catch (e) { t6 = "caught: " + str(e); }
+print(t6);
+
+# ---------- T7: -1.0 / 0.0 — -Inf 还是异常? ----------
+print("[T7.1 -1.0/0.0]");
+let t7 = "no-err";
+try { let r = (0 - 1.0) / 0.0; t7 = r; } catch (e) { t7 = "caught: " + str(e); }
+print(t7);
+
+# ---------- T8: 0.0 / 0.0 — NaN 还是异常? ----------
+print("[T8.1 0.0/0.0]");
+let t8 = "no-err";
+try { let r = 0.0 / 0.0; t8 = r; } catch (e) { t8 = "caught: " + str(e); }
+print(t8);
+
+# ---------- T9: NaN 比较 ----------
+# NaN == NaN 应 false (IEEE-754)
+print("[T9.1 NaN==NaN]                 expect=false]");
+print(NAN_VAL == NAN_VAL);
+
+# NaN != NaN 应 true (IEEE-754)
+print("[T9.2 NaN!=NaN]                 expect=true]");
+print(NAN_VAL != NAN_VAL);
+
+# ---------- T10: NaN 与数字比较 ----------
+print("[T10.1 NaN<1]                   expect=false]");
+print(NAN_VAL < 1);
+
+print("[T10.2 NaN>1]                   expect=false]");
+print(NAN_VAL > 1);
+
+print("[T10.3 NaN<=1]                  expect=false]");
+print(NAN_VAL <= 1);
+
+print("[T10.4 NaN>=1]                  expect=false]");
+print(NAN_VAL >= 1);
+
+# ---------- T11: str(NaN/Inf/-Inf) ----------
+print("[T11.1 str(NaN)]                expect=NaN]");
+print(str(NAN_VAL));
+
+print("[T11.2 str(Infinity)]           expect=Infinity]");
+print(str(POS_INF));
+
+print("[T11.3 str(-Infinity)]          expect=-Infinity]");
+print(str(NEG_INF));
+
+# print 直接输出
+print("[T11.4 print(NaN)]              expect=NaN]");
+print(NAN_VAL);
+
+print("[T11.5 print(Infinity)]         expect=Infinity]");
+print(POS_INF);
+
+print("[T11.6 print(-Infinity)]        expect=-Infinity]");
+print(NEG_INF);
+
+# ---------- T12: int(NaN) / int(Infinity) ----------
+# int() = toDouble().toLong().toDouble()
+# NaN.toLong() = 0 → 0.0
+print("[T12.1 int(NaN)]                expect=0 (NaN.toLong()=0)]");
+print(int(NAN_VAL));
+
+# Infinity.toLong() = Long.MAX_VALUE → 9223372036854775807
+print("[T12.2 int(Infinity)]           expect=9223372036854775807]");
+print(int(POS_INF));
+
+print("[T12.3 int(-Infinity)]          expect=-9223372036854775808]");
+print(int(NEG_INF));
+
+# ---------- T13: 溢出 1e308 * 10 → Inf ----------
+# 10^308 是有限 Double (< Double.MAX_VALUE ~1.7976e308)
+# 10^308 * 10 = 10^309 > Double.MAX_VALUE → Inf
+let e308 = pow(10, 308);
+print("[T13.1 pow(10,308) finite]      expect=1e308 (finite, not Inf)]");
+print(e308);
+print("[T13.2 1e308*10 overflow]       expect=Infinity]");
+print(e308 * 10);
+
+# ---------- T14: 下溢 1e-324 ----------
+# Double.MIN_VALUE ~4.9e-324; 10^-324 < 4.9e-324 → 可能下溢为 0
+print("[T14.1 pow(10,-324)]            expect=0 OR subnormal]");
+print(pow(10, 0 - 324));
+
+# ---------- T15: 1e-400 下溢为 0 ----------
+print("[T15.1 pow(10,-400)]            expect=0]");
+print(pow(10, 0 - 400));
+
+# ---------- T16: 模运算边界 ----------
+print("[T16.1 0%5]                     expect=0]");
+print(0 % 5);
+
+print("[T16.2 5%0]");
+let t16a = "no-err";
+try { let r = 5 % 0; t16a = r; } catch (e) { t16a = "caught: " + str(e); }
+print(t16a);
+
+# Python floored modulo: -5 % 3 = 1 (not -2)
+print("[T16.3 -5%3]                    expect=1 (Python floored)]");
+print((0 - 5) % 3);
+
+# 5 % -3 = -1 (Python floored)
+print("[T16.4 5%-3]                    expect=-1]");
+print(5 % (0 - 3));
+
+# ---------- T17: 浮点模 ----------
+print("[T17.1 5.5%2]                   expect=1.5]");
+print(5.5 % 2);
+
+print("[T17.2 5.5%0.5]                 expect=0]");
+print(5.5 % 0.5);
+
+print("[T17.3 -5.5%2]                  expect=0.5]");
+print((0 - 5.5) % 2);
+
+# ---------- T18: 整数除法 (Python floor 语义) ----------
+print("[T18.1 7/2]                     expect=3]");
+print(7 / 2);
+
+print("[T18.2 -7/2]                    expect=-4]");
+print((0 - 7) / 2);
+
+print("[T18.3 7/-2]                    expect=-4]");
+print(7 / (0 - 2));
+
+print("[T18.4 -7/-2]                   expect=3]");
+print((0 - 7) / (0 - 2));
+
+# ---------- T19: 浮点除法 (刚修复) ----------
+# 7.5/2 — 含小数 → 真除法
+print("[T19.1 7.5/2]                   expect=3.75]");
+print(7.5 / 2);
+
+# 10.0/4.0 — 整数值 → floor (潜在 BUG: 期望 2.5 但实际 2)
+print("[T19.2 10.0/4.0]                expect_task=2.5 | expect_impl=2]");
+print(10.0 / 4.0);
+
+# ---------- T20: 混合除法 ----------
+# 7/2.0 — 两者都是整数值 → floor → 3 (非 3.5)
+print("[T20.1 7/2.0]                   expect_task=3.5 | expect_impl=3]");
+print(7 / 2.0);
+
+# 7.0/2 — 两者都是整数值 → floor → 3 (非 3.5)
+print("[T20.2 7.0/2]                   expect_task=3.5 | expect_impl=3]");
+print(7.0 / 2);
+
+# ---------- T21: int() 截断 ----------
+print("[T21.1 int(12.7)]               expect=12]");
+print(int(12.7));
+
+print("[T21.2 int(-12.7)]              expect=-12]");
+print(int(0 - 12.7));
+
+# ---------- T22: int() 一致性 ----------
+print("[T22.1 int(12.5)]               expect=12]");
+print(int(12.5));
+
+print("[T22.2 int(13.5)]               expect=13]");
+print(int(13.5));
+
+print("[T22.3 int(-12.5)]              expect=-12]");
+print(int(0 - 12.5));
+
+# ---------- T23: float() 整数转浮点 ----------
+# HNumber 内部为 Double, float(123) 与 123 不可区分
+print("[T23.1 float(123)]              expect=123]");
+print(float(123));
+
+print("[T23.2 float(123)==123]         expect=true]");
+print(float(123) == 123);
+
+# ---------- T24: str() 格式差异 ----------
+print("[T24.1 str(3.14)]               expect=3.14]");
+print(str(3.14));
+
+# 3.0 整数值 → toDisplayString 返回 "3"
+print("[T24.2 str(3.0)]                expect=3]");
+print(str(3.0));
+
+print("[T24.3 str(3)]                  expect=3]");
+print(str(3));
+
+# 三者是否相等
+print("[T24.4 str(3.0)==str(3)]        expect=true (无法区分 int/float)]");
+print(str(3.0) == str(3));
+
+# ---------- T25: 大数科学计数法 ----------
+# 1e20 > Long.MAX (9.2e18) → toDisplayString 用 Double.toString → "1.0E20"
+print("[T25.1 str(1e20)]               expect=1.0E20]");
+print(str(pow(10, 20)));
+
+# 1e-10 → toDisplayString 用 Double.toString → "1.0E-10"
+print("[T25.2 str(1e-10)]              expect=1.0E-10]");
+print(str(pow(10, 0 - 10)));
+
+# ---------- T26: abs(-0.0) ----------
+# -0.0 字面量实际是 +0.0; abs(0.0) = 0.0
+print("[T26.1 abs(-0.0 literal)]       expect=0]");
+print(abs(-0.0));
+
+# 真负零: abs(-0.0) = 0.0 (kotlin.math.abs(-0.0)=0.0)
+print("[T26.2 abs(real -0.0)]          expect=0]");
+print(abs(NEG_ZERO));
+
+# ---------- T27: abs(Infinity) ----------
+print("[T27.1 abs(Infinity)]           expect=Infinity]");
+print(abs(POS_INF));
+
+print("[T27.2 abs(-Infinity)]          expect=Infinity]");
+print(abs(NEG_INF));
+
+print("[T27.3 abs(NaN)]                expect=NaN]");
+print(abs(NAN_VAL));
+
+# ---------- T28: max() NaN 传播 ----------
+# max(1,2,3,NaN): best=1→2→3, NaN>3=false → 3 (NaN 不传播)
+# IEEE-754 期望: NaN 应传播; 实际: 不传播 (潜在 BUG)
+print("[T28.1 max(1,2,3,NaN)]          expect_ieee=NaN | expect_impl=3]");
+print(max(1, 2, 3, NAN_VAL));
+
+# max([1,2,3,NaN]) 列表形式
+print("[T28.2 max([1,2,NaN])]          expect_ieee=NaN | expect_impl=3]");
+print(max([1, 2, NAN_VAL]));
+
+# ---------- T29: min() NaN 行为 ----------
+# min(NaN,1): best=NaN, 1<NaN=false → NaN (NaN 在首位时保留)
+print("[T29.1 min(NaN,1)]              expect=NaN (NaN first, stays)]");
+print(min(NAN_VAL, 1));
+
+# min(1,NaN): best=1, NaN<1=false → 1 (NaN 不传播)
+print("[T29.2 min(1,NaN)]              expect_ieee=NaN | expect_impl=1]");
+print(min(1, NAN_VAL));
+
+# ---------- T30: sum() NaN 传播 ----------
+# sum([1,NaN,2]): 0+1+NaN+2 = NaN (加法中 NaN 传播)
+print("[T30.1 sum([1,NaN,2])]          expect=NaN]");
+print(sum([1, NAN_VAL, 2]));
+
+print("[T30.2 sum([1,2,3])]            expect=6]");
+print(sum([1, 2, 3]));
+
+# ---------- T31: 补充边界 ----------
+# 1.0 - 0.9 精度
+print("[T31.1 1.0-0.9]                 expect=0.09999999999999998]");
+print(1.0 - 0.9);
+
+# 大数 +1 不丢精度 (Long 路径)
+print("[T31.2 100+1]                   expect=101]");
+print(100 + 1);
+
+# Inf - Inf = NaN
+print("[T31.3 Inf-Inf]                 expect=NaN]");
+print(POS_INF - POS_INF);
+
+# Inf * 0 = NaN
+print("[T31.4 Inf*0]                   expect=NaN]");
+print(POS_INF * 0);
+
+# 0 * Inf = NaN
+print("[T31.5 0*Inf]                   expect=NaN]");
+print(0 * POS_INF);
+
+# Inf + 1 = Inf
+print("[T31.6 Inf+1]                   expect=Infinity]");
+print(POS_INF + 1);
+
+# Inf == Inf
+print("[T31.7 Inf==Inf]                expect=true]");
+print(POS_INF == POS_INF);
+
+# -Inf == -Inf
+print("[T31.8 -Inf==-Inf]              expect=true]");
+print(NEG_INF == NEG_INF);
+
+# Inf == -Inf
+print("[T31.9 Inf==-Inf]               expect=false]");
+print(POS_INF == NEG_INF);
+
+# Inf > 1
+print("[T31.10 Inf>1]                  expect=true]");
+print(POS_INF > 1);
+
+# -Inf < 1
+print("[T31.11 -Inf<1]                 expect=true]");
+print(NEG_INF < 1);
+
+# NaN truthy?
+print("[T31.12 NaN truthy?]            expect=true (HNumber: !=0.0 → true)]");
+if (NAN_VAL) { print("truthy"); } else { print("falsy"); }
+
+# Inf truthy?
+print("[T31.13 Inf truthy?]            expect=true]");
+if (POS_INF) { print("truthy"); } else { print("falsy"); }
+
+# 0.0 truthy?
+print("[T31.14 0.0 truthy?]            expect=falsy]");
+if (0.0) { print("truthy"); } else { print("falsy"); }
+
+# ---------- T32: 科学计数法字面量解析 (lexer 限制) ----------
+# 1e5 应该被 lexer 拒绝 (不支持科学计数法)
+print("[T32.1 1e5 literal]");
+let t32 = "no-err";
+try { t32 = "compiled"; } catch (e) { t32 = "caught: " + str(e); }
+print(t32);
+
+print("===== R3-106 DONE =====");

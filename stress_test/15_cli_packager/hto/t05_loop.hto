@@ -1,0 +1,6 @@
+# t05_loop.hto - for-in loop over a list
+let total = 0;
+for i in [1, 2, 3, 4, 5] {
+    total = total + i;
+}
+print(total);

@@ -1,0 +1,39 @@
+# T18 - union variant pattern with nested match + combined with ? propagation
+# (throw is statement-only, so use a helper to throw from a match arm)
+union Expr {
+    Num: v;
+    Add: l, r;
+    Neg: e;
+}
+
+fn eval(e) {
+    return match e {
+        Num(v) => v,
+        Add(l, r) => eval(l) + eval(r),
+        Neg(e) => 0 - eval(e),
+        _ => 0
+    };
+}
+
+let n  = Expr{Num: 7};
+let a  = Expr{Add: Expr{Num: 2}, Expr{Num: 3}};
+let ng = Expr{Neg: Expr{Num: 5}};
+let complex = Expr{Add: Expr{Neg: Expr{Num: 4}}, Expr{Num: 10}};
+
+print(eval(n));
+print(eval(a));
+print(eval(ng));
+print(eval(complex));
+
+# Combine union + ?: strict_eval throws on unsupported variants via a helper
+fn unsupported() { throw "unsupported"; return 0; }
+fn strict_eval(e) {
+    return match e {
+        Num(v) => v,
+        Add(l, r) => strict_eval(l) + strict_eval(r),
+        _ => unsupported()
+    };
+}
+# unsupported arm throws; ? catches the payload string
+let res = strict_eval(Expr{Neg: Expr{Num: 1}})?;
+print(res);

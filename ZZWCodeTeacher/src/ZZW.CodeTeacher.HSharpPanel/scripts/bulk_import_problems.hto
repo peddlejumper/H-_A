@@ -1,0 +1,38 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# scripts/bulk_import_problems.hto — 批量导入题目
+# 从 JSON 文件读取题目数据，通过 API 批量创建
+# 用法：python3 hsharp.py scripts/bulk_import_problems.hto
+# ═══════════════════════════════════════════════════════════════════════════
+
+let API_BASE = "http://localhost:5000";
+
+# 读取题目数据文件
+let raw = read_file("config/problems_seed.json");
+if (raw == nullptr or raw == "") {
+    print("{\"success\": false, \"error\": \"配置文件 config/problems_seed.json 不存在\"}");
+} else {
+    let problems = json_parse(raw);
+    let count = len(problems);
+    let success = 0;
+    let failed = 0;
+    let i = 0;
+
+    while (i < count) {
+        let p = problems[i];
+        let body = json_dump(p);
+        let resp = http_post(API_BASE + "/api/v1/problems", body);
+        if (resp != nullptr) {
+            success = success + 1;
+        } else {
+            failed = failed + 1;
+        }
+        i = i + 1;
+    }
+
+    print("{");
+    print("  \"script\": \"bulk_import_problems\",");
+    print("  \"total\": " + str(count) + ",");
+    print("  \"success\": " + str(success) + ",");
+    print("  \"failed\": " + str(failed));
+    print("}");
+}

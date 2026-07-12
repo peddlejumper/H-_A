@@ -1,0 +1,12 @@
+# test_nil_compare.hto
+let a = nullptr;
+if (a == nullptr) {
+    print("is null");
+}
+let s = "";
+if (s == "") {
+    print("is empty");
+}
+if (a == nullptr and s == "") {
+    print("both");
+}

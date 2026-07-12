@@ -7,6 +7,9 @@ fn execute(bytecode, env) {
     if (env == nullptr) { env = {}; }
     let instrs = bytecode["instructions"];
     let consts = bytecode["consts"];
+    # func_consts: {const_idx: true} 标记哪些 const 是函数对象(用于闭包捕获)
+    let func_consts = bytecode["func_consts"];
+    if (func_consts == nullptr) { func_consts = {}; }
     let stack = [];
     let pc = 0;
     let return_flag = false;
@@ -15,43 +18,57 @@ fn execute(bytecode, env) {
     let call_pcs = [];
     let call_envs = [];
     let iter_stack = [];
+    let handlers = [];        # v0.4.1: exception/propagate handlers: [{"target": int, "saved_sp": int, "kind": str}]
+    let propagate_payload = nullptr;  # v0.4.1: captured payload from propagate handler
+    let pending_new_instance = nullptr;  # CALL_NEW 调用 init 时暂存 instance,RETURN_VALUE 时 push 它而非 init 返回值
 
-    fn push_val(v) { push(stack, v); return nullptr; }
-    fn pop_val() {
+    let push_val = fn(v) { push(stack, v); return nullptr; };
+    let pop_val = fn() {
         if (len(stack) == 0) { return nullptr; }
         let idx = len(stack) - 1;
         let v = stack[idx];
-        let i = 0;
         let new_stack = [];
-        while (i < len(stack) - 1) { push(new_stack, stack[i]); i = i + 1; }
+        let i = 0;
+        while (i < idx) { push(new_stack, stack[i]); i = i + 1; }
+        stack = new_stack;
         return v;
-    }
-    fn peek_val() {
+    };
+    let peek_val = fn() {
         if (len(stack) == 0) { return nullptr; }
         return stack[len(stack) - 1];
-    }
+    };
 
-    fn get_env(name) {
-        if (env[name] == nullptr) {
-            let cte = 0;
-            while (cte < len(call_envs)) {
-                if (call_envs[cte] != nullptr and call_envs[cte][name] != nullptr) { return call_envs[cte][name]; }
-                cte = cte + 1;
-            }
+    # 词法作用域查找:沿 __closure__ 链查找变量
+    let get_env = fn(name) {
+        let cur = env;
+        while (cur != nullptr) {
+            if (cur[name] != nullptr) { return cur[name]; }
+            cur = cur["__closure__"];
         }
-        return env[name];
-    }
+        return nullptr;
+    };
 
-    fn set_env(name, val) { env[name] = val; return nullptr; }
+    # 赋值:若变量已存在于闭包链中某层,则原地修改;否则在当前 env 定义
+    let set_env = fn(name, val) {
+        let cur = env;
+        while (cur != nullptr) {
+            if (cur[name] != nullptr) { cur[name] = val; return nullptr; }
+            let nxt = cur["__closure__"];
+            if (nxt == nullptr) { break; }
+            cur = nxt;
+        }
+        env[name] = val;
+        return nullptr;
+    };
 
-    fn bool_val(v) {
+    let bool_val = fn(v) {
         if (v == nullptr) { return false; }
         if (v == false) { return false; }
         if (v == 0) { return false; }
         return true;
-    }
+    };
 
-    fn str_to_num(s) {
+    let str_to_num = fn(s) {
         if (s == nullptr) { return 0; }
         if (s == true) { return 1; }
         if (s == false) { return 0; }
@@ -94,9 +111,9 @@ fn execute(bytecode, env) {
         if (is_float) { return val + float_part; }
         if (neg) { val = 0 - val; }
         return val;
-    }
+    };
 
-    fn make_class_instance(class_obj, args) {
+    let make_class_instance = fn(class_obj, args) {
         let instance = {"__class__": class_obj};
         if (class_obj["base"] != nullptr) {
             let base_name = class_obj["base"];
@@ -123,33 +140,10 @@ fn execute(bytecode, env) {
                 fi = fi + 1;
             }
         }
-        # call constructor if exists
-        let methods = class_obj["methods"];
-        if (methods != nullptr) {
-            let mi = 0;
-            while (mi < len(methods)) {
-                if (methods[mi][0] == "init") {
-                    instance["__this__"] = instance;
-                    let init_fn = methods[mi][1];
-                    push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
-                    pc = 0; bytecode = init_fn; instrs = init_fn["bytecode"]; consts = init_fn["consts"];
-                    let ne = {};
-                    ne["self"] = instance;
-                    let ai = 0;
-                    let aparams = init_fn["args"];
-                    if (aparams == nullptr) { aparams = []; }
-                    while (ai < len(aparams) and ai < len(args)) { ne[aparams[ai]] = args[ai]; ai = ai + 1; }
-                    env = ne;
-                    return_flag = false;
-                    return instance;
-                }
-                mi = mi + 1;
-            }
-        }
         return instance;
-    }
+    };
 
-    fn iterable_next(iterable, idx) {
+    let iterable_next = fn(iterable, idx) {
         if (iterable == nullptr) { return nullptr; }
         if (iterable["__iter__"] != nullptr) {
             let result = iterable["__iter__"](iterable, idx);
@@ -170,7 +164,117 @@ fn execute(bytecode, env) {
             }
         }
         return nullptr;
-    }
+    };
+
+    # v0.4.1: match a pattern dict against a scrutinee value.
+    # Returns true if matched (and may set bindings in env), false otherwise.
+    let match_pattern = fn(pat, scrutinee) {
+        if (pat == nullptr) { return false; }
+        let kind = pat["kind"];
+        if (kind == "wildcard") { return true; }
+        if (kind == "binding") {
+            env[pat["name"]] = scrutinee;
+            return true;
+        }
+        if (kind == "literal") {
+            return scrutinee == pat["literal"];
+        }
+        if (kind == "type") {
+            let tn = pat["type_name"];
+            let matched = false;
+            if (tn == "null") { matched = (scrutinee == nullptr); }
+            else if (tn == "int" or tn == "float") {
+                matched = (scrutinee == 0 or (scrutinee > 0 and scrutinee < 99999999));
+            }
+            else if (tn == "str" or tn == "string") {
+                matched = (scrutinee != nullptr and scrutinee != true and scrutinee != false and len(scrutinee) >= 0);
+            }
+            else if (tn == "bool") {
+                matched = (scrutinee == true or scrutinee == false);
+            }
+            else if (tn == "list") {
+                matched = (scrutinee != nullptr and scrutinee[0] != nullptr or scrutinee == []);
+            }
+            else if (tn == "dict") {
+                matched = (scrutinee != nullptr and scrutinee["__class__"] == nullptr and scrutinee["__chan__"] == nullptr);
+            }
+            else if (tn == "chan") {
+                matched = (scrutinee != nullptr and scrutinee["__chan__"] == true);
+            }
+            else {
+                # ClassName check
+                let cls = nullptr;
+                if (scrutinee != nullptr) { cls = scrutinee["__class__"]; }
+                if (cls != nullptr and cls["name"] == tn) { matched = true; }
+            }
+            if (matched and pat["binding"] != nullptr) {
+                env[pat["binding"]] = scrutinee;
+            }
+            return matched;
+        }
+        if (kind == "variant") {
+            # scrutinee must be a union instance with __variant__ matching
+            if (scrutinee == nullptr) { return false; }
+            if (scrutinee["__variant__"] != pat["variant"]) { return false; }
+            # 按 POSITION 绑定(与 Kotlin HVM 一致):从 union 定义获取 fieldOrder,
+            # binding name 按位置绑定到对应字段值
+            let names = pat["names"];
+            if (names != nullptr) {
+                # 从 env 查找 union 定义以获取字段顺序
+                let union_name = scrutinee["__union__"];
+                let field_order = [];
+                if (union_name != nullptr) {
+                    let union_def = get_env(union_name);
+                    if (union_def != nullptr and union_def["variants"] != nullptr) {
+                        let variants = union_def["variants"];
+                        let vi = 0;
+                        while (vi < len(variants)) {
+                            if (variants[vi]["name"] == pat["variant"]) {
+                                field_order = variants[vi]["fields"];
+                                break;
+                            }
+                            vi = vi + 1;
+                        }
+                    }
+                }
+                let ni = 0;
+                while (ni < len(names)) {
+                    let nm = names[ni];
+                    if (nm != "_") {
+                        # 按位置取字段名;若无法获取,退回到用 binding name
+                        let key = nm;
+                        if (ni < len(field_order)) { key = field_order[ni]; }
+                        env[nm] = scrutinee[key];
+                    }
+                    ni = ni + 1;
+                }
+            }
+            return true;
+        }
+        if (kind == "chan_send") {
+            # Match if channel can accept a value (not full, not closed)
+            if (scrutinee == nullptr or scrutinee["__chan__"] != true) { return false; }
+            if (scrutinee["closed"] == true) { return false; }
+            let cap = scrutinee["cap"];
+            if (cap == 0) { return true; }  # unbounded
+            return len(scrutinee["items"]) < cap;
+        }
+        if (kind == "chan_recv") {
+            # Match if channel has a value to receive
+            if (scrutinee == nullptr or scrutinee["__chan__"] != true) { return false; }
+            if (len(scrutinee["items"]) == 0) { return false; }
+            let nm = pat["name"];
+            if (nm != "_" and nm != nullptr) {
+                env[nm] = scrutinee["items"][0];
+            }
+            return true;
+        }
+        if (kind == "chan_close") {
+            if (scrutinee == nullptr or scrutinee["__chan__"] != true) { return false; }
+            return scrutinee["closed"] == true;
+        }
+        return false;
+    };
 
     while (pc < len(instrs)) {
         let inst = instrs[pc];
@@ -180,7 +284,27 @@ fn execute(bytecode, env) {
 
         if (op == "HALT") { break; }
 
-        if (op == "LOAD_CONST") { push_val(consts[arg]); continue; }
+        if (op == "LOAD_CONST") {
+            let v = consts[arg];
+            # 函数对象:每次加载时创建副本,独立捕获当前 env 作为闭包
+            # 必须创建副本(不能复用 const 中的原始对象):
+            # 否则循环中多次定义的函数共享同一对象,闭包会指向最后一次的 env
+            if (func_consts[arg] != nullptr) {
+                let fobj_copy = {};
+                fobj_copy["args"] = v["args"];
+                fobj_copy["bytecode"] = v["bytecode"];
+                fobj_copy["consts"] = v["consts"];
+                fobj_copy["func_consts"] = v["func_consts"];
+                if (v["defaults"] != nullptr) { fobj_copy["defaults"] = v["defaults"]; }
+                if (v["is_variadic"] != nullptr) { fobj_copy["is_variadic"] = v["is_variadic"]; }
+                if (v["is_async"] != nullptr) { fobj_copy["is_async"] = v["is_async"]; }
+                if (v["is_parallel"] != nullptr) { fobj_copy["is_parallel"] = v["is_parallel"]; }
+                fobj_copy["__closure__"] = env;
+                v = fobj_copy;
+            }
+            push_val(v);
+            continue;
+        }
 
         if (op == "LOAD_NAME") { push_val(get_env(arg)); continue; }
 
@@ -190,7 +314,12 @@ fn execute(bytecode, env) {
 
         if (op == "PRINT") {
             let v = pop_val();
-            print(v);
+            # 布尔值打印为 true/false(H# 风格),而非 Python 的 True/False
+            # 用 str() 区分布尔值和整数(Python 中 True==1, 无法用 == 区分)
+            let s = str(v);
+            if (s == "True") { print("true"); }
+            else if (s == "False") { print("false"); }
+            else { print(v); }
             continue;
         }
 
@@ -234,10 +363,10 @@ fn execute(bytecode, env) {
         if (op == "UNARY_NOT") { let v = pop_val(); push_val(not bool_val(v)); continue; }
         if (op == "UNARY_NEG") { let v = pop_val(); push_val(0 - v); continue; }
 
-        if (op == "JUMP") { pc = pc + arg - 1; continue; }
+        if (op == "JUMP") { pc = arg; continue; }
         if (op == "JUMP_IF_FALSE") {
             let cond = pop_val();
-            if (not bool_val(cond)) { pc = pc + arg - 1; }
+            if (not bool_val(cond)) { pc = arg; }
             continue;
         }
 
@@ -255,12 +384,8 @@ fn execute(bytecode, env) {
             if (fname == "pop") {
                 if (args[0] == nullptr) { args[0] = stack; }
                 if (len(args[0]) == 0) { push_val(nullptr); continue; }
-                let lidx = len(args[0]) - 1;
-                let v = args[0][lidx];
-                let new_list = [];
-                let li = 0;
-                while (li < lidx) { push(new_list, args[0][li]); li = li + 1; }
-                args[0] = new_list;
+                # 使用 Python 内置 pop(arr) 原地修改 list(避免 args[0]=new_list 不生效的 bug)
+                let v = pop(args[0]);
                 push_val(v);
                 continue;
             }
@@ -287,7 +412,11 @@ fn execute(bytecode, env) {
             if (fn_obj != nullptr) {
                 push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
                 pc = 0; bytecode = fn_obj; instrs = fn_obj["bytecode"]; consts = fn_obj["consts"];
+                let fc = fn_obj["func_consts"];
+                if (fc == nullptr) { fc = {}; }
+                func_consts = fc;
                 let ne = {};
+                ne["__closure__"] = fn_obj["__closure__"];
                 let aparams = fn_obj["args"];
                 if (aparams == nullptr) { aparams = []; }
                 let pi = 0;
@@ -316,7 +445,11 @@ fn execute(bytecode, env) {
                                 let fn_obj = methods[mi][1];
                                 push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
                                 pc = 0; bytecode = fn_obj; instrs = fn_obj["bytecode"]; consts = fn_obj["consts"];
+                                let fc = fn_obj["func_consts"];
+                                if (fc == nullptr) { fc = {}; }
+                                func_consts = fc;
                                 let ne = {};
+                                ne["__closure__"] = fn_obj["__closure__"];
                                 ne["self"] = obj;
                                 let aparams = fn_obj["args"];
                                 if (aparams != nullptr) {
@@ -341,7 +474,11 @@ fn execute(bytecode, env) {
                                     let fn_obj2 = pmethods[mi2][1];
                                     push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
                                     pc = 0; bytecode = fn_obj2; instrs = fn_obj2["bytecode"]; consts = fn_obj2["consts"];
+                                    let fc2 = fn_obj2["func_consts"];
+                                    if (fc2 == nullptr) { fc2 = {}; }
+                                    func_consts = fc2;
                                     let ne2 = {};
+                                    ne2["__closure__"] = fn_obj2["__closure__"];
                                     ne2["self"] = obj;
                                     let aparams2 = fn_obj2["args"];
                                     if (aparams2 != nullptr) {
@@ -367,10 +504,43 @@ fn execute(bytecode, env) {
             while (ai < nargs) { args = [pop_val()] + args; ai = ai + 1; }
             let class_obj = pop_val();
             if (class_obj != nullptr and class_obj["__class_def__"] != nullptr) {
-                let instance = make_class_instance(class_obj["__class_def__"], args);
-                push_val(instance);
-            } else if (class_obj != nullptr and class_obj["__class_def__"] == nullptr) {
-                push_val(nullptr);
+                let class_def = class_obj["__class_def__"];
+                let instance = make_class_instance(class_def, args);
+                # 查找 init / __init__ 构造函数
+                let init_fn = nullptr;
+                let methods = class_def["methods"];
+                if (methods != nullptr) {
+                    let mi = 0;
+                    while (mi < len(methods)) {
+                        if (methods[mi][0] == "init" or methods[mi][0] == "__init__") {
+                            init_fn = methods[mi][1];
+                            break;
+                        }
+                        mi = mi + 1;
+                    }
+                }
+                if (init_fn != nullptr) {
+                    # 调用 init:像 CALL_FUNCTION 一样设置帧,但用 pending_new_instance
+                    # 让 RETURN_VALUE 时 push instance 而非 init 的返回值
+                    pending_new_instance = instance;
+                    push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
+                    pc = 0; bytecode = init_fn; instrs = init_fn["bytecode"]; consts = init_fn["consts"];
+                    let fc = init_fn["func_consts"];
+                    if (fc == nullptr) { fc = {}; }
+                    func_consts = fc;
+                    let ne = {};
+                    ne["__closure__"] = init_fn["__closure__"];
+                    ne["self"] = instance;
+                    let aparams = init_fn["args"];
+                    if (aparams != nullptr) {
+                        let pi = 1;
+                        while (pi < len(aparams) and pi - 1 < len(args)) { ne[aparams[pi]] = args[pi - 1]; pi = pi + 1; }
+                    }
+                    env = ne;
+                    return_flag = false;
+                } else {
+                    push_val(instance);
+                }
             } else {
                 push_val(nullptr);
             }
@@ -378,6 +548,31 @@ fn execute(bytecode, env) {
         }
         if (op == "MAKE_CLASS") {
             let class_def = pop_val();
+            # 给每个 method 设置 __closure__ = env(类定义时的词法作用域)
+            let ms = class_def["methods"];
+            if (ms != nullptr) {
+                let mi = 0;
+                while (mi < len(ms)) {
+                    if (ms[mi][1]["__closure__"] == nullptr) {
+                        ms[mi][1]["__closure__"] = env;
+                    }
+                    mi = mi + 1;
+                }
+            }
+            let sms = class_def["__static__"];
+            if (sms != nullptr) {
+                # __static__ 是 dict,需要遍历 keys
+                let sm_names = ["init", "create", "new", "from", "of", "default"];
+                let sni = 0;
+                while (sni < len(sm_names)) {
+                    let nm = sm_names[sni];
+                    let sf = sms[nm];
+                    if (sf != nullptr and sf["__closure__"] == nullptr) {
+                        sf["__closure__"] = env;
+                    }
+                    sni = sni + 1;
+                }
+            }
             let cls_wrapper = {"__class_def__": class_def};
             push_val(cls_wrapper);
             continue;
@@ -399,12 +594,16 @@ fn execute(bytecode, env) {
             let temp = [];
             let i = 0;
             while (i < n * 2) { push(temp, pop_val()); i = i + 1; }
-            let j = 0;
-            while (j < n) {
-                let v = temp[j * 2];
-                let k = temp[j * 2 + 1];
+            # temp 是从栈顶弹出,顺序与压入顺序相反
+            # 编译器压入顺序:key1, val1, key2, val2, ...
+            # temp = [valN, keyN, ..., val1, key1]
+            # 从末尾开始按对取 key, val 以保持插入顺序
+            let j = len(temp) - 1;
+            while (j > 0) {
+                let k = temp[j];
+                let v = temp[j - 1];
                 dict[k] = v;
-                j = j + 1;
+                j = j - 2;
             }
             push_val(dict);
             continue;
@@ -416,7 +615,10 @@ fn execute(bytecode, env) {
         }
         if (op == "SET_ITEM") {
             let val = pop_val(); let idx = pop_val(); let obj = pop_val();
-            if (len(obj) > idx) { obj[idx] = val; }
+            if (obj != nullptr) {
+                # dict:直接设置 key=value;list:检查索引范围
+                obj[idx] = val;
+            }
             push_val(val);
             continue;
         }
@@ -444,14 +646,32 @@ fn execute(bytecode, env) {
             if (len(call_stack) > 0) {
                 # return to caller
                 let last = len(call_stack) - 1;
-                bytecode = call_stack[last]; instrs = bytecode["instructions"]; consts = bytecode["consts"];
+                let frame = call_stack[last];
+                # 恢复 bytecode(关键修复:不恢复会导致后续 CALL_FUNCTION 压入错误的 frame)
+                bytecode = frame;
+                # frame 可能是顶层 bytecode_dict(有 "instructions" 字段)或函数对象(有 "bytecode" 字段)
+                if (frame["instructions"] != nullptr) {
+                    instrs = frame["instructions"];
+                } else {
+                    instrs = frame["bytecode"];
+                }
+                consts = frame["consts"];
+                let rfc = frame["func_consts"];
+                if (rfc == nullptr) { rfc = {}; }
+                func_consts = rfc;
                 pc = call_pcs[last];
                 env = call_envs[last];
                 let new_cs = []; let new_cp = []; let new_ce = [];
                 let li = 0;
                 while (li < last) { push(new_cs, call_stack[li]); push(new_cp, call_pcs[li]); push(new_ce, call_envs[li]); li = li + 1; }
                 call_stack = new_cs; call_pcs = new_cp; call_envs = new_ce;
-                push_val(return_val);
+                # 如果是 CALL_NEW 触发的 init 调用,push instance 而非 init 返回值
+                if (pending_new_instance != nullptr) {
+                    push_val(pending_new_instance);
+                    pending_new_instance = nullptr;
+                } else {
+                    push_val(return_val);
+                }
                 return_flag = false;
             } else {
                 break;
@@ -467,7 +687,11 @@ fn execute(bytecode, env) {
             if (fn_obj != nullptr and fn_obj["bytecode"] != nullptr) {
                 push(call_stack, bytecode); push(call_pcs, pc); push(call_envs, env);
                 pc = 0; bytecode = fn_obj; instrs = fn_obj["bytecode"]; consts = fn_obj["consts"];
+                let fc = fn_obj["func_consts"];
+                if (fc == nullptr) { fc = {}; }
+                func_consts = fc;
                 let ne = {};
+                ne["__closure__"] = fn_obj["__closure__"];
                 let aparams = fn_obj["args"];
                 if (aparams == nullptr) { aparams = []; }
                 let pi = 0;
@@ -481,47 +705,68 @@ fn execute(bytecode, env) {
         }
         if (op == "STORE_ITER") {
             let iterable = pop_val();
-            push(iter_stack, {"iterable": iterable, "idx": 0});
+            # 判断是 dict 还是 list:
+            # - list: iterable[0] 返回第一个元素(非 nullptr)
+            # - dict: iterable[0] 返回 nullptr(key 0 不存在)
+            # - 空 list/dict: len == 0,当作 list 处理(迭代立即结束)
+            let is_dict = false;
+            if (iterable != nullptr and len(iterable) > 0) {
+                let first = iterable[0];
+                if (first == nullptr) { is_dict = true; }
+            }
+            if (is_dict) {
+                let keys = dict_keys(iterable);
+                push(iter_stack, {"iterable": iterable, "idx": 0, "keys": keys});
+            } else {
+                push(iter_stack, {"iterable": iterable, "idx": 0});
+            }
             continue;
         }
         if (op == "LOAD_ITER_NEXT") {
-            let iter_state = peek_val();
+            # peek iter_stack(不是 value stack)获取迭代状态
+            let iter_state = nullptr;
+            if (len(iter_stack) > 0) { iter_state = iter_stack[len(iter_stack) - 1]; }
             if (iter_state == nullptr) { push_val(false); continue; }
             let items = iter_state["iterable"];
             let idx = iter_state["idx"];
-            let val = nullptr;
-            if (items != nullptr and items["__class__"] != nullptr) {
-                # dict: return keys
-                val = nullptr;
-                # for lists
+            if (items == nullptr) { push_val(false); continue; }
+            # 判断是 list 还是 dict 迭代
+            # dict 迭代:iter_state 记录 keys 列表,按位置迭代
+            let keys = iter_state["keys"];
+            if (keys != nullptr) {
+                # dict 迭代:keys[idx] 是 key, items[key] 是 value
+                if (idx >= len(keys)) { push_val(false); continue; }
+                let k = keys[idx];
+                iter_state["idx"] = idx + 1;
+                env[arg] = k;
+                # 如果有 var2,把 value 存到 iter_state 供 STORE_ITER_VAL 使用
+                iter_state["__value__"] = items[k];
+                push_val(true);
+                continue;
             }
-            if (items != nullptr and len(items) >= 1) { val = nullptr; }
-            # try list-like iteration
-            let found = false;
-            let keys = [];
-            if (items != nullptr) {
-                let ki = 0;
-                while (ki < len(items)) {
-                    # dict keys (string keys in dict)
-                    found = true;
-                    if (ki == idx) { val = items[ki]; break; }
-                    ki = ki + 1;
-                }
+            # list 迭代
+            if (idx >= len(items)) {
+                push_val(false);
+                continue;
             }
-            if (val == nullptr) { push_val(false); continue; }
-            push_val(val);
-            env[arg] = val;
+            let val = items[idx];
             iter_state["idx"] = idx + 1;
+            env[arg] = val;
             push_val(true);
             continue;
         }
         if (op == "STORE_ITER_VAL") {
-            let val = stack[len(stack) - 1];
-            env[arg] = val;
+            # Two-variable for loop (for k, v in dict)
+            # 从 iter_state 取出 __value__(在 LOAD_ITER_NEXT 中设置)
+            let iter_state = nullptr;
+            if (len(iter_stack) > 0) { iter_state = iter_stack[len(iter_stack) - 1]; }
+            if (iter_state != nullptr) {
+                env[arg] = iter_state["__value__"];
+            }
             continue;
         }
         if (op == "POP_ITER") {
-            if (len(iter_stack) > 0) { pop(); }
+            if (len(iter_stack) > 0) { pop(iter_stack); }
             continue;
         }
         if (op == "IMPORT_FILE") {
@@ -535,6 +780,223 @@ fn execute(bytecode, env) {
         }
         if (op == "CALL_SUPER") {
             push_val(nullptr);
+            continue;
+        }
+
+        # ========== v0.4.1 new opcodes ==========
+
+        # Stack manipulation (used by match)
+        if (op == "DUP") {
+            let v = peek_val();
+            push_val(v);
+            continue;
+        }
+        if (op == "POP") {
+            pop_val();
+            continue;
+        }
+        if (op == "SWAP") {
+            let top = pop_val();
+            let below = pop_val();
+            push_val(top);
+            push_val(below);
+            continue;
+        }
+
+        # Exception / propagate handlers
+        if (op == "SETUP_EXCEPT") {
+            push(handlers, {"target": arg, "saved_sp": len(stack), "kind": "__except__", "frame_depth": len(call_stack), "ret_instrs": instrs, "ret_consts": consts, "ret_env": env});
+            continue;
+        }
+        if (op == "POP_EXCEPT") {
+            if (len(handlers) > 0) {
+                # pop the last handler (best-effort: create new list)
+                let new_h = [];
+                let hi = 0;
+                while (hi < len(handlers) - 1) { push(new_h, handlers[hi]); hi = hi + 1; }
+                handlers = new_h;
+            }
+            continue;
+        }
+        if (op == "SETUP_PROPAGATE") {
+            push(handlers, {"target": arg, "saved_sp": len(stack), "kind": "__propagate__", "frame_depth": len(call_stack), "ret_instrs": instrs, "ret_consts": consts, "ret_env": env});
+            continue;
+        }
+        if (op == "POP_PROPAGATE") {
+            if (len(handlers) > 0) {
+                let last = handlers[len(handlers) - 1];
+                if (last["kind"] == "__propagate__") {
+                    let new_h = [];
+                    let hi = 0;
+                    while (hi < len(handlers) - 1) { push(new_h, handlers[hi]); hi = hi + 1; }
+                    handlers = new_h;
+                }
+            }
+            continue;
+        }
+        if (op == "RAISE") {
+            let payload = pop_val();
+            # Dispatch to nearest handler
+            let dispatched = false;
+            while (len(handlers) > 0) {
+                let h = handlers[len(handlers) - 1];
+                let new_h = [];
+                let hi = 0;
+                while (hi < len(handlers) - 1) { push(new_h, handlers[hi]); hi = hi + 1; }
+                handlers = new_h;
+                # 跨帧传播:恢复到设置 handler 时的帧
+                let snap = h["frame_depth"];
+                if (len(call_stack) > snap) {
+                    # 截断 call_stack 到 frame_depth
+                    let new_cs = []; let new_cp = []; let new_ce = [];
+                    let li = 0;
+                    while (li < snap) { push(new_cs, call_stack[li]); push(new_cp, call_pcs[li]); push(new_ce, call_envs[li]); li = li + 1; }
+                    call_stack = new_cs; call_pcs = new_cp; call_envs = new_ce;
+                    instrs = h["ret_instrs"]; consts = h["ret_consts"]; env = h["ret_env"];
+                }
+                push_val(payload);
+                pc = h["target"];
+                dispatched = true;
+                break;
+            }
+            if (not dispatched) {
+                # Unhandled: print and halt
+                print("Unhandled exception: " + str(payload));
+                break;
+            }
+            continue;
+        }
+
+        # match — 栈布局: [..., scrut, scrut, pat]
+        # MATCH_CASE pop pat 和 duplicated scrut,push bool;原 scrut 留在栈上
+        if (op == "MATCH_CASE") {
+            let pat_idx = arg;
+            let pat = consts[pat_idx];
+            pop_val();  # discard pattern from stack (was pushed by LOAD_CONST)
+            let scrutinee = pop_val();  # duplicated scrutinee
+            let matched = match_pattern(pat, scrutinee);
+            push_val(matched);
+            continue;
+        }
+
+        # await — stub: just return the value (no real concurrency in bootstrap)
+        if (op == "AWAIT") {
+            # Real HVM pops HFuture and pushes resolved value.
+            # Bootstrap: value is already resolved (eager evaluation), so no-op.
+            continue;
+        }
+
+        # Channel operations (stub — no real channels in bootstrap, use list-based simulation)
+        if (op == "CHAN_NEW") {
+            let cap = pop_val();
+            # Create a simple list-based channel: {"items": [], "cap": cap, "closed": false}
+            push_val({"items": [], "cap": cap, "closed": false, "__chan__": true});
+            continue;
+        }
+        if (op == "CHAN_SEND") {
+            let v = pop_val();
+            let ch = pop_val();
+            if (ch != nullptr and ch["__chan__"] == true) {
+                push(ch["items"], v);
+            }
+            continue;
+        }
+        if (op == "CHAN_RECV") {
+            let ch = pop_val();
+            if (ch != nullptr and ch["__chan__"] == true and len(ch["items"]) > 0) {
+                let v = ch["items"][0];
+                # Remove first element
+                let new_items = [];
+                let ci = 1;
+                while (ci < len(ch["items"])) { push(new_items, ch["items"][ci]); ci = ci + 1; }
+                ch["items"] = new_items;
+                push_val(v);
+            } else {
+                push_val(nullptr);
+            }
+            continue;
+        }
+        if (op == "CHAN_CLOSE") {
+            let ch = pop_val();
+            if (ch != nullptr and ch["__chan__"] == true) {
+                ch["closed"] = true;
+            }
+            continue;
+        }
+
+        # Concurrent block (stub — sequential execution in bootstrap)
+        if (op == "CONCURRENT_ENTER") {
+            # No-op in bootstrap (single-threaded)
+            continue;
+        }
+        if (op == "CONCURRENT_EXIT") {
+            # No-op in bootstrap (single-threaded)
+            continue;
+        }
+
+        # union construction
+        # Stack: [utype, variant_string, value1, ..., valueN] → push HInstance-like dict
+        if (op == "UNION_MAKE") {
+            let argc = arg;
+            let values = [];
+            let vi = 0;
+            while (vi < argc) { values = [pop_val()] + values; vi = vi + 1; }
+            let variant = pop_val();  # variant name string
+            let utype = pop_val();    # union type dict
+            # Build instance dict
+            let inst = {"__union__": nullptr, "__variant__": variant};
+            if (utype != nullptr and utype["name"] != nullptr) {
+                inst["__union__"] = utype["name"];
+            }
+            # Set fields by name from union type definition
+            if (utype != nullptr and utype["variants"] != nullptr) {
+                let variants = utype["variants"];
+                let vj = 0;
+                while (vj < len(variants)) {
+                    if (variants[vj]["name"] == variant) {
+                        let fields = variants[vj]["fields"];
+                        let fk = 0;
+                        while (fk < len(fields) and fk < len(values)) {
+                            inst[fields[fk]] = values[fk];
+                            fk = fk + 1;
+                        }
+                        break;
+                    }
+                    vj = vj + 1;
+                }
+            }
+            push_val(inst);
+            continue;
+        }
+
+        # instanceof — check if value is instance of type
+        if (op == "INSTANCEOF") {
+            let typename = arg;
+            let v = pop_val();
+            let result = false;
+            if (v != nullptr) {
+                if (typename == "int" or typename == "float") {
+                    result = (v == 0 or v == 1 or (v > 0 and v < 99999999));
+                } else if (typename == "str" or typename == "string") {
+                    result = (len(v) > 0 and v[0] == "x" or v == "" or v == " ");
+                } else if (typename == "bool") {
+                    result = (v == true or v == false);
+                } else if (typename == "null") {
+                    result = (v == nullptr);
+                } else {
+                    # Check class name
+                    let cls = v["__class__"];
+                    if (cls != nullptr and cls["name"] == typename) { result = true; }
+                }
+            }
+            push_val(result);
+            continue;
+        }
+
+        # cast — best-effort type coercion
+        if (op == "CAST") {
+            # arg is type name, value on stack
+            # For bootstrap, just leave value as-is (no coercion)
             continue;
         }
     }

@@ -1,0 +1,6 @@
+# t03: await on a non-Future value (a bare number).
+# Per HVM.kt:473-480 AWAIT pops the value; if it is not an HFuture
+# the VM throws HSharpRuntimeError.  `await` at top level is
+# statically allowed, so this must fail at runtime.
+let x = await 42;
+print(x);

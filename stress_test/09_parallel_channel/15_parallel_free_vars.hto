@@ -1,0 +1,76 @@
+# 15 — parallel + parent-frame free variables
+# A @parallel fn should be able to read variables from the enclosing scope
+# (module-level `let`s and parent-frame locals) via closure / parent lookup.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Module-level constants the workers should see
+let WIDTH = 80;
+let HEIGHT = 60;
+let OFFSET = 1000;
+
+@parallel fn read_module_const() {
+    return WIDTH * HEIGHT;
+}
+
+let f1 = read_module_const();
+check("read_module_const", await f1 == 4800, "got " + str(await f1));
+
+# Read multiple module-level vars
+@parallel fn sum_module_vars() {
+    return WIDTH + HEIGHT + OFFSET;
+}
+check("sum_module_vars", await sum_module_vars() == 1140, "got " + str(await sum_module_vars()));
+
+# Worker reads a list defined in the parent frame
+let data = [10, 20, 30, 40, 50];
+@parallel fn read_parent_list(idx) {
+    return data[idx];
+}
+check("read_parent_list_0", await read_parent_list(0) == 10, "got " + str(await read_parent_list(0)));
+check("read_parent_list_4", await read_parent_list(4) == 50, "got " + str(await read_parent_list(4)));
+
+# Worker reads a dict from parent frame
+let config = {"multiplier": 3, "offset": 7};
+@parallel fn apply_config(x) {
+    return x * config["multiplier"] + config["offset"];
+}
+check("apply_config", await apply_config(5) == 22, "got " + str(await apply_config(5)));
+
+# Multiple workers reading the same parent-frame variable concurrently
+@parallel fn accumulator(start, n) {
+    let s = start;
+    let i = 0;
+    while (i < n) {
+        s = s + OFFSET;
+        i = i + 1;
+    }
+    return s;
+}
+
+let sum = 0;
+concurrent {
+    let a = accumulator(0, 10);
+    let b = accumulator(0, 20);
+    let c = accumulator(0, 30);
+    sum = await a + await b + await c;
+}
+check("concurrent_free_var_sum", sum == (0 + 10*1000) + (0 + 20*1000) + (0 + 30*1000),
+      "sum=" + str(sum));
+
+# Worker that uses a parent-frame string
+let greeting = "Hello, ";
+@parallel fn greet(name) {
+    return greeting + name;
+}
+check("greet_free_var", await greet("World") == "Hello, World", "got " + str(await greet("World")));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

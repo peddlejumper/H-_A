@@ -1,0 +1,150 @@
+# H# zzwUI Test 05 — Layout stress (many children, deep nesting)
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. vbox with 20 children ──────────────────────────────────────────
+let pv = new Panel();
+pv.init_panel("vbox");
+pv.set_pos(0, 0);
+pv.set_size(200, 1000);
+pv.set_spacing(2);
+let n = 20;
+let i = 0;
+while (i < n) {
+    let b = new Button();
+    b.init_btn("B" + str(i));
+    b.set_size(100, 20);
+    pv.add_child(b);
+    i = i + 1;
+}
+check("l/v_n",           len(pv.children) == 20);
+pv.do_layout();
+check("l/v_y0",          pv.children[0].y == 0);
+check("l/v_y1",          pv.children[1].y == 22);
+check("l/v_y9",          pv.children[9].y == 198);
+check("l/v_y19",         pv.children[19].y == 418);
+check("l/v_x",           pv.children[5].x == 0);
+
+# ─── 2. hbox with 20 children ──────────────────────────────────────────
+let ph = new Panel();
+ph.init_panel("hbox");
+ph.set_size(2000, 30);
+ph.set_spacing(2);
+i = 0;
+while (i < n) {
+    let l = new Label();
+    l.init_label("L" + str(i));
+    l.set_size(50, 30);
+    ph.add_child(l);
+    i = i + 1;
+}
+ph.do_layout();
+check("l/h_n",           len(ph.children) == 20);
+check("l/h_x0",          ph.children[0].x == 0);
+check("l/h_x1",          ph.children[1].x == 52);
+check("l/h_x19",         ph.children[19].x == 988);
+check("l/h_y",           ph.children[5].y == 0);
+
+# ─── 3. grid 2x6 with 12 children ──────────────────────────────────────
+let pg = new Panel();
+pg.init_panel("grid");
+pg.set_size(200, 200);
+i = 0;
+while (i < 12) {
+    let b = new Button();
+    b.init_btn(str(i));
+    b.set_size(40, 40);
+    pg.add_child(b);
+    i = i + 1;
+}
+pg.do_layout();
+check("l/g_n",           len(pg.children) == 12);
+# with cols=2, row_h=col_w=40
+check("l/g_0_0",         pg.children[0].x == 0 and pg.children[0].y == 0);
+check("l/g_1_0",         pg.children[1].x == 44 and pg.children[1].y == 0);
+check("l/g_2_0",         pg.children[2].x == 0 and pg.children[2].y == 44);
+check("l/g_3_0",         pg.children[3].x == 44 and pg.children[3].y == 44);
+check("l/g_11",          pg.children[11].x == 44 and pg.children[11].y == 220);
+
+# ─── 4. nested panels (3 levels deep) ──────────────────────────────────
+let outer = new Panel();
+outer.init_panel("vbox");
+outer.set_size(400, 400);
+let middle = new Panel();
+middle.init_panel("hbox");
+middle.set_size(400, 100);
+let inner = new Panel();
+inner.init_panel("vbox");
+inner.set_size(200, 100);
+outer.add_child(middle);
+middle.add_child(inner);
+let lbl = new Label();
+lbl.init_label("nested");
+lbl.set_size(100, 20);
+inner.add_child(lbl);
+check("l/n_out_n",       len(outer.children) == 1);
+check("l/n_mid_p",       middle.parent == outer);
+check("l/n_inn_p",       inner.parent == middle);
+check("l/n_lbl_p",       lbl.parent == inner);
+
+# ─── 5. deep hierarchy (5 levels) ───────────────────────────────────────
+let lv1 = new Panel();
+lv1.init_panel("absolute");
+let lv2 = new Panel();
+lv2.init_panel("absolute");
+let lv3 = new Panel();
+lv3.init_panel("absolute");
+let lv4 = new Panel();
+lv4.init_panel("absolute");
+let lv5 = new Panel();
+lv5.init_panel("absolute");
+lv1.add_child(lv2);
+lv2.add_child(lv3);
+lv3.add_child(lv4);
+lv4.add_child(lv5);
+check("l/d5_p",          lv5.parent == lv4);
+check("l/d5_gp",         lv5.parent.parent == lv3);
+check("l/d5_ggp",        lv5.parent.parent.parent == lv2);
+check("l/d5_gggp",       lv5.parent.parent.parent.parent == lv1);
+
+# ─── 6. remove during layout cycle ─────────────────────────────────────
+let prm = new Panel();
+prm.init_panel("vbox");
+prm.set_size(100, 100);
+let ka = new Button(); ka.init_btn("A");
+let kb = new Button(); kb.init_btn("B");
+let kc = new Button(); kc.init_btn("C");
+prm.add_child(ka);
+prm.add_child(kb);
+prm.add_child(kc);
+prm.do_layout();
+check("l/rm_pre",        len(prm.children) == 3);
+prm.remove_child(kb);
+check("l/rm_mid",        len(prm.children) == 2);
+check("l/rm_mid_p",      kb.parent == nullptr);
+prm.do_layout();
+check("l/rm_relayout",   prm.children[0].y == 0 and prm.children[1].y == 34);
+# re-add
+prm.add_child(kb);
+prm.do_layout();
+check("l/rm_readd",      len(prm.children) == 3);
+check("l/rm_readd_y",    prm.children[2].y == 68);
+
+print("05_ZZW_LAYOUT_STRESS : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

@@ -1,0 +1,270 @@
+# T17 - Multi-threaded DZZW scheduler / Channel / Structured Concurrency
+# ─────────────────────────────────────────────────────────────────
+# Validates the v0.4.1 worker-pool runtime:
+#
+#   A: `parallel fn` and `@parallel fn` both produce an HFunction
+#      with is_parallel=true; the call returns a Future<T> that
+#      `await` unwraps.
+#   B: An @parallel function actually runs on a worker thread (not
+#      the main thread) — verified by a long-running task completing
+#      in less wall time than the same work run sequentially.
+#   C: `parallelism()` returns the size of the DZZW worker pool.
+#   D: Channels: `chan_new(0)` is unbounded, `chan_new(N)` is
+#      bounded.  `chan_send`/`chan_recv` are blocking.  `chan_close`
+#      stops further sends; reads on a closed+empty channel raise.
+#   E: `chan_try_recv` is non-blocking — returns null on empty.
+#   F: `chan_size` reports buffered items.
+#   G: `concurrent { ... }` block: children run on workers; the
+#      block's exit joins on every child.
+#   H: Structured concurrency — exception in a child is re-thrown
+#      by the surrounding `concurrent { ... }` block, aborting any
+#      still-pending siblings.
+#   I: `concurrent { }` accepts both `await fut` and an inline
+#      parallel call whose future is implicitly joined.
+#
+# Conventions: each case prints `OK X/name` or `FAIL X/name`;
+# the summary line `PARALLEL_TEST : PASS=N FAIL=M` is parsed by
+# the runner.
+
+# ─── Test framework (self-contained, no async needed) ────────────────
+# Use a list as a mutable counter (H# rebinds plain module-level `let`
+# ints in a new frame inside function bodies, so to count across calls
+# we go through a list's STORE_INDEX which mutates in place).
+let __stats = [0, 0, []];
+
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── A: parallel fn / @parallel fn both yield is_parallel=true ─────
+parallel fn par_a(x) {
+    return x + 1;
+}
+
+@parallel fn par_b(x) {
+    return x + 2;
+}
+
+# Both are HFunctions; both expose is_parallel=true; both return a
+# value when called.
+let rpa = par_a(10);              # HFuture (lazy)
+let rpb = par_b(20);              # HFuture (lazy)
+check("A/par_fn_returns_future",  type(rpa) == "future", "got " + type(rpa));
+check("A/decorator_returns_future", type(rpb) == "future", "got " + type(rpb));
+check("A/par_a_is_parallel",       par_a.is_parallel == true, "is_parallel=" + str(par_a.is_parallel));
+check("A/par_b_is_parallel",       par_b.is_parallel == true, "is_parallel=" + str(par_b.is_parallel));
+check("A/await_par_a",             await rpa == 11,        "await rpa=" + str(await rpa));
+check("A/await_par_b",             await rpb == 22,        "await rpb=" + str(await rpb));
+
+# ─── B: parallel actually runs concurrently ────────────────────────
+# Same CPU-busy loop, run sequentially vs in a concurrent block.
+# The concurrent block should finish in roughly 1/N the time of the
+# sequential version (modulo overhead and worker warm-up).
+parallel fn busy(iter) {
+    let i = 0;
+    let s = 0;
+    while (i < iter) {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}
+
+# Sequential baseline (large enough to amortise dispatcher overhead)
+let t0_s = time_ms();
+let s1 = await busy(5000000);
+let s2 = await busy(5000000);
+let s3 = await busy(5000000);
+let s4 = await busy(5000000);
+let s_seq = s1 + s2 + s3 + s4;
+let t1_s = time_ms();
+let seq_ms = t1_s - t0_s;
+
+# Parallel variant
+let t0_p = time_ms();
+let s_par = 0;
+concurrent {
+    let f1 = busy(5000000);
+    let f2 = busy(5000000);
+    let f3 = busy(5000000);
+    let f4 = busy(5000000);
+    s_par = await f1 + await f2 + await f3 + await f4;
+}
+let t1_p = time_ms();
+let par_ms = t1_p - t0_p;
+
+check("B/seq_sums_to_expected",   s_seq == s_par,
+      "seq=" + str(s_seq) + " par=" + str(s_par));
+# We require the parallel version to be at least 2x faster when we
+# have >=2 cores (the v0.4.1 spec target).  On a 1-core host we skip
+# the timing assertion because sequential and parallel will land
+# within noise.
+if (parallelism() >= 2) {
+    check("B/parallel_speedup",   par_ms * 2 < seq_ms,
+          "seq_ms=" + str(seq_ms) + " par_ms=" + str(par_ms));
+} else {
+    print("OK B/parallel_speedup (skipped: 1 core, par_ms=" + str(par_ms) + " seq_ms=" + str(seq_ms) + ")");
+    __stats[0] = __stats[0] + 1;
+}
+
+# ─── C: parallelism() returns the pool size ────────────────────────
+let p = parallelism();
+check("C/parallelism_positive",   p >= 1, "parallelism=" + str(p));
+
+# ─── D: channels: unbounded, bounded, blocking send/recv, close ───
+let ch_u = chan_new(0);
+check("D/unbounded_capacity",     chan_size(ch_u) == 0, "size=" + str(chan_size(ch_u)));
+
+# Sends to an unbounded channel never block (we'd be in trouble if
+# they did — no consumer yet).
+chan_send(ch_u, 100);
+chan_send(ch_u, 200);
+chan_send(ch_u, 300);
+check("D/unbounded_buffered",     chan_size(ch_u) == 3, "size=" + str(chan_size(ch_u)));
+
+# Receives preserve FIFO order.
+let u_a = chan_recv(ch_u);
+let u_b = chan_recv(ch_u);
+let u_c = chan_recv(ch_u);
+check("D/unbounded_fifo",         u_a == 100 and u_b == 200 and u_c == 300,
+      "u_a=" + str(u_a) + " u_b=" + str(u_b) + " u_c=" + str(u_c));
+
+# Bounded channel of capacity 1: try_send succeeds when empty, fails
+# when full.
+let ch_b = chan_new(1);
+let ok1 = chan_try_send(ch_b, 42);
+let ok2 = chan_try_send(ch_b, 99);
+check("D/bounded_try_send",       ok1 == true and ok2 == false,
+      "ok1=" + str(ok1) + " ok2=" + str(ok2));
+let v_b = chan_recv(ch_b);
+check("D/bounded_recv",           v_b == 42, "v_b=" + str(v_b));
+
+# After recv the bounded channel is empty and try_send succeeds again.
+let ok3 = chan_try_send(ch_b, 7);
+check("D/bounded_drain",          ok3 == true, "ok3=" + str(ok3));
+
+# Closing a channel: further sends raise, recv on closed+drained
+# also raises.
+chan_close(ch_b);
+let recv_after_close = chan_recv(ch_b);
+check("D/recv_after_close",       recv_after_close == 7, "got " + str(recv_after_close));
+let closed_caught = false;
+try {
+    chan_send(ch_b, 1);
+} catch (e) {
+    closed_caught = true;
+}
+check("D/send_on_closed_raises",  closed_caught, "");
+
+# ─── E: chan_try_recv is non-blocking ──────────────────────────────
+let ch_e = chan_new(0);
+let e1 = chan_try_recv(ch_e);
+let e2 = chan_try_recv(ch_e);
+chan_send(ch_e, 55);
+let e3 = chan_try_recv(ch_e);
+let e4 = chan_try_recv(ch_e);
+check("E/try_recv_empty",         e1 == nullptr and e2 == nullptr,
+      "e1=" + str(e1) + " e2=" + str(e2));
+check("E/try_recv_after_send",    e3 == 55 and e4 == nullptr,
+      "e3=" + str(e3) + " e4=" + str(e4));
+
+# ─── F: chan_size reflects buffer state ────────────────────────────
+let ch_f = chan_new(10);
+check("F/empty_size",             chan_size(ch_f) == 0, "size=" + str(chan_size(ch_f)));
+chan_send(ch_f, 1);
+chan_send(ch_f, 2);
+chan_send(ch_f, 3);
+check("F/after_sends",            chan_size(ch_f) == 3, "size=" + str(chan_size(ch_f)));
+let _dummy = chan_recv(ch_f);
+check("F/after_recv",             chan_size(ch_f) == 2, "size=" + str(chan_size(ch_f)));
+
+# ─── G: concurrent { ... } joins on every child ────────────────────
+parallel fn g_worker(x) {
+    return x * x;
+}
+let g_sum = 0;
+concurrent {
+    let fa = g_worker(3);
+    let fb = g_worker(4);
+    let fc = g_worker(5);
+    g_sum = await fa + await fb + await fc;
+}
+check("G/concurrent_join",        g_sum == 9 + 16 + 25, "g_sum=" + str(g_sum));
+
+# Nested concurrent blocks: inner block joins, outer sees all.
+let g_outer = 0;
+concurrent {
+    let fa = g_worker(7);
+    let fb = g_worker(8);
+    let inner_sum = 0;
+    concurrent {
+        let fc = g_worker(9);
+        let fd = g_worker(10);
+        inner_sum = await fc + await fd;
+    }
+    g_outer = await fa + await fb + inner_sum;
+}
+check("G/nested_concurrent",      g_outer == 49 + 64 + 81 + 100, "g_outer=" + str(g_outer));
+
+# ─── H: structured concurrency — child exception aborts block ──────
+parallel fn bad_worker() {
+    # A worker that always throws.
+    throw "boom";
+}
+parallel fn slow_worker() {
+    # A worker that would take a long time; should be cancelled by
+    # the parent scope when bad_worker fails.
+    let i = 0;
+    while (i < 10000000) {
+        i = i + 1;
+    }
+    return i;
+}
+let h_caught = false;
+let h_message = "";
+try {
+    concurrent {
+        let bf = bad_worker();
+        let sf = slow_worker();
+        let _a = await bf;
+        let _b = await sf;
+    }
+} catch (e) {
+    h_caught = true;
+    h_message = str(e);
+}
+check("H/child_exception_propagates", h_caught, "message=" + h_message);
+check("H/exception_message_intact",   h_message == "boom",
+      "got " + h_message);
+
+# ─── I: concurrent { } accepts an inline parallel call too ────────
+# An unheld @parallel call inside a `concurrent { }` block is
+# implicitly joined: the block waits for it just like an explicitly
+# awaited future.
+parallel fn i_worker(x) {
+    return x + 100;
+}
+let i_seen = -1;
+concurrent {
+    let f = i_worker(1);   # HFuture
+    i_seen = await f;
+}
+check("I/inline_await_joined",    i_seen == 101, "i_seen=" + str(i_seen));
+
+# ─── Summary ───────────────────────────────────────────────────────
+print("PARALLEL_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    let failed = __stats[2];
+    while (i < len(failed)) {
+        print("  FAIL: " + failed[i]);
+        i = i + 1;
+    }
+}

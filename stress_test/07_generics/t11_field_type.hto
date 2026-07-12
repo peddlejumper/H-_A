@@ -1,0 +1,20 @@
+# t11_field_type.hto — 类型参数作字段类型（动态语义：字段持有 T 值，方法内省 __type_args__）
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Holder<T> {
+    let item = nullptr;
+    fn init(x) { self.item = x; }
+    fn get() { return self.item; }
+    fn type_name() { return self.__type_args__[0]; }
+}
+
+let h = new Holder<int>(7);
+check("11/field_get", h.get() == 7);
+check("11/field_type", h.type_name() == "int");
+
+let hs = new Holder<string>("z");
+check("11/str_get", hs.get() == "z");
+check("11/str_type", hs.type_name() == "string");

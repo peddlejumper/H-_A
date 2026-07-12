@@ -1,0 +1,843 @@
+# Round 3 / Test #101 — String Methods Full Boundary
+# Goal: exhaustively probe every supported string method at its boundaries,
+# plus every "looks like it should exist but doesn't" method.
+# Each potentially-crashing case is wrapped in try/catch so we keep going
+# and collect as many bugs as possible in one run.
+
+# =============================================================
+# Section 1: upper() / lower() — basic + Unicode
+# =============================================================
+print("S1.01 upper-basic: [" + "hello".upper() + "]");
+print("S1.02 lower-basic: [" + "HELLO".lower() + "]");
+print("S1.03 upper-mixed: [" + "hElLo".upper() + "]");
+print("S1.04 lower-mixed: [" + "HeLlO".lower() + "]");
+print("S1.05 upper-already: [" + "HELLO".upper() + "]");
+print("S1.06 lower-already: [" + "hello".lower() + "]");
+print("S1.07 upper-empty: [" + "".upper() + "]");
+print("S1.08 lower-empty: [" + "".lower() + "]");
+print("S1.09 upper-symbols: [" + "123!@#".upper() + "]");
+print("S1.10 lower-symbols: [" + "123!@#".lower() + "]");
+print("S1.11 upper-cn-unchanged: [" + "中文".upper() + "]");
+print("S1.12 lower-cn-unchanged: [" + "中文".lower() + "]");
+print("S1.13 upper-german-esszet: [" + "ß".upper() + "]");
+print("S1.14 upper-german-esszet-len: " + str(len("ß".upper())));
+print("S1.15 upper-german-strasse: [" + "straße".upper() + "]");
+print("S1.16 lower-german-strasse: [" + "STRASSE".lower() + "]");
+print("S1.17 lower-turkish-I-dot: [" + "İ".lower() + "]");
+print("S1.18 upper-french-accent: [" + "é".upper() + "]");
+print("S1.19 lower-french-accent: [" + "É".lower() + "]");
+print("S1.20 upper-emoji: [" + "😀".upper() + "]");
+print("S1.21 upper-emoji-text: [" + "a😀b".upper() + "]");
+print("S1.22 lower-emoji-text: [" + "A😀B".lower() + "]");
+print("S1.23 upper-idempotent: [" + "HELLO".upper().upper() + "]");
+print("S1.24 roundtrip: [" + "HeLLo".lower().upper() + "]");
+print("S1.25 upper-space-punct: [" + " a b ".upper() + "]");
+print("S1.26 lower-unicode-mix: [" + "Ab中Éß".lower() + "]");
+
+# =============================================================
+# Section 2: strip() / lstrip() / rstrip() / trim() — whitespace
+# =============================================================
+print("S2.01 strip-spaces: [" + "  hello  ".strip() + "]");
+print("S2.02 strip-empty: [" + "".strip() + "]");
+print("S2.03 strip-all-ws: [" + "   ".strip() + "]");
+print("S2.04 strip-tab: [" + "\thi\t".strip() + "]");
+print("S2.05 strip-newline: [" + "\nhi\n".strip() + "]");
+print("S2.06 strip-cr: [" + "\rhi\r".strip() + "]");
+print("S2.07 strip-mixed: [" + " \t\nhi \t\n".strip() + "]");
+print("S2.08 strip-no-ws: [" + "hello".strip() + "]");
+print("S2.09 strip-one-side: [" + "   hello".strip() + "]");
+print("S2.10 strip-other-side: [" + "hello   ".strip() + "]");
+print("S2.11 lstrip-spaces: [" + "  hello  ".lstrip() + "]");
+print("S2.12 rstrip-spaces: [" + "  hello  ".rstrip() + "]");
+print("S2.13 lstrip-empty: [" + "".lstrip() + "]");
+print("S2.14 rstrip-empty: [" + "".rstrip() + "]");
+print("S2.15 lstrip-all-ws: [" + "   ".lstrip() + "]");
+print("S2.16 rstrip-all-ws: [" + "   ".rstrip() + "]");
+print("S2.17 strip-internal-ws: [" + "  a  b  ".strip() + "]");
+print("S2.18 strip-unicode-ws: [" + "\u3000hi\u3000".strip() + "]");
+try {
+    print("S2.19 trim-alias: [" + "  hello  ".trim() + "]");
+} catch (e) {
+    print("S2.19 trim-err: " + e);
+}
+try {
+    print("S2.20 strip-with-arg: [" + "xxhelloxx".strip("x") + "]");
+} catch (e) {
+    print("S2.20 strip-arg-err: " + e);
+}
+
+# =============================================================
+# Section 3: split(sep) — single/multi char, missing, leading/trailing
+# =============================================================
+print("S3.01 split-single-char: " + str("a,b,c".split(",")));
+print("S3.02 split-multi-char: " + str("a::b::c".split("::")));
+print("S3.03 split-missing: " + str("abc".split(",")));
+print("S3.04 split-leading-sep: " + str(",a,b".split(",")));
+print("S3.05 split-trailing-sep: " + str("a,b,".split(",")));
+print("S3.06 split-both-ends: " + str(",a,b,".split(",")));
+print("S3.07 split-consecutive: " + str("a,,b".split(",")));
+print("S3.08 split-all-sep: " + str(",,,".split(",")));
+print("S3.09 split-empty-str: " + str("".split(",")));
+print("S3.10 split-single-char-str: " + str("a".split(",")));
+print("S3.11 split-sep-equals-str: " + str(",".split(",")));
+print("S3.12 split-unicode: " + str("你,好,世".split(",")));
+print("S3.13 split-multi-unicode-sep: " + str("你好世界".split("好")));
+print("S3.14 split-tab: " + str("a\tb\tc".split("\t")));
+print("S3.15 split-newline: " + str("a\nb\nc".split("\n")));
+
+# =============================================================
+# Section 4: split("") — empty separator behavior
+# =============================================================
+try {
+    print("S4.01 split-empty-sep: " + str("abc".split("")));
+} catch (e) {
+    print("S4.01 split-empty-sep-err: " + e);
+}
+try {
+    print("S4.02 split-empty-sep-empty-str: " + str("".split("")));
+} catch (e) {
+    print("S4.02 split-empty-sep-empty-str-err: " + e);
+}
+try {
+    print("S4.03 split-empty-sep-single: " + str("a".split("")));
+} catch (e) {
+    print("S4.03 split-empty-sep-single-err: " + e);
+}
+
+# =============================================================
+# Section 5: replace(old, new) — basic, multi-overlap, empty old/new
+# =============================================================
+print("S5.01 replace-basic: [" + "hello".replace("l", "L") + "]");
+print("S5.02 replace-all: [" + "aaa".replace("a", "b") + "]");
+print("S5.03 replace-miss: [" + "hello".replace("x", "y") + "]");
+print("S5.04 replace-empty-old: [" + "abc".replace("", "X") + "]");
+print("S5.05 replace-empty-new: [" + "abc".replace("b", "") + "]");
+print("S5.06 replace-both-empty: [" + "abc".replace("", "") + "]");
+print("S5.07 replace-empty-str: [" + "".replace("a", "b") + "]");
+print("S5.08 replace-empty-str-empty-old: [" + "".replace("", "X") + "]");
+print("S5.09 replace-overlap: [" + "aaa".replace("aa", "b") + "]");
+print("S5.10 replace-multichar: [" + "hello world".replace("world", "hsharp") + "]");
+print("S5.11 replace-to-longer: [" + "ab".replace("a", "aaa") + "]");
+print("S5.12 replace-to-empty-eq: [" + "aaa".replace("a", "") + "]");
+print("S5.13 replace-whole-str: [" + "abc".replace("abc", "X") + "]");
+print("S5.14 replace-unicode: [" + "你好世界".replace("好", "们") + "]");
+print("S5.15 replace-multi-unicode: [" + "哈哈哈".replace("哈", "嘻") + "]");
+print("S5.16 replace-case-sensitive: [" + "aAaA".replace("a", "B") + "]");
+print("S5.17 replace-newline: [" + "a\nb".replace("\n", " ") + "]");
+print("S5.18 replace-overlapping-pattern: [" + "ababa".replace("aba", "X") + "]");
+
+# =============================================================
+# Section 6: contains(sub) — hit/miss/empty/self
+# =============================================================
+print("S6.01 contains-hit: " + str("hello".contains("ell")));
+print("S6.02 contains-miss: " + str("hello".contains("xyz")));
+print("S6.03 contains-empty: " + str("hello".contains("")));
+print("S6.04 contains-self: " + str("hello".contains("hello")));
+print("S6.05 contains-prefix: " + str("hello".contains("he")));
+print("S6.06 contains-suffix: " + str("hello".contains("lo")));
+print("S6.07 contains-single-char: " + str("hello".contains("h")));
+print("S6.08 contains-empty-in-empty: " + str("".contains("")));
+print("S6.09 contains-nonempty-in-empty: " + str("".contains("a")));
+print("S6.10 contains-unicode: " + str("你好世界".contains("好世")));
+print("S6.11 contains-emoji: " + str("😀🎉".contains("🎉")));
+print("S6.12 contains-longer-than-self: " + str("hi".contains("hello")));
+try {
+    print("S6.13 contains-number-arg: " + str("a1b".contains(1)));
+} catch (e) {
+    print("S6.13 contains-number-arg-err: " + e);
+}
+
+# =============================================================
+# Section 7: starts_with / ends_with — empty, self, partial
+# =============================================================
+print("S7.01 starts_with-hit: " + str("hello".starts_with("he")));
+print("S7.02 starts_with-miss: " + str("hello".starts_with("ello")));
+print("S7.03 starts_with-empty: " + str("hello".starts_with("")));
+print("S7.04 starts_with-self: " + str("hello".starts_with("hello")));
+print("S7.05 starts_with-longer: " + str("hello".starts_with("hellox")));
+print("S7.06 starts_with-single: " + str("hello".starts_with("h")));
+print("S7.07 starts_with-empty-str: " + str("".starts_with("")));
+print("S7.08 starts_with-empty-str-nonempty: " + str("".starts_with("a")));
+print("S7.09 ends_with-hit: " + str("hello".ends_with("lo")));
+print("S7.10 ends_with-miss: " + str("hello".ends_with("hel")));
+print("S7.11 ends_with-empty: " + str("hello".ends_with("")));
+print("S7.12 ends_with-self: " + str("hello".ends_with("hello")));
+print("S7.13 ends_with-longer: " + str("hello".ends_with("xhello")));
+print("S7.14 ends_with-single: " + str("hello".ends_with("o")));
+print("S7.15 ends_with-empty-str: " + str("".ends_with("")));
+print("S7.16 starts_with-unicode: " + str("你好".starts_with("你")));
+print("S7.17 ends_with-unicode: " + str("你好".ends_with("好")));
+print("S7.18 starts_with-case-sensitive: " + str("Hello".starts_with("h")));
+
+# =============================================================
+# Section 8: find(sub) / index(sub) — hit/miss/empty/multi
+# =============================================================
+print("S8.01 find-hit: " + str("hello".find("ll")));
+print("S8.02 find-miss: " + str("hello".find("xx")));
+print("S8.03 find-empty: " + str("hello".find("")));
+print("S8.04 find-multi-first: " + str("abcabc".find("a")));
+print("S8.05 find-with-start: " + str("abcabc".find("a", 2)));
+print("S8.06 find-start-over: " + str("abcabc".find("a", 100)));
+print("S8.07 find-self: " + str("hello".find("hello")));
+print("S8.08 find-prefix: " + str("hello".find("he")));
+print("S8.09 find-suffix: " + str("hello".find("lo")));
+print("S8.10 find-empty-str: " + str("".find("a")));
+print("S8.11 find-empty-in-empty: " + str("".find("")));
+print("S8.12 find-multichar-miss: " + str("hello".find("xyz")));
+print("S8.13 find-unicode: " + str("你好世界".find("世界")));
+print("S8.14 find-unicode-miss: " + str("你好世界".find("地球")));
+print("S8.15 find-emoji: " + str("😀🎉".find("🎉")));
+print("S8.16 find-overlapping: " + str("aaa".find("aa")));
+try {
+    print("S8.17 find-negative-start: " + str("abcabc".find("a", -2)));
+} catch (e) {
+    print("S8.17 find-negative-start-err: " + e);
+}
+try {
+    print("S8.18 string-index-method: " + str("hello".index("ll")));
+} catch (e) {
+    print("S8.18 string-index-err: " + e);
+}
+try {
+    print("S8.19 string-index-method-miss: " + str("hello".index("xx")));
+} catch (e) {
+    print("S8.19 string-index-miss-err: " + e);
+}
+
+# =============================================================
+# Section 9: substring(start, len) — negative start, len over, start over
+# =============================================================
+print("S9.01 substring-normal: [" + substring("hello", 1, 3) + "]");
+print("S9.02 substring-len-over: [" + substring("hello", 0, 100) + "]");
+print("S9.03 substring-start-over: [" + substring("hello", 10, 3) + "]");
+print("S9.04 substring-zero-len: [" + substring("hello", 1, 0) + "]");
+print("S9.05 substring-empty-str: [" + substring("", 0, 5) + "]");
+print("S9.06 substring-full: [" + substring("hello", 0, 5) + "]");
+print("S9.07 substring-at-end: [" + substring("hello", 5, 3) + "]");
+print("S9.08 substring-unicode: [" + substring("你好世界", 1, 2) + "]");
+try {
+    print("S9.09 substring-neg-start: [" + substring("hello", -2, 4) + "]");
+} catch (e) {
+    print("S9.09 substring-neg-start-err: " + e);
+}
+try {
+    print("S9.10 substring-neg-len: [" + substring("hello", 3, -1) + "]");
+} catch (e) {
+    print("S9.10 substring-neg-len-err: " + e);
+}
+try {
+    print("S9.11 substring-neg-both: [" + substring("hello", -5, -1) + "]");
+} catch (e) {
+    print("S9.11 substring-neg-both-err: " + e);
+}
+
+# =============================================================
+# Section 10: repeat / s * n — n=0, negative, large
+# =============================================================
+print("S10.01 rep-3: [" + "ab" * 3 + "]");
+print("S10.02 rep-0: [" + "ab" * 0 + "]");
+print("S10.03 rep-1: [" + "ab" * 1 + "]");
+print("S10.04 rep-unicode: [" + "中" * 3 + "]");
+print("S10.05 rep-empty-str: [" + "" * 5 + "]");
+print("S10.06 rep-empty-str-zero: [" + "" * 0 + "]");
+try {
+    print("S10.07 rep-neg: [" + "ab" * -1 + "]");
+} catch (e) {
+    print("S10.07 rep-neg-err: " + e);
+}
+try {
+    print("S10.08 rep-neg-large: [" + "ab" * -100 + "]");
+} catch (e) {
+    print("S10.08 rep-neg-large-err: " + e);
+}
+let big = "a" * 1000;
+print("S10.09 rep-big-len: " + str(len(big)));
+try {
+    print("S10.10 rep-float: [" + "ab" * 2.9 + "]");
+} catch (e) {
+    print("S10.10 rep-float-err: " + e);
+}
+try {
+    print("S10.11 rep-method: [" + "ab".repeat(3) + "]");
+} catch (e) {
+    print("S10.11 rep-method-err: " + e);
+}
+
+# =============================================================
+# Section 11: charAt / s[i] — negative, out of bounds, 0
+# =============================================================
+print("S11.01 index-0: [" + "hello"[0] + "]");
+print("S11.02 index-4: [" + "hello"[4] + "]");
+print("S11.03 index-mid: [" + "hello"[2] + "]");
+try {
+    print("S11.04 index-neg-1: [" + "hello"[-1] + "]");
+} catch (e) {
+    print("S11.04 index-neg-1-err: " + e);
+}
+try {
+    print("S11.05 index-neg-large: [" + "hello"[-100] + "]");
+} catch (e) {
+    print("S11.05 index-neg-large-err: " + e);
+}
+try {
+    print("S11.06 index-out-of-bounds: [" + "hello"[5] + "]");
+} catch (e) {
+    print("S11.06 index-out-of-bounds-err: " + e);
+}
+try {
+    print("S11.07 index-far-over: [" + "hello"[100] + "]");
+} catch (e) {
+    print("S11.07 index-far-over-err: " + e);
+}
+try {
+    print("S11.08 index-empty: [" + ""[0] + "]");
+} catch (e) {
+    print("S11.08 index-empty-err: " + e);
+}
+try {
+    print("S11.09 charAt-method: [" + "hello".charAt(0) + "]");
+} catch (e) {
+    print("S11.09 charAt-err: " + e);
+}
+
+# =============================================================
+# Section 12: charCodeAt / ord(s[i]) — basic
+# =============================================================
+print("S12.01 ord-A: " + str(ord("A")));
+print("S12.02 ord-a: " + str(ord("a")));
+print("S12.03 ord-zero: " + str(ord("0")));
+print("S12.04 ord-space: " + str(ord(" ")));
+print("S12.05 ord-newline: " + str(ord("\n")));
+print("S12.06 ord-tab: " + str(ord("\t")));
+print("S12.07 ord-cn: " + str(ord("中")));
+print("S12.08 ord-from-index: " + str(ord("hello"[0])));
+print("S12.09 ord-from-index-last: " + str(ord("hello"[4])));
+try {
+    print("S12.10 ord-empty: " + str(ord("")));
+} catch (e) {
+    print("S12.10 ord-empty-err: " + e);
+}
+try {
+    print("S12.11 ord-multi: " + str(ord("abc")));
+} catch (e) {
+    print("S12.11 ord-multi-err: " + e);
+}
+try {
+    print("S12.12 charCodeAt-method: " + str("A".charCodeAt(0)));
+} catch (e) {
+    print("S12.12 charCodeAt-err: " + e);
+}
+print("S12.13 chr-ord-roundtrip: " + chr(ord("X")));
+print("S12.14 ord-chr-roundtrip: " + str(ord(chr(65))));
+
+# =============================================================
+# Section 13: slice(start, end) — negative, over, start > end, step
+# =============================================================
+print("S13.01 slice-basic: [" + "hello"[1:3] + "]");
+print("S13.02 slice-full: [" + "hello"[0:5] + "]");
+print("S13.03 slice-over-end: [" + "hello"[0:100] + "]");
+print("S13.04 slice-start-over-end: [" + "hello"[3:1] + "]");
+print("S13.05 slice-zero-to-zero: [" + "hello"[0:0] + "]");
+print("S13.06 slice-empty-str: [" + ""[0:5] + "]");
+print("S13.07 slice-neg-end: [" + "hello"[0:-1] + "]");
+print("S13.08 slice-neg-start: [" + "hello"[-3:] + "]");
+print("S13.09 slice-both-neg: [" + "hello"[-3:-1] + "]");
+print("S13.10 slice-neg-start-over: [" + "hello"[-100:] + "]");
+print("S13.11 slice-neg-end-over: [" + "hello"[:-100] + "]");
+print("S13.12 slice-step-neg: [" + "hello"[::-1] + "]");
+print("S13.13 slice-step-2: [" + "hello"[::2] + "]");
+print("S13.14 slice-step-neg-2: [" + "hello"[::-2] + "]");
+print("S13.15 slice-step-1: [" + "hello"[0:5:1] + "]");
+print("S13.16 slice-from-1-step: [" + "hello"[1::2] + "]");
+print("S13.17 slice-to-3-step: [" + "hello"[:3:2] + "]");
+print("S13.18 slice-reverse-section: [" + "hello"[4:0:-1] + "]");
+print("S13.19 slice-unicode: [" + "你好世界"[1:3] + "]");
+print("S13.20 slice-unicode-reverse: [" + "你好世界"[::-1] + "]");
+print("S13.21 slice-step-0-default: [" + "hello"[0:5] + "]");
+try {
+    print("S13.22 slice-step-0: [" + "hello"[0:5:0] + "]");
+} catch (e) {
+    print("S13.22 slice-step-0-err: " + e);
+}
+
+# =============================================================
+# Section 14: concat / s + other — empty, non-string
+# =============================================================
+print("S14.01 concat-str-str: [" + "a" + "b" + "]");
+print("S14.02 concat-empty-left: [" + "" + "b" + "]");
+print("S14.03 concat-empty-right: [" + "a" + "" + "]");
+print("S14.04 concat-both-empty: [" + "" + "" + "]");
+print("S14.05 concat-str-int: [" + ("x" + 1) + "]");
+print("S14.06 concat-str-float: [" + ("x" + 3.14) + "]");
+print("S14.07 concat-str-bool: [" + ("x" + true) + "]");
+print("S14.08 concat-str-null: [" + ("x" + null) + "]");
+print("S14.09 concat-int-str: [" + (1 + "x") + "]");
+print("S14.10 concat-chain: [" + "a" + 1 + "b" + 2 + "]");
+print("S14.11 concat-multi-str: [" + "a" + "b" + "c" + "d" + "]");
+print("S14.12 concat-str-list: [" + ("x" + [1, 2]) + "]");
+print("S14.13 concat-list-str: [" + ([1, 2] + "x") + "]");
+print("S14.14 concat-str-dict: [" + ("x" + {"a": 1}) + "]");
+try {
+    print("S14.15 concat-method: [" + "a".concat("b") + "]");
+} catch (e) {
+    print("S14.15 concat-method-err: " + e);
+}
+
+# =============================================================
+# Section 15: reverse() — method support check
+# =============================================================
+try {
+    print("S15.01 reverse-method: [" + "hello".reverse() + "]");
+} catch (e) {
+    print("S15.01 reverse-method-err: " + e);
+}
+print("S15.02 reverse-slice: [" + "hello"[::-1] + "]");
+print("S15.03 reverse-empty: [" + ""[::-1] + "]");
+print("S15.04 reverse-single: [" + "a"[::-1] + "]");
+print("S15.05 reverse-unicode: [" + "你好"[::-1] + "]");
+print("S15.06 reverse-palindrome: [" + "abcba"[::-1] + "]");
+print("S15.07 reverse-twice: [" + "hello"[::-1][::-1] + "]");
+
+# =============================================================
+# Section 16: method chaining
+# =============================================================
+print("S16.01 chain-strip-upper-split: " + str("  Hello World  ".strip().upper().split(" ")));
+print("S16.02 chain-upper-lower: [" + "hello".upper().lower() + "]");
+print("S16.03 chain-lower-upper: [" + "HELLO".lower().upper() + "]");
+print("S16.04 chain-split-len: " + str("a,b,c".split(",").len()));
+print("S16.05 chain-replace-upper: [" + "hello".replace("l", "L").upper() + "]");
+print("S16.06 chain-strip-replace: [" + "  hello  ".strip().replace("l", "L") + "]");
+print("S16.07 chain-find-on-method-result: " + str("hello world".upper().find("WORLD")));
+print("S16.08 chain-contains-on-upper: " + str("Hello".upper().contains("HELLO")));
+print("S16.09 chain-starts-with-on-lower: " + str("HELLO".lower().starts_with("he")));
+print("S16.10 chain-split-join: [" + ",".join("a,b,c".split(",")) + "]");
+print("S16.11 chain-reverse-upper: [" + "hello"[::-1].upper() + "]");
+print("S16.12 chain-3-methods: [" + "  hello  ".strip().upper().lower() + "]");
+print("S16.13 chain-4-methods: [" + "  hello  ".strip().upper().lower().replace("h", "H") + "]");
+print("S16.14 chain-split-0-index: [" + "a,b,c".split(",")[0] + "]");
+print("S16.15 chain-split-len-minus-one: " + str("a,b,c".split(",")[-1]));
+
+# =============================================================
+# Section 17: empty string on all methods
+# =============================================================
+print("S17.01 empty-upper: [" + "".upper() + "]");
+print("S17.02 empty-lower: [" + "".lower() + "]");
+print("S17.03 empty-strip: [" + "".strip() + "]");
+print("S17.04 empty-lstrip: [" + "".lstrip() + "]");
+print("S17.05 empty-rstrip: [" + "".rstrip() + "]");
+print("S17.06 empty-is-empty: " + str("".is_empty()));
+print("S17.07 empty-len: " + str("".len()));
+print("S17.08 empty-length: " + str("".length()));
+print("S17.09 empty-starts_with-empty: " + str("".starts_with("")));
+print("S17.10 empty-starts_with-nonempty: " + str("".starts_with("a")));
+print("S17.11 empty-ends_with-empty: " + str("".ends_with("")));
+print("S17.12 empty-ends_with-nonempty: " + str("".ends_with("a")));
+print("S17.13 empty-contains-empty: " + str("".contains("")));
+print("S17.14 empty-contains-nonempty: " + str("".contains("a")));
+print("S17.15 empty-find-empty: " + str("".find("")));
+print("S17.16 empty-find-nonempty: " + str("".find("a")));
+print("S17.17 empty-replace: [" + "".replace("a", "b") + "]");
+print("S17.18 empty-replace-empty-old: [" + "".replace("", "X") + "]");
+print("S17.19 empty-split: " + str("".split(",")));
+try {
+    print("S17.20 empty-index-0: [" + ""[0] + "]");
+} catch (e) {
+    print("S17.20 empty-index-0-err: " + e);
+}
+print("S17.21 empty-slice: [" + ""[0:5] + "]");
+print("S17.22 empty-slice-empty: [" + ""[0:0] + "]");
+print("S17.23 empty-reverse-slice: [" + ""[::-1] + "]");
+print("S17.24 empty-repeat: [" + "" * 3 + "]");
+try {
+    print("S17.25 empty-ord: " + str(ord("")));
+} catch (e) {
+    print("S17.25 empty-ord-err: " + e);
+}
+print("S17.26 empty-concat: [" + "" + "x" + "]");
+print("S17.27 empty-join: [" + ",".join([]) + "]");
+
+# =============================================================
+# Section 18: Unicode string methods
+# =============================================================
+print("S18.01 unicode-len-cn: " + str(len("中文")));
+print("S18.02 unicode-len-jp: " + str(len("日本語")));
+print("S18.03 unicode-len-kr: " + str(len("한국어")));
+print("S18.04 unicode-upper-accent: [" + "héllo".upper() + "]");
+print("S18.05 unicode-lower-accent: [" + "HÉLLO".lower() + "]");
+print("S18.06 unicode-upper-cn: [" + "中文".upper() + "]");
+print("S18.07 unicode-lower-cn: [" + "中文".lower() + "]");
+print("S18.08 unicode-contains: " + str("你好世界".contains("好世")));
+print("S18.09 unicode-starts_with: " + str("你好世界".starts_with("你好")));
+print("S18.10 unicode-ends_with: " + str("你好世界".ends_with("世界")));
+print("S18.11 unicode-find: " + str("你好世界".find("世界")));
+print("S18.12 unicode-replace: [" + "你好世界".replace("好", "们") + "]");
+print("S18.13 unicode-split: " + str("你 好 们".split(" ")));
+print("S18.14 unicode-strip: [" + "  你好  ".strip() + "]");
+print("S18.15 unicode-index: [" + "你好"[0] + "]");
+print("S18.16 unicode-index-2: [" + "你好"[1] + "]");
+print("S18.17 unicode-slice: [" + "你好世界"[1:3] + "]");
+print("S18.18 unicode-repeat: [" + "中" * 3 + "]");
+print("S18.19 unicode-ord: " + str(ord("中")));
+print("S18.20 unicode-chr: [" + chr(20013) + "]");
+print("S18.21 unicode-join: [" + "+".join(["中", "文"]) + "]");
+print("S18.22 unicode-concat: [" + "中" + "文" + "]");
+print("S18.23 unicode-reverse: [" + "你好"[::-1] + "]");
+print("S18.24 unicode-len-emoji: " + str(len("😀")));
+print("S18.25 unicode-len-emoji-pair: " + str(len("😀🎉")));
+print("S18.26 unicode-starts_with-empty: " + str("你好".starts_with("")));
+
+# =============================================================
+# Section 19: to_string() / str() conversion
+# =============================================================
+print("S19.01 str-int: [" + str(123) + "]");
+print("S19.02 str-neg-int: [" + str(-456) + "]");
+print("S19.03 str-float: [" + str(3.14) + "]");
+print("S19.04 str-float-whole: [" + str(3.0) + "]");
+print("S19.05 str-bool-true: [" + str(true) + "]");
+print("S19.06 str-bool-false: [" + str(false) + "]");
+print("S19.07 str-null: [" + str(null) + "]");
+print("S19.08 str-empty-str: [" + str("") + "]");
+print("S19.09 str-str: [" + str("abc") + "]");
+print("S19.10 str-list: [" + str([1, 2, 3]) + "]");
+print("S19.11 str-empty-list: [" + str([]) + "]");
+print("S19.12 str-dict: [" + str({"a": 1}) + "]");
+print("S19.13 str-empty-dict: [" + str({}) + "]");
+print("S19.14 str-zero: [" + str(0) + "]");
+print("S19.15 str-large: [" + str(1000000) + "]");
+print("S19.16 str-nested-list: [" + str([1, [2, 3]]) + "]");
+try {
+    print("S19.17 to_string-method-int: [" + (123).to_string() + "]");
+} catch (e) {
+    print("S19.17 to_string-method-int-err: " + e);
+}
+try {
+    print("S19.18 to_string-method-str: [" + "abc".to_string() + "]");
+} catch (e) {
+    print("S19.18 to_string-method-str-err: " + e);
+}
+try {
+    print("S19.19 to_string-method-bool: [" + true.to_string() + "]");
+} catch (e) {
+    print("S19.19 to_string-method-bool-err: " + e);
+}
+try {
+    print("S19.20 to_string-method-null: [" + null.to_string() + "]");
+} catch (e) {
+    print("S19.20 to_string-method-null-err: " + e);
+}
+
+# =============================================================
+# Section 20: immutability check
+# =============================================================
+let s20 = "hello";
+let u20 = s20.upper();
+print("S20.01 orig-after-upper: [" + s20 + "]");
+print("S20.02 result-upper: [" + u20 + "]");
+let s20b = "hello";
+let r20 = s20b.replace("l", "L");
+print("S20.03 orig-after-replace: [" + s20b + "]");
+print("S20.04 result-replace: [" + r20 + "]");
+let s20c = "  hello  ";
+let st20 = s20c.strip();
+print("S20.05 orig-after-strip: [" + s20c + "]");
+print("S20.06 result-strip: [" + st20 + "]");
+let s20d = "a,b,c";
+let sp20 = s20d.split(",");
+print("S20.07 orig-after-split: [" + s20d + "]");
+print("S20.08 result-split: " + str(sp20));
+let s20e = "hello";
+let sl20 = s20e[1:3];
+print("S20.09 orig-after-slice: [" + s20e + "]");
+print("S20.10 result-slice: [" + sl20 + "]");
+let s20f = "hello";
+let rp20 = s20f * 2;
+print("S20.11 orig-after-repeat: [" + s20f + "]");
+print("S20.12 result-repeat: [" + rp20 + "]");
+let s20g = "hello";
+let f20 = s20g.find("ll");
+print("S20.13 orig-after-find: [" + s20g + "]");
+print("S20.14 result-find: " + str(f20));
+let s20h = "hello";
+let rv20 = s20h[::-1];
+print("S20.15 orig-after-reverse: [" + s20h + "]");
+print("S20.16 result-reverse: [" + rv20 + "]");
+
+# =============================================================
+# Section 21: pad_left / pad_right — if supported
+# =============================================================
+try {
+    print("S21.01 pad_left: [" + "5".pad_left(3, "0") + "]");
+} catch (e) {
+    print("S21.01 pad_left-err: " + e);
+}
+try {
+    print("S21.02 pad_right: [" + "5".pad_right(3, "0") + "]");
+} catch (e) {
+    print("S21.02 pad_right-err: " + e);
+}
+try {
+    print("S21.03 pad_left-default: [" + "5".pad_left(3) + "]");
+} catch (e) {
+    print("S21.03 pad_left-default-err: " + e);
+}
+try {
+    print("S21.04 lpad: [" + "5".lpad(3, "0") + "]");
+} catch (e) {
+    print("S21.04 lpad-err: " + e);
+}
+try {
+    print("S21.05 rpad: [" + "5".rpad(3, "0") + "]");
+} catch (e) {
+    print("S21.05 rpad-err: " + e);
+}
+
+# =============================================================
+# Section 22: count(sub) — if supported
+# =============================================================
+try {
+    print("S22.01 count-basic: " + str("hello".count("l")));
+} catch (e) {
+    print("S22.01 count-err: " + e);
+}
+try {
+    print("S22.02 count-miss: " + str("hello".count("x")));
+} catch (e) {
+    print("S22.02 count-miss-err: " + e);
+}
+try {
+    print("S22.03 count-empty: " + str("hello".count("")));
+} catch (e) {
+    print("S22.03 count-empty-err: " + e);
+}
+try {
+    print("S22.04 count-overlap: " + str("aaa".count("aa")));
+} catch (e) {
+    print("S22.04 count-overlap-err: " + e);
+}
+
+# =============================================================
+# Section 23: join(list) — if supported
+# =============================================================
+print("S23.01 join-str: [" + ",".join(["a", "b", "c"]) + "]");
+print("S23.02 join-empty-list: [" + ",".join([]) + "]");
+print("S23.03 join-single: [" + ",".join(["x"]) + "]");
+print("S23.04 join-num: [" + ",".join([1, 2, 3]) + "]");
+print("S23.05 join-mixed: [" + "-".join(["a", 1, true]) + "]");
+print("S23.06 join-unicode: [" + "+".join(["中", "文"]) + "]");
+print("S23.07 join-empty-sep: [" + "".join(["a", "b", "c"]) + "]");
+print("S23.08 join-empty-sep-empty: [" + "".join([]) + "]");
+print("S23.09 join-multi-char-sep: [" + "::".join(["a", "b"]) + "]");
+print("S23.10 join-newline-sep: [" + "\n".join(["a", "b"]) + "]");
+try {
+    print("S23.11 join-non-list: [" + ",".join("abc") + "]");
+} catch (e) {
+    print("S23.11 join-non-list-err: " + e);
+}
+try {
+    print("S23.12 join-list-method: [" + ["a", "b"].join(",") + "]");
+} catch (e) {
+    print("S23.12 join-list-method-err: " + e);
+}
+
+# =============================================================
+# Section 24: string methods on null
+# =============================================================
+try {
+    print("S24.01 null-upper: [" + null.upper() + "]");
+} catch (e) {
+    print("S24.01 null-upper-err: " + e);
+}
+try {
+    print("S24.02 null-strip: [" + null.strip() + "]");
+} catch (e) {
+    print("S24.02 null-strip-err: " + e);
+}
+try {
+    print("S24.03 null-len: " + str(null.len()));
+} catch (e) {
+    print("S24.03 null-len-err: " + e);
+}
+try {
+    print("S24.04 null-find: " + str(null.find("a")));
+} catch (e) {
+    print("S24.04 null-find-err: " + e);
+}
+try {
+    print("S24.05 null-contains: " + str(null.contains("a")));
+} catch (e) {
+    print("S24.05 null-contains-err: " + e);
+}
+try {
+    print("S24.06 null-split: " + str(null.split(",")));
+} catch (e) {
+    print("S24.06 null-split-err: " + e);
+}
+try {
+    print("S24.07 null-replace: [" + null.replace("a", "b") + "]");
+} catch (e) {
+    print("S24.07 null-replace-err: " + e);
+}
+try {
+    print("S24.08 null-starts_with: " + str(null.starts_with("a")));
+} catch (e) {
+    print("S24.08 null-starts_with-err: " + e);
+}
+try {
+    print("S24.09 null-ends_with: " + str(null.ends_with("a")));
+} catch (e) {
+    print("S24.09 null-ends_with-err: " + e);
+}
+try {
+    print("S24.10 null-index: [" + null[0] + "]");
+} catch (e) {
+    print("S24.10 null-index-err: " + e);
+}
+
+# =============================================================
+# Section 25: string methods on non-strings (number, list, dict)
+# =============================================================
+try {
+    print("S25.01 int-upper: [" + (123).upper() + "]");
+} catch (e) {
+    print("S25.01 int-upper-err: " + e);
+}
+try {
+    print("S25.02 int-lower: [" + (123).lower() + "]");
+} catch (e) {
+    print("S25.02 int-lower-err: " + e);
+}
+try {
+    print("S25.03 int-strip: [" + (123).strip() + "]");
+} catch (e) {
+    print("S25.03 int-strip-err: " + e);
+}
+try {
+    print("S25.04 int-len: " + str((123).len()));
+} catch (e) {
+    print("S25.04 int-len-err: " + e);
+}
+try {
+    print("S25.05 int-find: " + str((123).find("1")));
+} catch (e) {
+    print("S25.05 int-find-err: " + e);
+}
+try {
+    print("S25.06 int-split: " + str((123).split(",")));
+} catch (e) {
+    print("S25.06 int-split-err: " + e);
+}
+try {
+    print("S25.07 int-replace: [" + (123).replace("1", "X") + "]");
+} catch (e) {
+    print("S25.07 int-replace-err: " + e);
+}
+try {
+    print("S25.08 int-contains: " + str((123).contains("1")));
+} catch (e) {
+    print("S25.08 int-contains-err: " + e);
+}
+try {
+    print("S25.09 float-upper: [" + (3.14).upper() + "]");
+} catch (e) {
+    print("S25.09 float-upper-err: " + e);
+}
+try {
+    print("S25.10 bool-upper: [" + true.upper() + "]");
+} catch (e) {
+    print("S25.10 bool-upper-err: " + e);
+}
+try {
+    print("S25.11 list-upper: [" + [1, 2].upper() + "]");
+} catch (e) {
+    print("S25.11 list-upper-err: " + e);
+}
+try {
+    print("S25.12 list-str-method: " + str([1, 2].find(1)));
+} catch (e) {
+    print("S25.12 list-find-err: " + e);
+}
+try {
+    print("S25.13 dict-upper: [" + ({"a": 1}).upper() + "]");
+} catch (e) {
+    print("S25.13 dict-upper-err: " + e);
+}
+try {
+    print("S25.14 int-index: [" + (123)[0] + "]");
+} catch (e) {
+    print("S25.14 int-index-err: " + e);
+}
+try {
+    print("S25.15 int-slice: [" + (123)[0:1] + "]");
+} catch (e) {
+    print("S25.15 int-slice-err: " + e);
+}
+
+# =============================================================
+# Section 26: extra edge cases — argument count errors
+# =============================================================
+try {
+    print("S26.01 upper-with-arg: [" + "hello".upper(1) + "]");
+} catch (e) {
+    print("S26.01 upper-with-arg-err: " + e);
+}
+try {
+    print("S26.02 strip-with-2-args: [" + "hello".strip(1, 2) + "]");
+} catch (e) {
+    print("S26.02 strip-with-2-args-err: " + e);
+}
+try {
+    print("S26.03 find-no-args: " + str("hello".find()));
+} catch (e) {
+    print("S26.03 find-no-args-err: " + e);
+}
+try {
+    print("S26.04 replace-1-arg: [" + "hello".replace("l") + "]");
+} catch (e) {
+    print("S26.04 replace-1-arg-err: " + e);
+}
+try {
+    print("S26.05 replace-3-args: [" + "hello".replace("l", "L", 1) + "]");
+} catch (e) {
+    print("S26.05 replace-3-args-err: " + e);
+}
+try {
+    print("S26.06 split-no-args: " + str("hello".split()));
+} catch (e) {
+    print("S26.06 split-no-args-err: " + e);
+}
+try {
+    print("S26.07 split-2-args: " + str("hello".split(",", "x")));
+} catch (e) {
+    print("S26.07 split-2-args-err: " + e);
+}
+try {
+    print("S26.08 starts_with-no-args: " + str("hello".starts_with()));
+} catch (e) {
+    print("S26.08 starts_with-no-args-err: " + e);
+}
+try {
+    print("S26.09 join-no-args: " + str(",".join()));
+} catch (e) {
+    print("S26.09 join-no-args-err: " + e);
+}
+try {
+    print("S26.10 len-with-arg: " + str("hello".len(1)));
+} catch (e) {
+    print("S26.10 len-with-arg-err: " + e);
+}
+
+# =============================================================
+# Section 27: type of method results (consistency)
+# =============================================================
+print("S27.01 type-upper-result: " + type("hello".upper()));
+print("S27.02 type-find-result: " + type("hello".find("l")));
+print("S27.03 type-contains-result: " + type("hello".contains("l")));
+print("S27.04 type-starts_with-result: " + type("hello".starts_with("h")));
+print("S27.05 type-split-result: " + type("hello".split(",")));
+print("S27.06 type-is_empty-result: " + type("hello".is_empty()));
+print("S27.07 type-len-result: " + type("hello".len()));
+print("S27.08 type-index-result: " + type("hello"[0]));
+print("S27.09 type-slice-result: " + type("hello"[0:2]));
+print("S27.10 type-repeat-result: " + type("hello" * 2));
+
+print("DONE-101");

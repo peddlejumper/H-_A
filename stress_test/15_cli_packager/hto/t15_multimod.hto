@@ -1,0 +1,11 @@
+# t15_multimod.hto - multiple top-level statements
+let x = 1;
+let y = 2;
+let z = 3;
+print(x + y + z);
+fn square(n) {
+    return n * n;
+}
+print(square(7));
+print(square(9));
+print(x * y * z);

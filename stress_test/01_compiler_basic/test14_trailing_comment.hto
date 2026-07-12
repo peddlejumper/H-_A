@@ -1,0 +1,3 @@
+# test14: trailing comment after code on same line
+let x = 10; # this is a trailing comment
+print(x); # another trailing comment

@@ -1,0 +1,379 @@
+# H# Database Module Test Suite
+# Tests for SQLite database operations and ORM functionality
+
+# Helper function (must be defined before use)
+fn str_contains(string, substr) {
+    let i = 0;
+    let max_pos = len(string) - len(substr);
+    let found = false;
+    while (i <= max_pos and not found) {
+        let match = true;
+        let j = 0;
+        while (j < len(substr) and match) {
+            if (string[i + j] != substr[j]) {
+                match = false;
+            }
+            j = j + 1;
+        }
+        if (match) {
+            found = true;
+        }
+        i = i + 1;
+    }
+    return found;
+}
+
+print("=== H# Database Module Tests ===");
+print("");
+
+let pass_count = 0;
+let fail_count = 0;
+
+fn check(name, condition) {
+    if (condition) {
+        print("PASS: " + name);
+        pass_count = pass_count + 1;
+    } else {
+        print("FAIL: " + name);
+        fail_count = fail_count + 1;
+    }
+}
+
+# ============================================
+# Database Connection Tests
+# ============================================
+print("--- Database Connection Tests ---");
+
+# Test 1: Open in-memory database
+let conn_result = db_open(":memory:");
+check("db_open creates connection", db_is_connected(conn_result) == true);
+
+# Get connection ID
+let conn_id = db_get_connection_id(conn_result);
+check("db_get_connection_id returns ID", len(conn_id) > 0);
+
+# Test 2: Check error handling
+check("db_get_error works", len(db_get_error(conn_result)) == 0);
+
+print("");
+
+# ============================================
+# Table Management Tests
+# ============================================
+print("--- Table Management Tests ---");
+
+# Test 3: Create table
+let columns = [
+    ["id", "INTEGER PRIMARY KEY AUTOINCREMENT"],
+    ["name", "TEXT NOT NULL"],
+    ["age", "INTEGER"],
+    ["email", "TEXT"]
+];
+let create_result = db_table_create(conn_id, "users", columns);
+check("db_table_create succeeds", db_success(create_result) == true);
+
+# Test 4: Check if table exists
+check("db_table_exists detects table", db_table_exists(conn_id, "users") == true);
+check("db_table_exists rejects non-existent", db_table_exists(conn_id, "nonexistent") == false);
+
+# Test 5: List tables
+let tables = db_tables_list(conn_id);
+check("db_tables_list returns tables", len(tables) > 0);
+
+# Test 6: Get table info
+let table_info = db_table_info(conn_id, "users");
+check("db_table_info returns columns", len(table_info) > 0);
+
+print("");
+
+# ============================================
+# SQL Execution Tests
+# ============================================
+print("--- SQL Execution Tests ---");
+
+# Test 7: Insert record
+let insert_data = [
+    ["name", "Alice"],
+    ["age", 30],
+    ["email", "alice@example.com"]
+];
+let insert_result = db_insert(conn_id, "users", insert_data);
+check("db_insert succeeds", db_success(insert_result) == true);
+check("db_insert affects rows", db_rows_affected(insert_result) > 0);
+
+# Test 8: Get last insert ID
+let last_id = db_last_insert_id(insert_result);
+check("db_last_insert_id returns value", last_id > 0);
+
+# Test 9: Insert another record
+let insert_data2 = [
+    ["name", "Bob"],
+    ["age", 25],
+    ["email", "bob@example.com"]
+];
+let insert_result2 = db_insert(conn_id, "users", insert_data2);
+check("Second insert succeeds", db_success(insert_result2) == true);
+
+print("");
+
+# ============================================
+# Query Tests
+# ============================================
+print("--- Query Tests ---");
+
+# Test 10: Select all records
+let select_result = db_select(conn_id, "SELECT * FROM users", []);
+check("db_select succeeds", db_success(select_result) == true);
+let row_count = db_row_count(select_result);
+check("db_select returns rows", row_count == 2);
+
+# Test 11: Get rows from result
+let rows = db_get_rows(select_result);
+check("db_get_rows returns array", len(rows) == 2);
+
+# Test 12: Get columns from result
+let columns_result = db_get_columns(select_result);
+check("db_get_columns returns columns", len(columns_result) > 0);
+
+# Test 13: Select with WHERE clause
+let where_result = db_select(conn_id, "SELECT * FROM users WHERE age > ?", [[nullptr, 26]]);
+check("WHERE query succeeds", db_success(where_result) == true);
+check("WHERE filters correctly", db_row_count(where_result) == 1);
+
+# Test 14: Select one record
+let one_result = db_select_one(conn_id, "SELECT * FROM users WHERE id = ?", [[nullptr, 1]]);
+check("db_select_one succeeds", db_success(one_result) == true);
+let i = 0;
+let found_row = nullptr;
+while (i < len(one_result)) {
+    let entry = one_result[i];
+    if (len(entry) >= 2 and entry[0] == "row") {
+        found_row = entry[1];
+    }
+    i = i + 1;
+}
+check("db_select_one returns row", found_row != nullptr);
+
+# Test 15: Get value from row
+if (found_row != nullptr) {
+    let name_value = db_get_value(found_row, "name");
+    check("db_get_value extracts field", name_value == "Alice");
+}
+
+print("");
+
+# ============================================
+# CRUD Helper Tests
+# ============================================
+print("--- CRUD Helper Tests ---");
+
+# Test 16: Find all records
+let find_all_result = db_find_all(conn_id, "users", [], "", 0);
+check("db_find_all succeeds", db_success(find_all_result) == true);
+
+# Test 17: Find with WHERE
+let find_result = db_find(conn_id, "users", [], "age < ?", [[nullptr, 28]], "", 0);
+check("db_find with WHERE succeeds", db_success(find_result) == true);
+
+# Test 18: Find one
+let find_one_result = db_find_one(conn_id, "users", [], "name = ?", [[nullptr, "Alice"]]);
+check("db_find_one succeeds", db_success(find_one_result) == true);
+
+# Test 19: Update record
+let update_data = [
+    ["age", 31]
+];
+let update_result = db_update(conn_id, "users", update_data, "name = ?", [[nullptr, "Alice"]]);
+check("db_update succeeds", db_success(update_result) == true);
+
+# Verify update
+let verify_result = db_select_one(conn_id, "SELECT age FROM users WHERE name = ?", [[nullptr, "Alice"]]);
+check("Update verification works", db_success(verify_result) == true);
+
+# Test 20: Delete record
+let delete_result = db_delete(conn_id, "users", "name = ?", [[nullptr, "Bob"]]);
+check("db_delete succeeds", db_success(delete_result) == true);
+
+# Verify deletion
+let after_delete = db_select(conn_id, "SELECT * FROM users", []);
+check("Delete verification works", db_row_count(after_delete) == 1);
+
+print("");
+
+# ============================================
+# Transaction Tests
+# ============================================
+print("--- Transaction Tests ---");
+
+# Test 21: Begin transaction
+let begin_result = db_transaction_begin(conn_id);
+check("db_transaction_begin succeeds", db_success(begin_result) == true);
+
+# Test 22: Execute in transaction
+let tx_insert = db_execute(conn_id, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", 
+    [["null", "Charlie"], ["null", 28], ["null", "charlie@example.com"]]);
+check("Transaction insert succeeds", db_success(tx_insert) == true);
+
+# Test 23: Commit transaction
+let commit_result = db_transaction_commit(conn_id);
+check("db_commit succeeds", db_success(commit_result) == true);
+
+# Verify committed data
+let after_tx = db_select(conn_id, "SELECT COUNT(*) as count FROM users", []);
+check("Committed data persists", db_success(after_tx) == true);
+
+# Test 24: Rollback test
+let begin2 = db_transaction_begin(conn_id);
+let tx_insert2 = db_execute(conn_id, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)",
+    [["null", "Dave"], ["null", 35], ["null", "dave@example.com"]]);
+let rollback_result = db_transaction_rollback(conn_id);
+check("db_rollback succeeds", db_success(rollback_result) == true);
+
+print("");
+
+# ============================================
+# SQL Builder Tests
+# ============================================
+print("--- SQL Builder Tests ---");
+
+# Test 25: Build INSERT statement
+let insert_stmt = db_build_insert("test_table", [["col1", "val1"], ["col2", 123]]);
+check("db_build_insert creates SQL", len(insert_stmt[0]) > 0);
+check("db_build_insert has params", len(insert_stmt[1]) == 2);
+
+# Test 26: Build UPDATE statement
+let update_stmt = db_build_update("test_table", [["col1", "new_val"]], "id = ?", [[nullptr, 1]]);
+check("db_build_update creates SQL", len(update_stmt[0]) > 0);
+
+# Test 27: Build DELETE statement
+let delete_stmt = db_build_delete("test_table", "id = ?", [[nullptr, 1]]);
+check("db_build_delete creates SQL", len(delete_stmt[0]) > 0);
+
+# Test 28: Build SELECT statement
+let select_stmt = db_build_select("test_table", ["col1", "col2"], "col1 = ?", [[nullptr, "val"]], "col1 ASC", 10);
+check("db_build_select creates SQL", len(select_stmt[0]) > 0);
+check("db_build_select has LIMIT", str_contains(select_stmt[0], "LIMIT") == true);
+
+print("");
+
+# ============================================
+# ORM Tests
+# ============================================
+print("--- ORM Tests ---");
+
+# Test 29: Create ORM model
+let user_model = orm_model("User", "users", [
+    ["id", "INTEGER"],
+    ["name", "TEXT"],
+    ["age", "INTEGER"]
+]);
+check("orm_model creates model", len(user_model) > 0);
+
+# Test 30: Get model properties
+check("orm_get_name returns name", orm_get_name(user_model) == "User");
+check("orm_get_table returns table", orm_get_table(user_model) == "users");
+check("orm_get_fields returns fields", len(orm_get_fields(user_model)) == 3);
+
+# Test 31: ORM insert
+let orm_insert_data = [
+    ["name", "Eve"],
+    ["age", 27]
+];
+let orm_insert_result = orm_create_record(conn_id, user_model, orm_insert_data);
+check("orm_create_record succeeds", db_success(orm_insert_result) == true);
+
+# Test 32: ORM find
+let orm_find_result = orm_find(conn_id, user_model, "name = ?", [[nullptr, "Eve"]], "", 0);
+check("orm_find succeeds", db_success(orm_find_result) == true);
+
+# Test 33: ORM find by ID
+let orm_by_id = orm_find_by_id(conn_id, user_model, 1);
+check("orm_find_by_id succeeds", db_success(orm_by_id) == true);
+
+# Test 34: ORM count
+let count = orm_count(conn_id, user_model, "", []);
+check("orm_count returns count", count > 0);
+
+# Test 35: ORM update
+let orm_update_data = [["age", 28]];
+let orm_update_result = orm_update(conn_id, user_model, orm_update_data, "name = ?", [[nullptr, "Eve"]]);
+check("orm_update succeeds", db_success(orm_update_result) == true);
+
+# Test 36: ORM delete
+let orm_delete_result = orm_delete(conn_id, user_model, "name = ?", [[nullptr, "Eve"]]);
+check("orm_delete succeeds", db_success(orm_delete_result) == true);
+
+print("");
+
+# ============================================
+# Query Builder Tests
+# ============================================
+print("--- Query Builder Tests ---");
+
+# Test 37: Create query builder
+let qb = query_builder(conn_id, "users");
+check("query_builder creates builder", len(qb) > 0);
+
+# Test 38: Build query with WHERE
+let qb_with_where = qb_where(qb, "age > ?", [[nullptr, 20]]);
+check("qb_where sets clause", true);
+
+# Test 39: Build query with ORDER BY
+let qb_ordered = qb_order_by(qb_with_where, "name ASC");
+check("qb_order_by sets order", true);
+
+# Test 40: Build query with LIMIT
+let qb_limited = qb_limit(qb_ordered, 5);
+check("qb_limit sets limit", true);
+
+# Test 41: Execute query builder
+let qb_result = qb_execute(qb_limited);
+check("qb_execute runs query", db_success(qb_result) == true);
+
+# Test 42: Query builder execute one
+let qb_one = query_builder(conn_id, "users");
+let qb_one_result = qb_where(qb_one, "id = ?", [[nullptr, 1]]);
+let qb_one_final = qb_execute_one(qb_one_result);
+check("qb_execute_one returns row", db_success(qb_one_final) == true);
+
+print("");
+
+# ============================================
+# Utility Function Tests
+# ============================================
+print("--- Utility Function Tests ---");
+
+# Test 43: Escape string
+let escaped = db_escape_string("It's a test");
+check("db_escape_string escapes quotes", str_contains(escaped, "''") == true);
+
+# Test 44: Format value
+let formatted = db_format_value("test");
+check("db_format_value formats string", len(formatted) > 0);
+
+print("");
+
+# ============================================
+# Cleanup
+# ============================================
+print("--- Cleanup ---");
+let close_result = db_disconnect(conn_id);
+check("db_disconnect closes connection", db_success(close_result) == true);
+
+print("");
+
+# ============================================
+# Summary
+# ============================================
+print("=== Test Summary ===");
+print("Passed: " + str(pass_count));
+print("Failed: " + str(fail_count));
+print("Total: " + str(pass_count + fail_count));
+
+if (fail_count == 0) {
+    print("");
+    print("All database module tests passed!");
+} else {
+    print("");
+    print(str(fail_count) + " test(s) failed.");
+}

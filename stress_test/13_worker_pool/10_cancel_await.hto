@@ -1,0 +1,78 @@
+# 10 — cancel reachability + cancel-then-await semantics
+# Covers: cancel 后 await 抛 HSharpCancelException 的可达性。
+# 发现：H# 用户层无 cancel API；ConcurrentScope.cancel() 在 runtime 中
+# 从未被调用。本测试试图通过「concurrent {} 内一 child 抛异常」触发
+# 兄弟任务的取消，验证 join() 是否真的 cancel 仍在跑的 sibling。
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# bad_worker 立即抛异常；slow_worker 跑很长。文档声称 slow_worker 会被
+# cancel（abort still-pending siblings）。实测 join() 是否真的 cancel。
+parallel fn bad_worker() {
+    throw "boom";
+}
+parallel fn slow_worker() {
+    # 跑 ~数秒，若被 cancel 应早于完成返回（抛 cancelled）
+    let i = 0;
+    while (i < 50000000) {
+        i = i + 1;
+    }
+    return i;
+}
+
+let t0 = time_ms();
+let slow_was_cancelled = false;
+let slow_completed = false;
+let join_msg = "";
+try {
+    concurrent {
+        let bf = bad_worker();
+        let sf = slow_worker();
+        let _a = await bf;
+        let _b = await sf;
+    }
+} catch (e) {
+    join_msg = str(e);
+}
+let t1 = time_ms();
+let elapsed = t1 - t0;
+
+# 若 sibling 被 cancel，join 应在 bad 抛出后很快返回（elapsed 远小于
+# slow_worker 单独跑完的时间）。若 sibling 未被 cancel，join 会等
+# slow_worker 跑完，elapsed 接近 slow_worker 单独时间。
+# slow_worker(50M) 单独约 100~500ms（看机器）。我们用阈值 3000ms 判断。
+print("# concurrent{bad+slow} elapsed_ms=" + str(elapsed));
+check("join_aborts_slow_sibling", elapsed < 3000,
+      "elapsed=" + str(elapsed) + "ms — sibling NOT cancelled, join waited");
+check("join_rethrows_boom", join_msg == "boom",
+      "join_msg=" + join_msg);
+
+# 单独跑 slow_worker 作为基准时间
+let t2 = time_ms();
+let _ = await slow_worker();
+let t3 = time_ms();
+let slow_alone = t3 - t2;
+print("# slow_worker alone elapsed_ms=" + str(slow_alone));
+
+# 直接验证：concurrent{} 外，单独 await 一个会抛的 future，异常类型
+parallel fn throws_cancel_msg() {
+    throw "cancelled-msg";
+}
+let caught_msg = "";
+try {
+    let _ = await throws_cancel_msg();
+} catch (e) {
+    caught_msg = str(e);
+}
+check("direct_await_payload", caught_msg == "cancelled-msg",
+      "got " + caught_msg);
+
+# 验证：用户层无法直接拿一个 future 来 cancel（无 cancel native）。
+# 这是设计缺口：cancel 只能通过 scope 间接发生，但 scope.cancel 从不被
+# runtime 调用。所以我们无法构造一个 PENDING->CANCELLED 的 future。
+print("# NOTE: no user-facing cancel API; CANCELLED state is unreachable from H# code");
+
+print("T10_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

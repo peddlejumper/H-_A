@@ -1,0 +1,499 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# common/widgets.hto — 现代化 UI 组件库（自带 render）
+# 设计语言：圆角、微妙边框、留白、灰阶层次，去除 emoji 与"AI"标签
+# 依赖: common/theme.hto, bootstrap/zzw_native.hto
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ───────────────────────── 工具函数 ─────────────────────────
+
+# 单行文本截断（按字符数）
+fn truncate(text, max_chars) {
+    if (len(text) <= max_chars) { return text; }
+    return substring(text, 0, max_chars - 1) + "…";
+}
+
+# 绘制带边框的卡片（圆角 + 微妙边框 + 表面色）
+fn draw_card(win_id, x, y, w, h, radius) {
+    let r = radius;
+    if (r == nullptr or r <= 0) { r = 6; }
+    native_draw_rounded_rect(win_id, x, y, w, h, r, "#161616", true);
+    native_draw_rounded_rect(win_id, x, y, w, h, r, "#262626", false);
+    return 0;
+}
+
+# 绘制凹陷区域（输入框、代码区背景）
+fn draw_inset(win_id, x, y, w, h, radius) {
+    let r = radius;
+    if (r == nullptr or r <= 0) { r = 4; }
+    native_draw_rounded_rect(win_id, x, y, w, h, r, "#0d0d0d", true);
+    native_draw_rounded_rect(win_id, x, y, w, h, r, "#1f1f1f", false);
+    return 0;
+}
+
+# 绘制小圆点（状态指示）
+fn draw_dot(win_id, cx, cy, r, color) {
+    native_draw_circle(win_id, cx, cy, r, color, true);
+    return 0;
+}
+
+# 绘制 badge（小标签）
+fn draw_badge(win_id, x, y, text, fg, bg) {
+    let m = native_measure_text(text, 10, false);
+    let w = m[0] + 10;
+    let h = 16;
+    native_draw_rounded_rect(win_id, x, y, w, h, 3, bg, true);
+    native_draw_text(win_id, x + 5, y + 3, text, fg, 10, false, "PingFang SC");
+    return w;
+}
+
+# ───────────────────────── Panel（卡片面板）─────────────────────────
+class Panel {
+    let x = 0; let y = 0; let w = 0; let h = 0;
+    let bg = "#161616";
+    let border = "#262626";
+    let radius = 6;
+    let id = "";
+
+    fn init_panel(x, y, w, h) {
+        self.x = x; self.y = y; self.w = w; self.h = h;
+        return 0;
+    }
+
+    fn render(win_id) {
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, self.radius, self.bg, true);
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, self.radius, self.border, false);
+        return 0;
+    }
+}
+
+# ───────────────────────── Label（文本标签）─────────────────────────
+class Label {
+    let x = 0; let y = 0; let w = 0; let h = 0;
+    let text = "";
+    let color = "#ededed";
+    let font_size = 13;
+    let bold = false;
+    let font_family = "PingFang SC";
+    let align = "left";      # left / center / right
+    let truncate = false;
+    let max_chars = 0;
+    let id = "";
+
+    fn init_label(text) {
+        self.text = text;
+        return 0;
+    }
+
+    fn set_text(t) { self.text = t; return 0; }
+    fn set_color(c) { self.color = c; return 0; }
+
+    fn render(win_id) {
+        if (self.text == "") { return 0; }
+        let t = self.text;
+        if (self.truncate and self.max_chars > 0) {
+            t = truncate(t, self.max_chars);
+        }
+        if (self.align == "center") {
+            let cx = self.x + self.w / 2;
+            native_draw_text_centered(win_id, cx, self.y + self.h / 2, t,
+                                      self.color, self.font_size, self.bold);
+        } else if (self.align == "right") {
+            let m = native_measure_text(t, self.font_size, self.bold);
+            native_draw_text(win_id, self.x + self.w - m[0], self.y, t, self.color,
+                             self.font_size, self.bold, self.font_family);
+        } else {
+            native_draw_text(win_id, self.x, self.y, t, self.color,
+                             self.font_size, self.bold, self.font_family);
+        }
+        return 0;
+    }
+}
+
+# ───────────────────────── Button（主按钮，白底黑字 Vercel 风）─────────────────────────
+class Button {
+    let x = 0; let y = 0; let w = 0; let h = 0;
+    let text = "";
+    let bg = "#ffffff";
+    let bg_hover = "#e4e4e7";
+    let fg = "#0a0a0a";
+    let font_size = 13;
+    let bold = false;
+    let hovered = false;
+    let id = "";
+
+    fn init_button(text) {
+        self.text = text;
+        return 0;
+    }
+
+    fn contains(px, py) {
+        return (px >= self.x and px < self.x + self.w and py >= self.y and py < self.y + self.h);
+    }
+
+    fn render(win_id) {
+        let bg = self.bg;
+        if (self.hovered) { bg = self.bg_hover; }
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 6, bg, true);
+        let cx = self.x + self.w / 2;
+        let cy = self.y + self.h / 2;
+        native_draw_text_centered(win_id, cx, cy, self.text, self.fg, self.font_size, self.bold);
+        return 0;
+    }
+}
+
+# ───────────────────────── SecondaryButton（次要按钮，透明边框）─────────────────────────
+class SecondaryButton {
+    let x = 0; let y = 0; let w = 0; let h = 0;
+    let text = "";
+    let fg = "#ededed";
+    let border = "#333333";
+    let font_size = 13;
+    let hovered = false;
+    let id = "";
+
+    fn init_button(text) {
+        self.text = text;
+        return 0;
+    }
+
+    fn contains(px, py) {
+        return (px >= self.x and px < self.x + self.w and py >= self.y and py < self.y + self.h);
+    }
+
+    fn render(win_id) {
+        let bg = "#161616";
+        if (self.hovered) { bg = "#1c1c1c"; }
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 6, bg, true);
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 6, self.border, false);
+        let cx = self.x + self.w / 2;
+        let cy = self.y + self.h / 2;
+        native_draw_text_centered(win_id, cx, cy, self.text, self.fg, self.font_size, false);
+        return 0;
+    }
+}
+
+# ───────────────────────── GhostButton（幽灵按钮，纯文字）─────────────────────────
+class GhostButton {
+    let x = 0; let y = 0; let w = 0; let h = 0;
+    let text = "";
+    let fg = "#a1a1aa";
+    let fg_hover = "#ededed";
+    let font_size = 13;
+    let hovered = false;
+    let id = "";
+
+    fn init_button(text) {
+        self.text = text;
+        return 0;
+    }
+
+    fn contains(px, py) {
+        return (px >= self.x and px < self.x + self.w and py >= self.y and py < self.y + self.h);
+    }
+
+    fn render(win_id) {
+        let bg = "#0a0a0a";
+        let fg = self.fg;
+        if (self.hovered) {
+            bg = "#1c1c1c";
+            fg = self.fg_hover;
+        }
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 6, bg, true);
+        let cx = self.x + self.w / 2;
+        let cy = self.y + self.h / 2;
+        native_draw_text_centered(win_id, cx, cy, self.text, fg, self.font_size, false);
+        return 0;
+    }
+}
+
+# ───────────────────────── TextBox（输入框，凹陷样式）─────────────────────────
+class TextBox {
+    let x = 0; let y = 0; let w = 0; let h = 0;
+    let text = "";
+    let placeholder = "";
+    let focused = false;
+    let id = "";
+
+    fn init_textbox(placeholder) {
+        self.placeholder = placeholder;
+        return 0;
+    }
+
+    fn contains(px, py) {
+        return (px >= self.x and px < self.x + self.w and py >= self.y and py < self.y + self.h);
+    }
+
+    fn render(win_id) {
+        let bg = "#0d0d0d";
+        let border = "#262626";
+        if (self.focused) { border = "#3b82f6"; }
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 6, bg, true);
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 6, border, false);
+        let t = self.text;
+        if (t == "") {
+            native_draw_text(win_id, self.x + 10, self.y + (self.h - 13) / 2, self.placeholder,
+                             "#52525b", 13, false, "PingFang SC");
+        } else {
+            native_draw_text(win_id, self.x + 10, self.y + (self.h - 13) / 2, t,
+                             "#ededed", 13, false, "Menlo");
+        }
+        return 0;
+    }
+}
+
+# ───────────────────────── IconBadge（用首字母代替图标，去 emoji）─────────────────────────
+class IconBadge {
+    let x = 0; let y = 0; let size = 28;
+    let letter = "P";        # 单字母
+    let bg = "#262626";
+    let fg = "#ededed";
+    let font_size = 13;
+
+    fn init_badge(letter, bg) {
+        self.letter = letter;
+        if (bg != nullptr and bg != "") { self.bg = bg; }
+        return 0;
+    }
+
+    fn render(win_id) {
+        native_draw_rounded_rect(win_id, self.x, self.y, self.size, self.size, 6, self.bg, true);
+        let cx = self.x + self.size / 2;
+        let cy = self.y + self.size / 2;
+        native_draw_text_centered(win_id, cx, cy, self.letter, self.fg, self.font_size, true);
+        return 0;
+    }
+}
+
+# ───────────────────────── NavItem（侧边导航项，带左侧激活条）─────────────────────────
+class NavItem {
+    let x = 0; let y = 0; let w = 0; let h = 32;
+    let label = "";
+    let icon_letter = "";   # 单字母图标
+    let active = false;
+    let hovered = false;
+    let badge_text = "";    # 右侧数字 badge
+    let id = "";
+
+    fn init_nav(label, icon_letter) {
+        self.label = label;
+        self.icon_letter = icon_letter;
+        return 0;
+    }
+
+    fn contains(px, py) {
+        return (px >= self.x and px < self.x + self.w and py >= self.y and py < self.y + self.h);
+    }
+
+    fn render(win_id) {
+        let bg = "#0a0a0a";
+        let fg = "#a1a1aa";
+        if (self.hovered) { bg = "#161616"; fg = "#ededed"; }
+        if (self.active) {
+            bg = "#1c1c1c";
+            fg = "#ededed";
+            # 左侧激活条
+            native_draw_rect(win_id, self.x, self.y + 6, 2, self.h - 12, "#ededed", true);
+        }
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 4, bg, true);
+        # 图标字母
+        if (self.icon_letter != "") {
+            native_draw_text(win_id, self.x + 12, self.y + 9, self.icon_letter, fg, 12, true, "Menlo");
+        }
+        native_draw_text(win_id, self.x + 32, self.y + 9, self.label, fg, 13, false, "PingFang SC");
+        # 右侧 badge
+        if (self.badge_text != "") {
+            let m = native_measure_text(self.badge_text, 10, false);
+            let bx = self.x + self.w - m[0] - 14;
+            native_draw_rounded_rect(win_id, bx, self.y + 9, m[0] + 8, 14, 3, "#262626", true);
+            native_draw_text(win_id, bx + 4, self.y + 11, self.badge_text, "#a1a1aa", 10, false, "Menlo");
+        }
+        return 0;
+    }
+}
+
+# ───────────────────────── TabItem（顶部标签）─────────────────────────
+class TabItem {
+    let x = 0; let y = 0; let w = 0; let h = 36;
+    let label = "";
+    let active = false;
+    let hovered = false;
+    let id = "";
+
+    fn init_tab(label) {
+        self.label = label;
+        return 0;
+    }
+
+    fn contains(px, py) {
+        return (px >= self.x and px < self.x + self.w and py >= self.y and py < self.y + self.h);
+    }
+
+    fn render(win_id) {
+        let fg = "#71717a";
+        if (self.hovered) { fg = "#a1a1aa"; }
+        if (self.active) { fg = "#ededed"; }
+        native_draw_text_centered(win_id, self.x + self.w / 2, self.y + self.h / 2, self.label,
+                                  fg, 13, self.active);
+        if (self.active) {
+            native_draw_rect(win_id, self.x + 8, self.y + self.h - 1, self.w - 16, 2, "#ededed", true);
+        }
+        return 0;
+    }
+}
+
+# ───────────────────────── ProblemListItem（题目列表项）─────────────────────────
+class ProblemListItem {
+    let x = 0; let y = 0; let w = 0; let h = 56;
+    let pid = "";
+    let title = "";
+    let difficulty = "简单";
+    let passed = 0;
+    let submitted = 0;
+    let active = false;
+    let hovered = false;
+    let id = "";
+
+    fn contains(px, py) {
+        return (px >= self.x and px < self.x + self.w and py >= self.y and py < self.y + self.h);
+    }
+
+    fn render(win_id) {
+        let bg = "#0a0a0a";
+        if (self.hovered) { bg = "#111111"; }
+        if (self.active) { bg = "#1c1c1c"; }
+        native_draw_rect(win_id, self.x, self.y, self.w, self.h, bg, true);
+
+        if (self.active) {
+            native_draw_rect(win_id, self.x, self.y, 2, self.h, "#ededed", true);
+        }
+
+        # 题号（等宽，弱化）
+        native_draw_text(win_id, self.x + 16, self.y + 10, self.pid, "#52525b", 11, false, "Menlo");
+        # 标题
+        native_draw_text(win_id, self.x + 16, self.y + 28, self.title,
+                         self.active ? "#ededed" : "#e4e4e7", 13, false, "PingFang SC");
+
+        # 右侧：难度 badge + 通过率
+        let diff_color = "#10b981";
+        let diff_bg = "#0d3d2e";
+        if (self.difficulty == "中等") { diff_color = "#f59e0b"; diff_bg = "#3d2e0d"; }
+        if (self.difficulty == "困难") { diff_color = "#ef4444"; diff_bg = "#3d1515"; }
+
+        let rate_text = str(self.passed) + "/" + str(self.submitted);
+        let m = native_measure_text(rate_text, 10, false);
+        native_draw_text(win_id, self.x + self.w - m[0] - 16, self.y + 10, rate_text,
+                         "#52525b", 10, false, "Menlo");
+
+        # 难度 badge
+        let dm = native_measure_text(self.difficulty, 10, false);
+        native_draw_rounded_rect(win_id, self.x + self.w - dm[0] - 16, self.y + 28, dm[0] + 8, 16, 3, diff_bg, true);
+        native_draw_text(win_id, self.x + self.w - dm[0] - 12, self.y + 30, self.difficulty,
+                         diff_color, 10, false, "PingFang SC");
+        return 0;
+    }
+}
+
+# ───────────────────────── ChatBubble（对话气泡，去除"AI"标签）─────────────────────────
+class ChatBubble {
+    let x = 0; let y = 0; let w = 0; let h = 0;
+    let text = "";
+    let from_user = false;
+    let lines = [];
+
+    fn init_bubble(text, from_user) {
+        self.text = text;
+        self.from_user = from_user;
+        return 0;
+    }
+
+    fn render(win_id) {
+        let bg = "#161618";
+        let fg = "#e4e4e7";
+        let border = "#262626";
+        if (self.from_user) {
+            bg = "#1e1e22";
+            border = "#333333";
+        }
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 8, bg, true);
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 8, border, false);
+        # 多行文本
+        let i = 0;
+        while (i < len(self.lines)) {
+            native_draw_text(win_id, self.x + 12, self.y + 10 + i * 16, self.lines[i],
+                             fg, 12, false, "PingFang SC");
+            i = i + 1;
+        }
+        return 0;
+    }
+}
+
+# ───────────────────────── StatCard（统计卡片）─────────────────────────
+class StatCard {
+    let x = 0; let y = 0; let w = 0; let h = 88;
+    let label = "";
+    let value = "";
+    let value_color = "#ededed";
+    let sub = "";
+
+    fn init_card(label, value) {
+        self.label = label;
+        self.value = value;
+        return 0;
+    }
+
+    fn render(win_id) {
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 8, "#161616", true);
+        native_draw_rounded_rect(win_id, self.x, self.y, self.w, self.h, 8, "#262626", false);
+        # 标签
+        native_draw_text(win_id, self.x + 16, self.y + 14, self.label, "#71717a", 11, false, "PingFang SC");
+        # 数值
+        native_draw_text(win_id, self.x + 16, self.y + 34, self.value, self.value_color, 24, true, "Menlo");
+        # 副文字
+        if (self.sub != "") {
+            native_draw_text(win_id, self.x + 16, self.y + 66, self.sub, "#52525b", 11, false, "PingFang SC");
+        }
+        return 0;
+    }
+}
+
+# ───────────────────────── TableHeader（表头单元格）─────────────────────────
+class TableHeader {
+    let x = 0; let y = 0; let w = 0; let h = 32;
+    let label = "";
+
+    fn render(win_id) {
+        native_draw_rect(win_id, self.x, self.y, self.w, self.h, "#0d0d0d", true);
+        native_draw_line(win_id, self.x, self.y + self.h - 1, self.x + self.w, self.y + self.h - 1, "#262626", 1);
+        native_draw_text(win_id, self.x + 12, self.y + 9, self.label, "#71717a", 11, true, "PingFang SC");
+        return 0;
+    }
+}
+
+# ───────────────────────── TableRow（表格行，斑马纹 + hover）─────────────────────────
+class TableRow {
+    let x = 0; let y = 0; let w = 0; let h = 36;
+    let cells = [];          # [{text, color, font, bold}]
+    let hovered = false;
+    let selected = false;
+    let id = "";
+
+    fn render(win_id) {
+        let bg = "#0a0a0a";
+        if (self.hovered) { bg = "#111111"; }
+        if (self.selected) { bg = "#1c1c1c"; }
+        native_draw_rect(win_id, self.x, self.y, self.w, self.h, bg, true);
+        if (self.selected) {
+            native_draw_rect(win_id, self.x, self.y, 2, self.h, "#ededed", true);
+        }
+        let i = 0;
+        while (i < len(self.cells)) {
+            let c = self.cells[i];
+            let font = c["font"];
+            if (font == nullptr or font == "") { font = "PingFang SC"; }
+            native_draw_text(win_id, c["x"], self.y + 11, c["text"], c["color"], 12, c["bold"], font);
+            i = i + 1;
+        }
+        native_draw_line(win_id, self.x, self.y + self.h, self.x + self.w, self.y + self.h, "#1f1f1f", 1);
+        return 0;
+    }
+}

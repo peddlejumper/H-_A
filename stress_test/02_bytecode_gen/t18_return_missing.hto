@@ -1,0 +1,20 @@
+# t18_return_missing.hto - RETURN_VALUE 缺失（函数末尾无显式 return）
+fn no_return_explicit() {
+    print("side effect only");
+    # 无 return，编译器应在末尾补 RETURN_VALUE
+}
+no_return_explicit();
+
+fn falls_through(x) {
+    if (x > 0) {
+        return "positive";
+    }
+    # if 分支外无 return，函数末尾隐式 return
+    print("not positive");
+}
+print(falls_through(5));
+print(falls_through(-3));
+
+fn empty_fn() {
+}
+print(empty_fn());

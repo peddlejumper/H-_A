@@ -1,0 +1,78 @@
+# 06 — global/shared mutable state race
+# Covers: parallel fn 内修改全局（共享）变量 — 数据竞争探测
+# H# 的 `let` 在函数内会 rebind 到当前 frame，所以测「修改全局」必须用
+# 共享的可变容器（list / dict），通过 STORE_INDEX 原地改。
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# 共享 counter（list 包装，便于原地改）
+let counter = [0];
+
+parallel fn incr() {
+    let cur = counter[0];
+    # 故意做点计算拉开读写窗口，放大竞争
+    let k = 0;
+    while (k < 50) { k = k + 1; }
+    counter[0] = cur + 1;
+    return 0;
+}
+
+# 提交 50 个 incr，串行 await。若 list 非线程安全或存在竞争，
+# 最终 counter 通常 < 50（丢更新）甚至崩溃。
+let futs = [];
+let i = 0;
+while (i < 50) {
+    push(futs, incr());
+    i = i + 1;
+}
+let j = 0;
+while (j < 50) {
+    let _ = await futs[j];
+    j = j + 1;
+}
+let final = counter[0];
+print("# counter after 50 parallel incr (expected 50 if no race): " + str(final));
+check("counter_no_lost_update", final == 50,
+      "counter=" + str(final) + " (lost " + str(50 - final) + " updates)");
+
+# 再测一个：每个 worker 写自己的 slot（无竞争对照组）
+let slots = [];
+let s = 0;
+while (s < 50) { push(slots, 0); s = s + 1; }
+parallel fn write_slot(idx) {
+    slots[idx] = idx * 2;
+    return 0;
+}
+let f2 = [];
+let t = 0;
+while (t < 50) { push(f2, write_slot(t)); t = t + 1; }
+let u = 0;
+while (u < 50) { let _ = await f2[u]; u = u + 1; }
+let disjoint_ok = true;
+let v = 0;
+while (v < 50) {
+    if (slots[v] != v * 2) { disjoint_ok = false; }
+    v = v + 1;
+}
+check("disjoint_slots_ok", disjoint_ok, "disjoint writes lost");
+
+# dict 共享写
+let dict_counter = {"n": 0};
+parallel fn dict_incr() {
+    let cur = dict_counter["n"];
+    dict_counter["n"] = cur + 1;
+    return 0;
+}
+let f3 = [];
+let w = 0;
+while (w < 30) { push(f3, dict_incr()); w = w + 1; }
+let x = 0;
+while (x < 30) { let _ = await f3[x]; x = x + 1; }
+let dn = dict_counter["n"];
+print("# dict counter after 30 parallel incr (expected 30): " + str(dn));
+check("dict_no_lost_update", dn == 30, "dict n=" + str(dn));
+
+print("T06_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

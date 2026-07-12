@@ -1,0 +1,21 @@
+# t14 - chan close pattern: chan close matches only when channel is closed
+fn ch_close_test(ch) {
+    return match ch {
+        chan close => "closed",
+        chan send(_) => "sendable",
+        chan recv(v) => "recv:" + str(v),
+        _ => "neither"
+    };
+}
+let ch1 = chan_new(0);
+print("t14_open_empty:" + ch_close_test(ch1));
+chan_send(ch1, 1);
+print("t14_open_full:" + ch_close_test(ch1));
+chan_close(ch1);
+print("t14_closed:" + ch_close_test(ch1));
+
+# closed but still has items — should it be "closed" or "recv"?
+let ch2 = chan_new(2);
+chan_send(ch2, 99);
+chan_close(ch2);
+print("t14_closed_with_item:" + ch_close_test(ch2));

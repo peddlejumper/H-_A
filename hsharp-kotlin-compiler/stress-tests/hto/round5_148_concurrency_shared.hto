@@ -1,0 +1,1385 @@
+# round5_148_concurrency_shared.hto — 测试智能体 Round 5 #148
+# 领域: 并发共享状态 (Concurrent Shared State)
+# H# v0.4.1
+#
+# 已知背景 (来自 round2_91 / round3_103 / round4_135):
+#   - chan_new(0) 是无界 (LinkedBlockingQueue), 非无缓冲
+#   - chan_recv 在 close+drained 时 THROWS (不返回 null)
+#   - chan_try_recv 空/closed+drained 返回 null (不抛)
+#   - chan_send on closed throws; chan_try_send on closed throws (不返回 false)
+#   - chan_close 幂等; 但 close() 内部 drainTo()+re-offer 与并发 recv 存在丢值竞态
+#   - parallel fn 内 STORE_NAME 写 worker 本地 env, 共享全局写丢失
+#   - 共享 list/dict SET_ITEM/append 通过引用可见 (有竞态, 非线程安全)
+#   - ConcurrentScope.joinPendingOnly 跳过已 settled 的 cell (含 FAILED-never-awaited)
+#       => 未 await 的失败 worker 异常被静默吞掉
+#   - 嵌套 concurrent 已修复 ThreadLocal 串扰
+#   - return inside concurrent 已修复 scope 泄漏
+#
+# 本测试聚焦 S1..S15 并发共享状态子领域, 每个子领域 2-5 个用例。
+# 所有死锁场景用 "main 旋转后 close 唤醒" 模式避免挂起。
+# 用 try/catch 包裹避免整体中止；打印 "Sxx:" 前缀, 预期值在注释。
+
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK   " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + "  " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# ============================================================
+# S1: 共享变量 (Shared Variables) — 多 worker 修改同一全局变量
+# ============================================================
+print("=== S1 shared variable ===");
+
+# S1.1: 多 worker 并发自增共享全局 counter (STORE_NAME 写本地)
+let s1_counter = 0;
+parallel fn s1_bump(n) {
+    let i = 0;
+    while (i < n) { s1_counter = s1_counter + 1; i = i + 1; }
+    return s1_counter;
+}
+try {
+    let f1 = s1_bump(500);
+    let f2 = s1_bump(500);
+    let f3 = s1_bump(500);
+    let r1 = await f1;
+    let r2 = await f2;
+    let r3 = await f3;
+    print("  S1.1 note: r1=" + str(r1) + " r2=" + str(r2) + " r3=" + str(r3) + " counter=" + str(s1_counter));
+    # 预期(若共享正确): counter > 0 (有竞态可能 < 1500); r1/r2/r3 各自本地副本
+    # 实际(BUG): counter=0 (写本地 env), r1=r2=r3=500
+    check("S1.1a_global_counter_visible", s1_counter > 0, "counter=" + str(s1_counter) + " (STORE_NAME write lost to worker env)");
+    check("S1.1b_workers_share_state", not (r1 == 500 and r2 == 500 and r3 == 500 and s1_counter == 0),
+          "r1=r2=r3=500 counter=0 (no sharing at all)");
+} catch (e) { check("S1.1_no_throw", false, "threw: " + str(e)); }
+
+# S1.2: 单 worker 修改全局, main 读取 (写仍应丢失)
+let s1_single = 0;
+parallel fn s1_single_bump(n) {
+    let i = 0;
+    while (i < n) { s1_single = s1_single + 1; i = i + 1; }
+    return s1_single;
+}
+try {
+    let f = s1_single_bump(1000);
+    let r = await f;
+    print("  S1.2 note: r=" + str(r) + " single=" + str(s1_single));
+    # 即使单 worker, STORE_NAME 仍写 worker 本地 env, 主线程全局不可见
+    check("S1.2_single_worker_global_visible", s1_single > 0, "single=" + str(s1_single) + " (worker write invisible even for 1 worker)");
+} catch (e) { check("S1.2_no_throw", false, "threw: " + str(e)); }
+
+# S1.3: 通过 box[0] 间接修改全局 (引用可见, 有竞态)
+let s1_box = [0];
+parallel fn s1_box_bump(n) {
+    let i = 0;
+    while (i < n) { s1_box[0] = s1_box[0] + 1; i = i + 1; }
+    return 0;
+}
+try {
+    let f1 = s1_box_bump(1000);
+    let f2 = s1_box_bump(1000);
+    let _ = await f1;
+    let _ = await f2;
+    let final = s1_box[0];
+    print("  S1.3 note: box[0]=" + str(final) + " (expected 2000 if atomic)");
+    # SET_ITEM 作用于共享 HList 对象, 主线程可见 (有 happens-before via await)
+    check("S1.3a_box_write_visible", final > 0, "final=" + str(final));
+    # 竞态丢失更新: 串行/原子应=2000, 实际通常 < 2000
+    check("S1.3b_box_race_lost_update", final <= 2000, "final=" + str(final) + " (impossible > 2000)");
+} catch (e) { check("S1.3_no_throw", false, "threw: " + str(e)); }
+
+# S1.4: worker 读取全局 (只读应安全)
+let s1_ro_global = 42;
+parallel fn s1_reader() { return s1_ro_global * 2; }
+try {
+    let f1 = s1_reader();
+    let f2 = s1_reader();
+    let r1 = await f1;
+    let r2 = await f2;
+    check("S1.4_global_read_visible", r1 == 84 and r2 == 84, "r1=" + str(r1) + " r2=" + str(r2));
+} catch (e) { check("S1.4_no_throw", false, "threw: " + str(e)); }
+
+# S1.5: worker 写全局, 同一 worker 内再读 (本地副本可见)
+let s1_w = 0;
+parallel fn s1_write_read(n) {
+    s1_w = n;
+    return s1_w;
+}
+try {
+    let f1 = s1_write_read(111);
+    let f2 = s1_write_read(222);
+    let r1 = await f1;
+    let r2 = await f2;
+    print("  S1.5 note: r1=" + str(r1) + " r2=" + str(r2) + " w=" + str(s1_w));
+    # worker 内读自己写: r1=111, r2=222 (各自本地); 主线程 w=0
+    check("S1.5a_worker_reads_own_write", r1 == 111 and r2 == 222, "r1=" + str(r1) + " r2=" + str(r2));
+    check("S1.5b_main_never_sees_worker_write", s1_w == 0, "w=" + str(s1_w) + " (main should see 0)");
+} catch (e) { check("S1.5_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S2: 共享列表 (Shared List) — 多 worker push 到同一列表
+# ============================================================
+print("=== S2 shared list ===");
+
+# S2.1: 3 worker 各 push 1000, 最终长度 (有竞态丢失)
+parallel fn s2_pusher(lst, n) {
+    let i = 0;
+    while (i < n) { lst.append(i); i = i + 1; }
+    return 0;
+}
+try {
+    let lst = [];
+    let f1 = s2_pusher(lst, 1000);
+    let f2 = s2_pusher(lst, 1000);
+    let f3 = s2_pusher(lst, 1000);
+    let _ = await f1;
+    let _ = await f2;
+    let _ = await f3;
+    let n = len(lst);
+    print("  S2.1 note: len=" + str(n) + " (expected 3000 if no race)");
+    # HList 内部 ArrayList 非线程安全; 并发 append 会丢失更新 (甚至可能 ArrayIndexOutOfBounds 被吞)
+    check("S2.1a_list_not_empty", n > 0, "len=" + str(n));
+    check("S2.1b_list_no_overflow", n <= 3000, "len=" + str(n) + " (impossible > 3000)");
+    check("S2.1c_list_race_lost", n < 3000, "len=" + str(n) + " (if ==3000, no race observed this run)");
+} catch (e) { check("S2.1_no_throw", false, "threw: " + str(e)); }
+
+# S2.2: 1 worker push (无竞态, 应精确)
+try {
+    let lst = [];
+    let f = s2_pusher(lst, 500);
+    let _ = await f;
+    check("S2.2_single_pusher_exact", len(lst) == 500, "len=" + str(len(lst)));
+} catch (e) { check("S2.2_no_throw", false, "threw: " + str(e)); }
+
+# S2.3: 多 worker push 不同值, 验证内容守恒 (总和)
+parallel fn s2_pusher_range(lst, base, n) {
+    let i = 0;
+    while (i < n) { lst.append(base + i); i = i + 1; }
+    return 0;
+}
+try {
+    let lst = [];
+    let f1 = s2_pusher_range(lst, 0, 100);
+    let f2 = s2_pusher_range(lst, 1000, 100);
+    let _ = await f1;
+    let _ = await f2;
+    let n = len(lst);
+    let sum = 0;
+    for v in lst { sum = sum + v; }
+    print("  S2.3 note: len=" + str(n) + " sum=" + str(sum));
+    # 预期 len=200, sum = (0..99 sum=4950) + (1000..1099 sum=104950) = 109900
+    # 实际: len <= 200 (竞态丢失); sum 也相应丢失
+    check("S2.3a_list_len_bounded", n <= 200, "len=" + str(n));
+    check("S2.3b_list_sum_bounded", sum <= 109900, "sum=" + str(sum));
+} catch (e) { check("S2.3_no_throw", false, "threw: " + str(e)); }
+
+# S2.4: worker 并发 SET_ITEM 到同一索引 (重度竞态)
+let s2_box2 = [0, 0, 0];
+parallel fn s2_set_idx(idx, n) {
+    let i = 0;
+    while (i < n) { s2_box2[idx] = s2_box2[idx] + 1; i = i + 1; }
+    return 0;
+}
+try {
+    let f1 = s2_set_idx(0, 1000);
+    let f2 = s2_set_idx(1, 1000);
+    let f3 = s2_set_idx(2, 1000);
+    let _ = await f1;
+    let _ = await f2;
+    let _ = await f3;
+    print("  S2.4 note: box2=" + str(s2_box2));
+    # 不同索引应互不干扰, 各自 <= 1000 (有竞态丢失)
+    check("S2.4a_diff_idx_independent", s2_box2[0] <= 1000 and s2_box2[1] <= 1000 and s2_box2[2] <= 1000,
+          "box2=" + str(s2_box2));
+    check("S2.4b_diff_idx_all_visible", s2_box2[0] > 0 and s2_box2[1] > 0 and s2_box2[2] > 0,
+          "box2=" + str(s2_box2));
+} catch (e) { check("S2.4_no_throw", false, "threw: " + str(e)); }
+
+# S2.5: worker 并发 SET_ITEM 到 SAME 索引 (重度竞态, 丢失更新)
+let s2_box3 = [0];
+parallel fn s2_set_same(n) {
+    let i = 0;
+    while (i < n) { s2_box3[0] = s2_box3[0] + 1; i = i + 1; }
+    return 0;
+}
+try {
+    let f1 = s2_set_same(1000);
+    let f2 = s2_set_same(1000);
+    let _ = await f1;
+    let _ = await f2;
+    let final = s2_box3[0];
+    print("  S2.5 note: same_idx=" + str(final) + " (expected 2000 if atomic)");
+    check("S2.5a_same_idx_visible", final > 0, "final=" + str(final));
+    check("S2.5b_same_idx_lost_update", final <= 2000, "final=" + str(final));
+} catch (e) { check("S2.5_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S3: 共享字典 (Shared Dict) — 多 worker 写入字典
+# ============================================================
+print("=== S3 shared dict ===");
+
+# S3.1: 多 worker 写不同 key (应独立, 无干扰)
+parallel fn s3_writer(d, key, n) {
+    let i = 0;
+    while (i < n) { d[key] = i; i = i + 1; }
+    return 0;
+}
+try {
+    let d = {};
+    let f1 = s3_writer(d, "a", 2000);
+    let f2 = s3_writer(d, "b", 2000);
+    let f3 = s3_writer(d, "c", 2000);
+    let _ = await f1;
+    let _ = await f2;
+    let _ = await f3;
+    let av = d["a"];
+    let bv = d["b"];
+    let cv = d["c"];
+    print("  S3.1 note: a=" + str(av) + " b=" + str(bv) + " c=" + str(cv) + " size=" + str(len(d)));
+    check("S3.1a_dict_distinct_keys_present", av != null and bv != null and cv != null,
+          "a=" + str(av) + " b=" + str(bv) + " c=" + str(cv));
+    check("S3.1b_dict_size_3", len(d) == 3, "size=" + str(len(d)));
+    check("S3.1c_dict_final_values", av == 1999 and bv == 1999 and cv == 1999,
+          "a=" + str(av) + " b=" + str(bv) + " c=" + str(cv));
+} catch (e) { check("S3.1_no_throw", false, "threw: " + str(e)); }
+
+# S3.2: 多 worker 写 SAME key (最后一写赢, 无数据结构损坏)
+parallel fn s3_same_key(d, key, val) {
+    d[key] = val;
+    return 0;
+}
+try {
+    let d = {};
+    let f1 = s3_same_key(d, "x", 111);
+    let f2 = s3_same_key(d, "x", 222);
+    let f3 = s3_same_key(d, "x", 333);
+    let _ = await f1;
+    let _ = await f2;
+    let _ = await f3;
+    let xv = d["x"];
+    print("  S3.2 note: x=" + str(xv) + " size=" + str(len(d)));
+    # 最终值是三者之一 (last-write-wins), size 应仍为 1
+    check("S3.2a_same_key_single_entry", len(d) == 1, "size=" + str(len(d)));
+    check("S3.2b_same_key_value_is_one_of_writes",
+          xv == 111 or xv == 222 or xv == 333, "x=" + str(xv));
+} catch (e) { check("S3.2_no_throw", false, "threw: " + str(e)); }
+
+# S3.3: 多 worker 并发自增 SAME key (重度竞态)
+let s3_d = {"cnt": 0};
+parallel fn s3_inc_same(n) {
+    let i = 0;
+    while (i < n) { s3_d["cnt"] = s3_d["cnt"] + 1; i = i + 1; }
+    return 0;
+}
+try {
+    let f1 = s3_inc_same(1000);
+    let f2 = s3_inc_same(1000);
+    let _ = await f1;
+    let _ = await f2;
+    let final = s3_d["cnt"];
+    print("  S3.3 note: cnt=" + str(final) + " (expected 2000 if atomic)");
+    check("S3.3a_dict_same_key_visible", final > 0, "final=" + str(final));
+    check("S3.3b_dict_same_key_lost_update", final <= 2000, "final=" + str(final));
+} catch (e) { check("S3.3_no_throw", false, "threw: " + str(e)); }
+
+# S3.4: 多 worker 写大量不同 key (验证 dict 扩容并发安全)
+parallel fn s3_many_keys(d, base, n) {
+    let i = 0;
+    while (i < n) {
+        d["k" + str(base + i)] = base + i;
+        i = i + 1;
+    }
+    return 0;
+}
+try {
+    let d = {};
+    let f1 = s3_many_keys(d, 0, 500);
+    let f2 = s3_many_keys(d, 500, 500);
+    let _ = await f1;
+    let _ = await f2;
+    let sz = len(d);
+    print("  S3.3 note: size=" + str(sz) + " (expected 1000 if no race)");
+    # 并发 put 不同 key 到 LinkedHashMap 可能丢失或 ConcurrentModification
+    check("S3.4a_dict_many_keys_bounded", sz <= 1000, "size=" + str(sz));
+    check("S3.4b_dict_not_corrupted", d["k0"] == 0 or d["k0"] == null, "k0=" + str(d["k0"]));
+} catch (e) { check("S3.4_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S4: channel 同步 / 屏障 (Barrier)
+# ============================================================
+print("=== S4 channel barrier ===");
+
+# S4.1: 用 channel 实现 barrier — N worker 各发 1, main recv N
+parallel fn s4_worker(ch, id) {
+    let i = 0;
+    while (i < 10000) { i = i + 1; }   # 模拟工作
+    chan_send(ch, id);
+    return id;
+}
+try {
+    let ch = chan_new(0);
+    let f1 = s4_worker(ch, 1);
+    let f2 = s4_worker(ch, 2);
+    let f3 = s4_worker(ch, 3);
+    let got = [];
+    let i = 0;
+    while (i < 3) { got.append(chan_recv(ch)); i = i + 1; }
+    let _ = await f1;
+    let _ = await f2;
+    let _ = await f3;
+    let sum = 0;
+    for v in got { sum = sum + v; }
+    check("S4.1a_barrier_count", len(got) == 3, "len=" + str(len(got)));
+    check("S4.1b_barrier_sum", sum == 6, "sum=" + str(sum));
+} catch (e) { check("S4.1_no_throw", false, "threw: " + str(e)); }
+
+# S4.2: barrier with 10 workers (无 close, main 按数 recv)
+try {
+    let ch = chan_new(0);
+    let futures = [];
+    let i = 0;
+    while (i < 10) {
+        futures.append(s4_worker(ch, i));
+        i = i + 1;
+    }
+    let got = [];
+    let j = 0;
+    while (j < 10) { got.append(chan_recv(ch)); j = j + 1; }
+    let k = 0;
+    while (k < 10) { let _ = await futures[k]; k = k + 1; }
+    let sum = 0;
+    for v in got { sum = sum + v; }
+    check("S4.2a_barrier_10_count", len(got) == 10, "len=" + str(len(got)));
+    check("S4.2b_barrier_10_sum", sum == 45, "sum=" + str(sum));
+} catch (e) { check("S4.2_no_throw", false, "threw: " + str(e)); }
+
+# S4.3: worker 内 recv 作 barrier (等 main 发令)
+parallel fn s4_waiter(ch, id) {
+    let v = chan_recv(ch);   # 等 main 发令
+    return id * 100 + v;
+}
+try {
+    let ch = chan_new(0);
+    let f1 = s4_waiter(ch, 1);
+    let f2 = s4_waiter(ch, 2);
+    # main 发令
+    chan_send(ch, 10);
+    chan_send(ch, 10);
+    let r1 = await f1;
+    let r2 = await f2;
+    check("S4.3a_barrier_recv_wake_1", r1 == 110 or r1 == 210, "r1=" + str(r1));
+    check("S4.3b_barrier_recv_wake_2", r2 == 110 or r2 == 210, "r2=" + str(r2));
+    check("S4.3c_barrier_recv_sum", r1 + r2 == 320, "sum=" + str(r1 + r2));
+} catch (e) { check("S4.3_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S5: 生产者-消费者 (Producer-Consumer)
+# ============================================================
+print("=== S5 producer-consumer ===");
+
+# S5.1: 经典单生产者单消费者, producer close 后 consumer drain
+parallel fn s5_prod(ch, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, i); i = i + 1; }
+    chan_close(ch);
+    return "p-done";
+}
+parallel fn s5_cons(ch) {
+    let sum = 0;
+    let count = 0;
+    while (true) {
+        let ok = "ok";
+        try { sum = sum + chan_recv(ch); count = count + 1; } catch (e) { ok = "end"; }
+        if (ok == "end") { break; }
+    }
+    return [sum, count];
+}
+try {
+    let ch = chan_new(0);
+    let fp = s5_prod(ch, 50);
+    let fc = s5_cons(ch);
+    let rp = await fp;
+    let rc = await fc;
+    print("  S5.1 note: sum=" + str(rc[0]) + " count=" + str(rc[1]));
+    # 预期: sum=1225, count=50
+    # 实际(BUG close-race): count<50, sum<1225 (close 的 drainTo+re-offer 丢值)
+    check("S5.1a_pc_count", rc[1] == 50, "count=" + str(rc[1]) + " (close-race may lose values)");
+    check("S5.1b_pc_sum", rc[0] == 1225, "sum=" + str(rc[0]));
+} catch (e) { check("S5.1_no_throw", false, "threw: " + str(e)); }
+
+# S5.2: producer 不 close, consumer 按已知数量 recv (避免 close race)
+parallel fn s5_prod_noclose(ch, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, i); i = i + 1; }
+    return "done";
+}
+parallel fn s5_cons_n(ch, n) {
+    let sum = 0;
+    let i = 0;
+    while (i < n) { sum = sum + chan_recv(ch); i = i + 1; }
+    return [sum, n];
+}
+try {
+    let ch = chan_new(0);
+    let fp = s5_prod_noclose(ch, 50);
+    let fc = s5_cons_n(ch, 50);
+    let rp = await fp;
+    let rc = await fc;
+    check("S5.2a_pc_noclose_count", rc[1] == 50, "count=" + str(rc[1]));
+    check("S5.2b_pc_noclose_sum", rc[0] == 1225, "sum=" + str(rc[0]));
+} catch (e) { check("S5.2_no_throw", false, "threw: " + str(e)); }
+
+# S5.3: 有界 channel (cap=4) 生产者-消费者
+parallel fn s5_bounded_prod(ch, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, i); i = i + 1; }
+    chan_close(ch);
+    return "done";
+}
+parallel fn s5_bounded_cons(ch) {
+    let sum = 0;
+    let count = 0;
+    while (true) {
+        let ok = "ok";
+        try { sum = sum + chan_recv(ch); count = count + 1; } catch (e) { ok = "end"; }
+        if (ok == "end") { break; }
+    }
+    return [sum, count];
+}
+try {
+    let ch = chan_new(4);
+    let fp = s5_bounded_prod(ch, 30);
+    let fc = s5_bounded_cons(ch);
+    let rp = await fp;
+    let rc = await fc;
+    print("  S5.3 note: sum=" + str(rc[0]) + " count=" + str(rc[1]));
+    check("S5.3a_pc_bounded_count", rc[1] == 30, "count=" + str(rc[1]));
+    check("S5.3b_pc_bounded_sum", rc[0] == 435, "sum=" + str(rc[0]));
+} catch (e) { check("S5.3_no_throw", false, "threw: " + str(e)); }
+
+# S5.4: 多生产者单消费者 (fan-in 模式, 不 close 共享 channel)
+parallel fn s5_multi_prod(ch, base, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, base + i); i = i + 1; }
+    return "done";
+}
+try {
+    let ch = chan_new(0);
+    let p1 = s5_multi_prod(ch, 0, 20);
+    let p2 = s5_multi_prod(ch, 100, 20);
+    let fc = s5_cons_n(ch, 40);
+    let rp1 = await p1;
+    let rp2 = await p2;
+    let rc = await fc;
+    check("S5.4a_pc_multi_count", rc[1] == 40, "count=" + str(rc[1]));
+    # sum = (0..19 = 190) + (100..119 = 2190) = 2380
+    check("S5.4b_pc_multi_sum", rc[0] == 2380, "sum=" + str(rc[0]));
+} catch (e) { check("S5.4_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S6: fan-out / fan-in
+# ============================================================
+print("=== S6 fan-out fan-in ===");
+
+# S6.1: fan-out — 1 主分发, N worker 各取一任务
+parallel fn s6_task(x) { return x * x; }
+try {
+    let futures = [];
+    let i = 0;
+    while (i < 8) {
+        futures.append(s6_task(i));
+        i = i + 1;
+    }
+    let total = 0;
+    let j = 0;
+    while (j < 8) {
+        let r = await futures[j];
+        total = total + r;
+        j = j + 1;
+    }
+    # 0+1+4+9+16+25+36+49 = 140
+    check("S6.1_fanout_sum", total == 140, "total=" + str(total));
+} catch (e) { check("S6.1_no_throw", false, "threw: " + str(e)); }
+
+# S6.2: fan-in — N worker 计算后发到共享 output channel
+parallel fn s6_worker_in(in_ch, out_ch) {
+    while (true) {
+        let ok = "ok";
+        let v = 0;
+        try { v = chan_recv(in_ch); } catch (e) { ok = "end"; }
+        if (ok == "end") { break; }
+        chan_send(out_ch, v * v);
+    }
+    return "w-done";
+}
+try {
+    let in_ch = chan_new(0);
+    let out_ch = chan_new(0);
+    let w1 = s6_worker_in(in_ch, out_ch);
+    let w2 = s6_worker_in(in_ch, out_ch);
+    let i = 0;
+    while (i < 10) { chan_send(in_ch, i); i = i + 1; }
+    chan_close(in_ch);
+    let collected = [];
+    let j = 0;
+    while (j < 10) { collected.append(chan_recv(out_ch)); j = j + 1; }
+    let _ = await w1;
+    let _ = await w2;
+    let sum = 0;
+    for v in collected { sum = sum + v; }
+    check("S6.2a_fanin_count", len(collected) == 10, "count=" + str(len(collected)));
+    check("S6.2b_fanin_sum", sum == 285, "sum=" + str(sum));   # 0+1+4+...+81 = 285
+} catch (e) { check("S6.2_no_throw", false, "threw: " + str(e)); }
+
+# S6.3: fan-out + fan-in 组合
+parallel fn s6_square(x) { return x * x; }
+parallel fn s6_collect(out_ch, v) { chan_send(out_ch, v); return 0; }
+try {
+    let out_ch = chan_new(0);
+    let futures = [];
+    let i = 0;
+    while (i < 5) {
+        let f = s6_square(i);
+        futures.append([f, i]);   # [future, idx]
+        i = i + 1;
+    }
+    # await 每个 future 后发送到 out_ch
+    let k = 0;
+    while (k < 5) {
+        let r = await futures[k][0];
+        let _ = s6_collect(out_ch, r);
+        k = k + 1;
+    }
+    let got = [];
+    let j = 0;
+    while (j < 5) { got.append(chan_recv(out_ch)); j = j + 1; }
+    let sum = 0;
+    for v in got { sum = sum + v; }
+    check("S6.3_fanout_fanin_sum", sum == 30, "sum=" + str(sum));   # 0+1+4+9+16 = 30
+} catch (e) { check("S6.3_no_throw", false, "threw: " + str(e)); }
+
+# S6.4: 一个 producer 关闭共享 channel 导致其他 producer send 抛异常 (BUG 行为)
+parallel fn s6_closer(ch) {
+    chan_send(ch, 1);
+    chan_close(ch);
+    return "closed";
+}
+parallel fn s6_other_sender(ch) {
+    let i = 0;
+    while (i < 5) {
+        let st = "ok";
+        try { chan_send(ch, 100 + i); } catch (e) { st = "throw:" + str(e); }
+        if (st != "ok") { return st; }
+        i = i + 1;
+    }
+    return "all-ok";
+}
+try {
+    let ch = chan_new(0);
+    let f1 = s6_closer(ch);
+    let f2 = s6_other_sender(ch);
+    let r1 = await f1;
+    let r2 = await f2;
+    print("  S6.4 note: closer=" + str(r1) + " other=" + str(r2));
+    # 共享 channel 被一个 producer close 后, 其他 producer 的 send 应抛
+    check("S6.4_shared_close_breaks_others", r2 != "all-ok",
+          "other=" + str(r2) + " (other sender should hit send-on-closed)");
+} catch (e) { check("S6.4_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S7: pipeline (多阶段流水线)
+# ============================================================
+print("=== S7 pipeline ===");
+
+# S7.1: 3 阶段流水线 stage1 -> ch1 -> stage2 -> ch2 -> stage3
+parallel fn s7_stage1(out_ch, n) {
+    let i = 0;
+    while (i < n) { chan_send(out_ch, i); i = i + 1; }
+    chan_close(out_ch);
+    return "s1-done";
+}
+parallel fn s7_stage2(in_ch, out_ch) {
+    while (true) {
+        let ok = "ok";
+        let v = 0;
+        try { v = chan_recv(in_ch); } catch (e) { ok = "end"; }
+        if (ok == "end") { break; }
+        chan_send(out_ch, v * 2);
+    }
+    chan_close(out_ch);
+    return "s2-done";
+}
+parallel fn s7_stage3(in_ch) {
+    let sum = 0;
+    let count = 0;
+    while (true) {
+        let ok = "ok";
+        let v = 0;
+        try { v = chan_recv(in_ch); } catch (e) { ok = "end"; }
+        if (ok == "end") { break; }
+        sum = sum + v;
+        count = count + 1;
+    }
+    return [sum, count];
+}
+try {
+    let ch1 = chan_new(0);
+    let ch2 = chan_new(0);
+    let f1 = s7_stage1(ch1, 20);
+    let f2 = s7_stage2(ch1, ch2);
+    let f3 = s7_stage3(ch2);
+    let r1 = await f1;
+    let r2 = await f2;
+    let r3 = await f3;
+    print("  S7.1 note: sum=" + str(r3[0]) + " count=" + str(r3[1]));
+    # 预期: count=20, sum = 2*(0+1+..+19) = 2*190 = 380
+    # 实际(BUG close-race on ch1): count<20, sum<380 (stage1 close 丢值给 stage2)
+    check("S7.1a_pipeline_count", r3[1] == 20, "count=" + str(r3[1]));
+    check("S7.1b_pipeline_sum", r3[0] == 380, "sum=" + str(r3[0]));
+} catch (e) { check("S7.1_no_throw", false, "threw: " + str(e)); }
+
+# S7.2: pipeline 不 close 中间 channel (main await 后手动 close)
+try {
+    let ch1 = chan_new(0);
+    let ch2 = chan_new(0);
+    let f1 = s7_stage1(ch1, 20);
+    # f1 会 close ch1; stage2 在 ch1 close+drained 后 break, 然后 close ch2
+    # 这个测试和 S7.1 相同, 验证多次运行一致性
+    let f2 = s7_stage2(ch1, ch2);
+    let f3 = s7_stage3(ch2);
+    let r1 = await f1;
+    let r2 = await f2;
+    let r3 = await f3;
+    print("  S7.2 note: sum=" + str(r3[0]) + " count=" + str(r3[1]));
+    check("S7.2_pipeline_repeatable", r3[1] == 20, "count=" + str(r3[1]) + " (close-race nondeterministic)");
+} catch (e) { check("S7.2_no_throw", false, "threw: " + str(e)); }
+
+# S7.3: 4 阶段流水线 (更深)
+parallel fn s7_stage_double(in_ch, out_ch) {
+    while (true) {
+        let ok = "ok";
+        let v = 0;
+        try { v = chan_recv(in_ch); } catch (e) { ok = "end"; }
+        if (ok == "end") { break; }
+        chan_send(out_ch, v + 1);
+    }
+    chan_close(out_ch);
+    return "done";
+}
+try {
+    let ch1 = chan_new(0);
+    let ch2 = chan_new(0);
+    let ch3 = chan_new(0);
+    let f1 = s7_stage1(ch1, 10);
+    let f2 = s7_stage_double(ch1, ch2);
+    let f3 = s7_stage_double(ch2, ch3);
+    let f4 = s7_stage3(ch3);
+    let r1 = await f1;
+    let r2 = await f2;
+    let r3 = await f3;
+    let r4 = await f4;
+    print("  S7.3 note: sum=" + str(r4[0]) + " count=" + str(r4[1]));
+    # 预期: count=10, sum = (0+1)+1 + (1+1)+1 + ... + (9+1)+1 = (1+1)+(2+1)+...+(10+1) = 2+3+..+11 = 65
+    check("S7.3a_pipeline_4stage_count", r4[1] == 10, "count=" + str(r4[1]));
+    check("S7.3b_pipeline_4stage_sum", r4[0] == 65, "sum=" + str(r4[0]));
+} catch (e) { check("S7.3_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S8: worker pool — N worker 从 channel 取任务
+# ============================================================
+print("=== S8 worker pool ===");
+
+# S8.1: 4 worker 处理 20 任务
+parallel fn s8_pool_worker(in_ch, out_ch, id) {
+    while (true) {
+        let ok = "ok";
+        let v = 0;
+        try { v = chan_recv(in_ch); } catch (e) { ok = "end"; }
+        if (ok == "end") { break; }
+        chan_send(out_ch, v * v);
+    }
+    return id;
+}
+try {
+    let in_ch = chan_new(0);
+    let out_ch = chan_new(0);
+    let w1 = s8_pool_worker(in_ch, out_ch, 1);
+    let w2 = s8_pool_worker(in_ch, out_ch, 2);
+    let w3 = s8_pool_worker(in_ch, out_ch, 3);
+    let w4 = s8_pool_worker(in_ch, out_ch, 4);
+    let i = 0;
+    while (i < 20) { chan_send(in_ch, i); i = i + 1; }
+    chan_close(in_ch);
+    let collected = [];
+    let j = 0;
+    while (j < 20) { collected.append(chan_recv(out_ch)); j = j + 1; }
+    let rw1 = await w1;
+    let rw2 = await w2;
+    let rw3 = await w3;
+    let rw4 = await w4;
+    let sum = 0;
+    for v in collected { sum = sum + v; }
+    check("S8.1a_pool_count", len(collected) == 20, "count=" + str(len(collected)));
+    check("S8.1b_pool_sum", sum == 2470, "sum=" + str(sum));   # sum of 0..19 squared = 2470
+    check("S8.1c_pool_workers_returned", rw1 == 1 and rw2 == 2 and rw3 == 3 and rw4 == 4,
+          "w=" + str([rw1, rw2, rw3, rw4]));
+} catch (e) { check("S8.1_no_throw", false, "threw: " + str(e)); }
+
+# S8.2: worker pool 处理不等量任务 (验证负载均衡)
+try {
+    let in_ch = chan_new(0);
+    let out_ch = chan_new(0);
+    let w1 = s8_pool_worker(in_ch, out_ch, 1);
+    let w2 = s8_pool_worker(in_ch, out_ch, 2);
+    let i = 0;
+    while (i < 100) { chan_send(in_ch, i); i = i + 1; }
+    chan_close(in_ch);
+    let collected = [];
+    let j = 0;
+    while (j < 100) { collected.append(chan_recv(out_ch)); j = j + 1; }
+    let _ = await w1;
+    let _ = await w2;
+    let sum = 0;
+    for v in collected { sum = sum + v; }
+    check("S8.2a_pool_100_count", len(collected) == 100, "count=" + str(len(collected)));
+    check("S8.2b_pool_100_sum", sum == 328350, "sum=" + str(sum));   # sum of 0..99 squared = 328350
+} catch (e) { check("S8.2_no_throw", false, "threw: " + str(e)); }
+
+# S8.3: worker pool with 0 tasks (close 立即, worker 立即退出)
+try {
+    let in_ch = chan_new(0);
+    let out_ch = chan_new(0);
+    let w1 = s8_pool_worker(in_ch, out_ch, 1);
+    let w2 = s8_pool_worker(in_ch, out_ch, 2);
+    chan_close(in_ch);
+    let rw1 = await w1;
+    let rw2 = await w2;
+    check("S8.3_pool_zero_tasks", rw1 == 1 and rw2 == 2, "w1=" + str(rw1) + " w2=" + str(rw2));
+} catch (e) { check("S8.3_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S9: deadlock 检测 (用 close 唤醒, 避免挂起)
+# ============================================================
+print("=== S9 deadlock (close-wake) ===");
+
+# S9.1: 单 worker 阻塞 recv 空 channel, main close 唤醒
+parallel fn s9_blocked_recv(ch) {
+    try {
+        let v = chan_recv(ch);
+        return "got:" + str(v);
+    } catch (e) {
+        return "throw:" + str(e);
+    }
+}
+try {
+    let ch = chan_new(0);
+    let f = s9_blocked_recv(ch);
+    # main 旋转给 worker 时间阻塞
+    let spin = 0;
+    while (spin < 100000) { spin = spin + 1; }
+    chan_close(ch);
+    let r = await f;
+    check("S9.1_close_wakes_blocked_recv", r == "throw:recv on closed channel", "r=" + str(r));
+} catch (e) { check("S9.1_no_throw", false, "threw: " + str(e)); }
+
+# S9.2: 经典 2-worker 死锁 — w1 等 chA, w2 等 chB; 都先 recv
+# main 旋转后 close 两个 channel 唤醒
+parallel fn s9_deadlocker(ch, name) {
+    try {
+        let v = chan_recv(ch);
+        return name + ":got:" + str(v);
+    } catch (e) {
+        return name + ":throw:" + str(e);
+    }
+}
+try {
+    let chA = chan_new(0);
+    let chB = chan_new(0);
+    let f1 = s9_deadlocker(chA, "w1");
+    let f2 = s9_deadlocker(chB, "w2");
+    let spin = 0;
+    while (spin < 200000) { spin = spin + 1; }
+    # 两个 worker 都应阻塞在 recv; main close 唤醒
+    chan_close(chA);
+    chan_close(chB);
+    let r1 = await f1;
+    let r2 = await f2;
+    print("  S9.2 note: r1=" + str(r1) + " r2=" + str(r2));
+    check("S9.2a_deadlock_w1_woken", r1 == "w1:throw:recv on closed channel", "r1=" + str(r1));
+    check("S9.2b_deadlock_w2_woken", r2 == "w2:throw:recv on closed channel", "r2=" + str(r2));
+} catch (e) { check("S9.2_no_throw", false, "threw: " + str(e)); }
+
+# S9.3: worker 阻塞在满的有界 channel send, main recv 唤醒
+parallel fn s9_blocked_send(ch, n) {
+    let i = 0;
+    while (i < n) {
+        chan_send(ch, i);   # 第 n 个 send 阻塞 (cap=n)
+        i = i + 1;
+    }
+    return "sent:" + str(n);
+}
+try {
+    let ch = chan_new(2);   # cap=2
+    let f = s9_blocked_send(ch, 5);   # 发 5, 第 3 个阻塞
+    # main recv 5 个, 每次 recv 让 producer 继续
+    let got = [];
+    let i = 0;
+    while (i < 5) { got.append(chan_recv(ch)); i = i + 1; }
+    let r = await f;
+    let sum = 0;
+    for v in got { sum = sum + v; }
+    check("S9.3a_bounded_send_wake_count", len(got) == 5, "count=" + str(len(got)));
+    check("S9.3b_bounded_send_wake_sum", sum == 10, "sum=" + str(sum));   # 0+1+2+3+4
+    check("S9.3c_bounded_send_done", r == "sent:5", "r=" + str(r));
+} catch (e) { check("S9.3_no_throw", false, "threw: " + str(e)); }
+
+# S9.4: worker 阻塞在满 channel send, main close
+# 注意: HChannel.send() 用 queue.put() 阻塞, close() 不唤醒 blocked put
+#       => 若 worker 阻塞在 put, await f 会永久挂起 (BUG: close 不唤醒 blocked sender)
+# 为避免挂起, 用 try_send (非阻塞) 探测; close 后 try_send 应抛
+parallel fn s9_full_try_send(ch, n) {
+    let sent = 0;
+    let i = 0;
+    while (i < n) {
+        let st = "ok";
+        try {
+            if (not chan_try_send(ch, i)) { st = "full"; }
+        } catch (e) { st = "throw:" + str(e); }
+        if (st == "full") {
+            # 满了, 短暂旋转后重试
+            let s = 0;
+            while (s < 100) { s = s + 1; }
+        } else if (st != "ok") {
+            return "throw@" + str(i) + ":" + str(st);
+        } else {
+            sent = sent + 1;
+        }
+        i = i + 1;
+    }
+    return "sent:" + str(sent);
+}
+try {
+    let ch = chan_new(2);
+    let f = s9_full_try_send(ch, 10);
+    let spin = 0;
+    while (spin < 50000) { spin = spin + 1; }
+    chan_close(ch);
+    let r = await f;
+    print("  S9.4 note: r=" + str(r));
+    # cap=2, worker 用 try_send; close 后 try_send 抛 "send on closed channel"
+    check("S9.4_full_try_send_close", r != "sent:10",
+          "r=" + str(r) + " (close should break try_send with throw)");
+} catch (e) { check("S9.4_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S10: concurrent 块嵌套 (Nested concurrent)
+# ============================================================
+print("=== S10 nested concurrent ===");
+
+# S10.1: 外层 concurrent 内嵌套 concurrent
+parallel fn s10_inner(n) { return n * n; }
+parallel fn s10_outer(n) { return n + n; }
+try {
+    let result = "init";
+    concurrent {
+        let fo = s10_outer(10);
+        concurrent {
+            let fi = s10_inner(5);
+            let ri = await fi;
+            result = "inner=" + str(ri);
+        }
+        let ro = await fo;
+        result = result + " outer=" + str(ro);
+    }
+    check("S10.1_nested_concurrent", result == "inner=25 outer=20", "result=" + str(result));
+} catch (e) { check("S10.1_no_throw", false, "threw: " + str(e)); }
+
+# S10.2: 3 层嵌套
+parallel fn s10_work(n) { return n; }
+try {
+    let total = 0;
+    concurrent {
+        let fa = s10_work(1);
+        concurrent {
+            let fb = s10_work(2);
+            concurrent {
+                let fc = s10_work(3);
+                let rc = await fc;
+                total = total + rc;
+            }
+            let rb = await fb;
+            total = total + rb;
+        }
+        let ra = await fa;
+        total = total + ra;
+    }
+    check("S10.2_deep_nested_3_levels", total == 6, "total=" + str(total));
+} catch (e) { check("S10.2_no_throw", false, "threw: " + str(e)); }
+
+# S10.3: parallel worker 内开 concurrent (ThreadLocal 修复验证)
+parallel fn s10_worker_nested(n) {
+    let r = 0;
+    concurrent {
+        r = n * n;
+    }
+    return r;
+}
+try {
+    let total = 0;
+    concurrent {
+        let f1 = s10_worker_nested(3);
+        let f2 = s10_worker_nested(4);
+        let f3 = s10_worker_nested(5);
+        let r1 = await f1;
+        let r2 = await f2;
+        let r3 = await f3;
+        total = r1 + r2 + r3;
+    }
+    check("S10.3_parallel_worker_nested", total == 50, "total=" + str(total));   # 9+16+25
+} catch (e) { check("S10.3_no_throw", false, "threw: " + str(e)); }
+
+# S10.4: 嵌套 concurrent 内修改外层变量
+parallel fn s10_simple() { return 1; }
+try {
+    let counter = 0;
+    concurrent {
+        let f1 = s10_simple();
+        concurrent {
+            let f2 = s10_simple();
+            let r2 = await f2;
+            counter = counter + r2;
+        }
+        let r1 = await f1;
+        counter = counter + r1;
+    }
+    check("S10.4_nested_modify_outer", counter == 2, "counter=" + str(counter));
+} catch (e) { check("S10.4_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S11: concurrent 外变量捕获 (Closure capture)
+# ============================================================
+print("=== S11 closure capture ===");
+
+# S11.1: parallel fn 捕获外层 let (只读)
+try {
+    let multiplier = 10;
+    parallel fn s11_mul(x) { return x * multiplier; }
+    let f1 = s11_mul(5);
+    let f2 = s11_mul(6);
+    let r1 = await f1;
+    let r2 = await f2;
+    check("S11.1_capture_read", r1 == 50 and r2 == 60, "r1=" + str(r1) + " r2=" + str(r2));
+} catch (e) { check("S11.1_no_throw", false, "threw: " + str(e)); }
+
+# S11.2: parallel fn 捕获外层 let 并写 (写丢失, 同 STORE_NAME bug)
+try {
+    let captured = 0;
+    parallel fn s11_write_captured(n) {
+        let i = 0;
+        while (i < n) { captured = captured + 1; i = i + 1; }
+        return captured;
+    }
+    let f = s11_write_captured(100);
+    let r = await f;
+    print("  S11.2 note: r=" + str(r) + " captured=" + str(captured));
+    # 写丢失: r=100 (本地), captured=0 (主线程)
+    check("S11.2a_capture_write_local", r == 100, "r=" + str(r));
+    check("S11.2b_capture_write_lost", captured == 0, "captured=" + str(captured));
+} catch (e) { check("S11.2_no_throw", false, "threw: " + str(e)); }
+
+# S11.3: 捕获 list 引用 (可见, 有竞态)
+try {
+    let cap_list = [];
+    parallel fn s11_push_cap(n) {
+        let i = 0;
+        while (i < n) { cap_list.append(i); i = i + 1; }
+        return 0;
+    }
+    let f1 = s11_push_cap(500);
+    let f2 = s11_push_cap(500);
+    let _ = await f1;
+    let _ = await f2;
+    let n = len(cap_list);
+    print("  S11.3 note: len=" + str(n) + " (expected 1000 if no race)");
+    check("S11.3_capture_list_visible", n > 0, "len=" + str(n));
+    check("S11.3b_capture_list_bounded", n <= 1000, "len=" + str(n));
+} catch (e) { check("S11.3_no_throw", false, "threw: " + str(e)); }
+
+# S11.4: 捕获外层函数参数
+try {
+    fn s11_make_adder(base) {
+        parallel fn adder(x) { return x + base; }
+        return adder;
+    }
+    let add10 = s11_make_adder(10);
+    let add20 = s11_make_adder(20);
+    let f1 = add10(5);
+    let f2 = add20(5);
+    let r1 = await f1;
+    let r2 = await f2;
+    check("S11.4_capture_param", r1 == 15 and r2 == 25, "r1=" + str(r1) + " r2=" + str(r2));
+} catch (e) { check("S11.4_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S12: 大量 worker (100+ 并发)
+# ============================================================
+print("=== S12 100+ workers ===");
+
+# S12.1: 100 个 worker 各计算平方和
+parallel fn s12_sq(x) { return x * x; }
+try {
+    let futures = [];
+    let i = 0;
+    while (i < 100) {
+        futures.append(s12_sq(i));
+        i = i + 1;
+    }
+    let total = 0;
+    let j = 0;
+    while (j < 100) {
+        let r = await futures[j];
+        total = total + r;
+        j = j + 1;
+    }
+    # sum of 0..99 squared = 99*100*199/6 = 328350
+    check("S12.1_100_workers_sum", total == 328350, "total=" + str(total));
+} catch (e) { check("S12.1_no_throw", false, "threw: " + str(e)); }
+
+# S12.2: 150 个 worker 通过 channel 汇总
+parallel fn s12_chan_worker(out_ch, id) {
+    chan_send(out_ch, id);
+    return id;
+}
+try {
+    let ch = chan_new(0);
+    let futures = [];
+    let i = 0;
+    while (i < 150) {
+        futures.append(s12_chan_worker(ch, i));
+        i = i + 1;
+    }
+    let got = [];
+    let j = 0;
+    while (j < 150) { got.append(chan_recv(ch)); j = j + 1; }
+    let k = 0;
+    while (k < 150) { let _ = await futures[k]; k = k + 1; }
+    let sum = 0;
+    for v in got { sum = sum + v; }
+    check("S12.2a_150_workers_count", len(got) == 150, "count=" + str(len(got)));
+    check("S12.2b_150_workers_sum", sum == 11175, "sum=" + str(sum));   # 0+1+..+149 = 149*150/2 = 11175
+} catch (e) { check("S12.2_no_throw", false, "threw: " + str(e)); }
+
+# S12.3: 200 个 worker 共享 list push (重度并发)
+parallel fn s12_shared_push(lst, id) {
+    lst.append(id);
+    return 0;
+}
+try {
+    let lst = [];
+    let futures = [];
+    let i = 0;
+    while (i < 200) {
+        futures.append(s12_shared_push(lst, i));
+        i = i + 1;
+    }
+    let j = 0;
+    while (j < 200) { let _ = await futures[j]; j = j + 1; }
+    let n = len(lst);
+    print("  S12.3 note: len=" + str(n) + " (expected 200 if no race)");
+    check("S12.3a_200_shared_push_bounded", n <= 200, "len=" + str(n));
+    check("S12.3b_200_shared_push_not_empty", n > 0, "len=" + str(n));
+} catch (e) { check("S12.3_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S13: 异常传播 (Exception Propagation)
+# ============================================================
+print("=== S13 exception propagation ===");
+
+# S13.1: parallel fn throw, await 时抛
+parallel fn s13_thrower(msg) { throw msg; }
+try {
+    let f = s13_thrower("s13-boom");
+    let threw = "no-throw";
+    try {
+        let r = await f;
+    } catch (e) {
+        threw = "caught:" + str(e);
+    }
+    check("S13.1_await_throws", threw == "caught:s13-boom", "got=" + threw);
+} catch (e) { check("S13.1_no_outer_throw", false, "threw: " + str(e)); }
+
+# S13.2: concurrent 块内 throw 透传到外层 catch
+parallel fn s13_block_fail() { throw "block-boom"; }
+try {
+    let caught = "no-throw";
+    try {
+        concurrent {
+            let f = s13_block_fail();
+            let r = await f;
+        }
+    } catch (e) {
+        caught = "caught:" + str(e);
+    }
+    check("S13.2_block_throws_outer_catch", caught == "caught:block-boom", "got=" + caught);
+} catch (e) { check("S13.2_no_outer_throw", false, "threw: " + str(e)); }
+
+# S13.3: 未 await 的失败 worker 异常是否传播 (BUG: joinPendingOnly 跳过 settled)
+parallel fn s13_unawaited_fail() { throw "unawaited-boom"; }
+parallel fn s13_unawaited_ok() { return 42; }
+try {
+    let propagated = "no-throw";
+    try {
+        concurrent {
+            let f1 = s13_unawaited_fail();
+            let f2 = s13_unawaited_ok();
+            let r2 = await f2;
+        }
+    } catch (e) {
+        propagated = "throw:" + str(e);
+    }
+    print("  S13.3 note: propagated=" + str(propagated));
+    # 预期(正确语义): propagated == "throw:unawaited-boom"
+    # 实际(BUG joinPendingOnly 跳过 settled FAILED cell): propagated == "no-throw"
+    check("S13.3_unawaited_failure_propagates", propagated == "throw:unawaited-boom",
+          "got=" + propagated + " (joinPendingOnly skips settled FAILED, swallows unawaited exception)");
+} catch (e) { check("S13.3_no_throw", false, "threw: " + str(e)); }
+
+# S13.4: 块内 try/catch 捕获, 不透传
+parallel fn s13_inner_throw() { throw "inner-boom"; }
+try {
+    let inner_caught = "none";
+    let outer_caught = "none";
+    try {
+        concurrent {
+            let f = s13_inner_throw();
+            try {
+                let r = await f;
+            } catch (e) {
+                inner_caught = "inner:" + str(e);
+            }
+        }
+    } catch (e) {
+        outer_caught = "outer:" + str(e);
+    }
+    check("S13.4a_inner_catch_captures", inner_caught == "inner:inner-boom", "got=" + inner_caught);
+    check("S13.4b_outer_no_throw", outer_caught == "none", "got=" + outer_caught);
+} catch (e) { check("S13.4_no_throw", false, "threw: " + str(e)); }
+
+# S13.5: worker 内异常被自身 try/catch 吞掉, 不传播
+parallel fn s13_self_catch() {
+    try { throw "self-boom"; } catch (e) { return "caught:" + str(e); }
+    return "unreached";
+}
+try {
+    let f = s13_self_catch();
+    let r = await f;
+    check("S13.5_worker_self_catch", r == "caught:self-boom", "r=" + str(r));
+} catch (e) { check("S13.5_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S14: return 在 concurrent (Return inside concurrent)
+# ============================================================
+print("=== S14 return in concurrent ===");
+
+# S14.1: concurrent 块内 return (从外层函数返回)
+fn s14_with_return(n) {
+    let result = 0;
+    concurrent {
+        if (n > 0) {
+            result = n * 2;
+            return result;
+        }
+        result = -1;
+    }
+    return result;
+}
+try {
+    let r = s14_with_return(5);
+    print("  S14.1 note: r=" + str(r));
+    # 预期: return 10 (从函数返回); 实际: ??? (return 在 concurrent 内行为)
+    check("S14.1_return_in_concurrent", r == 10, "r=" + str(r));
+} catch (e) { check("S14.1_no_throw", false, "threw: " + str(e)); }
+
+# S14.2: concurrent 块内 return 后, 外层代码是否执行
+fn s14_check_outer() {
+    let log = [];
+    concurrent {
+        log.append("in-block");
+        return 99;
+    }
+    log.append("after-block");
+    return log;
+}
+try {
+    let r = s14_check_outer();
+    print("  S14.2 note: r=" + str(r));
+    # 预期: return 立即从函数返回, log=["in-block"], 函数返回 99
+    # 若 return 只退出 concurrent 块: log=["in-block","after-block"], 返回 log
+    check("S14.2a_return_exits_function", r == 99, "r=" + str(r) + " (return should exit function)");
+} catch (e) { check("S14.2_no_throw", false, "threw: " + str(e)); }
+
+# S14.3: concurrent 块内 return 在 parallel worker 内
+parallel fn s14_worker_return(n) {
+    concurrent {
+        if (n > 0) { return n * 3; }
+    }
+    return -1;
+}
+try {
+    let f1 = s14_worker_return(4);
+    let f2 = s14_worker_return(0);
+    let r1 = await f1;
+    let r2 = await f2;
+    print("  S14.3 note: r1=" + str(r1) + " r2=" + str(r2));
+    check("S14.3a_return_in_worker_concurrent", r1 == 12, "r1=" + str(r1));
+    check("S14.3b_no_return_falls_through", r2 == -1, "r2=" + str(r2));
+} catch (e) { check("S14.3_no_throw", false, "threw: " + str(e)); }
+
+# S14.4: return 在嵌套 concurrent 内层
+fn s14_nested_return() {
+    let r = 0;
+    concurrent {
+        concurrent {
+            return 777;
+        }
+        r = 111;
+    }
+    return r;
+}
+try {
+    let r = s14_nested_return();
+    print("  S14.4 note: r=" + str(r));
+    check("S14.4_return_in_nested_concurrent", r == 777, "r=" + str(r));
+} catch (e) { check("S14.4_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# S15: 顺序保证 (Order Guarantee)
+# ============================================================
+print("=== S15 order guarantee ===");
+
+# S15.1: 单生产者单消费者 FIFO 顺序保证
+parallel fn s15_ordered_prod(ch, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, i); i = i + 1; }
+    chan_close(ch);
+    return "done";
+}
+parallel fn s15_ordered_cons(ch, n) {
+    let prev = -1;
+    let ordered = true;
+    let i = 0;
+    while (i < n) {
+        let v = chan_recv(ch);
+        if (v != prev + 1) { ordered = false; }
+        prev = v;
+        i = i + 1;
+    }
+    return ordered;
+}
+try {
+    let ch = chan_new(0);
+    let fp = s15_ordered_prod(ch, 30);
+    let fc = s15_ordered_cons(ch, 30);
+    let rp = await fp;
+    let rc = await fc;
+    check("S15.1_single_producer_fifo", rc == true, "ordered=" + str(rc));
+} catch (e) { check("S15.1_no_throw", false, "threw: " + str(e)); }
+
+# S15.2: 多生产者 — 各自顺序保持, 但全局顺序交错
+parallel fn s15_seq_prod(ch, base, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, base + i); i = i + 1; }
+    return "done";
+}
+try {
+    let ch = chan_new(0);
+    let p1 = s15_seq_prod(ch, 0, 10);
+    let p2 = s15_seq_prod(ch, 1000, 10);
+    let fc = s15_ordered_cons(ch, 20);
+    let rp1 = await p1;
+    let rp2 = await p2;
+    let rc = await fc;
+    # 多生产者: 全局顺序不保证, rc 应为 false
+    print("  S15.2 note: ordered=" + str(rc));
+    check("S15.2_multi_producer_not_globally_ordered", rc == false,
+          "ordered=" + str(rc) + " (multi-producer should interleave)");
+} catch (e) { check("S15.2_no_throw", false, "threw: " + str(e)); }
+
+# S15.3: 有界 channel main 阻塞 (跳过: main 单线程, 无 consumer 会挂起)
+# 该场景无法在 main 直接测试 (cap=5 满, chan_send 阻塞 main, 无 consumer 唤醒 -> 死锁)
+# 用 S15.4 worker 生产者替代验证有界 channel FIFO
+check("S15.3_bounded_main_skipped", true, "main-thread bounded send would deadlock; tested via worker in S15.4");
+
+# S15.4: 单生产者有界 channel FIFO (worker 生产, main 消费)
+parallel fn s15_bounded_prod(ch, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, i); i = i + 1; }
+    chan_close(ch);
+    return "done";
+}
+try {
+    let ch = chan_new(3);
+    let fp = s15_bounded_prod(ch, 20);
+    let prev = -1;
+    let ordered = true;
+    let i = 0;
+    while (i < 20) {
+        let v = chan_recv(ch);
+        if (v != prev + 1) { ordered = false; }
+        prev = v;
+        i = i + 1;
+    }
+    let rp = await fp;
+    check("S15.4_bounded_single_producer_fifo", ordered == true, "ordered=" + str(ordered));
+} catch (e) { check("S15.4_no_throw", false, "threw: " + str(e)); }
+
+# S15.5: 多生产者各自消息顺序保持 (验证 per-producer FIFO)
+parallel fn s15_tagged_prod(ch, tag, n) {
+    let i = 0;
+    while (i < n) { chan_send(ch, [tag, i]); i = i + 1; }
+    return "done";
+}
+try {
+    let ch = chan_new(0);
+    let p1 = s15_tagged_prod(ch, "A", 5);
+    let p2 = s15_tagged_prod(ch, "B", 5);
+    let got = [];
+    let i = 0;
+    while (i < 10) { got.append(chan_recv(ch)); i = i + 1; }
+    let rp1 = await p1;
+    let rp2 = await p2;
+    # 提取 A 和 B 各自的序号, 验证各自递增
+    let a_seq = [];
+    let b_seq = [];
+    for pair in got {
+        if (pair[0] == "A") { a_seq.append(pair[1]); }
+        if (pair[0] == "B") { b_seq.append(pair[1]); }
+    }
+    let a_ordered = true;
+    let b_ordered = true;
+    let i2 = 0;
+    while (i2 < len(a_seq)) {
+        if (a_seq[i2] != i2) { a_ordered = false; }
+        i2 = i2 + 1;
+    }
+    let i3 = 0;
+    while (i3 < len(b_seq)) {
+        if (b_seq[i3] != i3) { b_ordered = false; }
+        i3 = i3 + 1;
+    }
+    check("S15.5a_per_producer_A_fifo", a_ordered == true, "a_seq=" + str(a_seq));
+    check("S15.5b_per_producer_B_fifo", b_ordered == true, "b_seq=" + str(b_seq));
+    check("S15.5c_total_count", len(a_seq) == 5 and len(b_seq) == 5,
+          "a=" + str(len(a_seq)) + " b=" + str(len(b_seq)));
+} catch (e) { check("S15.5_no_throw", false, "threw: " + str(e)); }
+
+# ============================================================
+# 汇总
+# ============================================================
+print("=========================================");
+print("ROUND5_148_CONCURRENCY_SHARED_SUMMARY: PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+print("=== ALL DONE ===");

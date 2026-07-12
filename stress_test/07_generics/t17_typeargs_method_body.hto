@@ -1,0 +1,25 @@
+# t17_typeargs_method_body.hto — __type_args__ 在方法体内省
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Triple<A, B, C> {
+    fn names() {
+        return self.__type_args__[0] + "," + self.__type_args__[1] + "," + self.__type_args__[2];
+    }
+    fn count() { return len(self.__type_args__); }
+    fn first_arg() { return self.__type_args__[0]; }
+}
+
+let t = new Triple<int, string, bool>(1, "x", true);
+print("17/names=" + str(t.names()));
+check("17/names", t.names() == "int,string,bool");
+check("17/count", t.count() == 3);
+check("17/first_arg", t.first_arg() == "int");
+
+# 类上的 __type_params__
+check("17/cls_params_len", len(Triple.__type_params__) == 3);
+check("17/cls_p0", Triple.__type_params__[0] == "A");
+check("17/cls_p1", Triple.__type_params__[1] == "B");
+check("17/cls_p2", Triple.__type_params__[2] == "C");

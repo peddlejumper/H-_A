@@ -1,0 +1,32 @@
+# t18_mixed_arrows.hto — 带/不带空格的 < > 混合
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Box<T> {
+    let v = nullptr;
+    fn init(x) { self.v = x; }
+    fn get() { return self.v; }
+}
+fn identity<T>(x) { return x; }
+
+# 1. 带空格的 new Box < int > (42)
+let b1 = new Box < int > (42);
+check("18/spaced_new", b1.get() == 42);
+
+# 2. 带空格的类型参数调用
+check("18/spaced_call", identity < int > (7) == 7);
+
+# 3. 带空格的比较必须仍是比较
+let a = 5;
+let c = 10;
+check("18/spaced_cmp", (a < c) == true);
+
+# 4. new 的参数是比较
+let b2 = new Box<bool>(a < c);
+check("18/new_with_cmp", b2.get() == true);
+
+# 5. 紧贴 vs 带空格混用
+let b3 = new Box<int>(identity < int > (9));
+check("18/mixed", b3.get() == 9);

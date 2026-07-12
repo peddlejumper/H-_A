@@ -1,0 +1,4 @@
+# test_twoif.hto
+let x = 1;
+if (x == 1) { print("a"); }
+if (x == 2) { print("b"); }

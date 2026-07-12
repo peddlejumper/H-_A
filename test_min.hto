@@ -1,0 +1,2 @@
+# Test min
+print(min([3, 1, 2]));

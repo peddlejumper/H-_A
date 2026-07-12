@@ -1,0 +1,24 @@
+# t15 — chan_close then chan_send (must error); chan_recv on closed+empty (must error)
+print("== t15 chan closed ==");
+try {
+    let ch = chan_new(0);
+    chan_send(ch, "x");
+    chan_close(ch);
+    print("closed size=" + str(chan_size(ch)));
+    # recv should drain the one item, then next recv should error
+    print("recv after close (drain)=" + str(chan_recv(ch)));
+    try {
+        let v = chan_recv(ch);
+        print("recv on closed-empty OK (unexpected): " + str(v));
+    } catch (e2) {
+        print("recv(closed-empty) ERR: " + str(e2));
+    }
+    try {
+        chan_send(ch, "y");
+        print("send after close OK (unexpected)");
+    } catch (e3) {
+        print("send(closed) ERR: " + str(e3));
+    }
+} catch (e) {
+    print("chan closed ERR: " + str(e));
+}

@@ -1,0 +1,4 @@
+# 测试 has_key
+let d = {"a": 1, "b": 2};
+print(has_key(d, "a"));
+print(has_key(d, "c"));

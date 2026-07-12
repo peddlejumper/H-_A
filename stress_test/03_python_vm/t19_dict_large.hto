@@ -1,0 +1,26 @@
+# t19_dict_large.hto - 大字典操作与迭代
+# 插入大量键值对，迭代求和
+let d = {};
+let i = 0;
+while (i < 500) {
+    d["k" + str(i)] = i * 2;
+    i = i + 1;
+}
+print("len=");
+print(len(d));
+let sum = 0;
+for k in d {
+    sum = sum + d[k];
+}
+print("sum=");
+print(sum);
+# 验证 keys() 数量
+let ks = keys(d);
+print("keys len=");
+print(len(ks));
+# 删除/覆盖
+d["k0"] = 999;
+print("k0=");
+print(d["k0"]);
+print("k499=");
+print(d["k499"]);

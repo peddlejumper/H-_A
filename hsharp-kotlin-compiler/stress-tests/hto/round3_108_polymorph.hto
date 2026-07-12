@@ -1,0 +1,767 @@
+# ============================================================
+# Round 3 / #108 — 多态与动态分派深度测试
+# 测试智能体 #108。覆盖 task 列出的 28 个领域。
+#
+# 注: 由于已确认 bug (NewExpression 编译时绕过 emit_load_name, 在 lambda
+#     内 `new ClassName()` 会拿到闭包 cell (HList) 而非类本身), 本测试
+#     全部使用顶层 try/catch, 避免 lambda 包装触发该 bug。
+# ============================================================
+
+# ============================================================
+# 1. 基本 override: 子类方法覆盖父类
+# ============================================================
+class P1 {
+    fn m() { return "P"; }
+}
+class Q1 extends P1 {
+    fn m() { return "Q"; }
+}
+try { let q = new Q1(); print("r108_01_basic_override:" + str(q.m())); } catch (e) { print("r108_01_basic_override:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 2. 多态数组: [new Dog(), new Cat(), new Dog()] 调用各自 speak()
+# ============================================================
+class Animal2 {
+    fn speak() { return "?"; }
+}
+class Dog2 extends Animal2 {
+    fn speak() { return "woof"; }
+}
+class Cat2 extends Animal2 {
+    fn speak() { return "meow"; }
+}
+try {
+    let arr = [new Dog2(), new Cat2(), new Dog2()];
+    let acc02 = "";
+    for a02 in arr { acc02 = acc02 + a02.speak() + ","; }
+    print("r108_02_poly_array:" + acc02);
+} catch (e) { print("r108_02_poly_array:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 3. 向上转型: H# 不支持 let x: Base 的类型标注 (parser 不识别)
+#    这里用普通 let 测试语义向上转型
+# ============================================================
+try { let obj = new Dog2(); print("r108_03_upcast:" + str(obj.speak())); } catch (e) { print("r108_03_upcast:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 4. 向下转型: obj as Derived
+# ============================================================
+try { let obj = new Dog2(); let d = obj as Dog2; print("r108_04_downcast_as:" + str(d.speak())); } catch (e) { print("r108_04_downcast_as:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 4b. 向下转型: 错误类型转换 (Dog as Cat) — CAST 是 no-op, 不抛异常
+# ============================================================
+try { let obj = new Dog2(); let c = obj as Cat2; print("r108_04b_bad_cast:" + str(type(c))); } catch (e) { print("r108_04b_bad_cast:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 5. is 类型检查: obj is Derived
+# ============================================================
+try { let obj = new Dog2(); print("r108_05_is_check:" + str(obj is Dog2)); } catch (e) { print("r108_05_is_check:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 6. is 对继承链: new Dog() is Animal
+# ============================================================
+try { print("r108_06_is_base_chain:" + str(new Dog2() is Animal2)); } catch (e) { print("r108_06_is_base_chain:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 6b. is 对 3 层继承链
+# ============================================================
+class A6b { }
+class B6b extends A6b { }
+class C6b extends B6b { }
+try { print("r108_06b_is_3layer:" + str(new C6b() is A6b)); } catch (e) { print("r108_06b_is_3layer:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 7. is 对接口: obj is IFlyable
+# ============================================================
+interface IFlyable {
+    fn fly();
+}
+class Bird7 implements IFlyable {
+    fn fly() { return "fly"; }
+}
+try { print("r108_07_is_interface:" + str(new Bird7() is IFlyable)); } catch (e) { print("r108_07_is_interface:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 7b. is 对未实现接口 — 应返回 false
+# ============================================================
+class Stone7 { }
+try { print("r108_07b_is_unimpl_iface:" + str(new Stone7() is IFlyable)); } catch (e) { print("r108_07b_is_unimpl_iface:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 7c. is 对传递接口继承 (IB extends IA, C implements IB => C is IA?)
+# ============================================================
+interface IA7c { fn aM(); }
+interface IB7c extends IA7c { fn bM(); }
+class C7c implements IB7c {
+    fn aM() { return "a"; }
+    fn bM() { return "b"; }
+}
+try { print("r108_07c_is_transitive_iface:" + str(new C7c() is IA7c)); } catch (e) { print("r108_07c_is_transitive_iface:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 8. super 调用: 子类方法中 super.method()
+# ============================================================
+class A8 {
+    fn m() { return 1; }
+}
+class B8 extends A8 {
+    fn m() { return super.m() + 10; }
+}
+try { print("r108_08_super_call:" + str((new B8()).m())); } catch (e) { print("r108_08_super_call:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 9. super 链: A → B → C
+# ============================================================
+class A9 {
+    fn m() { return 1; }
+}
+class B9 extends A9 {
+    fn m() { return super.m() + 10; }
+}
+class C9 extends B9 {
+    fn m() { return super.m() + 100; }
+}
+try { print("r108_09_super_chain_3:" + str((new C9()).m())); } catch (e) { print("r108_09_super_chain_3:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 9b. super 链 4 层
+# ============================================================
+class A9b {
+    fn m() { return 1; }
+}
+class B9b extends A9b {
+    fn m() { return super.m() + 2; }
+}
+class C9b extends B9b {
+    fn m() { return super.m() + 3; }
+}
+class D9b extends C9b {
+    fn m() { return super.m() + 4; }
+}
+try { print("r108_09b_super_chain_4:" + str((new D9b()).m())); } catch (e) { print("r108_09b_super_chain_4:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 9c. super 调用不存在的方法 — 应抛异常
+# ============================================================
+class A9c {
+    fn m() { return "A"; }
+}
+class B9c extends A9c {
+    fn m() { return super.nope() + "B"; }
+}
+try { print("r108_09c_super_missing:" + str((new B9c()).m())); } catch (e) { print("r108_09c_super_missing:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 10. 虚方法调用: 父类方法调用被子类覆盖的方法
+# ============================================================
+class A10 {
+    fn m() { return "A.m"; }
+    fn n() { return "n:" + self.m(); }
+}
+class B10 extends A10 {
+    fn m() { return "B.m"; }
+}
+try { print("r108_10_virtual_call:" + str((new B10()).n())); } catch (e) { print("r108_10_virtual_call:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 11. 构造函数链: new Derived() 是否调用 Base 构造
+# ============================================================
+class A11 {
+    let log = [];
+    fn init() {
+        push(self.log, "A.init");
+    }
+}
+class B11 extends A11 {
+    fn init() {
+        push(self.log, "B.init");
+    }
+}
+try { let b = new B11(); print("r108_11_ctor_chain_no_super:" + str(b.log)); } catch (e) { print("r108_11_ctor_chain_no_super:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 11b. 构造函数链: 子类 init 显式调用 super.init()
+# ============================================================
+class A11b {
+    let log = [];
+    fn init() {
+        push(self.log, "A.init");
+    }
+}
+class B11b extends A11b {
+    fn init() {
+        super.init();
+        push(self.log, "B.init");
+    }
+}
+try { let b = new B11b(); print("r108_11b_ctor_super_init:" + str(b.log)); } catch (e) { print("r108_11b_ctor_super_init:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 11c. 构造函数带参数 + super.init(args)
+# ============================================================
+class A11c {
+    let v = 0;
+    fn init(x) {
+        self.v = x;
+    }
+}
+class B11c extends A11c {
+    let w = 0;
+    fn init(x, y) {
+        super.init(x);
+        self.w = y;
+    }
+}
+try { let b = new B11c(10, 20); print("r108_11c_ctor_super_args:" + str(b.v) + "," + str(b.w)); } catch (e) { print("r108_11c_ctor_super_args:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 11d. 子类无 init, 父类有 init — new Child(args) 是否调用父 init?
+# ============================================================
+class A11d {
+    let v = 0;
+    fn init(x) {
+        self.v = x;
+    }
+}
+class B11d extends A11d { }
+try { let b = new B11d(42); print("r108_11d_inherited_init:" + str(b.v)); } catch (e) { print("r108_11d_inherited_init:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 12. 字段继承: 子类访问父类字段
+# ============================================================
+class A12 {
+    let x = 100;
+}
+class B12 extends A12 {
+    fn get() { return x; }
+}
+try { let b = new B12(); print("r108_12_field_inherit:" + str(b.get()) + "," + str(b.x)); } catch (e) { print("r108_12_field_inherit:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 13. 字段覆盖: 子类定义同名字段
+# ============================================================
+class A13 {
+    let x = 1;
+}
+class B13 extends A13 {
+    let x = 2;
+}
+try { let a = new A13(); let b = new B13(); print("r108_13_field_shadow:" + str(a.x) + "," + str(b.x)); } catch (e) { print("r108_13_field_shadow:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 13b. 字段覆盖 + 方法访问: 父类方法访问 self.x，子类覆盖 x 后看到哪个?
+# ============================================================
+class A13b {
+    let x = 1;
+    fn get() { return x; }
+}
+class B13b extends A13b {
+    let x = 2;
+}
+try { let b = new B13b(); print("r108_13b_field_shadow_method:" + str(b.get()) + "," + str(b.x)); } catch (e) { print("r108_13b_field_shadow_method:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 14. 方法覆盖后调用父类版本: super.m() 嵌套
+# ============================================================
+class A14 {
+    fn m() { return "A"; }
+}
+class B14 extends A14 {
+    fn m() { return "B[" + super.m() + "]"; }
+}
+class C14 extends B14 {
+    fn m() { return "C[" + super.m() + "]"; }
+}
+try { print("r108_14_super_nested:" + str((new C14()).m())); } catch (e) { print("r108_14_super_nested:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 15. private 字段继承与访问
+# ============================================================
+class A15 {
+    private let secret = 42;
+    fn get() { return secret; }
+}
+class B15 extends A15 {
+    fn get() { return super.get() + 1; }
+    fn probe() { return secret; }
+}
+try { let b = new B15(); print("r108_15a_private_field_inherit:" + str(b.get())); } catch (e) { print("r108_15a_private_field_inherit:EXC[" + str(e) + "]"); }
+try { let b = new B15(); print("r108_15b_private_field_from_child_method:" + str(b.probe())); } catch (e) { print("r108_15b_private_field_from_child_method:EXC[" + str(e) + "]"); }
+try { let a = new A15(); print("r108_15c_private_field_external:" + str(a.secret)); } catch (e) { print("r108_15c_private_field_external:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 16. static 方法/字段
+# ============================================================
+class Counter16 {
+    static fn create() { return "static-create"; }
+    fn inst() { return "instance"; }
+}
+try { print("r108_16a_static_method_call:" + str(Counter16.create())); } catch (e) { print("r108_16a_static_method_call:EXC[" + str(e) + "]"); }
+try { let c = new Counter16(); print("r108_16b_static_via_instance:" + str(c.create())); } catch (e) { print("r108_16b_static_via_instance:EXC[" + str(e) + "]"); }
+try { let c = new Counter16(); print("r108_16c_instance_method:" + str(c.inst())); } catch (e) { print("r108_16c_instance_method:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 16d. static 方法继承: 子类是否继承父类 static 方法
+# ============================================================
+class Base16d {
+    static fn sM() { return "Base.sM"; }
+}
+class Child16d extends Base16d { }
+try { print("r108_16d_static_inherit:" + str(Child16d.sM())); } catch (e) { print("r108_16d_static_inherit:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 17. 抽象方法/抽象类 — H# 无 abstract 关键字 (N/A)
+# ============================================================
+print("r108_17_abstract_skipped:N/A");
+
+# ============================================================
+# 18. 接口默认方法
+# ============================================================
+interface Logger18 {
+    fn tag();
+    fn log(msg) {
+        return "[" + self.tag() + "] " + msg;
+    }
+}
+class ConsoleL18 implements Logger18 {
+    fn tag() { return "CONSOLE"; }
+}
+try { let c = new ConsoleL18(); print("r108_18_iface_default:" + str(c.log("hello"))); } catch (e) { print("r108_18_iface_default:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 18b. 接口默认方法 + 子类覆盖
+# ============================================================
+class FileL18 implements Logger18 {
+    fn tag() { return "FILE"; }
+    fn log(msg) { return "FILE<" + msg + ">"; }
+}
+try { let c = new FileL18(); print("r108_18b_iface_override:" + str(c.log("hello"))); } catch (e) { print("r108_18b_iface_override:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 19. 菱形继承 (H# 单继承, 多接口)
+# ============================================================
+interface IA19 { fn aM(); }
+interface IB19 { fn bM(); }
+class C19 implements IA19, IB19 {
+    fn aM() { return "a"; }
+    fn bM() { return "b"; }
+}
+try { let c = new C19(); print("r108_19_multi_iface:" + str(c.aM() + c.bM())); } catch (e) { print("r108_19_multi_iface:EXC[" + str(e) + "]"); }
+try { let c = new C19(); print("r108_19b_multi_iface_is:" + str(c is IA19) + "," + str(c is IB19)); } catch (e) { print("r108_19b_multi_iface_is:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 20. 方法解析顺序 (MRO)
+# ============================================================
+class A20 {
+    fn m() { return "A"; }
+}
+class B20 extends A20 {
+    fn m() { return "B"; }
+}
+class C20 extends B20 { }
+class D20 extends C20 {
+    fn m() { return "D"; }
+}
+try { let d = new D20(); print("r108_20_mro:" + str(d.m())); } catch (e) { print("r108_20_mro:EXC[" + str(e) + "]"); }
+class E20 extends D20 { }
+try { let e = new E20(); print("r108_20b_mro_inherit:" + str(e.m())); } catch (e) { print("r108_20b_mro_inherit:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 21. 多态 + 异常: 子类方法 throw, 父类引用 catch
+# ============================================================
+class A21 {
+    fn m() { return "ok"; }
+}
+class B21 extends A21 {
+    fn m() { throw "child-error"; }
+}
+try {
+    try {
+        let a = new B21();
+        print("r108_21_poly_exception:" + str(a.m()));
+    } catch (e) {
+        print("r108_21_poly_exception:caught:" + str(e));
+    }
+} catch (e) { print("r108_21_poly_exception:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 22. 多态 + channel: channel 传不同子类实例
+# ============================================================
+class A22 {
+    fn m() { return "A"; }
+}
+class B22 extends A22 {
+    fn m() { return "B"; }
+}
+class C22 extends A22 {
+    fn m() { return "C"; }
+}
+try {
+    let ch = chan_new(2);
+    chan_send(ch, new B22());
+    chan_send(ch, new C22());
+    let acc22 = "";
+    let v22a = chan_recv(ch);
+    acc22 = acc22 + v22a.m();
+    let v22b = chan_recv(ch);
+    acc22 = acc22 + v22b.m();
+    print("r108_22_poly_channel:" + acc22);
+} catch (e) { print("r108_22_poly_channel:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 23. 多态 + list
+# ============================================================
+class Shape23 {
+    fn area() { return 0; }
+}
+class Circle23 extends Shape23 {
+    let rad = 2;
+    fn area() { return 3 * rad * rad; }
+}
+class Square23 extends Shape23 {
+    let side = 3;
+    fn area() { return side * side; }
+}
+class Tri23 extends Shape23 {
+    let base = 4;
+    let height = 5;
+    fn area() { return (base * height) / 2; }
+}
+try {
+    let shapes = [new Circle23(), new Square23(), new Tri23()];
+    let total23 = 0;
+    for sh23 in shapes { total23 = total23 + sh23.area(); }
+    print("r108_23_poly_list:" + str(total23));
+} catch (e) { print("r108_23_poly_list:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 24. 动态分派性能: 10000 次多态调用
+# ============================================================
+class A24 {
+    fn m() { return 1; }
+}
+class B24 extends A24 {
+    fn m() { return 2; }
+}
+try {
+    let arr = [];
+    let i = 0;
+    while (i < 5000) {
+        push(arr, new A24());
+        push(arr, new B24());
+        i = i + 1;
+    }
+    let total = 0;
+    for itm24 in arr { total = total + itm24.m(); }
+    print("r108_24_perf_dispatch:" + str(total));
+} catch (e) { print("r108_24_perf_dispatch:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 25. type(obj) 对子类: 返回子类名还是父类名
+# ============================================================
+class A25 { }
+class B25 extends A25 { }
+try { print("r108_25a_type_subclass:" + str(type(new B25()))); } catch (e) { print("r108_25a_type_subclass:EXC[" + str(e) + "]"); }
+try { print("r108_25b_type_parent:" + str(type(new A25()))); } catch (e) { print("r108_25b_type_parent:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 26. 类方法表: 覆盖后父类方法仍可通过 super 访问
+# ============================================================
+class A26 {
+    fn m() { return "A.m"; }
+}
+class B26 extends A26 {
+    fn m() { return "B.m+[" + super.m() + "]"; }
+}
+class C26 extends B26 {
+    fn m() { return "C.m+[" + super.m() + "]"; }
+}
+try { print("r108_26_super_access_parent:" + str((new C26()).m())); } catch (e) { print("r108_26_super_access_parent:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 27. 方法覆盖 vs 字段遮蔽: 同名方法 vs 同名字段
+# ============================================================
+class A27 {
+    let v = "field-A";
+    fn v() { return "method-A"; }
+}
+try { let a = new A27(); print("r108_27a_method_field_same_name:" + str(a.v)); } catch (e) { print("r108_27a_method_field_same_name:EXC[" + str(e) + "]"); }
+
+class A27b {
+    let v = "field-A";
+    fn getV() { return v; }
+}
+class B27b extends A27b {
+    fn v() { return "method-B"; }
+}
+try { let b = new B27b(); print("r108_27b_field_in_parent_method_in_child:" + str(b.v) + "|" + str(b.getV())); } catch (e) { print("r108_27b_field_in_parent_method_in_child:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 28. new 时字段初始化顺序: 父类字段先还是子类字段先
+# ============================================================
+class A28 {
+    let order = [];
+    let a = 1;
+    fn init() {
+        push(self.order, "A");
+        self.a = 100;
+    }
+}
+class B28 extends A28 {
+    let b = 2;
+    fn init() {
+        push(self.order, "B(before-super)");
+        super.init();
+        push(self.order, "B(after-super)");
+        self.b = 200;
+    }
+}
+try { let b = new B28(); print("r108_28_field_init_order:" + str(b.a) + "," + str(b.b) + "," + str(b.order)); } catch (e) { print("r108_28_field_init_order:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 28b. 字段默认值初始化 (无 init)
+# ============================================================
+class A28b {
+    let x = 1;
+    let y = 2;
+}
+class B28b extends A28b {
+    let z = 3;
+}
+try { let b = new B28b(); print("r108_28b_default_field_init:" + str(b.x) + "," + str(b.y) + "," + str(b.z)); } catch (e) { print("r108_28b_default_field_init:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 29. 多态分派: 通过函数参数传递子类实例
+# ============================================================
+class A29 {
+    fn m() { return "A"; }
+}
+class B29 extends A29 {
+    fn m() { return "B"; }
+}
+fn callM29(x) { return x.m(); }
+try { print("r108_29_poly_param:" + str(callM29(new A29()) + callM29(new B29()))); } catch (e) { print("r108_29_poly_param:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 30. 多层接口继承 (3 层)
+# ============================================================
+interface IBase30 { fn baseM(); }
+interface IMid30 extends IBase30 { fn midM(); }
+interface ITop30 extends IMid30 { fn topM(); }
+class Impl30 implements ITop30 {
+    fn baseM() { return "base"; }
+    fn midM() { return "mid"; }
+    fn topM() { return "top"; }
+}
+try { let i = new Impl30(); print("r108_30_iface_3level:" + str(i.baseM() + "/" + i.midM() + "/" + i.topM())); } catch (e) { print("r108_30_iface_3level:EXC[" + str(e) + "]"); }
+try { print("r108_30b_iface_3level_is_base:" + str(new Impl30() is IBase30)); } catch (e) { print("r108_30b_iface_3level_is_base:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 31. instanceof 走完整继承链 (类 + 接口)
+# ============================================================
+class A31 { }
+interface I31 { fn m(); }
+class B31 extends A31 implements I31 {
+    fn m() { return "m"; }
+}
+class C31 extends B31 { }
+try { let c = new C31(); print("r108_31_is_full_chain:" + str(c is A31) + "," + str(c is B31) + "," + str(c is C31) + "," + str(c is I31)); } catch (e) { print("r108_31_is_full_chain:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 32. null 的 is 检查
+# ============================================================
+try { let x32 = null; print("r108_32_is_null:" + str(x32 is A31)); } catch (e) { print("r108_32_is_null:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 33. is 对基本类型 (int/str 等)
+# ============================================================
+try { print("r108_33_is_int:" + str(1 is int)); } catch (e) { print("r108_33_is_int:EXC[" + str(e) + "]"); }
+try { print("r108_33b_is_str:" + str("hi" is str)); } catch (e) { print("r108_33b_is_str:EXC[" + str(e) + "]"); }
+try { print("r108_33c_is_bool:" + str(true is bool)); } catch (e) { print("r108_33c_is_bool:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 34. is 对 list/dict 类型
+# ============================================================
+try { print("r108_34_is_list:" + str([1, 2] is list)); } catch (e) { print("r108_34_is_list:EXC[" + str(e) + "]"); }
+try { print("r108_34b_is_dict:" + str({"a": 1} is dict)); } catch (e) { print("r108_34b_is_dict:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 35/36. 接口 arity/unimpl — 编译期强制 (compiler.py:700/704)
+# ============================================================
+print("r108_35_iface_arity_compile_enforced:compile-time-enforced");
+print("r108_36_iface_unimpl_compile_enforced:compile-time-enforced");
+
+# ============================================================
+# 37. super 在非方法上下文调用 — 应抛异常
+# ============================================================
+try { print("r108_37_super_outside_method:" + str(super.m())); } catch (e) { print("r108_37_super_outside_method:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 38. 同名方法重载 (不同签名)
+# ============================================================
+class A38 {
+    fn m() { return 0; }
+    fn m(x) { return x; }
+}
+try { let a = new A38(); print("r108_38_overload:" + str(a.m()) + "," + str(a.m(5))); } catch (e) { print("r108_38_overload:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 39. 多态 + match 分派
+# ============================================================
+class A39 { fn t() { return "A"; } }
+class B39 extends A39 { fn t() { return "B"; } }
+class C39 extends A39 { fn t() { return "C"; } }
+try {
+    let arr = [new A39(), new B39(), new C39()];
+    let acc39 = "";
+    for itm39 in arr {
+        acc39 = acc39 + match itm39 {
+            is A39 => "A",
+            is B39 => "B",
+            is C39 => "C",
+            _ => "?",
+        };
+    }
+    print("r108_39_poly_match:" + acc39);
+} catch (e) { print("r108_39_poly_match:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 40. 子类方法访问父类 private 字段
+# ============================================================
+class A40 {
+    private let secret = 99;
+    fn get() { return secret; }
+}
+class B40 extends A40 {
+    fn probe() { return secret; }
+}
+try { let b = new B40(); print("r108_40_child_access_parent_private:" + str(b.probe())); } catch (e) { print("r108_40_child_access_parent_private:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 41. super 调用祖父类方法 (跳层)
+# ============================================================
+class A41 {
+    fn m() { return "A.m"; }
+    fn n() { return "A.n"; }
+}
+class B41 extends A41 {
+    fn m() { return "B.m"; }
+}
+class C41 extends B41 {
+    fn m() { return "C.m[" + super.m() + "]"; }
+    fn n() { return "C.n[" + super.n() + "]"; }
+}
+try { let c = new C41(); print("r108_41_super_skip:" + str(c.m() + "|" + c.n())); } catch (e) { print("r108_41_super_skip:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 42. super.m() 中 self.field 取哪个? (字段遮蔽下的 super)
+# ============================================================
+class A42 {
+    let x = 1;
+    fn m() { return x; }
+}
+class B42 extends A42 {
+    let x = 2;
+    fn m() { return super.m(); }
+}
+try { let b = new B42(); print("r108_42_super_field_resolution:" + str(b.m())); } catch (e) { print("r108_42_super_field_resolution:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 43. 类对象 is 检查 (类本身, 非实例)
+# ============================================================
+try { print("r108_43_class_is:" + str(A31 is A31)); } catch (e) { print("r108_43_class_is:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 44. 实例 == 比较 (引用相等)
+# ============================================================
+class A44 { let x = 1; }
+try { let a = new A44(); let b = new A44(); let c = a; print("r108_44_instance_eq:" + str(a == b) + "," + str(a == c)); } catch (e) { print("r108_44_instance_eq:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 45. 子类实例赋给父类变量后, is 仍识别子类
+# ============================================================
+class A45 { fn m() { return "A"; } }
+class B45 extends A45 { fn m() { return "B"; } }
+try { let a = new B45(); print("r108_45_upcast_preserves_type:" + str(a.m()) + "," + str(a is B45) + "," + str(a is A45)); } catch (e) { print("r108_45_upcast_preserves_type:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 46. 多态调用 + 字段访问 (子类特有字段)
+# ============================================================
+class A46 { }
+class B46 extends A46 {
+    let v = 42;
+}
+try { let a = new B46(); print("r108_46_subclass_field_access:" + str(a.v)); } catch (e) { print("r108_46_subclass_field_access:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 47. 接口默认方法调用另一接口方法 (self 分派)
+# ============================================================
+interface ICounter47 {
+    fn base();
+    fn inc();
+    fn describe() {
+        return self.base() + "+" + self.inc();
+    }
+}
+class C47 implements ICounter47 {
+    fn base() { return 10; }
+    fn inc() { return 5; }
+}
+try { let c = new C47(); print("r108_47_iface_default_calls_self:" + str(c.describe())); } catch (e) { print("r108_47_iface_default_calls_self:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 48. 子类不覆盖接口默认方法, 但覆盖它调用的方法
+# ============================================================
+interface IBase48 {
+    fn tag();
+    fn log() {
+        return "tag=" + self.tag();
+    }
+}
+class C48 implements IBase48 {
+    fn tag() { return "T1"; }
+}
+class D48 extends C48 {
+    fn tag() { return "T2"; }
+}
+try { let d = new D48(); print("r108_48_default_method_dispatch:" + str(d.log())); } catch (e) { print("r108_48_default_method_dispatch:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 49. 静态方法中访问 self — 应抛异常
+# ============================================================
+class A49 {
+    static fn sM() { return self; }
+}
+try { print("r108_49_static_self:" + str(A49.sM())); } catch (e) { print("r108_49_static_self:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 50. 静态方法中访问实例字段 — 应抛异常
+# ============================================================
+class A50 {
+    let x = 1;
+    static fn sM() { return x; }
+}
+try { print("r108_50_static_access_instance:" + str(A50.sM())); } catch (e) { print("r108_50_static_access_instance:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 51. new 在 lambda 内 — 已知 bug 复现
+# ============================================================
+class C51 { fn m() { return "ok"; } }
+try {
+    let f = fn() {
+        let y = new C51();
+        return y.m();
+    };
+    print("r108_51_new_in_lambda:" + str(f()));
+} catch (e) { print("r108_51_new_in_lambda:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 52. 类引用在 lambda 内 (对照: 应正常)
+# ============================================================
+try {
+    let f = fn() { return C51; };
+    print("r108_52_class_ref_in_lambda:" + str(type(f())));
+} catch (e) { print("r108_52_class_ref_in_lambda:EXC[" + str(e) + "]"); }
+
+print("=== r108 done ===");

@@ -1,0 +1,27 @@
+# probe edge cases
+fn ff(x=3.14) { return x; }
+try { print("ff()=" + ff()); } catch (e) { print("ff() ERR: " + e); }
+try { print("ff(2.0)=" + ff(2.0)); } catch (e) { print("ff(2.0) ERR: " + e); }
+
+# negative default tested in separate probe (compile-time reject)
+
+fn fneed(a, b=2) { return a + b; }
+try { print("fneed()=" + fneed()); } catch (e) { print("fneed() ERR: " + e); }
+try { print("fneed(10)=" + fneed(10)); } catch (e) { print("fneed(10) ERR: " + e); }
+try { print("fneed(10,20,30)=" + fneed(10, 20, 30)); } catch (e) { print("fneed(10,20,30) ERR: " + e); }
+
+fn outer() {
+    fn inner(x=99) { return x; }
+    return inner();
+}
+try { print("outer()=" + outer()); } catch (e) { print("outer() ERR: " + e); }
+
+try {
+    let lam = fn(x=50) { return x; };
+    print("lam()=" + lam());
+    print("lam(77)=" + lam(77));
+} catch (e) { print("lam ERR: " + e); }
+
+fn fs(a="x", b="y") { return a + b; }
+try { print("fs()=" + fs()); } catch (e) { print("fs() ERR: " + e); }
+try { print("fs('A')=" + fs("A")); } catch (e) { print("fs('A') ERR: " + e); }

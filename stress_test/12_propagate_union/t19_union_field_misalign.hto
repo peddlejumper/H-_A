@@ -1,0 +1,23 @@
+# T19 - UNION_MAKE field misalignment stress: many fields, mixed types
+union Rec {
+    Full: id, name, age, active, score;
+}
+
+let r = Rec{Full: 1, "alice", 30, true, 9.5};
+print(r.id);
+print(r.name);
+print(r.age);
+print(r.active);
+print(r.score);
+
+# verify by reconstructing in order
+fn unpack(x) {
+    return [x.id, x.name, x.age, x.active, x.score];
+}
+print(unpack(r));
+
+# swap construction order to confirm fields are positional, not keyed
+let r2 = Rec{Full: r.score, r.name, r.age, r.active, r.id};
+print(r2.id);
+print(r2.name);
+print(r2.score);

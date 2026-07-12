@@ -1,0 +1,7 @@
+# t07_list.hto - list operations and indexing
+let xs = [10, 20, 30, 40, 50];
+print(xs[0]);
+print(xs[4]);
+print(len(xs));
+xs[2] = 999;
+print(xs[2]);

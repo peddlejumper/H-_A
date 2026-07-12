@@ -1,0 +1,363 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# zzw_render_min.hto — minimal ZzwRenderer + ZzwWindow for testing
+# Derived from zzw_render.hto but stripped of all cross-referencing widget
+# renderers (zzwui_render_*).  Those cause module-load time "Undefined name"
+# errors because H#'s top-level freevar pre-load happens before later
+# functions are defined.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Default theme colors
+let RENDER_THEME = {
+    "bg": "#0f1119",
+    "surface": "#161a26",
+    "surface2": "#1e2240",
+    "border": "#252840",
+    "text": "#e0e0e0",
+    "text_secondary": "#6b7394",
+    "text_muted": "#4a5078",
+    "primary": "#6366f1",
+    "primary_hover": "#7c8cf8",
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "danger": "#ef4444",
+    "info": "#06b6d4",
+    "white": "#ffffff",
+    "black": "#000000"
+};
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ZzwRenderer — the main rendering engine (no cross-refs)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ZzwRenderer {
+    let win_id = 0;
+    let theme = {};
+    let dirty = true;
+    let clip_stack = [];
+    let font_family = "Arial";
+    let default_font_size = 12;
+
+    fn init_renderer(win_id) {
+        self.win_id = win_id;
+        self.theme = RENDER_THEME;
+        self.dirty = true;
+        self.clip_stack = [];
+        self.font_family = "Arial";
+        self.default_font_size = 12;
+        return 0;
+    }
+
+    fn setTheme(theme_dict) {
+        self.theme = theme_dict;
+        self.dirty = true;
+        return 0;
+    }
+
+    fn getTheme() { return self.theme; }
+
+    fn setFont(family, size) {
+        self.font_family = family;
+        self.default_font_size = size;
+        return 0;
+    }
+
+    fn clear(color) {
+        let c = color;
+        if (c == "" or c == nullptr) { c = self.theme["bg"]; }
+        native_clear(self.win_id, c);
+        return 0;
+    }
+
+    fn fillRect(x, y, w, h, color) {
+        native_draw_rect(self.win_id, x, y, w, h, color, true);
+        return 0;
+    }
+
+    fn drawRect(x, y, w, h, color, line_width) {
+        native_draw_rect(self.win_id, x, y, w, h, color, false);
+        return 0;
+    }
+
+    fn fillRoundedRect(x, y, w, h, radius, color) {
+        native_draw_rounded_rect(self.win_id, x, y, w, h, radius, color, true);
+        return 0;
+    }
+
+    fn drawRoundedRect(x, y, w, h, radius, color) {
+        native_draw_rounded_rect(self.win_id, x, y, w, h, radius, color, false);
+        return 0;
+    }
+
+    fn drawLine(x1, y1, x2, y2, color, width) {
+        native_draw_line(self.win_id, x1, y1, x2, y2, color, width);
+        return 0;
+    }
+
+    fn fillCircle(cx, cy, r, color) {
+        native_draw_circle(self.win_id, cx, cy, r, color, true);
+        return 0;
+    }
+
+    fn drawCircle(cx, cy, r, color) {
+        native_draw_circle(self.win_id, cx, cy, r, color, false);
+        return 0;
+    }
+
+    fn drawText(x, y, text, color, font_size, bold) {
+        let fs = font_size;
+        if (fs <= 0) { fs = self.default_font_size; }
+        let b = bold;
+        if (b == nullptr) { b = false; }
+        let c = color;
+        if (c == "") { c = self.theme["text"]; }
+        native_draw_text(self.win_id, x, y, text, c, fs, b, self.font_family);
+        return 0;
+    }
+
+    fn drawTextCentered(x, y, text, color, font_size, bold) {
+        let fs = font_size;
+        if (fs <= 0) { fs = self.default_font_size; }
+        let b = bold;
+        if (b == nullptr) { b = false; }
+        let c = color;
+        if (c == "") { c = self.theme["text"]; }
+        native_draw_text_centered(self.win_id, x, y, text, c, fs, b);
+        return 0;
+    }
+
+    fn measureText(text, font_size, bold) {
+        let fs = font_size;
+        if (fs <= 0) { fs = self.default_font_size; }
+        let b = bold;
+        if (b == nullptr) { b = false; }
+        let result = native_measure_text(text, fs, b);
+        return result;
+    }
+
+    fn pushClip(x, y, w, h) {
+        push(self.clip_stack, {"x": x, "y": y, "w": w, "h": h});
+        native_set_clip(self.win_id, x, y, w, h);
+        return 0;
+    }
+
+    fn popClip() {
+        if (len(self.clip_stack) > 0) {
+            pop(self.clip_stack);
+        }
+        if (len(self.clip_stack) > 0) {
+            let c = self.clip_stack[len(self.clip_stack) - 1];
+            native_set_clip(self.win_id, c["x"], c["y"], c["w"], c["h"]);
+        } else {
+            native_clear_clip(self.win_id);
+        }
+        return 0;
+    }
+
+    fn drawArrow(x, y, direction, size, color) {
+        let s = size;
+        if (s <= 0) { s = 8; }
+        let h = s * 0.866;
+        let points = [];
+        if (direction == "down") {
+            push(points, [x, y]);
+            push(points, [x + s, y]);
+            push(points, [x + s/2, y + h]);
+        } else if (direction == "up") {
+            push(points, [x, y + h]);
+            push(points, [x + s, y + h]);
+            push(points, [x + s/2, y]);
+        } else if (direction == "right") {
+            push(points, [x, y]);
+            push(points, [x, y + s]);
+            push(points, [x + h, y + s/2]);
+        } else if (direction == "left") {
+            push(points, [x + h, y]);
+            push(points, [x + h, y + s]);
+            push(points, [x, y + s/2]);
+        }
+        native_draw_polygon(self.win_id, points, color, true);
+        return 0;
+    }
+
+    fn drawCheckMark(x, y, size, color) {
+        let s = size;
+        if (s <= 0) { s = 12; }
+        native_draw_line(self.win_id, x, y + s/2, x + s/3, y + s, color, 2);
+        native_draw_line(self.win_id, x + s/3, y + s, x + s, y, color, 2);
+        return 0;
+    }
+
+    fn drawScrollbar(x, y, w, h, thumb_pos, thumb_size, vertical) {
+        native_draw_rect(self.win_id, x, y, w, h, self.theme["surface2"], true);
+        if (vertical) {
+            native_draw_rect(self.win_id, x + 2, y + thumb_pos, w - 4, thumb_size, self.theme["border"], true);
+        } else {
+            native_draw_rect(self.win_id, x + thumb_pos, y + 2, thumb_size, h - 4, self.theme["border"], true);
+        }
+        return 0;
+    }
+
+    fn drawShadow(x, y, w, h, radius, intensity) {
+        let i = 0;
+        while (i < 4) {
+            let offset = i + 1;
+            native_draw_rounded_rect(self.win_id, x + offset, y + offset, w, h, radius, self.theme["black"], false);
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn drawImage(x, y, w, h, color) {
+        native_draw_image(self.win_id, x, y, w, h, color);
+        return 0;
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ZzwWindow — the root window container (no cross-refs)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ZzwWindow {
+    let win_id = 0;
+    let renderer = nullptr;
+    let root_widget = nullptr;
+    let width = 800;
+    let height = 600;
+    let title = "";
+    let bg_color = "#0f1119";
+    let running = false;
+    let children = [];
+    let on_close = nullptr;
+    let on_resize = nullptr;
+
+    fn init_zw(title, w, h) {
+        self.title = title;
+        self.width = w;
+        self.height = h;
+        self.bg_color = "#0f1119";
+        self.children = [];
+        self.running = false;
+        return 0;
+    }
+
+    fn open() {
+        self.win_id = native_create_window(self.title, self.width, self.height, self.bg_color);
+        self.renderer = ZzwRenderer();
+        self.renderer.init_renderer(self.win_id);
+        self.renderer.setTheme(RENDER_THEME);
+        self.running = true;
+        return 0;
+    }
+
+    fn close() {
+        self.running = false;
+        native_destroy_window(self.win_id);
+        return 0;
+    }
+
+    fn setRootWidget(widget) {
+        self.root_widget = widget;
+        widget.x = 0;
+        widget.y = 0;
+        widget.width = self.width;
+        widget.height = self.height;
+        return 0;
+    }
+
+    fn addWidget(widget) {
+        push(self.children, widget);
+        return 0;
+    }
+
+    fn setTitle(t) {
+        self.title = t;
+        if (self.win_id > 0) {
+            native_set_window_title(self.win_id, t);
+        }
+        return 0;
+    }
+
+    fn setSize(w, h) {
+        self.width = w;
+        self.height = h;
+        if (self.win_id > 0) {
+            native_set_window_size(self.win_id, w, h);
+        }
+        return 0;
+    }
+
+    fn setBgColor(color) {
+        self.bg_color = color;
+        return 0;
+    }
+
+    fn getRenderer() { return self.renderer; }
+
+    fn getWidth() { return self.width; }
+
+    fn getHeight() { return self.height; }
+
+    fn getWinId() { return self.win_id; }
+
+    fn setOnClose(callback) {
+        self.on_close = callback;
+        return 0;
+    }
+
+    fn setOnResize(callback) {
+        self.on_resize = callback;
+        return 0;
+    }
+
+    fn render() {
+        if (self.renderer == nullptr) { return 0; }
+        if (self.win_id <= 0) { return 0; }
+        self.renderer.clear(self.bg_color);
+        let i = 0;
+        while (i < len(self.children)) {
+            let child = self.children[i];
+            if (child != nullptr) {
+                child.render(self.renderer);
+            }
+            i = i + 1;
+        }
+        if (self.root_widget != nullptr) {
+            self.root_widget.render(self.renderer);
+        }
+        native_update(self.win_id);
+        return 0;
+    }
+
+    fn handleEvents() {
+        if (self.win_id <= 0) { return 0; }
+        let events = native_get_events(self.win_id);
+        let i = 0;
+        while (i < len(events)) {
+            let evt = events[i];
+            if (evt["type"] == "close") {
+                self.running = false;
+                if (self.on_close != nullptr) {
+                    let cb = self.on_close;
+                    cb(self);
+                }
+            }
+            if (evt["type"] == "resize") {
+                self.width = evt["x"];
+                self.height = evt["y"];
+                if (self.on_resize != nullptr) {
+                    let cb = self.on_resize;
+                    cb(self, evt["x"], evt["y"]);
+                }
+            }
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn isRunning() { return self.running; }
+
+    fn stop() {
+        self.running = false;
+        return 0;
+    }
+}

@@ -1,0 +1,27 @@
+# Simple 3D system test
+import "bootstrap/d3system.hto";
+
+3dsizepower TestSpace {
+    public abs{T, T, size}
+    public size[auto{size=auto^3d}]
+
+    region TestZone(0, 0, 0, 100, 100, 100) {
+        fn hello(x, y, z) {
+            print("TestZone says hello!");
+        }
+        class TestEntity {
+            fn greet() {
+                print("Entity greets");
+            }
+        }
+    }
+}
+
+d3_size_power_get_info(TestSpace);
+
+let found = d3_find_region_by_point(TestSpace, 50, 50, 50);
+print("Found region: " + found.name);
+
+d3_system_summary(TestSpace);
+
+print("Test complete!");

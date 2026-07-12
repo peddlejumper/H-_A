@@ -1,0 +1,24 @@
+# 07 - for over 单元素集合
+# 目的: 单元素迭代，验证 fixForLoopJumps 后只执行一次
+let cnt = 0;
+for x in [42] {
+    cnt = cnt + 1;
+    print("iter=" + str(x));
+}
+print("cnt=" + str(cnt));
+print("expected_cnt=1");
+
+let scnt = 0;
+for c in "Z" {
+    scnt = scnt + 1;
+}
+print("scnt=" + str(scnt));
+print("expected_scnt=1");
+
+let dcnt = 0;
+for k, v in {"only": 99} {
+    dcnt = dcnt + 1;
+    print("kv=" + k + "=" + str(v));
+}
+print("dcnt=" + str(dcnt));
+print("expected_dcnt=1");

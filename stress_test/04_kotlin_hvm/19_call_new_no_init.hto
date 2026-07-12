@@ -1,0 +1,14 @@
+# 19_call_new_no_init.hto — CALL_NEW 无 init 方法
+class Point {
+    let x = 0;
+    let y = 0;
+    fn show() {
+        print("(" + str(self.x) + "," + str(self.y) + ")");
+    }
+}
+let p = new Point();
+p.show();
+p.x = 5;
+p.y = 7;
+p.show();
+print("done");

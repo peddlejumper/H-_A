@@ -1,0 +1,111 @@
+{
+  "data": [
+    {
+      "id": "page-home",
+      "type": "page",
+      "title": "主界面",
+      "devMetadata": {
+        "htmlSrc": "pages/home.html"
+      },
+      "interactions": [
+        {
+          "type": "navigate",
+          "domId": "link-course-detail",
+          "targetPageId": "page-course-detail"
+        },
+        {
+          "type": "navigate",
+          "domId": "nav-home",
+          "targetPageId": "page-home",
+          "hideEdge": true
+        }
+      ]
+    },
+    {
+      "id": "page-course-detail",
+      "type": "page",
+      "title": "课程详情",
+      "devMetadata": {
+        "htmlSrc": "pages/course-detail.html"
+      },
+      "interactions": [
+        {
+          "type": "navigate",
+          "domId": "link-code-practice",
+          "targetPageId": "page-code-practice"
+        },
+        {
+          "type": "navigate",
+          "domId": "back-home",
+          "targetPageId": "page-home",
+          "hideEdge": true
+        },
+        {
+          "type": "navigate",
+          "domId": "nav-home",
+          "targetPageId": "page-home",
+          "hideEdge": true
+        }
+      ]
+    },
+    {
+      "id": "page-code-practice",
+      "type": "page",
+      "title": "代码练习",
+      "devMetadata": {
+        "htmlSrc": "pages/code-practice.html"
+      },
+      "interactions": [
+        {
+          "type": "navigate",
+          "domId": "back-course-detail",
+          "targetPageId": "page-course-detail",
+          "hideEdge": true
+        },
+        {
+          "type": "navigate",
+          "domId": "nav-home",
+          "targetPageId": "page-home",
+          "hideEdge": true
+        }
+      ]
+    },
+    {
+      "id": "image-hero-welcome",
+      "type": "image",
+      "title": "主界面欢迎区视觉",
+      "devMetadata": {
+        "imageSrc": "assets/hero-welcome.jpg"
+      }
+    },
+    {
+      "id": "image-course-banner",
+      "type": "image",
+      "title": "课程头图",
+      "devMetadata": {
+        "imageSrc": "assets/course-banner.jpg"
+      }
+    },
+    {
+      "id": "image-code-editor-preview",
+      "type": "image",
+      "title": "代码编辑器预览",
+      "devMetadata": {
+        "imageSrc": "assets/code-editor-preview.jpg"
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "desktop",
+    "projectName": "ZZW Code Teacher 客户端",
+    "designLibrary": {
+      "name": "苹果",
+      "id": "dl_builtin_apple",
+      "version": null,
+      "scope": "built-in-global",
+      "path": "/Users/peddlejumper/.trae-cn/design_libraries/dl_builtin_apple",
+      "versionSource": "metadata.json"
+    }
+  }
+}

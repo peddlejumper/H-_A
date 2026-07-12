@@ -1,0 +1,31 @@
+# T20 - ? combined with union: propagate a thrown union, then introspect
+union Result {
+    Ok: v;
+    Err: msg;
+}
+
+fn parse_int(s) {
+    if (s == "bad") {
+        throw Result{Err: "not a number"};
+    }
+    return Result{Ok: 42};
+}
+
+# non-throwing path: ? yields the Ok union value
+let ok = parse_int("good")?;
+print(ok.__variant__);
+print(ok.v);
+
+# throwing path: ? yields the thrown Err union value (payload)
+let err = parse_int("bad")?;
+print(err.__variant__);
+print(err.msg);
+
+# use ? inside a union variant payload
+fn pick(n) {
+    if (n == 0) { throw "none"; }
+    return n;
+}
+let u = Result{Ok: pick(7)?};
+print(u.__variant__);
+print(u.v);

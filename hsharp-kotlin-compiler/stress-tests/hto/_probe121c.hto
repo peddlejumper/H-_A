@@ -1,0 +1,3 @@
+# probe S3: expression as default
+fn f(a=1+2, b=len([1,2,3])) { return [a, b]; }
+print(f());

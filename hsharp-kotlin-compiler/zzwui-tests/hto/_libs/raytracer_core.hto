@@ -1,0 +1,309 @@
+# raytracer_core.hto — Intersection, normal, and shading
+# ─────────────────────────────────────────────────────────────────────
+# The renderer is a recursive ray tracer.  At each step:
+#   1. Find the closest object intersected by the ray.
+#   2. Compute the surface normal at the hit point.
+#   3. Shade using a Phong-style model with shadow rays.
+#   4. If the material is reflective, trace a reflection ray and
+#      blend the result.
+#   5. If the depth limit hasn't been hit, recurse.
+#
+# This module returns scalar (not graphics) results, so the
+# output is a `[r, g, b]` list.  The actual rendering loop is in
+# `raytracer_pipeline.hto`.
+
+# ─── 1. Intersect a ray with a Sphere ──────────────────────────────
+# Returns the t-parameter along the ray, or a negative value if
+# no hit.  The threshold `EPS` prevents self-intersection at the
+# surface due to floating-point error.
+fn intersect_sphere(ray, sphere) {
+    let EPS = 0.001;
+    let ox = ray.ox - sphere.cx;
+    let oy = ray.oy - sphere.cy;
+    let oz = ray.oz - sphere.cz;
+    let b = ox * ray.dx + oy * ray.dy + oz * ray.dz;
+    let c = (ox * ox + oy * oy + oz * oz) - sphere.r * sphere.r;
+    let disc = b * b - c;
+    if (disc < 0.0) { return -1.0; }
+    let s = sqrt(disc);
+    let t = 0.0 - b - s;
+    if (t > EPS) { return t; }
+    t = 0.0 - b + s;
+    if (t > EPS) { return t; }
+    return -1.0;
+}
+
+# Normal at a sphere surface point.  The ray is parameterised by
+# t; we compute hit = ray.origin + t * ray.direction, then
+# normalise (hit - centre).
+fn normal_sphere(ray, sphere, t) {
+    let hx = ray.ox + ray.dx * t;
+    let hy = ray.oy + ray.dy * t;
+    let hz = ray.oz + ray.dz * t;
+    let nx = hx - sphere.cx;
+    let ny = hy - sphere.cy;
+    let nz = hz - sphere.cz;
+    let l = sqrt(nx * nx + ny * ny + nz * nz);
+    if (l == 0.0) { return new_v3(0.0, 1.0, 0.0); }
+    return new_v3(fdiv(nx, l), fdiv(ny, l), fdiv(nz, l));
+}
+
+# ─── 2. Intersect a ray with a horizontal plane (y = h) ────────────
+fn intersect_plane(ray, plane) {
+    let EPS = 0.001;
+    if (ray.dy > 0.0 - EPS and ray.dy < EPS) { return -1.0; }
+    let t = fdiv(plane.h - ray.oy, ray.dy);
+    if (t < EPS) { return -1.0; }
+    return t;
+}
+
+fn normal_plane(ray, plane, t) {
+    return new_v3(0.0, 1.0, 0.0);
+}
+
+# ─── 3. Dispatch: find the closest object intersected by a ray ─────
+# Returns a dictionary {t, object, normal} or `null` on miss.
+# The "normal" is precomputed so the shading code doesn't have
+# to re-derive it.
+fn closest_hit(scene, ray) {
+    let best_t = 1000000.0;
+    let best_obj = null;
+    let best_normal = null;
+    let i = 0;
+    while (i < len(scene.objects)) {
+        let o = scene.objects[i];
+        let t = -1.0;
+        let n = null;
+        # Dispatch on the object's tag.
+        if (o.tag() == "sphere") {
+            t = intersect_sphere(ray, o);
+            if (t > 0.0) { n = normal_sphere(ray, o, t); }
+        } else if (o.tag() == "plane") {
+            t = intersect_plane(ray, o);
+            if (t > 0.0) { n = normal_plane(ray, o, t); }
+        }
+        if (t > 0.0 and t < best_t) {
+            best_t = t;
+            best_obj = o;
+            best_normal = n;
+        }
+        i = i + 1;
+    }
+    if (best_obj == null) { return null; }
+    return { "t": best_t, "object": best_obj, "normal": best_normal };
+}
+
+# ─── 4. Background colour: vertical gradient from bot to top ──────
+# Maps ray direction to a colour.  We use a smooth blend between
+# `background_bot` (rd.y = -1) and `background_top` (rd.y = +1).
+fn background_color(scene, ray) {
+    let t = 0.5 * (ray.dy + 1.0);
+    let top = scene.background_top;
+    let bot = scene.background_bot;
+    return new_v3(bot.x + (top.x - bot.x) * t,
+                  bot.y + (top.y - bot.y) * t,
+                  bot.z + (top.z - bot.z) * t);
+}
+
+# ─── 5. Shadow test: does the path from `point` to the light hit ──
+# any other object?  Used to decide whether a surface point is
+# in shadow.  We bias the origin slightly toward the light to
+# avoid self-shadowing.
+fn in_shadow(scene, point, light_pos, ignore_obj) {
+    let EPS = 0.001;
+    let dx = light_pos.x - point.x;
+    let dy = light_pos.y - point.y;
+    let dz = light_pos.z - point.z;
+    let l = sqrt(dx * dx + dy * dy + dz * dz);
+    if (l == 0.0) { return false; }
+    let nx = fdiv(dx, l);
+    let ny = fdiv(dy, l);
+    let nz = fdiv(dz, l);
+    let ox = point.x + nx * EPS;
+    let oy = point.y + ny * EPS;
+    let oz = point.z + nz * EPS;
+    let shadow_ray = new_ray(ox, oy, oz, nx, ny, nz);
+    let i = 0;
+    while (i < len(scene.objects)) {
+        let o = scene.objects[i];
+        if (o == ignore_obj) { i = i + 1; continue; }
+        let t = -1.0;
+        if (o.tag() == "sphere") { t = intersect_sphere(shadow_ray, o); }
+        else if (o.tag() == "plane") { t = intersect_plane(shadow_ray, o); }
+        if (t > 0.0 and t < l) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+# ─── 6. Compute lighting at a surface point ───────────────────────
+# Returns an RGB Vec3.  `view_dir` is the direction back toward
+# the camera (used for the Phong specular term).  `ignore_obj`
+# is the object we're shading — passed to the shadow test so the
+# object doesn't shadow itself.
+fn shade(scene, hit_point, normal, view_dir, material, ignore_obj) {
+    let color = new_v3(0.0, 0.0, 0.0);
+
+    # Global ambient term.
+    color.x = color.x + material.color.x * scene.ambient;
+    color.y = color.y + material.color.y * scene.ambient;
+    color.z = color.z + material.color.z * scene.ambient;
+
+    # Each light contributes a diffuse + (optional) specular
+    # term, modulated by a shadow test.
+    let i = 0;
+    while (i < len(scene.lights)) {
+        let light = scene.lights[i];
+        let lpos = new_v3(light.px, light.py, light.pz);
+        let ldx = lpos.x - hit_point.x;
+        let ldy = lpos.y - hit_point.y;
+        let ldz = lpos.z - hit_point.z;
+        let ldist2 = ldx * ldx + ldy * ldy + ldz * ldz;
+        if (ldist2 < 0.000001) { i = i + 1; continue; }
+        let ldist = sqrt(ldist2);
+        let ldir = new_v3(fdiv(ldx, ldist), fdiv(ldy, ldist), fdiv(ldz, ldist));
+
+        # Diffuse.
+        let n_dot_l = normal.x * ldir.x + normal.y * ldir.y + normal.z * ldir.z;
+        if (n_dot_l > 0.0) {
+            if (not in_shadow(scene, hit_point, lpos, ignore_obj)) {
+                let diff = light.intensity * n_dot_l;
+                color.x = color.x + material.color.x * light.color.x * diff;
+                color.y = color.y + material.color.y * light.color.y * diff;
+                color.z = color.z + material.color.z * light.color.z * diff;
+
+                # Specular (Phong).
+                if (material.specular > 0.0) {
+                    let rx = 2.0 * n_dot_l * normal.x - ldir.x;
+                    let ry = 2.0 * n_dot_l * normal.y - ldir.y;
+                    let rz = 2.0 * n_dot_l * normal.z - ldir.z;
+                    let r_dot_v = rx * view_dir.x + ry * view_dir.y + rz * view_dir.z;
+                    if (r_dot_v > 0.0) {
+                        let spec_factor = pow(r_dot_v, material.shininess);
+                        spec_factor = spec_factor * material.specular * light.intensity;
+                        color.x = color.x + light.color.x * spec_factor;
+                        color.y = color.y + light.color.y * spec_factor;
+                        color.z = color.z + light.color.z * spec_factor;
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+
+    # Emissive.
+    color.x = color.x + material.emissive * material.color.x;
+    color.y = color.y + material.emissive * material.color.y;
+    color.z = color.z + material.emissive * material.color.z;
+
+    return color;
+}
+
+# ─── 7. The recursive trace function ──────────────────────────────
+# Returns an RGB Vec3.  `depth` is the recursion counter; we
+# stop at `max_depth` to bound the work.
+fn trace(scene, ray, depth, max_depth) {
+    if (depth >= max_depth) {
+        return new_v3(0.0, 0.0, 0.0);
+    }
+    let hit = closest_hit(scene, ray);
+    if (hit == null) {
+        return background_color(scene, ray);
+    }
+    let hit_point = new_v3(ray.ox + ray.dx * hit.t,
+                           ray.oy + ray.dy * hit.t,
+                           ray.oz + ray.dz * hit.t);
+    let view_dir = new_v3(0.0 - ray.dx, 0.0 - ray.dy, 0.0 - ray.dz);
+    let material = hit.object.material;
+    let base_color = shade(scene, hit_point, hit.normal, view_dir,
+                           material, hit.object);
+
+    # Add the reflective component.  We spawn a child ray
+    # reflected about the normal and blend by `material.reflect`.
+    if (material.reflect > 0.0 and depth + 1 < max_depth) {
+        let n_dot_d = hit.normal.x * ray.dx
+                    + hit.normal.y * ray.dy
+                    + hit.normal.z * ray.dz;
+        let rdx = ray.dx - 2.0 * n_dot_d * hit.normal.x;
+        let rdy = ray.dy - 2.0 * n_dot_d * hit.normal.y;
+        let rdz = ray.dz - 2.0 * n_dot_d * hit.normal.z;
+        let bias = 0.001;
+        let rox = hit_point.x + rdx * bias;
+        let roy = hit_point.y + rdy * bias;
+        let roz = hit_point.z + rdz * bias;
+        let refl_ray = new_ray(rox, roy, roz, rdx, rdy, rdz);
+        let refl_color = trace(scene, refl_ray, depth + 1, max_depth);
+        let k = material.reflect;
+        base_color.x = base_color.x * (1.0 - k) + refl_color.x * k;
+        base_color.y = base_color.y * (1.0 - k) + refl_color.y * k;
+        base_color.z = base_color.z * (1.0 - k) + refl_color.z * k;
+    }
+    return base_color;
+}
+
+# ─── 8. Camera-ray construction ──────────────────────────────────
+# Convert pixel coordinates (px, py) in [0..W) x [0..H) into a
+# primary ray for the given camera.  The ray is jittered by the
+# supplied RNG (used for anti-aliasing).
+fn primary_ray(camera, px, py, w, h, rng) {
+    # Map pixel coords to normalised device coords in [-1, 1].
+    let jitter_x = 0.0;
+    let jitter_y = 0.0;
+    if (rng != null) {
+        jitter_x = rng.sym() * 0.5;
+        jitter_y = rng.sym() * 0.5;
+    }
+    let ndc_x = fdiv((px + 0.5 + jitter_x) * 2.0, w) - 1.0;
+    let ndc_y = 1.0 - fdiv((py + 0.5 + jitter_y) * 2.0, h);
+
+    # Aspect-ratio-corrected NDC.
+    let aspect = fdiv(w * 1.0, h);
+    let fov_rad = fdiv(camera.fov * 3.141592653589793, 180.0);
+    let half_h = tan(fov_rad * 0.5);
+    let half_w = half_h * aspect;
+
+    # Build the orthonormal camera basis: forward, right, up.
+    let fwd = new_v3(camera.fx, camera.fy, camera.fz);
+    let upv = new_v3(camera.ux, camera.uy, camera.uz);
+    let right = fwd.cross(upv).norm();
+    let real_up = right.cross(fwd).norm();
+
+    # Ray direction in world space.
+    let dx = fwd.x + right.x * ndc_x * half_w + real_up.x * ndc_y * half_h;
+    let dy = fwd.y + right.y * ndc_x * half_w + real_up.y * ndc_y * half_h;
+    let dz = fwd.z + right.z * ndc_x * half_w + real_up.z * ndc_y * half_h;
+    let l = sqrt(dx * dx + dy * dy + dz * dz);
+    if (l == 0.0) {
+        return new_ray(camera.ex, camera.ey, camera.ez, 0.0, 0.0, 0.0 - 1.0);
+    }
+    return new_ray(camera.ex, camera.ey, camera.ez,
+                   fdiv(dx, l), fdiv(dy, l), fdiv(dz, l));
+}
+
+# ─── 9. Pixel render: average `samples` rays through the same px ──
+fn render_pixel(scene, camera, px, py, w, h, samples, max_depth, seed) {
+    let rng = new_rng(seed);
+    let r = 0.0; let g = 0.0; let b = 0.0;
+    let s = 0;
+    while (s < samples) {
+        let ray = primary_ray(camera, px, py, w, h, rng);
+        let c = trace(scene, ray, 0, max_depth);
+        r = r + c.x;
+        g = g + c.y;
+        b = b + c.z;
+        s = s + 1;
+    }
+    let inv = fdiv(1.0, samples * 1.0);
+    return new_v3(r * inv, g * inv, b * inv);
+}
+
+# ─── 10. Convert a Vec3 colour to a packed 0..255 RGB triplet ────
+fn to_rgb8(c) {
+    let r = int(c.x * 255.0);
+    let g = int(c.y * 255.0);
+    let b = int(c.z * 255.0);
+    if (r < 0) { r = 0; } if (r > 255) { r = 255; }
+    if (g < 0) { g = 0; } if (g > 255) { g = 255; }
+    if (b < 0) { b = 0; } if (b > 255) { b = 255; }
+    return [r, g, b];
+}

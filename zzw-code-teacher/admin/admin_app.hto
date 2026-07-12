@@ -1,0 +1,51 @@
+# admin/admin_app.hto
+# 管理端: 统一应用入口与共享状态
+
+import "client/ide_theme.hto";
+import "client/login_window.hto";
+import "shared/json_utils.hto";
+
+let _admin_state = {
+    "user": nullptr,
+    "token": "",
+    "server_url": "http://127.0.0.1:8765"
+};
+
+fn admin_state() { return _admin_state; }
+fn admin_set_server(url) { _admin_state["server_url"] = url; }
+fn admin_set_user(u, token) {
+    _admin_state["user"] = u;
+    _admin_state["token"] = token;
+}
+
+# 包装 HTTP 请求(自动带 admin token)
+fn admin_get(path) {
+    return http_get(_admin_state["server_url"] + path, [
+        ["Authorization", "Bearer " + _admin_state["token"]]
+    ]);
+}
+
+fn admin_post(path, body) {
+    return http_post_json(_admin_state["server_url"] + path, body, [
+        ["Content-Type", "application/json"],
+        ["Authorization", "Bearer " + _admin_state["token"]]
+    ]);
+}
+
+fn admin_put(path, body) {
+    return http_put_json(_admin_state["server_url"] + path, body, [
+        ["Content-Type", "application/json"],
+        ["Authorization", "Bearer " + _admin_state["token"]]
+    ]);
+}
+
+fn admin_delete(path) {
+    return http_delete(_admin_state["server_url"] + path, [
+        ["Authorization", "Bearer " + _admin_state["token"]]
+    ]);
+}
+
+fn admin_parse(resp) {
+    let b = http_get_body(resp);
+    return json_parse(b);
+}

@@ -1,0 +1,13 @@
+# Probe for destructure in for-loop header — item 12 of the test domain.
+# `for [k, v] in items(d) { ... }` would be the natural way to iterate
+# key/value pairs destructured from an items() list.  The H# parser's
+# `for_statement` only accepts `for IDENT in ...` or `for IDENT, IDENT in ...`,
+# so a leading `[` should raise a compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.  This probe exists only to confirm that.
+
+let d = {"x": 1, "y": 2};
+for [k, v] in items(d) {
+    print(k);
+    print(v);
+}

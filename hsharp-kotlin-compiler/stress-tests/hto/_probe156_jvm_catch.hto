@@ -1,0 +1,13 @@
+# 最小测试: JVM 异常是否能被 H# try/catch 捕获
+print("=== JVM Exception Catch Test ===");
+
+# T1: pow() 0 args -> JVM IndexOutOfBoundsException
+let t1 = "no-err";
+try {
+    let x = pow();
+    t1 = "ok:" + str(x);
+} catch (e) {
+    t1 = "caught:" + str(e);
+}
+print("[T1 pow() 0args] expect=caught");
+print(t1);

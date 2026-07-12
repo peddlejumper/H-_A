@@ -1,0 +1,5 @@
+# probe for spread call f(...args) — 验证是否仍为解析错误
+# 预期: SyntaxError: Unexpected token ELLIPSIS
+fn target(...args) { return len(args); }
+fn wrapper(...args) { return target(...args); }
+print(wrapper(1, 2, 3));

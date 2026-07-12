@@ -1,0 +1,114 @@
+# H# zzwUI Test 08 — Drawing primitives coverage (ZzwRenderer)
+# build: hwdui_min.hto,zzw_native.hto,zzw_render_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+let r = new ZzwRenderer();
+r.init_renderer(1);
+
+# ─── 1. fillRect / drawRect ────────────────────────────────────────────
+let i = 0;
+while (i < 50) {
+    r.fillRect(i, i, 10, 10, "#ff0000");
+    r.drawRect(i, i, 10, 10, "#00ff00", 1);
+    i = i + 1;
+}
+check("p/fr_50",         i == 50);
+check("p/win",           r.win_id == 1);
+
+# ─── 2. fillRoundedRect / drawRoundedRect ─────────────────────────────
+i = 0;
+while (i < 20) {
+    r.fillRoundedRect(i, i, 20, 20, 4, "#0000ff");
+    r.drawRoundedRect(i, i, 20, 20, 4, "#ffff00");
+    i = i + 1;
+}
+check("p/frr_20",        i == 20);
+
+# ─── 3. drawLine, fillCircle, drawCircle ─────────────────────────────
+i = 0;
+while (i < 30) {
+    r.drawLine(0, 0, i, i, "#fff", 1);
+    r.fillCircle(50, 50, i, "#f0f");
+    r.drawCircle(50, 50, i, "#0ff");
+    i = i + 1;
+}
+check("p/lc_30",         i == 30);
+
+# ─── 4. drawText with default font size ───────────────────────────────
+let dt1 = r.drawText(0, 0, "Hello, World", "", 0, nullptr);
+check("p/dt_def",        dt1 == 0);
+let dt2 = r.drawText(10, 10, "Colored", "#abc123", 0, false);
+check("p/dt_set",        dt2 == 0);
+let dt3 = r.drawText(20, 20, "Bold", "#fff", 16, true);
+check("p/dt_bold",       dt3 == 0);
+
+# ─── 5. drawTextCentered ──────────────────────────────────────────────
+let dtc1 = r.drawTextCentered(100, 100, "Centered", "", 0, nullptr);
+check("p/dtc1",          dtc1 == 0);
+let dtc2 = r.drawTextCentered(100, 100, "Bold Centered", "#fff", 14, true);
+check("p/dtc2",          dtc2 == 0);
+
+# ─── 6. measureText — should return a non-null list (stub returns 0-list)
+let m1 = r.measureText("x", 12, false);
+check("p/m1",            m1 != nullptr);
+let m2 = r.measureText("a longer text", 14, true);
+check("p/m2",            m2 != nullptr);
+
+# ─── 7. drawImage ─────────────────────────────────────────────────────
+let di1 = r.drawImage(0, 0, 100, 100, "#fff");
+check("p/img1",          di1 == 0);
+let di2 = r.drawImage(10, 10, 50, 50, "#000");
+check("p/img2",          di2 == 0);
+
+# ─── 8. drawArrow (4 directions) — also exercises draw_polygon ───────
+let da1 = r.drawArrow(0, 0, "down", 8, "#fff");
+check("p/a_dn",          da1 == 0);
+let da2 = r.drawArrow(0, 0, "up", 8, "#fff");
+check("p/a_up",          da2 == 0);
+let da3 = r.drawArrow(0, 0, "left", 8, "#fff");
+check("p/a_lf",          da3 == 0);
+let da4 = r.drawArrow(0, 0, "right", 8, "#fff");
+check("p/a_rt",          da4 == 0);
+
+# ─── 9. drawCheckMark ────────────────────────────────────────────────
+let dcm1 = r.drawCheckMark(0, 0, 12, "#fff");
+check("p/cm1",           dcm1 == 0);
+let dcm2 = r.drawCheckMark(0, 0, 0, "#fff");  # size 0 → default 12
+check("p/cm_def",        dcm2 == 0);
+
+# ─── 10. drawScrollbar (vertical + horizontal) ───────────────────────
+let ds1 = r.drawScrollbar(0, 0, 10, 100, 0, 40, true);
+check("p/sb_v",          ds1 == 0);
+let ds2 = r.drawScrollbar(0, 0, 100, 10, 0, 40, false);
+check("p/sb_h",          ds2 == 0);
+
+# ─── 11. drawShadow (4 layer) ─────────────────────────────────────────
+let dsh1 = r.drawShadow(0, 0, 50, 50, 4, 0.5);
+check("p/sh1",           dsh1 == 0);
+
+# ─── 12. clear with default + custom colors ──────────────────────────
+let cl1 = r.clear("#fff");
+check("p/cl_set",        cl1 == 0);
+let cl2 = r.clear("");
+check("p/cl_def",        cl2 == 0);
+let cl3 = r.clear(nullptr);
+check("p/cl_null",       cl3 == 0);
+
+print("08_ZZW_PRIMITIVES : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

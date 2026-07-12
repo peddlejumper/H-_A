@@ -1,0 +1,711 @@
+# H# Mathematics Module (Pure H# Implementation)
+# Provides matrix operations and statistical analysis without Python dependencies
+
+# ============================================
+# Matrix Operations
+# ============================================
+
+# Create a matrix (2D array)
+fn math_matrix_create(rows, cols, default_value) {
+    if (default_value == nullptr) {
+        default_value = 0;
+    }
+    let matrix = [];
+    let i = 0;
+    while (i < rows) {
+        let row = [];
+        let j = 0;
+        while (j < cols) {
+            push(row, default_value);
+            j = j + 1;
+        }
+        push(matrix, row);
+        i = i + 1;
+    }
+    return matrix;
+}
+
+# Create identity matrix
+fn math_matrix_identity(size) {
+    let matrix = math_matrix_create(size, size, 0);
+    let i = 0;
+    while (i < size) {
+        math_matrix_set(matrix, i, i, 1);
+        i = i + 1;
+    }
+    return matrix;
+}
+
+# Get matrix dimensions
+fn math_matrix_rows(matrix) {
+    return len(matrix);
+}
+
+fn math_matrix_cols(matrix) {
+    if (len(matrix) == 0) {
+        return 0;
+    }
+    return len(matrix[0]);
+}
+
+# Get element from matrix
+fn math_matrix_get(matrix, row, col) {
+    return matrix[row][col];
+}
+
+# Set element in matrix
+fn math_matrix_set(matrix, row, col, value) {
+    matrix[row][col] = value;
+    return nullptr;
+}
+
+# Get row from matrix
+fn math_matrix_get_row(matrix, row) {
+    return matrix[row];
+}
+
+# Get column from matrix
+fn math_matrix_get_col(matrix, col) {
+    let result = [];
+    let i = 0;
+    while (i < len(matrix)) {
+        push(result, matrix[i][col]);
+        i = i + 1;
+    }
+    return result;
+}
+
+# Add two matrices
+fn math_matrix_add(a, b) {
+    let rows = math_matrix_rows(a);
+    let cols = math_matrix_cols(a);
+    let result = math_matrix_create(rows, cols, 0);
+    
+    let i = 0;
+    while (i < rows) {
+        let j = 0;
+        while (j < cols) {
+            math_matrix_set(result, i, j, 
+                math_matrix_get(a, i, j) + math_matrix_get(b, i, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# Subtract two matrices
+fn math_matrix_subtract(a, b) {
+    let rows = math_matrix_rows(a);
+    let cols = math_matrix_cols(a);
+    let result = math_matrix_create(rows, cols, 0);
+    
+    let i = 0;
+    while (i < rows) {
+        let j = 0;
+        while (j < cols) {
+            math_matrix_set(result, i, j, 
+                math_matrix_get(a, i, j) - math_matrix_get(b, i, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# Multiply two matrices
+fn math_matrix_multiply(a, b) {
+    let rows_a = math_matrix_rows(a);
+    let cols_a = math_matrix_cols(a);
+    let rows_b = math_matrix_rows(b);
+    let cols_b = math_matrix_cols(b);
+    
+    if (cols_a != rows_b) {
+        return nullptr;  # Incompatible dimensions
+    }
+    
+    let result = math_matrix_create(rows_a, cols_b, 0);
+    
+    let i = 0;
+    while (i < rows_a) {
+        let j = 0;
+        while (j < cols_b) {
+            let sum = 0;
+            let k = 0;
+            while (k < cols_a) {
+                sum = sum + math_matrix_get(a, i, k) * math_matrix_get(b, k, j);
+                k = k + 1;
+            }
+            math_matrix_set(result, i, j, sum);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# Multiply matrix by scalar
+fn math_matrix_scalar_multiply(matrix, scalar) {
+    let rows = math_matrix_rows(matrix);
+    let cols = math_matrix_cols(matrix);
+    let result = math_matrix_create(rows, cols, 0);
+    
+    let i = 0;
+    while (i < rows) {
+        let j = 0;
+        while (j < cols) {
+            math_matrix_set(result, i, j, 
+                math_matrix_get(matrix, i, j) * scalar);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# Transpose matrix
+fn math_matrix_transpose(matrix) {
+    let rows = math_matrix_rows(matrix);
+    let cols = math_matrix_cols(matrix);
+    let result = math_matrix_create(cols, rows, 0);
+    
+    let i = 0;
+    while (i < rows) {
+        let j = 0;
+        while (j < cols) {
+            math_matrix_set(result, j, i, math_matrix_get(matrix, i, j));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# Calculate determinant (for 2x2 and 3x3 matrices)
+fn math_matrix_determinant(matrix) {
+    let size = math_matrix_rows(matrix);
+    
+    if (size == 1) {
+        return math_matrix_get(matrix, 0, 0);
+    }
+    
+    if (size == 2) {
+        return math_matrix_get(matrix, 0, 0) * math_matrix_get(matrix, 1, 1) -
+               math_matrix_get(matrix, 0, 1) * math_matrix_get(matrix, 1, 0);
+    }
+    
+    if (size == 3) {
+        let a = math_matrix_get(matrix, 0, 0);
+        let b = math_matrix_get(matrix, 0, 1);
+        let c = math_matrix_get(matrix, 0, 2);
+        let d = math_matrix_get(matrix, 1, 0);
+        let e = math_matrix_get(matrix, 1, 1);
+        let f = math_matrix_get(matrix, 1, 2);
+        let g = math_matrix_get(matrix, 2, 0);
+        let h = math_matrix_get(matrix, 2, 1);
+        let i_val = math_matrix_get(matrix, 2, 2);
+        
+        return a * (e * i_val - f * h) - 
+               b * (d * i_val - f * g) + 
+               c * (d * h - e * g);
+    }
+    
+    # For larger matrices, would need more complex algorithm
+    return 0;
+}
+
+# Print matrix (for debugging)
+fn math_matrix_print(matrix) {
+    let rows = math_matrix_rows(matrix);
+    let i = 0;
+    while (i < rows) {
+        let row_str = "";
+        let cols = math_matrix_cols(matrix);
+        let j = 0;
+        while (j < cols) {
+            if (j > 0) {
+                row_str = row_str + "\t";
+            }
+            row_str = row_str + str(math_matrix_get(matrix, i, j));
+            j = j + 1;
+        }
+        print(row_str);
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# ============================================
+# Vector Operations
+# ============================================
+
+# Create vector
+fn math_vector_create(size, default_value) {
+    if (default_value == nullptr) {
+        default_value = 0;
+    }
+    let vec = [];
+    let i = 0;
+    while (i < size) {
+        push(vec, default_value);
+        i = i + 1;
+    }
+    return vec;
+}
+
+# Dot product of two vectors
+fn math_vector_dot(a, b) {
+    if (len(a) != len(b)) {
+        return 0;
+    }
+    let sum = 0;
+    let i = 0;
+    while (i < len(a)) {
+        sum = sum + a[i] * b[i];
+        i = i + 1;
+    }
+    return sum;
+}
+
+# Cross product (3D vectors)
+fn math_vector_cross(a, b) {
+    if (len(a) != 3 or len(b) != 3) {
+        return [0, 0, 0];
+    }
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+    ];
+}
+
+# Vector magnitude
+fn math_vector_magnitude(vec) {
+    let sum_sq = 0;
+    let i = 0;
+    while (i < len(vec)) {
+        sum_sq = sum_sq + vec[i] * vec[i];
+        i = i + 1;
+    }
+    return math_sqrt(sum_sq);
+}
+
+# Normalize vector
+fn math_vector_normalize(vec) {
+    let mag = math_vector_magnitude(vec);
+    if (mag == 0) {
+        return vec;
+    }
+    let result = [];
+    let i = 0;
+    while (i < len(vec)) {
+        push(result, vec[i] / mag);
+        i = i + 1;
+    }
+    return result;
+}
+
+# Add two vectors
+fn math_vector_add(a, b) {
+    let result = [];
+    let i = 0;
+    while (i < len(a)) {
+        push(result, a[i] + b[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+# Subtract two vectors
+fn math_vector_subtract(a, b) {
+    let result = [];
+    let i = 0;
+    while (i < len(a)) {
+        push(result, a[i] - b[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+# Scalar multiply vector
+fn math_vector_scalar_multiply(vec, scalar) {
+    let result = [];
+    let i = 0;
+    while (i < len(vec)) {
+        push(result, vec[i] * scalar);
+        i = i + 1;
+    }
+    return result;
+}
+
+# ============================================
+# Mathematical Functions
+# ============================================
+
+# Square root using Newton's method
+fn math_sqrt(value) {
+    if (value < 0) {
+        return 0;
+    }
+    if (value == 0) {
+        return 0;
+    }
+    
+    let guess = value / 2.0;
+    let i = 0;
+    while (i < 100) {  # Iterate for precision
+        guess = (guess + value / guess) / 2.0;
+        i = i + 1;
+    }
+    return guess;
+}
+
+# Absolute value
+fn math_abs(value) {
+    if (value < 0) {
+        return -value;
+    }
+    return value;
+}
+
+# Power function
+fn math_pow(base, exponent) {
+    if (exponent == 0) {
+        return 1;
+    }
+    if (exponent == 1) {
+        return base;
+    }
+    
+    let result = 1;
+    let i = 0;
+    while (i < int(exponent)) {
+        result = result * base;
+        i = i + 1;
+    }
+    return result;
+}
+
+# Factorial
+fn math_factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    let result = 1;
+    let i = 2;
+    while (i <= n) {
+        result = result * i;
+        i = i + 1;
+    }
+    return result;
+}
+
+# Greatest common divisor
+fn math_gcd(a, b) {
+    if (a < 0) {
+        a = -a;
+    }
+    if (b < 0) {
+        b = -b;
+    }
+    while (b != 0) {
+        let temp = b;
+        b = a - int(a / b) * b;
+        a = temp;
+    }
+    return a;
+}
+
+# Least common multiple
+fn math_lcm(a, b) {
+    if (a == 0 or b == 0) {
+        return 0;
+    }
+    return math_abs(a * b) / math_gcd(a, b);
+}
+
+# ============================================
+# Statistical Functions
+# ============================================
+
+# Sum of array
+fn math_sum(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        total = total + arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+# Mean (average)
+fn math_mean(arr) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    return math_sum(arr) / len(arr);
+}
+
+# Median
+fn math_median(arr) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    
+    # Sort array (simple bubble sort)
+    let sorted = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(sorted, arr[i]);
+        i = i + 1;
+    }
+    math_sort_array(sorted);
+    
+    let mid = int(len(sorted) / 2);
+    if (len(sorted) % 2 == 0) {
+        return (sorted[mid - 1] + sorted[mid]) / 2.0;
+    } else {
+        return sorted[mid];
+    }
+}
+
+# Mode (most frequent value)
+fn math_mode(arr) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    
+    # Count frequencies
+    let max_count = 0;
+    let mode_value = arr[0];
+    
+    let i = 0;
+    while (i < len(arr)) {
+        let count = 0;
+        let j = 0;
+        while (j < len(arr)) {
+            if (arr[j] == arr[i]) {
+                count = count + 1;
+            }
+            j = j + 1;
+        }
+        if (count > max_count) {
+            max_count = count;
+            mode_value = arr[i];
+        }
+        i = i + 1;
+    }
+    
+    return mode_value;
+}
+
+# Variance
+fn math_variance(arr) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    
+    let mean = math_mean(arr);
+    let sum_sq_diff = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        let diff = arr[i] - mean;
+        sum_sq_diff = sum_sq_diff + diff * diff;
+        i = i + 1;
+    }
+    return sum_sq_diff / len(arr);
+}
+
+# Standard deviation
+fn math_std_dev(arr) {
+    return math_sqrt(math_variance(arr));
+}
+
+# Minimum value
+fn math_min(arr) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    let min_val = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        if (arr[i] < min_val) {
+            min_val = arr[i];
+        }
+        i = i + 1;
+    }
+    return min_val;
+}
+
+# Maximum value
+fn math_max(arr) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    let max_val = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        if (arr[i] > max_val) {
+            max_val = arr[i];
+        }
+        i = i + 1;
+    }
+    return max_val;
+}
+
+# Range (max - min)
+fn math_range(arr) {
+    return math_max(arr) - math_min(arr);
+}
+
+# Quartiles
+fn math_quartiles(arr) {
+    if (len(arr) == 0) {
+        return [0, 0, 0];
+    }
+    
+    let sorted = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(sorted, arr[i]);
+        i = i + 1;
+    }
+    math_sort_array(sorted);
+    
+    let q1_idx = int(len(sorted) / 4);
+    let q2_idx = int(len(sorted) / 2);
+    let q3_idx = int(3 * len(sorted) / 4);
+    
+    return [sorted[q1_idx], sorted[q2_idx], sorted[q3_idx]];
+}
+
+# Percentile
+fn math_percentile(arr, p) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    
+    let sorted = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(sorted, arr[i]);
+        i = i + 1;
+    }
+    math_sort_array(sorted);
+    
+    let idx = int(p * len(sorted) / 100);
+    if (idx >= len(sorted)) {
+        idx = len(sorted) - 1;
+    }
+    return sorted[idx];
+}
+
+# Correlation coefficient (Pearson)
+fn math_correlation(x_arr, y_arr) {
+    if (len(x_arr) != len(y_arr) or len(x_arr) == 0) {
+        return 0;
+    }
+    
+    let n = len(x_arr);
+    let mean_x = math_mean(x_arr);
+    let mean_y = math_mean(y_arr);
+    
+    let sum_xy = 0;
+    let sum_x2 = 0;
+    let sum_y2 = 0;
+    
+    let i = 0;
+    while (i < n) {
+        let dx = x_arr[i] - mean_x;
+        let dy = y_arr[i] - mean_y;
+        sum_xy = sum_xy + dx * dy;
+        sum_x2 = sum_x2 + dx * dx;
+        sum_y2 = sum_y2 + dy * dy;
+        i = i + 1;
+    }
+    
+    let denom = math_sqrt(sum_x2 * sum_y2);
+    if (denom == 0) {
+        return 0;
+    }
+    return sum_xy / denom;
+}
+
+# Covariance
+fn math_covariance(x_arr, y_arr) {
+    if (len(x_arr) != len(y_arr) or len(x_arr) == 0) {
+        return 0;
+    }
+    
+    let mean_x = math_mean(x_arr);
+    let mean_y = math_mean(y_arr);
+    let n = len(x_arr);
+    
+    let sum = 0;
+    let i = 0;
+    while (i < n) {
+        sum = sum + (x_arr[i] - mean_x) * (y_arr[i] - mean_y);
+        i = i + 1;
+    }
+    return sum / n;
+}
+
+# ============================================
+# Helper Functions
+# ============================================
+
+# Sort array (bubble sort)
+fn math_sort_array(arr) {
+    let n = len(arr);
+    let i = 0;
+    while (i < n - 1) {
+        let j = 0;
+        while (j < n - i - 1) {
+            if (arr[j] > arr[j + 1]) {
+                # Swap
+                let temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# Linear regression (returns [slope, intercept])
+fn math_linear_regression(x_arr, y_arr) {
+    if (len(x_arr) != len(y_arr) or len(x_arr) == 0) {
+        return [0, 0];
+    }
+    
+    let n = len(x_arr);
+    let mean_x = math_mean(x_arr);
+    let mean_y = math_mean(y_arr);
+    
+    let sum_xy = 0;
+    let sum_x2 = 0;
+    
+    let i = 0;
+    while (i < n) {
+        sum_xy = sum_xy + (x_arr[i] - mean_x) * (y_arr[i] - mean_y);
+        sum_x2 = sum_x2 + (x_arr[i] - mean_x) * (x_arr[i] - mean_x);
+        i = i + 1;
+    }
+    
+    if (sum_x2 == 0) {
+        return [0, mean_y];
+    }
+    
+    let slope = sum_xy / sum_x2;
+    let intercept = mean_y - slope * mean_x;
+    
+    return [slope, intercept];
+}
+
+# Predict using linear regression
+fn math_predict(slope, intercept, x) {
+    return slope * x + intercept;
+}

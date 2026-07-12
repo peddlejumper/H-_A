@@ -1,0 +1,77 @@
+# Collection operations demonstration
+
+# List operations
+let fruits = ["apple", "banana", "cherry"];
+print("List: " + str(fruits));
+print("Length: " + str(len(fruits)));
+
+# Add elements
+push(fruits, "date");
+print("After push: " + str(fruits));
+
+# Remove last
+let last = pop(fruits);
+print("Popped: " + last);
+print("After pop: " + str(fruits));
+
+# Access by index
+print("First: " + fruits[0]);
+print("Second: " + fruits[1]);
+
+# Iterate list
+print("Iterating:");
+for f in fruits {
+    print("  - " + f);
+}
+
+# Dictionary operations
+let prices = {"apple": 5, "banana": 3, "cherry": 8};
+print("");
+print("Dict: " + str(prices));
+print("Length: " + str(len(prices)));
+
+# Get keys and values
+let keys = dict_keys(prices);
+let values = dict_values(prices);
+print("Keys: " + str(keys));
+print("Values: " + str(values));
+
+# Get items as pairs
+let items = dict_items(prices);
+print("Items: " + str(items));
+
+# Iterate dict
+print("Dict iteration:");
+for k, v in prices {
+    print("  " + k + " = " + str(v));
+}
+
+# Check key existence (custom has_key)
+fn has_key(d, k) {
+    let ks = dict_keys(d);
+    let i = 0;
+    while (i < len(ks)) {
+        if (ks[i] == k) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+print("");
+print("Has 'apple': " + str(has_key(prices, "apple")));
+print("Has 'grape': " + str(has_key(prices, "grape")));
+
+# Add and modify dict entries
+prices["date"] = 4;
+prices["apple"] = 6;
+print("After modifications: " + str(prices));
+
+# Nested structures
+let inventory = {
+    "fruits": ["apple", "banana"],
+    "vegetables": ["carrot", "pea"]
+};
+print("");
+print("Inventory fruits: " + str(inventory["fruits"]));
+print("Inventory vegetables: " + str(inventory["vegetables"]));

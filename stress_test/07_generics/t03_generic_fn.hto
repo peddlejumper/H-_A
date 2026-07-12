@@ -1,0 +1,14 @@
+# t03_generic_fn.hto — 泛型函数：fn identity<T>(x) / fn first_of<T>(arr)
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+fn identity<T>(x) { return x; }
+fn first_of<T>(arr) { return arr[0]; }
+
+check("3/identity_int", identity<int>(100) == 100);
+check("3/identity_str", identity<string>("hello") == "hello");
+check("3/identity_bool", identity<bool>(true) == true);
+check("3/first_of", first_of<int>([10, 20, 30]) == 10);
+check("3/nested_identity", identity<int>(identity<int>(7)) == 7);

@@ -1,0 +1,20 @@
+# t06_obj_pool_reuse.hto - 对象池复用
+# 大量创建实例并释放（引用计数回收），测试 _dict_pool 复用
+class Pt {
+    let x = 0;
+    let y = 0;
+    fn init(xv, yv) {
+        self.x = xv;
+        self.y = yv;
+    }
+}
+let sum = 0;
+let i = 0;
+while (i < 1000) {
+    let p = new Pt();
+    p.init(i, i + 1);
+    sum = sum + p.x + p.y;
+    i = i + 1;
+}
+print("sum=");
+print(sum);

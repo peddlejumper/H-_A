@@ -1,0 +1,118 @@
+# build: hwdui_min.hto, zzw_native.hto, zzw_render_min.hto, _libs/raytracer_math.hto, _libs/raytracer_scene.hto, _libs/raytracer_core.hto, _libs/raytracer_pipeline.hto
+# T32 - H# Raytracer - 渲染到窗口
+# ─────────────────────────────────────────────────────────
+# 跑一次并发 raytracer，把结果通过 native_show_image
+# 推到一个真正的 Swing 窗口。窗口会一直显示直到你
+# 关闭它；下一场景渲染完成后会自动替换窗口内容。
+
+fn t32_to_rgb_bytes(img) {
+    # img is *already* a flat list of 0..255 ints per channel
+    # (render_tile_worker already calls to_rgb8).  Clamp just
+    # to be safe and return as-is.
+    let out = [];
+    let i = 0;
+    while (i < len(img)) {
+        let v = img[i];
+        if (v < 0) { v = 0; }
+        if (v > 255) { v = 255; }
+        push(out, v);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn t32_render_parallel(scene_id, samples, depth) {
+    let s = scene_by_index(scene_id);
+    let cam = look_at(0, 1.5, 5, 0, 0.5, 0, 60);
+    let W = 96;
+    let H = 64;
+    let tiles = make_tiles(W, H, 16, 16);
+    let total = len(tiles);
+    let result_chan = chan_new(total);
+    let tile_queue = chan_new(total);
+    let i = 0;
+    while (i < total) {
+        chan_send(tile_queue, tiles[i]);
+        i = i + 1;
+    }
+    chan_close(tile_queue);
+    let np = parallelism();
+    if (np < 1) { np = 1; }
+    if (np > total) { np = total; }
+    concurrent {
+        let w = 0;
+        while (w < np) {
+            let stop = false;
+            while (not stop) {
+                let got = null;
+                try {
+                    got = chan_recv(tile_queue);
+                } catch (e) {
+                    stop = true;
+                }
+                if (not stop and got != null) {
+                    let _u = render_tile_worker(s, cam, got, W, H,
+                                                samples, depth,
+                                                result_chan, null);
+                }
+            }
+            w = w + 1;
+        }
+    }
+    chan_close(result_chan);
+    # Assemble the image by writing each tile's pixels to the
+    # correct (x0+px, y0+py) location — not by concatenation,
+    # which would scramble pixels since tiles arrive out of
+    # order.
+    let img = [];
+    let pad = W * H * 3;
+    let p = 0;
+    while (p < pad) { push(img, 0); p = p + 1; }
+    let got = 0;
+    while (got < total) {
+        let r = chan_recv(result_chan);
+        if (r == null) { break; }
+        let data = r["data"];
+        let tw = r["w"];
+        let th = r["h"];
+        let x0 = r["x0"];
+        let y0 = r["y0"];
+        let py = 0;
+        while (py < th) {
+            let px = 0;
+            while (px < tw) {
+                let src = (py * tw + px) * 3;
+                let dst = ((y0 + py) * W + (x0 + px)) * 3;
+                img[dst]     = data[src];
+                img[dst + 1] = data[src + 1];
+                img[dst + 2] = data[src + 2];
+                px = px + 1;
+            }
+            py = py + 1;
+        }
+        got = got + 1;
+    }
+    return img;
+}
+
+fn main() {
+    print("=== H# Raytracer -> Window Demo ===");
+    print("workers = " + str(parallelism()));
+    let names = ["three_spheres", "glass_ball", "mirror_corridor"];
+    let scene = 0;
+    while (scene < 3) {
+        print("--- rendering " + names[scene] + " ---");
+        let t0 = time_ms();
+        let img = t32_render_parallel(scene, 2, 3);
+        let t1 = time_ms();
+        let stats = image_stats(img);
+        let bytes = t32_to_rgb_bytes(img);
+        print("  rendered in " + str(t1 - t0) + " ms, max_lum=" + str(stats["max_lum"]));
+        print("  opening window for " + names[scene] + " (close it to continue)...");
+        native_show_image("H# Raytracer - " + names[scene], 96, 64, bytes);
+        print("  window closed.");
+        scene = scene + 1;
+    }
+    print("=== done ===");
+}
+main();

@@ -1,0 +1,115 @@
+# server/routes_ai.hto
+# AI 提示路由(全部要求鉴权):
+#   POST /api/ai/hint           思路提示
+#   POST /api/ai/explain        错误解释
+#   POST /api/ai/review         代码审查
+#   POST /api/ai/chat           自由对话
+
+import "shared/json_utils.hto";
+import "shared/storage.hto";
+import "shared/ai_client.hto";
+
+fn register() {
+    route("POST", "/api/ai/hint", _hint);
+    route("POST", "/api/ai/explain", _explain);
+    route("POST", "/api/ai/review", _review);
+    route("POST", "/api/ai/chat", _chat);
+}
+
+fn _problem_or_404(problem_id) {
+    return storage_get_by_id("problems", problem_id);
+}
+
+fn _save_history(submission_id, user_msg, ai_msg) {
+    let sub = storage_get_by_id("submissions", submission_id);
+    if (sub != nullptr) {
+        let h = sub["ai_hints"];
+        h.append({"role": "user", "content": user_msg, "ts": time_now()});
+        h.append({"role": "assistant", "content": ai_msg, "ts": time_now()});
+        sub["ai_hints"] = h;
+        storage_update("submissions", sub["id"], sub);
+    }
+}
+
+fn _hint(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let body = body_json(req);
+    let problem_id = json_get(body, "problem_id");
+    let user_code = json_get(body, "code");
+    if (problem_id == nullptr) {
+        return http_response(400, json_stringify(json_response_err("problem_id 必填")), "application/json");
+    }
+    let p = _problem_or_404(problem_id);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("题目不存在")), "application/json");
+    }
+    if (user_code == nullptr) { user_code = ""; }
+    let history = json_get(body, "history");
+    let ans = ai_hint_problem(p, user_code, history);
+    if (json_get(body, "submission_id") != nullptr) {
+        _save_history(json_get(body, "submission_id"), "[hint]", ans);
+    }
+    return http_response(200, json_stringify(json_response_ok({"answer": ans})), "application/json");
+}
+
+fn _explain(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let body = body_json(req);
+    let problem_id = json_get(body, "problem_id");
+    let user_code = json_get(body, "code");
+    let err = json_get(body, "error");
+    if (problem_id == nullptr or user_code == nullptr) {
+        return http_response(400, json_stringify(json_response_err("参数缺失")), "application/json");
+    }
+    let p = _problem_or_404(problem_id);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("题目不存在")), "application/json");
+    }
+    if (err == nullptr) { err = ""; }
+    let history = json_get(body, "history");
+    let ans = ai_explain_error(p, user_code, err, history);
+    if (json_get(body, "submission_id") != nullptr) {
+        _save_history(json_get(body, "submission_id"), "[explain:" + err + "]", ans);
+    }
+    return http_response(200, json_stringify(json_response_ok({"answer": ans})), "application/json");
+}
+
+fn _review(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let body = body_json(req);
+    let problem_id = json_get(body, "problem_id");
+    let user_code = json_get(body, "code");
+    if (problem_id == nullptr or user_code == nullptr) {
+        return http_response(400, json_stringify(json_response_err("参数缺失")), "application/json");
+    }
+    let p = _problem_or_404(problem_id);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("题目不存在")), "application/json");
+    }
+    let history = json_get(body, "history");
+    let ans = ai_review_code(p, user_code, history);
+    return http_response(200, json_stringify(json_response_ok({"answer": ans})), "application/json");
+}
+
+fn _chat(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let body = body_json(req);
+    let q = json_get(body, "question");
+    if (q == nullptr) {
+        return http_response(400, json_stringify(json_response_err("question 必填")), "application/json");
+    }
+    let history = json_get(body, "history");
+    let ans = ai_free_question(q, history);
+    return http_response(200, json_stringify(json_response_ok({"answer": ans})), "application/json");
+}
+
+# 自动注册
+register();

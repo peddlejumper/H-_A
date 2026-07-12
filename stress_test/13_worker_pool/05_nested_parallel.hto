@@ -1,0 +1,128 @@
+# 05 — nested parallel fn (parallel fn calls another parallel fn)
+# Covers: parallel fn 嵌套调用。
+#
+# ★ 重要发现：H# 编译器（HSharp_v0.4_Tests/compiler.py:977）静态拒绝
+#   `parallel fn` / 普通 `fn` / `coro fn` 体内的 `await`，只允许在
+#   `async fn` 体或模块顶层使用。因此「parallel fn 内 await 另一个
+#   parallel fn 的 future」在源码层无法表达 —— 尽管 Kotlin HVM 的
+#   invokeHFunction isParallel 分支 + runOnWorker + AWAIT 字节码本身
+#   支持在 worker 线程上 await。这是 编译器/运行时 能力错配。
+#
+# 本测试改用两条合法路径探测「嵌套」：
+#   A. async fn 作为外层，调 parallel fn 并 await（async fn 内允许 await）
+#   B. parallel fn 内 fire-and-forget 提交另一个 parallel fn（不 await），
+#      通过共享 channel 的副作用观察子任务确实执行
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+parallel fn inner(x) {
+    return x * x;
+}
+
+# ── A: async fn 嵌套调 parallel fn ──
+async fn outer_async(n) {
+    let f = inner(n);
+    return await f + 1;
+}
+check("async_nests_parallel", await outer_async(5) == 26,
+      "got " + str(await outer_async(5)));
+
+async fn outer_multi(n) {
+    let f1 = inner(n);
+    let f2 = inner(n + 1);
+    let f3 = inner(n + 2);
+    return await f1 + await f2 + await f3;
+}
+check("async_nests_three_parallel", await outer_multi(3) == 9 + 16 + 25,
+      "got " + str(await outer_multi(3)));
+
+# 三层嵌套（async -> parallel -> ... 都是 async 外层）
+async fn level1_async(x) {
+    let f = inner(x);
+    let v = await f;
+    let g = inner(v);
+    return await g;
+}
+# level1_async(3): inner(3)=9, inner(9)=81
+check("three_level_via_async", await level1_async(3) == 81,
+      "got " + str(await level1_async(3)));
+
+# ── B: parallel fn 内 fire-and-forget 提交另一个 parallel fn ──
+# 父 parallel fn 调子 parallel fn，不 await，立即返回。子任务的 future
+# 被「丢弃」。观察子任务是否仍被执行（通过 channel 副作用）。
+let done_ch = chan_new(0);
+
+parallel fn child_fire() {
+    let k = 0;
+    while (k < 10000) { k = k + 1; }
+    chan_send(done_ch, "child-done");
+    return 0;
+}
+
+parallel fn parent_fire(n) {
+    # 提交子任务但不 await（parallel fn 内不允许 await）
+    let _f = child_fire();
+    return n + 1;
+}
+
+# 提交若干 parent_fire，它们各自 fire 一个 child_fire
+let pfuts = [];
+let i = 0;
+while (i < 10) {
+    push(pfuts, parent_fire(i));
+    i = i + 1;
+}
+# await 所有 parent（它们应很快返回，因为不等 child）
+let psum = 0;
+let j = 0;
+while (j < 10) {
+    psum = psum + await pfuts[j];
+    j = j + 1;
+}
+check("parent_fire_returns_fast", psum == 55, "psum=" + str(psum));
+
+# 现在 await 所有 child 的副作用（10 个 "child-done"）
+let child_done_count = 0;
+let k = 0;
+while (k < 10) {
+    let msg = chan_recv(done_ch);
+    if (msg == "child-done") { child_done_count = child_done_count + 1; }
+    k = k + 1;
+}
+check("fire_forget_child_ran", child_done_count == 10,
+      "child_done_count=" + str(child_done_count));
+
+# ── C: 嵌套在 concurrent {} 内（顶层 concurrent，async fn 作外层）──
+let total = 0;
+concurrent {
+    let a = outer_async(10);
+    let b = outer_async(20);
+    let c = outer_async(30);
+    total = await a + await b + await c;
+}
+check("nested_in_concurrent", total == (100 + 1) + (400 + 1) + (900 + 1),
+      "total=" + str(total));
+
+# 100 个 async 外层任务（每个 await 一个 parallel）
+async fn async_square(n) {
+    let f = inner(n);
+    return await f;
+}
+let afuts = [];
+let m = 0;
+while (m < 100) {
+    push(afuts, async_square(m));
+    m = m + 1;
+}
+let all_ok = true;
+let n = 0;
+while (n < 100) {
+    if (await afuts[n] != n * n) { all_ok = false; }
+    n = n + 1;
+}
+check("100_async_nests_parallel", all_ok, "some result wrong");
+
+print("T05_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

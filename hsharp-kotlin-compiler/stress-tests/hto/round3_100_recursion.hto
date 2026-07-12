@@ -1,0 +1,920 @@
+# =====================================================================
+# T100 - Round 3: 深度递归与栈管理 Stress Test
+# 测试智能体 #100
+# 覆盖 20 个测试领域: 线性/尾/深度/互/闭包/类方法/list/dict/异常/
+#   channel/concurrent/局部变量/二叉树/汉诺塔/漏return/默认参数/
+#   字符串拼接/match/Ackermann
+# NOTE: 不使用 lambda 包装器 (safePrint/safe), 因为存在 P0 bug:
+#   lambda 内调用顶层 fn 时, freevar 捕获错误地得到 HList cell.
+#   改用直接 try/catch 包裹每段.
+# =====================================================================
+
+# =====================================================================
+# S1 — 线性递归深度: factorial / fibonacci 正确性
+# =====================================================================
+print("== S1 linear recursion ==");
+
+fn fact(n) {
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
+}
+try { print("S1.fact5:" + str(fact(5))); } catch (e) { print("S1.fact5:EXC[" + str(e) + "]"); }
+try { print("S1.fact10:" + str(fact(10))); } catch (e) { print("S1.fact10:EXC[" + str(e) + "]"); }
+try { print("S1.fact20:" + str(fact(20))); } catch (e) { print("S1.fact20:EXC[" + str(e) + "]"); }
+try { print("S1.fact50:" + str(fact(50))); } catch (e) { print("S1.fact50:EXC[" + str(e) + "]"); }
+try { print("S1.fact100:" + str(fact(100))); } catch (e) { print("S1.fact100:EXC[" + str(e) + "]"); }
+
+fn fib(n) {
+    if (n < 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+try { print("S1.fib10:" + str(fib(10))); } catch (e) { print("S1.fib10:EXC[" + str(e) + "]"); }
+try { print("S1.fib20:" + str(fib(20))); } catch (e) { print("S1.fib20:EXC[" + str(e) + "]"); }
+try { print("S1.fib30:" + str(fib(30))); } catch (e) { print("S1.fib30:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S2 — 尾递归: H# 不做 TCO, 但值必须正确
+# =====================================================================
+print("== S2 tail recursion (no TCO) ==");
+
+fn sum_tail(n, acc) {
+    if (n == 0) { return acc; }
+    return sum_tail(n - 1, acc + n);
+}
+try { print("S2.sum_tail100:" + str(sum_tail(100, 0))); } catch (e) { print("S2.sum_tail100:EXC[" + str(e) + "]"); }
+try { print("S2.sum_tail500:" + str(sum_tail(500, 0))); } catch (e) { print("S2.sum_tail500:EXC[" + str(e) + "]"); }
+
+fn fact_tail(n, acc) {
+    if (n <= 1) { return acc; }
+    return fact_tail(n - 1, n * acc);
+}
+try { print("S2.fact_tail10:" + str(fact_tail(10, 1))); } catch (e) { print("S2.fact_tail10:EXC[" + str(e) + "]"); }
+try { print("S2.fact_tail20:" + str(fact_tail(20, 1))); } catch (e) { print("S2.fact_tail20:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S3 — 深度递归 500/700/800/900 — 精确阈值探测
+# =====================================================================
+print("== S3 deep recursion threshold ==");
+
+fn depth_count(n) {
+    if (n == 0) { return 0; }
+    return 1 + depth_count(n - 1);
+}
+try { print("S3.depth500:" + str(depth_count(500))); } catch (e) { print("S3.depth500:EXC[" + str(e) + "]"); }
+try { print("S3.depth700:" + str(depth_count(700))); } catch (e) { print("S3.depth700:EXC[" + str(e) + "]"); }
+try { print("S3.depth800:" + str(depth_count(800))); } catch (e) { print("S3.depth800:EXC[" + str(e) + "]"); }
+try { print("S3.depth900:" + str(depth_count(900))); } catch (e) { print("S3.depth900:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S4 — StackOverflow catch probe (小深度对照)
+# =====================================================================
+print("== S4 StackOverflow catch probe (small) ==");
+
+fn throw_at(n) {
+    if (n == 0) { throw "deep-throw-msg"; }
+    return throw_at(n - 1);
+}
+try { print("S4.throw_at10:" + str(throw_at(10))); } catch (e) { print("S4.throw_at10:EXC[" + str(e) + "]"); }
+try { print("S4.throw_at100:" + str(throw_at(100))); } catch (e) { print("S4.throw_at100:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S5 — 互递归 is_even / is_odd (更深)
+# =====================================================================
+print("== S5 mutual recursion ==");
+
+fn is_even(n) {
+    if (n == 0) { return true; }
+    return is_odd(n - 1);
+}
+fn is_odd(n) {
+    if (n == 0) { return false; }
+    return is_even(n - 1);
+}
+try { print("S5.even0:" + str(is_even(0))); } catch (e) { print("S5.even0:EXC[" + str(e) + "]"); }
+try { print("S5.odd0:" + str(is_odd(0))); } catch (e) { print("S5.odd0:EXC[" + str(e) + "]"); }
+try { print("S5.even10:" + str(is_even(10))); } catch (e) { print("S5.even10:EXC[" + str(e) + "]"); }
+try { print("S5.odd10:" + str(is_odd(10))); } catch (e) { print("S5.odd10:EXC[" + str(e) + "]"); }
+try { print("S5.even100:" + str(is_even(100))); } catch (e) { print("S5.even100:EXC[" + str(e) + "]"); }
+try { print("S5.odd100:" + str(is_odd(100))); } catch (e) { print("S5.odd100:EXC[" + str(e) + "]"); }
+
+fn pos(n) {
+    if (n == 0) { return "zero"; }
+    return neg(n - 1);
+}
+fn neg(n) {
+    if (n == 0) { return "zero"; }
+    return pos(n - 1);
+}
+try { print("S5.pos7:" + str(pos(7))); } catch (e) { print("S5.pos7:EXC[" + str(e) + "]"); }
+try { print("S5.neg8:" + str(neg(8))); } catch (e) { print("S5.neg8:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S6 — 递归 + 闭包
+# =====================================================================
+print("== S6 recursion + closure ==");
+
+# 6a: 直接 lambda 递归 (已知失败 - Undefined name: f)
+try {
+    let f = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * f(n - 1);
+    };
+    print("S6a.lambda_fact:" + str(f(5)));
+} catch (e) {
+    print("S6a.lambda_fact:EXC[" + str(e) + "]");
+}
+
+# 6b: 闭包内修改捕获变量 + 递归 (mk_counter 递归版)
+fn mk_counter(n) {
+    let count = n;
+    fn dec() {
+        count = count - 1;
+        if (count > 0) { return dec(); }
+        return 0;
+    }
+    return dec;
+}
+try {
+    let d = mk_counter(5);
+    print("S6b.mk_counter5:" + str(d()));
+} catch (e) {
+    print("S6b.mk_counter5:EXC[" + str(e) + "]");
+}
+
+# 6c: 通过字典实现可递归闭包 (workaround)
+try {
+    let box = {};
+    box["f"] = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * box["f"](n - 1);
+    };
+    print("S6c.dict_recur_fact:" + str(box["f"](5)));
+} catch (e) {
+    print("S6c.dict_recur_fact:EXC[" + str(e) + "]");
+}
+
+# 6d: Y组合子风格
+fn make_factorial() {
+    fn helper(g, n) {
+        if (n <= 1) { return 1; }
+        return n * g(g, n - 1);
+    }
+    return fn(n) { return helper(helper, n); };
+}
+try {
+    let f = make_factorial();
+    print("S6d.ycomb_fact5:" + str(f(5)));
+} catch (e) {
+    print("S6d.ycomb_fact5:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S7 — 递归 + 类方法
+# =====================================================================
+print("== S7 recursion + class method ==");
+
+class TreeBuilder {
+    let count = 0;
+    fn build(n) {
+        if (n <= 0) { return 0; }
+        count = count + 1;
+        return build(n - 1);
+    }
+    fn buildSelf(n) {
+        if (n <= 0) { return 0; }
+        return self.buildSelf(n - 1);
+    }
+    fn getCount() { return count; }
+}
+try {
+    let t = new TreeBuilder();
+    print("S7.bare_build5:" + str(t.build(5)));
+} catch (e) {
+    print("S7.bare_build5:EXC[" + str(e) + "]");
+}
+try {
+    let t = new TreeBuilder();
+    print("S7.self_build5:" + str(t.buildSelf(5)));
+} catch (e) {
+    print("S7.self_build5:EXC[" + str(e) + "]");
+}
+
+class Factorial {
+    fn compute(n) {
+        if (n <= 1) { return 1; }
+        return n * self.compute(n - 1);
+    }
+    fn computeBare(n) {
+        if (n <= 1) { return 1; }
+        return n * computeBare(n - 1);
+    }
+}
+try {
+    let f = new Factorial();
+    print("S7.self_fact5:" + str(f.compute(5)));
+} catch (e) {
+    print("S7.self_fact5:EXC[" + str(e) + "]");
+}
+try {
+    let f = new Factorial();
+    print("S7.bare_fact5:" + str(f.computeBare(5)));
+} catch (e) {
+    print("S7.bare_fact5:EXC[" + str(e) + "]");
+}
+
+class MathUtil {
+    static fn power(base, exp) {
+        if (exp == 0) { return 1; }
+        return base * MathUtil.power(base, exp - 1);
+    }
+}
+try { print("S7.static_power:" + str(MathUtil.power(2, 10))); } catch (e) { print("S7.static_power:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S8 — 递归 + list 操作
+# =====================================================================
+print("== S8 recursion + list ==");
+
+fn range_list(n) {
+    if (n <= 0) { return []; }
+    let tail = range_list(n - 1);
+    push(tail, n - 1);
+    return tail;
+}
+try {
+    let r = range_list(10);
+    print("S8.range10:" + str(len(r)));
+} catch (e) {
+    print("S8.range10:EXC[" + str(e) + "]");
+}
+try {
+    let r = range_list(10);
+    print("S8.range10_last:" + str(r[9]));
+} catch (e) {
+    print("S8.range10_last:EXC[" + str(e) + "]");
+}
+
+fn length(lst) {
+    if (len(lst) == 0) { return 0; }
+    return 1 + length(lst[1:1000000]);
+}
+try { print("S8.length:" + str(length([1, 2, 3, 4, 5]))); } catch (e) { print("S8.length:EXC[" + str(e) + "]"); }
+
+fn reverse_list(lst) {
+    if (len(lst) == 0) { return []; }
+    let rest = reverse_list(lst[1:1000000]);
+    push(rest, lst[0]);
+    return rest;
+}
+try { print("S8.reverse:" + str(reverse_list([1, 2, 3]))); } catch (e) { print("S8.reverse:EXC[" + str(e) + "]"); }
+
+fn sum_list(lst) {
+    if (len(lst) == 0) { return 0; }
+    return lst[0] + sum_list(lst[1:1000000]);
+}
+try { print("S8.sum_list:" + str(sum_list([1, 2, 3, 4, 5]))); } catch (e) { print("S8.sum_list:EXC[" + str(e) + "]"); }
+
+fn qsort(lst) {
+    if (len(lst) <= 1) { return lst; }
+    let pivot = lst[0];
+    let rest = lst[1:1000000];
+    let less = [];
+    let more = [];
+    for x in rest {
+        if (x < pivot) { push(less, x); }
+        else { push(more, x); }
+    }
+    let sorted_less = qsort(less);
+    let sorted_more = qsort(more);
+    let result = [];
+    for x in sorted_less { push(result, x); }
+    push(result, pivot);
+    for x in sorted_more { push(result, x); }
+    return result;
+}
+try { print("S8.qsort:" + str(qsort([3, 1, 4, 1, 5, 9, 2, 6]))); } catch (e) { print("S8.qsort:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S9 — 递归 + dict
+# =====================================================================
+print("== S9 recursion + dict ==");
+
+fn dict_chain(n) {
+    if (n == 0) { return {"val": 0}; }
+    return {"k": dict_chain(n - 1), "n": n};
+}
+try {
+    let d = dict_chain(5);
+    print("S9.chain_top_n:" + str(d["n"]));
+} catch (e) {
+    print("S9.chain_top_n:EXC[" + str(e) + "]");
+}
+try {
+    let d = dict_chain(5);
+    fn walk(d, depth) {
+        if ("val" in d) { return depth; }
+        return walk(d["k"], depth + 1);
+    }
+    print("S9.chain_depth:" + str(walk(d, 0)));
+} catch (e) {
+    print("S9.chain_depth:EXC[" + str(e) + "]");
+}
+
+fn count_keys(d) {
+    let total = 0;
+    for k in d {
+        total = total + 1;
+        let v = d[k];
+        if (type(v) == "dict") {
+            total = total + count_keys(v);
+        }
+    }
+    return total;
+}
+try {
+    let d = {"a": 1, "b": {"c": 2, "d": {"e": 3}}};
+    print("S9.count_keys:" + str(count_keys(d)));
+} catch (e) {
+    print("S9.count_keys:EXC[" + str(e) + "]");
+}
+
+fn deep_copy(d) {
+    let result = {};
+    for k in d {
+        let v = d[k];
+        if (type(v) == "dict") {
+            result[k] = deep_copy(v);
+        } else {
+            result[k] = v;
+        }
+    }
+    return result;
+}
+try {
+    let orig = {"a": {"b": 1}};
+    let copy = deep_copy(orig);
+    orig["a"]["b"] = 999;
+    print("S9.deep_copy_independent:" + str(copy["a"]["b"]));
+} catch (e) {
+    print("S9.deep_copy_independent:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S10 — 递归 + 异常
+# =====================================================================
+print("== S10 recursion + exception ==");
+
+fn deep_throw(n, target) {
+    if (n == target) { throw "at-" + n; }
+    return deep_throw(n - 1, target);
+}
+try { print("S10.throw_at_3:" + str(deep_throw(10, 3))); } catch (e) { print("S10.throw_at_3:EXC[" + str(e) + "]"); }
+try { print("S10.throw_at_0:" + str(deep_throw(50, 0))); } catch (e) { print("S10.throw_at_0:EXC[" + str(e) + "]"); }
+
+fn rethrow_chain(n) {
+    try {
+        if (n == 0) { throw "bottom"; }
+        return rethrow_chain(n - 1);
+    } catch (e) {
+        if (n == 0) { return "caught-at-0:" + e; }
+        throw "wrap-" + n + ":" + e;
+    }
+}
+try { print("S10.rethrow_chain:" + str(rethrow_chain(3))); } catch (e) { print("S10.rethrow_chain:EXC[" + str(e) + "]"); }
+
+fn sum_with_catch(n) {
+    if (n == 0) { return 0; }
+    try {
+        return n + sum_with_catch(n - 1);
+    } catch (e) {
+        return -1;
+    }
+}
+try { print("S10.sum_catch50:" + str(sum_with_catch(50))); } catch (e) { print("S10.sum_catch50:EXC[" + str(e) + "]"); }
+
+fn risky_sum(n) {
+    if (n == 0) { return 0; }
+    if (n == 7) { throw "lucky-7"; }
+    return n + risky_sum(n - 1);
+}
+try {
+    try {
+        print("S10.risky_sum_caught:" + str(risky_sum(20)));
+    } catch (e) {
+        print("S10.risky_sum_caught:caught:" + e);
+    }
+} catch (e) {
+    print("S10.risky_sum_caught:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S11 — 递归 + channel
+# =====================================================================
+print("== S11 recursion + channel ==");
+
+fn send_n(ch, n) {
+    if (n == 0) {
+        chan_close(ch);
+        return 0;
+    }
+    chan_send(ch, n);
+    return 1 + send_n(ch, n - 1);
+}
+try {
+    let ch = chan_new(0);
+    let sent = send_n(ch, 5);
+    print("S11.send_n:" + str(sent));
+} catch (e) {
+    print("S11.send_n:EXC[" + str(e) + "]");
+}
+
+fn recv_sum(ch) {
+    let v = chan_try_recv(ch);
+    if (v == null) { return 0; }
+    return v + recv_sum(ch);
+}
+try {
+    let ch = chan_new(0);
+    chan_send(ch, 10);
+    chan_send(ch, 20);
+    chan_send(ch, 30);
+    chan_close(ch);
+    print("S11.recv_sum:" + str(recv_sum(ch)));
+} catch (e) {
+    print("S11.recv_sum:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S12 — 递归 + concurrent
+# =====================================================================
+print("== S12 recursion + concurrent ==");
+
+parallel fn p_sum(n) {
+    if (n == 0) { return 0; }
+    return n + p_sum(n - 1);
+}
+try {
+    concurrent {
+        let f = p_sum(5);
+        let r = await f;
+        print("S12.par_sum5:" + r);
+    }
+} catch (e) {
+    print("S12.par_sum5:EXC[" + str(e) + "]");
+}
+
+parallel fn p_fib(n) {
+    if (n < 2) { return n; }
+    return p_fib(n - 1) + p_fib(n - 2);
+}
+try {
+    concurrent {
+        let f = p_fib(10);
+        let r = await f;
+        print("S12.par_fib10:" + r);
+    }
+} catch (e) {
+    print("S12.par_fib10:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S13 — 递归深度 + 大量局部变量
+# =====================================================================
+print("== S13 recursion + many locals ==");
+
+fn deep_locals(n) {
+    let a1 = n + 1;
+    let a2 = n + 2;
+    let a3 = n + 3;
+    let a4 = n + 4;
+    let a5 = n + 5;
+    let a6 = n + 6;
+    let a7 = n + 7;
+    let a8 = n + 8;
+    let a9 = n + 9;
+    let a10 = n + 10;
+    let s = a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10;
+    if (n == 0) { return s; }
+    return s + deep_locals(n - 1);
+}
+try { print("S13.deep_locals200:" + str(deep_locals(200))); } catch (e) { print("S13.deep_locals200:EXC[" + str(e) + "]"); }
+
+fn deep_simple(n) {
+    if (n == 0) { return 0; }
+    return n + deep_simple(n - 1);
+}
+try { print("S13.deep_simple200:" + str(deep_simple(200))); } catch (e) { print("S13.deep_simple200:EXC[" + str(e) + "]"); }
+try { print("S13.deep_locals500:" + str(deep_locals(500))); } catch (e) { print("S13.deep_locals500:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S14 — 二叉树递归
+# =====================================================================
+print("== S14 binary tree recursion ==");
+
+fn make_node(val, left, right) {
+    return {"val": val, "left": left, "right": right};
+}
+
+fn build_bst(lst) {
+    if (len(lst) == 0) { return null; }
+    let mid = len(lst) / 2;
+    let left = build_bst(lst[0:mid]);
+    let right = build_bst(lst[mid+1:1000000]);
+    return make_node(lst[mid], left, right);
+}
+
+fn preorder(node) {
+    if (node == null) { return []; }
+    let result = [node["val"]];
+    let left = preorder(node["left"]);
+    let right = preorder(node["right"]);
+    for x in left { push(result, x); }
+    for x in right { push(result, x); }
+    return result;
+}
+
+fn inorder(node) {
+    if (node == null) { return []; }
+    let result = inorder(node["left"]);
+    push(result, node["val"]);
+    let right = inorder(node["right"]);
+    for x in right { push(result, x); }
+    return result;
+}
+
+fn postorder(node) {
+    if (node == null) { return []; }
+    let result = postorder(node["left"]);
+    let right = postorder(node["right"]);
+    for x in right { push(result, x); }
+    push(result, node["val"]);
+    return result;
+}
+
+fn tree_height(node) {
+    if (node == null) { return 0; }
+    let lh = tree_height(node["left"]);
+    let rh = tree_height(node["right"]);
+    if (lh > rh) { return 1 + lh; }
+    return 1 + rh;
+}
+
+fn tree_sum(node) {
+    if (node == null) { return 0; }
+    return node["val"] + tree_sum(node["left"]) + tree_sum(node["right"]);
+}
+
+try {
+    let t = build_bst([1, 2, 3, 4, 5, 6, 7]);
+    print("S14.preorder:" + str(preorder(t)));
+} catch (e) {
+    print("S14.preorder:EXC[" + str(e) + "]");
+}
+try {
+    let t = build_bst([1, 2, 3, 4, 5, 6, 7]);
+    print("S14.inorder:" + str(inorder(t)));
+} catch (e) {
+    print("S14.inorder:EXC[" + str(e) + "]");
+}
+try {
+    let t = build_bst([1, 2, 3, 4, 5, 6, 7]);
+    print("S14.postorder:" + str(postorder(t)));
+} catch (e) {
+    print("S14.postorder:EXC[" + str(e) + "]");
+}
+try {
+    let t = build_bst([1, 2, 3, 4, 5, 6, 7]);
+    print("S14.height:" + str(tree_height(t)));
+} catch (e) {
+    print("S14.height:EXC[" + str(e) + "]");
+}
+try {
+    let t = build_bst([1, 2, 3, 4, 5, 6, 7]);
+    print("S14.sum:" + str(tree_sum(t)));
+} catch (e) {
+    print("S14.sum:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S15 — 汉诺塔递归
+# =====================================================================
+print("== S15 hanoi ==");
+
+fn hanoi(n, from, to, via, moves) {
+    if (n == 0) { return moves; }
+    moves = hanoi(n - 1, from, via, to, moves);
+    push(moves, str(from) + "->" + str(to));
+    moves = hanoi(n - 1, via, to, from, moves);
+    return moves;
+}
+try {
+    let moves = [];
+    print("S15.hanoi3:" + str(hanoi(3, "A", "C", "B", moves)));
+} catch (e) {
+    print("S15.hanoi3:EXC[" + str(e) + "]");
+}
+try {
+    let moves = [];
+    let r = hanoi(3, "A", "C", "B", moves);
+    print("S15.hanoi3_count:" + str(len(r)));
+} catch (e) {
+    print("S15.hanoi3_count:EXC[" + str(e) + "]");
+}
+try {
+    let moves = [];
+    let r = hanoi(5, "A", "C", "B", moves);
+    print("S15.hanoi5_count:" + str(len(r)));
+} catch (e) {
+    print("S15.hanoi5_count:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S16 — 递归返回值丢失: 漏写 return
+# =====================================================================
+print("== S16 missing return ==");
+
+fn sum_ok(n) {
+    if (n == 0) { return 0; }
+    return n + sum_ok(n - 1);
+}
+try { print("S16.sum_ok5:" + str(sum_ok(5))); } catch (e) { print("S16.sum_ok5:EXC[" + str(e) + "]"); }
+
+fn sum_missing_return(n) {
+    if (n == 0) { return 0; }
+    n + sum_missing_return(n - 1);
+}
+try { print("S16.missing_return5:" + str(sum_missing_return(5))); } catch (e) { print("S16.missing_return5:EXC[" + str(e) + "]"); }
+
+fn side_effect(n, acc) {
+    acc = acc + n;
+    if (n == 0) { return acc; }
+    side_effect(n - 1, acc);
+}
+try { print("S16.side_effect5:" + str(side_effect(5, 0))); } catch (e) { print("S16.side_effect5:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S17 — 递归 + 默认参数
+# =====================================================================
+print("== S17 recursion + default params ==");
+
+fn power_default(base, exp, acc = 1) {
+    if (exp == 0) { return acc; }
+    return power_default(base, exp - 1, acc * base);
+}
+try { print("S17.power2_10:" + str(power_default(2, 10))); } catch (e) { print("S17.power2_10:EXC[" + str(e) + "]"); }
+try { print("S17.power3_5:" + str(power_default(3, 5))); } catch (e) { print("S17.power3_5:EXC[" + str(e) + "]"); }
+try { print("S17.power_explicit_acc:" + str(power_default(2, 3, 10))); } catch (e) { print("S17.power_explicit_acc:EXC[" + str(e) + "]"); }
+
+fn range_default(start, end, step = 1, acc = null) {
+    if (acc == null) { acc = []; }
+    if (start >= end) { return acc; }
+    push(acc, start);
+    return range_default(start + step, end, step, acc);
+}
+try { print("S17.range_default:" + str(range_default(0, 10))); } catch (e) { print("S17.range_default:EXC[" + str(e) + "]"); }
+try { print("S17.range_step2:" + str(range_default(0, 10, 2))); } catch (e) { print("S17.range_step2:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S18 — 递归 + 字符串拼接
+# =====================================================================
+print("== S18 recursion + string concat ==");
+
+fn build_string(n, sep) {
+    if (n == 0) { return ""; }
+    let rest = build_string(n - 1, sep);
+    if (rest == "") { return str(n); }
+    return rest + sep + str(n);
+}
+try { print("S18.build5:" + str(build_string(5, ","))); } catch (e) { print("S18.build5:EXC[" + str(e) + "]"); }
+try { print("S18.build10:" + str(build_string(10, "-"))); } catch (e) { print("S18.build10:EXC[" + str(e) + "]"); }
+
+fn reverse_str(s) {
+    if (len(s) <= 1) { return s; }
+    let mid = len(s) / 2;
+    return reverse_str(s[mid:1000000]) + reverse_str(s[0:mid]);
+}
+try { print("S18.reverse_str:" + str(reverse_str("hello"))); } catch (e) { print("S18.reverse_str:EXC[" + str(e) + "]"); }
+try { print("S18.reverse_empty:" + str(reverse_str(""))); } catch (e) { print("S18.reverse_empty:EXC[" + str(e) + "]"); }
+
+fn indent(n, prefix) {
+    if (n == 0) { return prefix; }
+    return indent(n - 1, "  " + prefix);
+}
+try { print("S18.indent3:" + str(indent(3, "x"))); } catch (e) { print("S18.indent3:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S19 — 递归 + match
+# =====================================================================
+print("== S19 recursion + match ==");
+
+fn collatz(n, steps) {
+    return match n {
+        1 => steps,
+        _ => match (n % 2) {
+            0 => collatz(n / 2, steps + 1),
+            _ => collatz(3 * n + 1, steps + 1)
+        }
+    };
+}
+try { print("S19.collatz1:" + str(collatz(1, 0))); } catch (e) { print("S19.collatz1:EXC[" + str(e) + "]"); }
+try { print("S19.collatz6:" + str(collatz(6, 0))); } catch (e) { print("S19.collatz6:EXC[" + str(e) + "]"); }
+try { print("S19.collatz27:" + str(collatz(27, 0))); } catch (e) { print("S19.collatz27:EXC[" + str(e) + "]"); }
+
+fn describe_num(n) {
+    return match n {
+        0 => "zero",
+        _ => "n=" + n + " then " + describe_num(n - 1)
+    };
+}
+try { print("S19.describe3:" + str(describe_num(3))); } catch (e) { print("S19.describe3:EXC[" + str(e) + "]"); }
+
+fn gcd(a, b) {
+    return match b {
+        0 => a,
+        _ => gcd(b, a % b)
+    };
+}
+try { print("S19.gcd12_8:" + str(gcd(12, 8))); } catch (e) { print("S19.gcd12_8:EXC[" + str(e) + "]"); }
+try { print("S19.gcd100_60:" + str(gcd(100, 60))); } catch (e) { print("S19.gcd100_60:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S20 — Ackermann 函数 (极深递归)
+# =====================================================================
+print("== S20 ackermann ==");
+
+fn ack(m, n) {
+    if (m == 0) { return n + 1; }
+    if (n == 0) { return ack(m - 1, 1); }
+    return ack(m - 1, ack(m, n - 1));
+}
+try { print("S20.ack0_0:" + str(ack(0, 0))); } catch (e) { print("S20.ack0_0:EXC[" + str(e) + "]"); }
+try { print("S20.ack1_1:" + str(ack(1, 1))); } catch (e) { print("S20.ack1_1:EXC[" + str(e) + "]"); }
+try { print("S20.ack2_3:" + str(ack(2, 3))); } catch (e) { print("S20.ack2_3:EXC[" + str(e) + "]"); }
+try { print("S20.ack3_3:" + str(ack(3, 3))); } catch (e) { print("S20.ack3_3:EXC[" + str(e) + "]"); }
+try { print("S20.ack3_4:" + str(ack(3, 4))); } catch (e) { print("S20.ack3_4:EXC[" + str(e) + "]"); }
+try { print("S20.ack2_5:" + str(ack(2, 5))); } catch (e) { print("S20.ack2_5:EXC[" + str(e) + "]"); }
+try { print("S20.ack2_10:" + str(ack(2, 10))); } catch (e) { print("S20.ack2_10:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S21 — 异常传播链
+# =====================================================================
+print("== S21 exception propagation chain ==");
+
+fn level(n) {
+    try {
+        if (n == 0) { throw "L0"; }
+        let r = level(n - 1);
+        return "L" + n + " got " + r;
+    } catch (e) {
+        return "L" + n + " caught " + e;
+    }
+}
+try { print("S21.level3:" + str(level(3))); } catch (e) { print("S21.level3:EXC[" + str(e) + "]"); }
+
+fn no_catch(n) {
+    if (n == 0) { throw "deep"; }
+    return no_catch(n - 1);
+}
+try {
+    try {
+        print("S21.no_catch5:outer:" + str(no_catch(5)));
+    } catch (e) {
+        print("S21.no_catch5:outer:" + e);
+    }
+} catch (e) {
+    print("S21.no_catch5:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S22 — 递归 + 闭包捕获递归函数本身 (workaround patterns)
+# =====================================================================
+print("== S22 recursive closure workarounds ==");
+
+fn fact_global(n) {
+    if (n <= 1) { return 1; }
+    return n * fact_global(n - 1);
+}
+try { print("S22a.global_fact5:" + str(fact_global(5))); } catch (e) { print("S22a.global_fact5:EXC[" + str(e) + "]"); }
+
+fn fact_self(f, n) {
+    if (n <= 1) { return 1; }
+    return n * f(f, n - 1);
+}
+try { print("S22b.self_arg_fact5:" + str(fact_self(fact_self, 5))); } catch (e) { print("S22b.self_arg_fact5:EXC[" + str(e) + "]"); }
+
+fn make_fact() {
+    fn go(n) {
+        if (n <= 1) { return 1; }
+        return n * go(n - 1);
+    }
+    return go;
+}
+try {
+    let f = make_fact();
+    print("S22c.inner_fn_fact5:" + str(f(5)));
+} catch (e) {
+    print("S22c.inner_fn_fact5:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S23 — 深度递归返回复合值
+# =====================================================================
+print("== S23 deep recursion returning composite ==");
+
+fn count_down(n) {
+    if (n == 0) { return []; }
+    let rest = count_down(n - 1);
+    push(rest, n);
+    return rest;
+}
+try {
+    let r = count_down(50);
+    print("S23.count_down50:" + str(len(r)));
+} catch (e) {
+    print("S23.count_down50:EXC[" + str(e) + "]");
+}
+
+fn pair_chain(n) {
+    if (n == 0) { return {"v": 0}; }
+    return {"v": n, "next": pair_chain(n - 1)};
+}
+try {
+    let p = pair_chain(20);
+    fn walk2(p, d) {
+        if (("next" in p) == false) { return d; }
+        return walk2(p["next"], d + 1);
+    }
+    print("S23.pair_chain20:" + str(walk2(p, 0)));
+} catch (e) {
+    print("S23.pair_chain20:EXC[" + str(e) + "]");
+}
+
+# =====================================================================
+# S24 — 递归中的 for 循环 (递归 + 迭代混合)
+# =====================================================================
+print("== S24 recursion + iteration ==");
+
+fn tree_flatten(node) {
+    let result = [];
+    if (node == null) { return result; }
+    if (type(node) == "list") {
+        for child in node {
+            let sub = tree_flatten(child);
+            for x in sub { push(result, x); }
+        }
+        return result;
+    }
+    push(result, node);
+    return result;
+}
+try { print("S24.flatten:" + str(tree_flatten([1, [2, [3, [4, [5]]]]]))); } catch (e) { print("S24.flatten:EXC[" + str(e) + "]"); }
+try { print("S24.flatten_deep:" + str(tree_flatten([[1, 2], [3, [4, 5]], 6]))); } catch (e) { print("S24.flatten_deep:EXC[" + str(e) + "]"); }
+
+fn perm(lst) {
+    if (len(lst) <= 1) { return [lst]; }
+    let result = [];
+    for i in range(0, len(lst)) {
+        let rest2 = [];
+        for j in range(0, i) { push(rest2, lst[j]); }
+        for j in range(i+1, len(lst)) { push(rest2, lst[j]); }
+        let perms = perm(rest2);
+        for p in perms {
+            let combined = [lst[i]];
+            for x in p { push(combined, x); }
+            push(result, combined);
+        }
+    }
+    return result;
+}
+try { print("S24.perm3_count:" + str(len(perm([1, 2, 3])))); } catch (e) { print("S24.perm3_count:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S25 — 递归中的 break/continue (探针: 是否影响递归)
+# =====================================================================
+print("== S25 recursion + break/continue ==");
+
+fn find_in_tree(node, target) {
+    if (node == target) { return true; }
+    if (type(node) != "list") { return false; }
+    for x in node {
+        if (find_in_tree(x, target)) {
+            return true;
+        }
+    }
+    return false;
+}
+try { print("S25.find_hit:" + str(find_in_tree([1, [2, [3, [4]]]], 3))); } catch (e) { print("S25.find_hit:EXC[" + str(e) + "]"); }
+try { print("S25.find_miss:" + str(find_in_tree([1, [2, [3, [4]]]], 9))); } catch (e) { print("S25.find_miss:EXC[" + str(e) + "]"); }
+
+# =====================================================================
+# S-FINAL — StackOverflow 深度探针 (放最后, 可能崩溃 VM)
+# =====================================================================
+print("== S-FINAL StackOverflow probe ==");
+print("depth 1000 probe:");
+try {
+    let r = depth_count(1000);
+    print("depth 1000 OK -> " + r);
+} catch (e) {
+    print("depth 1000 caught: " + e);
+}
+print("== DONE ==");

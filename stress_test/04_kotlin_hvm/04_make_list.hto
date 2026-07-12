@@ -1,0 +1,11 @@
+# 04_make_list.hto — MAKE_LIST 空 / 嵌套
+let empty = [];
+print(len(empty));
+print(empty);
+
+let nested = [[1, 2], [3, [4, 5]], []];
+print(len(nested));
+print(nested[1][1][0]);
+print(nested[2]);
+print(nested[0]);
+print("done");

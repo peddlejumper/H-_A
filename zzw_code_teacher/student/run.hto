@@ -1,0 +1,4 @@
+# 单独运行学生端的入口
+import "zzw_code_teacher/student/student_ide.hto";
+
+run_student();

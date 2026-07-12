@@ -1,0 +1,13 @@
+# T26 - Long list operations (perf)
+let xs = [];
+for i in range(1000) { push(xs, i); }
+print(len(xs));
+let s = 0;
+for x in xs { s = s + x; }
+print(s);
+
+let sq = [];
+for x in xs { push(sq, x * x); }
+print(len(sq));
+print(sq[0]);
+print(sq[999]);

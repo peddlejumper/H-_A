@@ -1,0 +1,6 @@
+# t2
+let cfg = nullptr;
+if (cfg == nullptr) {
+    print("null");
+}
+print("ok");

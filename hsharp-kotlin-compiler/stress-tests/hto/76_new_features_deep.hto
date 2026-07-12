@@ -1,0 +1,147 @@
+# T76 - New features deep stress tests
+# Coverage: fmt / destructuring / default params / variadic — deep & edge.
+# Each print is tagged so output maps 1:1 to a case.
+
+# ============================================================
+# FMT DEEP
+# ============================================================
+
+# ---- Case 1: multi placeholder + repeated index {0}{0} ----
+print("c1: " + fmt("{0}-{0}-{1}", "a", "b"));
+
+# ---- Case 2: out-of-bounds placeholder {5} with only 2 args ----
+# Per impl: idx >= rest.size renders the literal placeholder.
+print("c2: " + fmt("x{5}x", "a", "b"));
+
+# ---- Case 3: nested fmt — inner result used as an arg of the outer ----
+print("c3: " + fmt("{0}+{1}", fmt("[{0},{1}]", 1, 2), "z"));
+
+# ---- Case 4: fmt with number / string / bool / null / list / dict ----
+print("c4: " + fmt("n={0} s={1} b={2} u={3} l={4} d={5}", 42, "hi", true, null, [1, 2], {"k": "v"}));
+
+# ---- Case 5: empty template, no placeholder, extra args ignored ----
+print("c5a: [" + fmt("") + "]");
+print("c5b: " + fmt("plain", 1, 2, 3));
+
+# ---- Case 6: brace escape attempt — {{0}} is NOT a real escape ----
+# Impl: first '{' (next is '{', non-digit) stays literal; second '{' starts
+# a real placeholder; trailing '}' stays literal.
+print("c6: " + fmt("{{0}}", "x"));
+
+# ============================================================
+# DESTRUCTURE DEEP
+# ============================================================
+
+# ---- Case 7: full / _ skip / function-return / consecutive ----
+let [a, b, c] = [1, 2, 3];
+let [p, _, r] = [10, 20, 30];
+fn pair() { return [7, 8]; }
+let [u, v] = pair();
+let [w, z] = [u, v];
+print("c7: " + (a + b + c) + " " + (p + r) + " " + (u + v) + " " + (w + z));
+
+# ---- Case 8: vars < elements (extra elements ignored) ----
+let [x, y] = [100, 200, 300];
+print("c8: " + (x + y));
+
+# ---- Case 9: vars > elements (runtime index-out-of-range) ----
+try {
+    let [m, n] = [1];
+    print("c9: no-error " + m);
+} catch (e) {
+    print("c9: caught " + e);
+}
+
+# ---- Case 10: destructure a dict (GET_ITEM uses integer key -> error) ----
+try {
+    let [k1, k2] = {"x": 1, "y": 2};
+    print("c10: no-error " + k1);
+} catch (e) {
+    print("c10: caught " + e);
+}
+
+# ---- Case 11: destructure a string ----
+let [s0, s1, s2] = "abc";
+print("c11: " + s0 + s1 + s2);
+
+# ============================================================
+# DEFAULT PARAMS DEEP
+# ============================================================
+
+# ---- Case 12: all defaults, various literal types ----
+fn cfg(name = "x", n = 5, flag = true, u = null) {
+    return fmt("{0}|{1}|{2}|{3}", name, n, flag, u);
+}
+print("c12a: " + cfg());
+print("c12b: " + cfg("a", 9, false, 0));
+
+# ---- Case 13: default params in class method ----
+class Greeter {
+    fn greet(self, who = "world", mark = "!") {
+        return "hi " + who + mark;
+    }
+}
+let g = new Greeter();
+try {
+    print("c13a: " + g.greet());
+} catch (e) {
+    print("c13a: caught " + e);
+}
+print("c13b: " + g.greet("h#", "?"));
+
+# ============================================================
+# VARIADIC DEEP
+# ============================================================
+
+# ---- Case 14: variadic len / first / empty / iterate ----
+fn vlen(...xs) { return len(xs); }
+fn vfirst(...xs) {
+    if (len(xs) == 0) { return "empty"; }
+    return xs[0];
+}
+print("c14a: " + vlen());
+print("c14b: " + vlen(1, 2, 3));
+print("c14c: " + vfirst());
+print("c14d: " + vfirst(9, 8));
+
+# ---- Case 15: variadic in class method ----
+class Multi {
+    fn vsum(self, ...xs) {
+        let t = 0;
+        for v in xs { t = t + v; }
+        return t;
+    }
+}
+let m = new Multi();
+print("c15a: " + m.vsum());
+print("c15b: " + m.vsum(1, 2, 3));
+
+# ---- Case 16: variadic list passed to a list-expecting function ----
+fn sumList(xs) {
+    let t = 0;
+    for v in xs { t = t + v; }
+    return t;
+}
+fn forward(...xs) {
+    return sumList(xs);
+}
+print("c16a: " + forward(1, 2, 3, 4));
+print("c16b: " + forward());
+
+# ---- Case 17: default + variadic combo (known suspect) ----
+# fn combo(a, b=10, ...rest): parser ALLOWS defaults-before-variadic, but
+# the runtime takes the isVariadic branch and NEVER applies defaults, so
+# b's default is silently lost. combo(1) should give 1|10|0 if defaults
+# worked; instead it errors "expects at least 2 args".
+fn combo(a, b = 10, ...rest) {
+    return fmt("{0}|{1}|{2}", a, b, len(rest));
+}
+try {
+    print("c17a: " + combo(1));
+} catch (e) {
+    print("c17a: caught " + e);
+}
+print("c17b: " + combo(1, 2));
+print("c17c: " + combo(1, 2, 3, 4));
+
+print("T76-DONE");

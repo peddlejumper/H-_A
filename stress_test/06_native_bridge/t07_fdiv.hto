@@ -1,0 +1,22 @@
+# t07 — fdiv() IEEE float division boundaries (0/0, 1/0, 1/3)
+print("== t07 fdiv ==");
+try {
+    print("fdiv(0,0)=" + str(fdiv(0, 0)));
+} catch (e) {
+    print("fdiv(0,0) ERR: " + str(e));
+}
+try {
+    print("fdiv(1,0)=" + str(fdiv(1, 0)));
+} catch (e) {
+    print("fdiv(1,0) ERR: " + str(e));
+}
+try {
+    print("fdiv(1,3)=" + str(fdiv(1, 3)));
+} catch (e) {
+    print("fdiv(1,3) ERR: " + str(e));
+}
+try {
+    print("fdiv(10,2)=" + str(fdiv(10, 2)));
+} catch (e) {
+    print("fdiv(10,2) ERR: " + str(e));
+}

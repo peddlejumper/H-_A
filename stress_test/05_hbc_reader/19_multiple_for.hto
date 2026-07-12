@@ -1,0 +1,22 @@
+# 19 - 连续多个 for (状态隔离)
+# 目的: 多个 for 顺序执行，每个 for 的 JUMP 修正独立
+let s1 = 0;
+for i in [1, 2, 3] { s1 = s1 + i; }
+let s2 = 0;
+for i in [10, 20, 30, 40] { s2 = s2 + i; }
+let s3 = 0;
+for i in range(5) { s3 = s3 + i; }
+print("s1=" + str(s1));
+print("expected_s1=6");
+print("s2=" + str(s2));
+print("expected_s2=100");
+print("s3=" + str(s3));
+print("expected_s3=10");
+
+# 同名变量在多个 for 中复用
+let total = 0;
+for v in [1, 2] { total = total + v; }
+for v in [10, 20] { total = total + v; }
+for v in [100, 200] { total = total + v; }
+print("total=" + str(total));
+print("expected_total=333");

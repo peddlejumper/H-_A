@@ -1,0 +1,141 @@
+# server/routes_problem.hto
+# 题目路由:
+#   GET  /api/problems               学员/管理员: 题目列表(可按难度/标签过滤)
+#   GET  /api/problems/:id           详情
+#   POST /api/problems               管理员: 创建
+#   PUT  /api/problems/:id           管理员: 修改
+#   DEL  /api/problems/:id           管理员: 删除
+
+import "shared/json_utils.hto";
+import "shared/storage.hto";
+import "shared/models.hto";
+
+fn register() {
+    route("GET", "/api/problems", _list);
+    route("GET", "/api/problems/:id", _detail);
+    route("POST", "/api/problems", _create);
+    route("PUT", "/api/problems/:id", _update);
+    route("DELETE", "/api/problems/:id", _delete);
+}
+
+fn _list(req) {
+    let all = storage_all("problems");
+    let difficulty = json_get(req["query"], "difficulty");
+    let tag = json_get(req["query"], "tag");
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        let p = all[i];
+        if (difficulty != nullptr and p["difficulty"] != difficulty) {
+            i = i + 1;
+            continue;
+        }
+        if (tag != nullptr) {
+            let has = false;
+            let j = 0;
+            while (j < len(p["tags"])) {
+                if (p["tags"][j] == tag) { has = true; }
+                j = j + 1;
+            }
+            if (not has) {
+                i = i + 1;
+                continue;
+            }
+        }
+        out.append(_problem_summary(p));
+        i = i + 1;
+    }
+    return http_response(200, json_stringify(json_response_ok(out)), "application/json");
+}
+
+# 题目摘要(隐藏测试用例,只暴露 samples)
+fn _problem_summary(p) {
+    return {
+        "id": p["id"],
+        "title": p["title"],
+        "difficulty": p["difficulty"],
+        "tags": p["tags"],
+        "description": p["description"],
+        "input_format": p["input_format"],
+        "output_format": p["output_format"],
+        "samples": p["samples"],
+        "template": p["template"],
+        "time_limit_ms": p["time_limit_ms"],
+        "memory_limit_kb": p["memory_limit_kb"],
+        "submission_count": p["submission_count"],
+        "accepted_count": p["accepted_count"]
+    };
+}
+
+fn _detail(req) {
+    let id = req["params"]["id"];
+    let p = storage_get_by_id("problems", id);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("题目不存在")), "application/json");
+    }
+    # 学员不返回 test_cases,管理员返回
+    let is_admin = false;
+    if (req["user"] != nullptr and req["user"]["role"] == "admin") {
+        is_admin = true;
+    }
+    if (is_admin) {
+        return http_response(200, json_stringify(json_response_ok(p)), "application/json");
+    }
+    return http_response(200, json_stringify(json_response_ok(_problem_summary(p))), "application/json");
+}
+
+fn _create(req) {
+    if (req["user"] == nullptr or req["user"]["role"] != "admin") {
+        return http_response(403, json_stringify(json_response_err("仅管理员可创建题目")), "application/json");
+    }
+    let body = body_json(req);
+    let title = json_get(body, "title");
+    let difficulty = json_get(body, "difficulty");
+    if (title == nullptr or difficulty == nullptr) {
+        return http_response(400, json_stringify(json_response_err("title/difficulty 必填")), "application/json");
+    }
+    let pid = "p_" + str(time_now()) + "_" + str(rand_int(1000, 9999));
+    let p = problem_new(pid, title, difficulty);
+    # 拷贝可选字段
+    let optional_fields = [
+        "tags", "description", "input_format", "output_format",
+        "samples", "test_cases", "hint", "template"
+    ];
+    let i = 0;
+    while (i < len(optional_fields)) {
+        let k = optional_fields[i];
+        if (k in body) {
+            p[k] = body[k];
+        }
+        i = i + 1;
+    }
+    p["created_by"] = req["user"]["id"];
+    storage_insert("problems", p);
+    return http_response(201, json_stringify(json_response_ok(p)), "application/json");
+}
+
+fn _update(req) {
+    if (req["user"] == nullptr or req["user"]["role"] != "admin") {
+        return http_response(403, json_stringify(json_response_err("仅管理员可改题")), "application/json");
+    }
+    let id = req["params"]["id"];
+    let body = body_json(req);
+    body["updated_at"] = time_now();
+    let p = storage_update("problems", id, body);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("题目不存在")), "application/json");
+    }
+    return http_response(200, json_stringify(json_response_ok(p)), "application/json");
+}
+
+fn _delete(req) {
+    if (req["user"] == nullptr or req["user"]["role"] != "admin") {
+        return http_response(403, json_stringify(json_response_err("仅管理员可删题")), "application/json");
+    }
+    let id = req["params"]["id"];
+    storage_delete("problems", id);
+    return http_response(200, json_stringify(json_response_ok({"deleted": id})), "application/json");
+}
+
+# 自动注册
+register();

@@ -1,0 +1,352 @@
+# raytracer_gui.hto — Live progress dashboard built on zzwui
+# ─────────────────────────────────────────────────────────────────────
+# This module is a "headless" GUI: it constructs a real zzwui
+# widget tree (ZzwWindow + Panels + Labels + Buttons + TextInputs
+# + ListBox + ProgressBar) and wires up `set_onClick` callbacks,
+# but the test driver invokes the callbacks directly instead of
+# running a real event loop.  This is enough to exercise the
+# end-to-end integration:
+#
+#   1. the user picks a scene, width, height, and sample count
+#   2. clicks "Start" → the StartBtnClick callback mutates the
+#      dashboard's controller flags
+#   3. the test driver starts a real render via render_pipeline,
+#      updating the dashboard's state label and progress bar
+#      as it goes
+#   4. clicking "Cancel" sets a flag that the driver observes and
+#      pushes into the cancel_chan
+#
+# H# has no anonymous-function syntax, so every callback is a
+# top-level `fn` whose name we hand to `set_onClick`.  All
+# shared mutable state lives in `let __dash = [...]` mutable
+# lists — H#'s `let x = ...` rebinds in a new frame, but
+# `STORE_INDEX` on a list cell mutates the list element in place
+# and is visible from any function that has a reference to the
+# same list.
+
+# ─── 1. The shared controller ─────────────────────────────────────
+# Because H# callbacks are top-level `fn`s, they all need to
+# read/write shared state.  We use one global list:
+#
+#   __dash_ctrl[0] = start_clicked_count    (int)
+#   __dash_ctrl[1] = cancel_clicked_count   (int)
+#   __dash_ctrl[2] = last_scene_index       (int)
+#   __dash_ctrl[3] = last_width             (int)
+#   __dash_ctrl[4] = last_height            (int)
+#   __dash_ctrl[5] = last_samples           (int)
+#
+# The dashboard itself (the widget tree + state cells) is held in
+# a parallel list `__dash_widgets`; each function reads/writes
+# specific indices.
+let __dash_ctrl   = [0, 0, 0, 0, 0, 0];
+let __dash_widgets = [null];   # index 0 = the Dashboard dict
+
+# ─── 2. Callbacks (top-level so set_onClick can reference them) ──
+fn __dash_on_start(btn) {
+    # Bump the start counter so the driver knows "Start" was hit.
+    __dash_ctrl[0] = __dash_ctrl[0] + 1;
+    # Snapshot the scene index (ListBox selection).
+    let dash = __dash_widgets[0];
+    let lb = dash["scene_listbox"];
+    __dash_ctrl[2] = lb.get_selected();
+    # Snapshot the dimensions.
+    let wi = dash["width_input"];
+    let hi = dash["height_input"];
+    let si = dash["samples_input"];
+    # int() converts strings to ints (we typed them in).
+    __dash_ctrl[3] = int(wi.get_value());
+    __dash_ctrl[4] = int(hi.get_value());
+    __dash_ctrl[5] = int(si.get_value());
+    # Reflect the click in the status label.
+    let lbl = dash["status_label"];
+    lbl.set_text("Start clicked: scene=" + scene_name(__dash_ctrl[2])
+                 + " " + str(__dash_ctrl[3]) + "x" + str(__dash_ctrl[4])
+                 + " samples=" + str(__dash_ctrl[5]));
+}
+fn __dash_on_cancel(btn) {
+    __dash_ctrl[1] = __dash_ctrl[1] + 1;
+    let dash = __dash_widgets[0];
+    let lbl = dash["status_label"];
+    lbl.set_text("Cancel clicked (count=" + str(__dash_ctrl[1]) + ")");
+}
+fn __dash_on_scene_change(lb) {
+    # Re-render the scene-name caption whenever the user picks a
+    # different scene from the list.  This is a no-op stub when
+    # the runtime doesn't expose set_on_change; callers can
+    # still invoke it manually via `dashboard_on_scene_select`.
+    let idx = lb.get_selected();
+    let dash = __dash_widgets[0];
+    let lbl = dash["scene_caption"];
+    lbl.set_text("Selected: " + scene_name(idx));
+}
+fn __dash_on_size_change(inp) {
+    let dash = __dash_widgets[0];
+    let w = int(dash["width_input"].get_value());
+    let h = int(dash["height_input"].get_value());
+    let s = int(dash["samples_input"].get_value());
+    let lbl = dash["dims_label"];
+    lbl.set_text("Dims=" + str(w) + "x" + str(h) + " samples=" + str(s));
+}
+
+# Manual entry points (used in tests where there is no event
+# loop, but also callable by application code that wants to
+# drive the dashboard explicitly after mutating inputs).
+fn dashboard_on_scene_select(d) {
+    let idx = d["scene_listbox"].get_selected();
+    d["scene_caption"].set_text("Selected: " + scene_name(idx));
+    return idx;
+}
+fn dashboard_on_size_change(d) {
+    let w = int(d["width_input"].get_value());
+    let h = int(d["height_input"].get_value());
+    let s = int(d["samples_input"].get_value());
+    d["dims_label"].set_text("Dims=" + str(w) + "x" + str(h) + " samples=" + str(s));
+    return { "w": w, "h": h, "s": s };
+}
+
+# ─── 3. Dashboard factory ────────────────────────────────────────
+# Returns a `dashboard` dict holding every widget the GUI exposes
+# plus a few state cells.  Indices into the dict are stable so the
+# driver can find them by name.
+fn dashboard_create(title, win_w, win_h) {
+    let win = new ZzwWindow();
+    win.init_zw(title, win_w, win_h);
+    win.setBgColor("#0f1119");
+
+    # Root panel: vertical stack of (header, scene-pick, dims,
+    # actions, status, progress, stats, preview).
+    let root = new Panel();
+    root.init_panel("vbox");
+    root.set_pos(0, 0);
+    root.set_size(win_w, win_h);
+    win.setRootWidget(root);
+
+    # Header label.
+    let header = new Label();
+    header.init_label("=== H# Raytracer Dashboard ===");
+    header.set_font_size(18);
+    header.set_color("#ffe066");
+    root.add_child(header);
+
+    # Scene picker (ListBox, indexed 0..2).
+    let scene_label = new Label();
+    scene_label.init_label("Scene:");
+    scene_label.set_color("#aaaaaa");
+    root.add_child(scene_label);
+
+    let scene_lb = new ListBox();
+    scene_lb.init_listbox();
+    scene_lb.add_item(scene_name(0));
+    scene_lb.add_item(scene_name(1));
+    scene_lb.add_item(scene_name(2));
+    scene_lb.set_selected(0);
+    scene_lb.set_multi_select(false);
+    root.add_child(scene_lb);
+
+    let scene_caption = new Label();
+    scene_caption.init_label("Selected: " + scene_name(0));
+    scene_caption.set_color("#cccccc");
+    root.add_child(scene_caption);
+
+    # Dims / samples (TextInput × 3).
+    let dims_label = new Label();
+    dims_label.init_label("Dims=160x120 samples=2");
+    dims_label.set_color("#aaaaaa");
+    root.add_child(dims_label);
+
+    let width_inp = new TextInput();
+    width_inp.init_input("width", "160");
+    root.add_child(width_inp);
+
+    let height_inp = new TextInput();
+    height_inp.init_input("height", "120");
+    root.add_child(height_inp);
+
+    let samples_inp = new TextInput();
+    samples_inp.init_input("samples", "2");
+    root.add_child(samples_inp);
+
+    # Buttons (Start + Cancel).
+    let start_btn = new Button();
+    start_btn.init_btn("Start Render");
+    start_btn.set_size(150, 32);
+    let on_start = __dash_on_start;
+    start_btn.set_onClick(on_start);
+    root.add_child(start_btn);
+
+    let cancel_btn = new Button();
+    cancel_btn.init_btn("Cancel");
+    cancel_btn.set_size(150, 32);
+    let on_cancel = __dash_on_cancel;
+    cancel_btn.set_onClick(on_cancel);
+    root.add_child(cancel_btn);
+
+    # Status label (single-line current state).
+    let status_label = new Label();
+    status_label.init_label("State: IDLE");
+    status_label.set_color("#7fff7f");
+    status_label.set_font_size(14);
+    root.add_child(status_label);
+
+    # Progress bar + ascii-art preview.
+    let pb = new ProgressBar();
+    pb.init_pb(0, 100);
+    pb.set_show_text(true);
+    root.add_child(pb);
+
+    let preview_label = new Label();
+    preview_label.init_label("(preview will appear after render)");
+    preview_label.set_multi_line(true);
+    preview_label.set_word_wrap(false);
+    preview_label.set_font_size(8);
+    preview_label.set_color("#cccccc");
+    root.add_child(preview_label);
+
+    # Stats label (avg_r/avg_g/avg_b, min/max/mean_lum).
+    let stats_label = new Label();
+    stats_label.init_label("Stats: (no image yet)");
+    stats_label.set_color("#cccccc");
+    root.add_child(stats_label);
+
+    let dash = {
+        "window":         win,
+        "root":           root,
+        "header":         header,
+        "scene_label":    scene_label,
+        "scene_listbox":  scene_lb,
+        "scene_caption":  scene_caption,
+        "dims_label":     dims_label,
+        "width_input":    width_inp,
+        "height_input":   height_inp,
+        "samples_input":  samples_inp,
+        "start_btn":      start_btn,
+        "cancel_btn":     cancel_btn,
+        "status_label":   status_label,
+        "progress":       pb,
+        "preview_label":  preview_label,
+        "stats_label":    stats_label
+    };
+    __dash_widgets[0] = dash;
+    return dash;
+}
+
+# ─── 4. State-driven updates ─────────────────────────────────────
+# `dashboard_apply_state(d, state)` mutates the dashboard's labels
+# and progress bar to reflect a state value of the form returned
+# by `state_idle/running/done/cancelled/failed`.  This is the
+# function the driver calls every time the pipeline emits a new
+# state.
+#
+# We use a chain of `if`/`else` rather than a `match` expression
+# because the arm bodies are multi-statement blocks; v0.4.1's
+# `match` only accepts a single expression on the right of `=>`.
+fn dashboard_apply_state(d, state) {
+    let lbl = d["status_label"];
+    let pb = d["progress"];
+    let kind = state["kind"];
+    if (kind == "idle") {
+        lbl.set_text("State: IDLE");
+        lbl.set_color("#7fff7f");
+        pb.set_value(0);
+    } else if (kind == "running") {
+        let d_done = state["done"];
+        let d_total = state["total"];
+        lbl.set_text("State: RUNNING " + str(d_done) + "/" + str(d_total));
+        lbl.set_color("#ffe066");
+        if (d_total > 0) {
+            let pct = (d_done * 100) / d_total;
+            pb.set_value(pct);
+        }
+    } else if (kind == "done") {
+        lbl.set_text("State: DONE in " + str(state["ms"]) + " ms");
+        lbl.set_color("#7fff7f");
+        pb.set_value(100);
+    } else if (kind == "cancelled") {
+        lbl.set_text("State: CANCELLED");
+        lbl.set_color("#ff8888");
+    } else if (kind == "failed") {
+        lbl.set_text("State: FAILED: " + state["reason"]);
+        lbl.set_color("#ff4444");
+    } else {
+        lbl.set_text("State: <unknown>");
+    }
+}
+
+# ─── 5. Progress update helper ───────────────────────────────────
+# A typed convenience for "one more pixel finished" updates.
+fn dashboard_apply_progress(d, done, total) {
+    let pb = d["progress"];
+    let lbl = d["status_label"];
+    if (total > 0) {
+        let pct = (done * 100) / total;
+        pb.set_value(pct);
+    }
+    lbl.set_text("State: RUNNING " + str(done) + "/" + str(total)
+                 + " (" + str(pb.get_percent()) + "%)");
+}
+
+# ─── 6. Stats display ────────────────────────────────────────────
+fn dashboard_apply_stats(d, stats) {
+    let lbl = d["stats_label"];
+    lbl.set_text("Stats: avg_r=" + str(int(stats["avg_r"]))
+                 + " avg_g=" + str(int(stats["avg_g"]))
+                 + " avg_b=" + str(int(stats["avg_b"]))
+                 + " | min_lum=" + str(int(stats["min_lum"]))
+                 + " max_lum=" + str(int(stats["max_lum"]))
+                 + " mean_lum=" + str(int(stats["mean_lum"])));
+}
+
+# ─── 7. ASCII preview ────────────────────────────────────────────
+# The PPM file we wrote is binary; the dashboard can't display
+# bitmaps in v0.4.1, so we convert the assembled image to a
+# coarse 40×30 ASCII art preview and shove it into the
+# `preview_label` (multi_line).  This also gives the integration
+# test a way to visually verify the render by reading the label
+# text back.
+#
+# The character ramp is chosen so darker = space, brighter = '#'.
+fn dashboard_apply_preview(d, image, img_w, img_h, target_w, target_h) {
+    let ramp = " .:-=+*#%@";
+    let ramp_n = len(ramp);
+    let out = "";
+    let ty = 0;
+    while (ty < target_h) {
+        let sy = (ty * img_h) / target_h;
+        let tx = 0;
+        while (tx < target_w) {
+            let sx = (tx * img_w) / target_w;
+            let px = pixel_at(image, sx, sy, img_w);
+            let lum = (px[0] + px[1] + px[2]) / 3;
+            let idx = (lum * ramp_n) / 256;
+            if (idx < 0) { idx = 0; }
+            if (idx >= ramp_n) { idx = ramp_n - 1; }
+            out = out + ramp[idx];
+            tx = tx + 1;
+        }
+        out = out + "\n";
+        ty = ty + 1;
+    }
+    d["preview_label"].set_text(out);
+    return out;
+}
+
+# ─── 8. Resets (for test re-runs) ─────────────────────────────────
+fn dashboard_reset(d) {
+    __dash_ctrl[0] = 0;
+    __dash_ctrl[1] = 0;
+    d["status_label"].set_text("State: IDLE");
+    d["status_label"].set_color("#7fff7f");
+    d["progress"].set_value(0);
+    d["stats_label"].set_text("Stats: (no image yet)");
+    d["preview_label"].set_text("(preview will appear after render)");
+}
+
+# ─── 9. Read current config from the dashboard ───────────────────
+# Returns { scene_index, width, height, samples }.
+fn dashboard_config(d) {
+    let idx = d["scene_listbox"].get_selected();
+    let w = int(d["width_input"].get_value());
+    let h = int(d["height_input"].get_value());
+    let s = int(d["samples_input"].get_value());
+    return { "scene_index": idx, "width": w, "height": h, "samples": s };
+}

@@ -1,0 +1,4 @@
+# _probe132_s4_staticfield.hto — 探针: 静态字段
+# 预期: parser.py:402-403 -> SyntaxError "static must be followed by fn"
+class C { static let count = 0; }
+print(C.count);

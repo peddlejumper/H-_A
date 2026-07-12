@@ -1,0 +1,30 @@
+# t10 - variant pattern: basic with single/multi payload
+union Result {
+    Ok: value;
+    Err: msg;
+    Empty;
+}
+fn unwrap(r) {
+    return match r {
+        Ok(v) => v,
+        Err(m) => m,
+        Empty => "empty"
+    };
+}
+let ok = Result{Ok: 99};
+let err = Result{Err: "bad"};
+let emp = Result{Empty};
+print("t10_ok:" + str(unwrap(ok)));
+print("t10_err:" + unwrap(err));
+print("t10_empty:" + unwrap(emp));
+
+# variant with multi-payload
+union Pair {
+    P: a, b;
+}
+fn sum(p) {
+    return match p {
+        P(x, y) => x + y
+    };
+}
+print("t10_pair:" + str(sum(Pair{P: 3, 4})));

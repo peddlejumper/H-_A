@@ -1,0 +1,495 @@
+# ============================================================
+# round4_138_parser.hto — 解析器歧义与边界 (parser ambiguity & edge cases)
+# 测试智能体 Round 4 #138
+# H# v0.4.1
+#
+# 目标: 深度测试解析器在歧义/边界场景的行为:
+#   S1: 悬空 else (dangling else)
+#   S2: 运算符优先级 (operator precedence)
+#   S3: 一元负号 (unary minus)
+#   S4: 链式比较 (chained comparison, C-style left-assoc)
+#   S5: 分号 (semicolon, 同行多语句)
+#   S6: 空块 (empty blocks)
+#   S7: 表达式语句 (expression statements)
+#   S8: 赋值链 (assignment chain — 探测行为)
+#   S9: 复杂 match (complex match patterns)
+#   S10: 嵌套复杂表达式 (nested complex expressions)
+#
+# 已知限制 (不是 bug):
+#   - a < b < c 是左结合 (C 风格), 不是链式比较
+#   - ** 幂运算未实现
+#   - if 语句体必须是 { } 块 (不支持无括号语句体)
+#   - match 不支持 or-pattern (1 | 2)
+#   - 赋值是语句不是表达式 (a = b = c 是语法错误)
+#
+# 注: S1/S8/S9 的语法错误场景用独立探针文件测试。
+# ============================================================
+
+print("=== R4.138 START ===");
+
+# ============================================================
+# 工具: 安全执行包装
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# S1: 悬空 else (dangling else)
+# H# if 语句体必须是 { } 块。else 绑定到最近的 if。
+# 测试 else 绑定到内层 if vs 外层 if。
+# ============================================================
+print("--- S1: dangling else ---");
+
+# S1.1: else 绑定到内层 if (最近原则)
+# if (a) { if (b) { print(1); } else { print(2); } }
+# a=true, b=true  -> print(1)  (内层 if 取真, else 不执行)
+# a=true, b=false -> print(2)  (内层 if 取假, else 执行)
+# a=false         -> 无输出    (外层 if 取假, 内层整体跳过)
+fn dangling_inner_true() {
+    if (true) { if (true) { print(1); } else { print(2); } }
+}
+fn dangling_inner_false() {
+    if (true) { if (false) { print(1); } else { print(2); } }
+}
+fn dangling_outer_false() {
+    if (false) { if (true) { print(1); } else { print(2); } }
+}
+safe("r138_s1_inner_tt", fn() { dangling_inner_true(); return "ok"; });
+safe("r138_s1_inner_tf", fn() { dangling_inner_false(); return "ok"; });
+safe("r138_s1_outer_f", fn() { dangling_outer_false(); return "ok"; });
+
+# S1.2: else 绑定到外层 if (显式空块隔离)
+# if (a) { if (b) { print(1); } } else { print(2); }
+# a=true, b=true  -> print(1)  (内层 if 取真)
+# a=true, b=false -> 无输出    (内层 if 取假, 无 else)
+# a=false         -> print(2)  (外层 else 执行)
+fn dangling_outer_else_tt() {
+    if (true) { if (true) { print(1); } } else { print(2); }
+}
+fn dangling_outer_else_tf() {
+    if (true) { if (false) { print(1); } } else { print(2); }
+}
+fn dangling_outer_else_f() {
+    if (false) { if (true) { print(1); } } else { print(2); }
+}
+safe("r138_s1_oe_tt", fn() { dangling_outer_else_tt(); return "ok"; });
+safe("r138_s1_oe_tf", fn() { dangling_outer_else_tf(); return "ok"; });
+safe("r138_s1_oe_f", fn() { dangling_outer_else_f(); return "ok"; });
+
+# S1.3: 三层嵌套 if/else if/else
+fn classify3(n) {
+    if (n < 0) { return "neg"; }
+    else if (n == 0) { return "zero"; }
+    else { return "pos"; }
+}
+safe("r138_s1_3_neg", fn() { return classify3(-5); });
+safe("r138_s1_3_zero", fn() { return classify3(0); });
+safe("r138_s1_3_pos", fn() { return classify3(5); });
+
+# S1.4: else if 链 — 5 层
+fn grade5(score) {
+    if (score >= 90) { return "A"; }
+    else if (score >= 80) { return "B"; }
+    else if (score >= 70) { return "C"; }
+    else if (score >= 60) { return "D"; }
+    else { return "F"; }
+}
+safe("r138_s1_5_a", fn() { return grade5(95); });
+safe("r138_s1_5_b", fn() { return grade5(85); });
+safe("r138_s1_5_c", fn() { return grade5(75); });
+safe("r138_s1_5_d", fn() { return grade5(65); });
+safe("r138_s1_5_f", fn() { return grade5(55); });
+
+# ============================================================
+# S2: 运算符优先级 (operator precedence)
+# * / % 高于 + - ; 括号覆盖; 左结合
+# ============================================================
+print("--- S2: operator precedence ---");
+
+safe("r138_s2_mul_first", fn() { return 1 + 2 * 3; });        # 7
+safe("r138_s2_paren", fn() { return (1 + 2) * 3; });          # 9
+safe("r138_s2_mul_then_add", fn() { return 2 * 3 + 1; });     # 7
+safe("r138_s2_left_assoc", fn() { return 1 + 2 - 3 + 4; });   # 4
+safe("r138_s2_mixed", fn() { return 2 + 3 * 4 - 1; });        # 13
+safe("r138_s2_div_mod", fn() { return 20 / 4 + 17 % 5; });    # 5 + 2 = 7
+safe("r138_s2_deep_paren", fn() { return ((1 + 2) * (3 + 4)) - 5; }); # 21 - 5 = 16
+safe("r138_s2_all_ops", fn() { return 2 * 3 + 4 * 5 - 6 / 2; }); # 6 + 20 - 3 = 23
+
+# ============================================================
+# S3: 一元负号 (unary minus)
+# unary 在 parser 中展开为 0 - expr
+# ============================================================
+print("--- S3: unary minus ---");
+
+safe("r138_s3_neg5", fn() { return -5; });              # -5
+safe("r138_s3_neg2_mul3", fn() { return -2 * 3; });     # -6
+safe("r138_s3_2_minus_neg3", fn() { return 2 - -3; });  # 5
+safe("r138_s3_2_plus_neg3", fn() { return 2 + -3; });   # -1
+safe("r138_s3_paren", fn() { return -(2 + 3); });       # -5
+safe("r138_s3_double_neg", fn() { return -(-5); });     # 5
+safe("r138_s3_neg_first", fn() { return -2 + 3; });     # 1
+safe("r138_s3_neg_both", fn() { return -2 * -3; });     # 6
+safe("r138_s3_complex", fn() { return -2 * 3 + -4 * -5; }); # -6 + 20 = 14
+
+# ============================================================
+# S4: 链式比较 (chained comparison — C-style left-assoc)
+# 1 < 2 < 3 => (1 < 2) < 3 => true < 3 => 1 < 3 => true
+# 已知限制: 不是数学链式比较
+# ============================================================
+print("--- S4: chained comparison ---");
+
+safe("r138_s4_true_chain", fn() { return 1 < 2 < 3; });   # (1<2)<3 = true<3 = 1<3 = true
+safe("r138_s4_false_chain", fn() { return 3 < 2 < 1; }); # (3<2)<1 = false<1 = 0<1 = true
+safe("r138_s4_gt_chain", fn() { return 5 > 3 > 1; });    # (5>3)>1 = true>1 = 1>1 = false
+safe("r138_s4_eq_chain", fn() { return 1 == 1 == true; }); # (1==1)==true = true==true = true
+safe("r138_s4_mixed", fn() { return 1 < 2 == true; });   # (1<2)==true = true==true = true
+safe("r138_s4_le_ge", fn() { return 1 <= 1 >= 1; });     # (1<=1)>=1 = true>=1 = 1>=1 = true
+
+# ============================================================
+# S5: 分号 (semicolon — 同行多语句)
+# ============================================================
+print("--- S5: semicolons ---");
+
+# S5.1: 同行多语句
+fn multi_stmt() {
+    let x = 1; let y = 2; let z = 3; return x + y + z;
+}
+safe("r138_s5_multi", fn() { return multi_stmt(); });  # 6
+
+# S5.2: 同行赋值 + print
+fn inline_print() {
+    let a = 10; let b = 20; return a + b;
+}
+safe("r138_s5_inline", fn() { return inline_print(); });  # 30
+
+# S5.3: 表达式语句可省略分号 (仅当后跟 } / EOF / ) 时)
+# 注: let/return/赋值语句始终需要分号 — 这是解析器限制
+fn optional_semi() {
+    let a = 1;
+    let b = 2;
+    a + b
+}
+safe("r138_s5_optional", fn() { return optional_semi(); });  # null (表达式语句值被丢弃)
+
+# S5.4: 混合分号 — let/return 必须有分号
+fn mixed_semi() {
+    let a = 1; let b = 2;
+    let c = 3; let d = 4;
+    return a + b + c + d;
+}
+safe("r138_s5_mixed", fn() { return mixed_semi(); });  # 10
+
+# S5.5: 空语句 (仅分号) — 用探针文件 _probe138_s5_emptysemi.hto 测试
+# (单独分号在解析器中会触发 SyntaxError, 不能放在主文件中)
+
+# ============================================================
+# S6: 空块 (empty blocks)
+# ============================================================
+print("--- S6: empty blocks ---");
+
+# S6.1: 空函数体
+fn empty_fn() { }
+safe("r138_s6_empty_fn", fn() { empty_fn(); return "ok"; });
+
+# S6.2: 空函数体 + return
+fn empty_then_return() {
+    if (true) { }
+    return "ok";
+}
+safe("r138_s6_empty_if", fn() { return empty_then_return(); });
+
+# S6.3: 空 for 循环体
+fn empty_for() {
+    let count = 0;
+    for i in [1, 2, 3] { }
+    return count;
+}
+safe("r138_s6_empty_for", fn() { return empty_for(); });  # 0
+
+# S6.4: 空 while 循环体 (false 条件, 不执行)
+fn empty_while() {
+    while (false) { }
+    return "ok";
+}
+safe("r138_s6_empty_while", fn() { return empty_while(); });
+
+# S6.5: 空类
+class EmptyClass { }
+safe("r138_s6_empty_class", fn() {
+    let e = new EmptyClass();
+    return "ok";
+});
+
+# S6.6: 嵌套空块
+fn nested_empty() {
+    if (true) {
+        if (true) { }
+        else { }
+    }
+    return "ok";
+}
+safe("r138_s6_nested_empty", fn() { return nested_empty(); });
+
+# ============================================================
+# S7: 表达式语句 (expression statements)
+# 无赋值的表达式作为语句 — 值被丢弃
+# ============================================================
+print("--- S7: expression statements ---");
+
+# S7.1: 算术表达式语句
+safe("r138_s7_arith", fn() {
+    1 + 2;
+    return "ok";
+});
+
+# S7.2: 字符串表达式语句
+safe("r138_s7_string", fn() {
+    "hello";
+    return "ok";
+});
+
+# S7.3: 列表表达式语句
+safe("r138_s7_list", fn() {
+    [1, 2, 3];
+    return "ok";
+});
+
+# S7.4: 字典表达式语句
+safe("r138_s7_dict", fn() {
+    {"a": 1};
+    return "ok";
+});
+
+# S7.5: 函数调用表达式语句 (无 return)
+fn side_effect() {
+    print("r138_s7_side_effect:called");
+}
+safe("r138_s7_call", fn() {
+    side_effect();
+    return "ok";
+});
+
+# S7.6: 复杂表达式语句
+safe("r138_s7_complex", fn() {
+    1 + 2 * 3 - 4 / 2;
+    "x" + "y";
+    [1, 2] + [3, 4];
+    return "ok";
+});
+
+# ============================================================
+# S8: 赋值链 (assignment chain)
+# 注: H# 赋值是语句不是表达式, a = b = c = 0 应为语法错误。
+# 这里测试顺序赋值 (合法) 和通过变量链传递值。
+# 语法错误场景用探针文件 _probe138_s8_assignchain.hto 测试。
+# ============================================================
+print("--- S8: assignment chain ---");
+
+# S8.1: 顺序赋值 (合法)
+fn sequential_assign() {
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    a = 1;
+    b = a;
+    c = b;
+    return str(a) + "," + str(b) + "," + str(c);
+}
+safe("r138_s8_sequential", fn() { return sequential_assign(); });  # 1,1,1
+
+# S8.2: 通过表达式赋值
+fn expr_assign() {
+    let a = 0;
+    let b = 0;
+    a = 5 + 3;
+    b = a * 2;
+    return str(a) + "," + str(b);
+}
+safe("r138_s8_expr", fn() { return expr_assign(); });  # 8,16
+
+# S8.3: 赋值后立即使用
+fn use_after_assign() {
+    let a = 0;
+    a = 10;
+    return a + 5;
+}
+safe("r138_s8_use", fn() { return use_after_assign(); });  # 15
+
+# S8.4: 多变量独立赋值
+fn multi_var() {
+    let x = 1;
+    let y = 2;
+    let z = 3;
+    x = x + y;
+    y = y * z;
+    z = z - x;
+    return str(x) + "," + str(y) + "," + str(z);
+}
+safe("r138_s8_multi", fn() { return multi_var(); });  # x=3, y=6, z=0
+
+# S8.5: 字段赋值链
+class Box { let v = 0; }
+fn field_assign() {
+    let a = new Box();
+    let b = new Box();
+    a.v = 5;
+    b.v = a.v;
+    a.v = 10;
+    return str(a.v) + "," + str(b.v);
+}
+safe("r138_s8_field", fn() { return field_assign(); });  # 10,5
+
+# ============================================================
+# S9: 复杂 match (complex match patterns)
+# 注: H# 不支持 or-pattern (1 | 2 => ...)。语法错误场景用探针文件。
+# 这里测试 match 的各种合法复杂用法。
+# ============================================================
+print("--- S9: complex match ---");
+
+# S9.1: 多字面量 arm + 默认
+fn multi_lit(x) {
+    return match x {
+        1 => "one",
+        2 => "two",
+        3 => "three",
+        _ => "other"
+    };
+}
+safe("r138_s9_lit_1", fn() { return multi_lit(1); });
+safe("r138_s9_lit_2", fn() { return multi_lit(2); });
+safe("r138_s9_lit_3", fn() { return multi_lit(3); });
+safe("r138_s9_lit_9", fn() { return multi_lit(9); });
+
+# S9.2: 用 guard 模拟 or-pattern (1 => ..., n if n == 2 or n == 3 => ...)
+fn guard_or(x) {
+    return match x {
+        1 => "one",
+        n if n == 2 or n == 3 => "two-or-three",
+        _ => "other"
+    };
+}
+safe("r138_s9_guard_1", fn() { return guard_or(1); });
+safe("r138_s9_guard_2", fn() { return guard_or(2); });
+safe("r138_s9_guard_3", fn() { return guard_or(3); });
+safe("r138_s9_guard_9", fn() { return guard_or(9); });
+
+# S9.3: 嵌套 match 表达式
+fn nested_match(x, y) {
+    return match x {
+        0 => match y { 0 => "00", _ => "0x" },
+        1 => match y { 1 => "11", _ => "1x" },
+        _ => "xx"
+    };
+}
+safe("r138_s9_nest_00", fn() { return nested_match(0, 0); });
+safe("r138_s9_nest_0x", fn() { return nested_match(0, 9); });
+safe("r138_s9_nest_11", fn() { return nested_match(1, 1); });
+safe("r138_s9_nest_1x", fn() { return nested_match(1, 9); });
+safe("r138_s9_nest_xx", fn() { return nested_match(9, 9); });
+
+# S9.4: match + 算术/字符串拼接
+fn match_arith(x) {
+    return (match x { 1 => 10, 2 => 20, _ => 0 }) + 5;
+}
+safe("r138_s9_arith_1", fn() { return match_arith(1); });
+safe("r138_s9_arith_2", fn() { return match_arith(2); });
+safe("r138_s9_arith_9", fn() { return match_arith(9); });
+
+# S9.5: 类型模式 + 绑定 + guard
+fn type_guard(x) {
+    return match x {
+        is int as n if n > 100 => "big-int",
+        is int as n => "int:" + str(n),
+        is str as s => "str:" + str(len(s)),
+        _ => "other"
+    };
+}
+safe("r138_s9_tg_big", fn() { return type_guard(200); });
+safe("r138_s9_tg_int", fn() { return type_guard(50); });
+safe("r138_s9_tg_str", fn() { return type_guard("hello"); });
+safe("r138_s9_tg_other", fn() { return type_guard(3.14); });
+
+# ============================================================
+# S10: 嵌套复杂表达式 (nested complex expressions)
+# ============================================================
+print("--- S10: nested complex expressions ---");
+
+# S10.1: 嵌套函数调用 ff(gg(hh(x)))
+# 注: 函数名用 ff/gg/hh 而非 f/g/h, 因为 safe() 的参数名 f 会遮蔽全局 fn f
+# (见 BUG-1: 函数参数泄漏到全局作用域)
+fn hh(x) { return x + 1; }
+fn gg(x) { return x * 2; }
+fn ff(x) { return x - 3; }
+safe("r138_s10_fgh", fn() { return ff(gg(hh(5))); });  # hh(5)=6, gg(6)=12, ff(12)=9
+
+# S10.2: 嵌套索引 a[b[c]]
+fn nested_index() {
+    let a = [10, 20, 30];
+    let b = [0, 1, 2];
+    let c = 1;
+    return a[b[c]];  # b[1]=1, a[1]=20
+}
+safe("r138_s10_nested_idx", fn() { return nested_index(); });
+
+# S10.3: 方法链 obj.method().chain()
+class Chain {
+    let v = 0;
+    fn init() { self.v = 0; }
+    fn add(n) { self.v = self.v + n; return self; }
+    fn mul(n) { self.v = self.v * n; return self; }
+    fn get() { return self.v; }
+}
+safe("r138_s10_chain", fn() {
+    let c = new Chain();
+    return c.add(3).mul(4).add(2).get();  # ((0+3)*4)+2 = 14
+});
+
+# S10.4: 深层嵌套索引 + 字典
+fn deep_nest() {
+    let d = {"a": {"b": {"c": [1, 2, 3]}}};
+    return d["a"]["b"]["c"][2];  # 3
+}
+safe("r138_s10_deep", fn() { return deep_nest(); });
+
+# S10.5: 嵌套调用 + 算术
+fn complex_expr() {
+    let xs = [1, 2, 3, 4, 5];
+    return ff(gg(hh(xs[0]))) + ff(gg(hh(xs[1])));  # ff(gg(hh(1))) + ff(gg(hh(2)))
+    # hh(1)=2, gg(2)=4, ff(4)=1 ; hh(2)=3, gg(3)=6, ff(6)=3 ; 1+3=4
+}
+safe("r138_s10_complex", fn() { return complex_expr(); });
+
+# S10.6: 方法链 + 嵌套调用
+fn mixed_chain() {
+    let c = new Chain();
+    return c.add(hh(gg(2))).mul(ff(10)).get();
+    # gg(2)=4, hh(4)=5, add(5) -> v=5 ; ff(10)=7, mul(7) -> v=35 ; get -> 35
+}
+safe("r138_s10_mixed", fn() { return mixed_chain(); });
+
+# S10.7: 嵌套数组字面量 + 索引
+fn nested_array() {
+    let m = [[1, 2], [3, 4], [5, 6]];
+    return m[0][1] + m[1][0] + m[2][1];  # 2 + 3 + 6 = 11
+}
+safe("r138_s10_nested_arr", fn() { return nested_array(); });
+
+# S10.8: 复杂后缀表达式组合
+class Wrapper {
+    let data = [];
+    fn init() { self.data = [1, 2, 3]; }
+    fn get_data() { return self.data; }
+}
+fn postfix_combo() {
+    let w = new Wrapper();
+    return w.get_data()[1];  # 2
+}
+safe("r138_s10_postfix", fn() { return postfix_combo(); });
+
+print("=== R4.138 DONE ===");

@@ -1,0 +1,10 @@
+# T05 - Dicts
+let d = {"a": 1, "b": 2, "c": 3};
+print(d["a"]);
+print(d["b"]);
+print(d["c"]);
+print(len(d));
+d["d"] = 4;
+print(d["d"]);
+let empty = {};
+print(len(empty));

@@ -1,0 +1,23 @@
+# t23 — DIRECT (no try/catch) comparison of natives shared by PY & KT.
+# Runs to completion on both VMs so output can be diffed line-by-line.
+print("== t23 direct compare ==");
+print(len([]));
+print(len("hello"));
+print(len([1, 2, 3]));
+print(len({"a": 1, "b": 2}));
+print("str(nullptr)=" + str(nullptr));
+print("str(true)=" + str(true));
+print("str(false)=" + str(false));
+print("str([1, 2, 3])=" + str([1, 2, 3]));
+print("int(3.9)=" + str(int(3.9)));
+print("int(true)=" + str(int(true)));
+print("float(2)=" + str(float(2)));
+print("substring(1,3)=" + substring("hello", 1, 3));
+print("substring(0,100)=" + substring("hello", 0, 100));
+print("ord(A)=" + str(ord("A")));
+print("chr(66)=" + chr(66));
+let xs = [1, 2, 3];
+push(xs, 4);
+print("after push=" + str(xs));
+print("pop=" + str(pop(xs)));
+print("after pop=" + str(xs));

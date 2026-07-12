@@ -1,0 +1,53 @@
+# String utilities demonstration
+
+# String length
+let s = "Hello, World!";
+print("Length: " + str(len(s)));
+
+# Substring: substring(s, start, length)
+print("First 5 chars: " + substring(s, 0, 5));
+print("Chars 7-12: " + substring(s, 7, 5));
+
+# Character code conversion
+print("ASCII of 'A': " + str(ord("A")));
+print("ASCII of 'a': " + str(ord("a")));
+print("Char from 65: " + chr(65));
+print("Char from 97: " + chr(97));
+
+# Build string from char codes
+fn build_alpha() {
+    let result = "";
+    let i = 65;
+    while (i <= 90) {
+        result = result + chr(i);
+        i = i + 1;
+    }
+    return result;
+}
+print("Uppercase alphabet: " + build_alpha());
+
+# String concatenation and conversion
+let n = 42;
+let f = 3.14;
+let b = true;
+print("int to str: " + str(n));
+print("float to str: " + str(f));
+print("bool to str: " + str(b));
+
+# String to number conversion
+print("str to int: " + str(int("123")));
+print("str to float: " + str(float("3.14")));
+
+# Check if string contains character
+fn contains_char(s, ch) {
+    let i = 0;
+    while (i < len(s)) {
+        if (substring(s, i, 1) == ch) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+print("Contains 'W': " + str(contains_char(s, "W")));
+print("Contains 'z': " + str(contains_char(s, "z")));

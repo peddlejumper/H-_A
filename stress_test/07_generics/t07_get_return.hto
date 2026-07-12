@@ -1,0 +1,25 @@
+# t07_get_return.hto — new Box<int>(42) + b.get() 返回值
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Box<T> {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+    fn get() { return self.value; }
+}
+
+let ib = new Box<int>(42);
+let sb = new Box<string>("hi");
+check("7/int_get", ib.get() == 42);
+check("7/str_get", sb.get() == "hi");
+
+# 返回值参与表达式
+check("7/expr_add", ib.get() + 8 == 50);
+check("7/expr_concat", sb.get() + "!" == "hi!");
+
+# float 类型参数
+let db = new Box<float>(3.14);
+print("float get=" + str(db.get()));
+check("7/float_get", db.get() == 3.14);

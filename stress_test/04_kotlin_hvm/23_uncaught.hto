@@ -1,0 +1,7 @@
+# 23_uncaught.hto — 未捕获异常 (顶层抛出)
+fn boom() {
+    throw "kaboom";
+}
+print("before");
+boom();
+print("never reached");

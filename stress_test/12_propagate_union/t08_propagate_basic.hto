@@ -1,0 +1,17 @@
+# T08 - ? basic propagation: throw + ? capture as value
+fn risky(n) {
+    if (n < 0) {
+        throw "neg";
+    }
+    return n * 2;
+}
+
+# no exception: ? yields normal return
+let v1 = risky(5)?;
+print(v1);
+# exception: ? captures payload as value
+let v2 = risky(-1)?;
+print(v2);
+# zero boundary
+let v3 = risky(0)?;
+print(v3);

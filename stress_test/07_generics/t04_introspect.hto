@@ -1,0 +1,19 @@
+# t04_introspect.hto — 类型参数内省：obj.__type_args__ / Cls.__type_params__
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Box<T> {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+}
+
+let b = new Box<int>(42);
+try { print("inst ta0=" + str(b.__type_args__[0])); } catch (e) { print("inst ta err=" + str(e)); }
+try { print("cls tp0=" + str(Box.__type_params__[0])); } catch (e) { print("cls tp err=" + str(e)); }
+
+check("4/inst_ta0", b.__type_args__[0] == "int");
+check("4/inst_ta_len", len(b.__type_args__) == 1);
+check("4/cls_tp0", Box.__type_params__[0] == "T");
+check("4/cls_tp_len", len(Box.__type_params__) == 1);

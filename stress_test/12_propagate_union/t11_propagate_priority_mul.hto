@@ -1,0 +1,14 @@
+# T11 - ? priority with * : a * b?  — does ? bind to b only, or to (a*b)?
+# risky(-1) throws 7.
+# If parsed as `2 * (risky(-1)?)`  -> 2 * 7 = 14
+# If parsed as `(2 * risky(-1))?` -> inner throws 7, ? catches -> 7
+fn risky(n) {
+    if (n < 0) { throw 7; }
+    return n;
+}
+let r = 2 * risky(-1)?;
+print(r);
+
+# control: with a non-throwing call, both parses agree on 14
+let r2 = 2 * risky(7)?;
+print(r2);

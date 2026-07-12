@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZZW.CodeTeacher.Domain</RootNamespace>
+  </PropertyGroup>
+  <!-- 领域层不依赖任何外部包，纯净 -->
+</Project>

@@ -1,0 +1,19 @@
+# t05_compat.hto — 非泛型类兼容：class Point + new Point(1,2)
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Point {
+    let x = 0;
+    let y = 0;
+    fn init(px, py) { self.x = px; self.y = py; }
+    fn sum() { return self.x + self.y; }
+}
+
+let pt = new Point(1, 2);
+check("5/sum", pt.sum() == 3);
+try { print("no_typeargs=" + str(pt.__type_args__)); } catch (e) { print("no_ta err=" + str(e)); }
+check("5/no_ta_is_null", pt.__type_args__ == nullptr);
+try { print("cls_tp_len=" + str(len(Point.__type_params__))); } catch (e) { print("cls_tp err=" + str(e)); }
+check("5/no_tp_len0", len(Point.__type_params__) == 0);

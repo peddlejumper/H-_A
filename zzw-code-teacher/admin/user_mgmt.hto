@@ -1,0 +1,155 @@
+# admin/user_mgmt.hto
+# 用户管理: 列表 + 角色 / 状态修改 + 重置密码
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "shared/json_utils.hto";
+
+let _um_widgets = nullptr;
+
+fn build(parent, x, y, w, h) {
+    let t = ide_theme();
+    let panel = new Panel();
+    panel.init_panel("user_mgmt");
+    panel.set_pos(x, y);
+    panel.set_size(w, h);
+    ide_paint_panel(panel, "soft");
+    parent.add_child(panel);
+    # 标题
+    let title = new Label();
+    title.init_label("👥 用户管理");
+    title.set_pos(20, 10);
+    title.set_size(w - 40, 26);
+    title.set_color(t["accent"]);
+    title.set_font_size(15);
+    panel.add_child(title);
+    # 用户列表
+    let list = new ListBox();
+    list.init_listbox();
+    list.set_pos(20, 46);
+    list.set_size(420, h - 60);
+    panel.add_child(list);
+    # 详情面板
+    let detail = new Label();
+    detail.init_label("(选择左侧用户查看详情)");
+    detail.set_pos(460, 46);
+    detail.set_size(w - 480, h - 60);
+    detail.set_color(t["fg"]);
+    detail.set_word_wrap(true);
+    detail.set_font_size(11);
+    detail.set_bg_color(t["bg_alt"]);
+    panel.add_child(detail);
+    # 操作按钮
+    let btn_refresh = new Button();
+    btn_refresh.init_button("🔄 刷新");
+    btn_refresh.set_pos(20, 14);
+    btn_refresh.set_size(80, 24);
+    btn_refresh.set_pos(w - 240, 14);
+    panel.add_child(btn_refresh);
+    let btn_ban = new Button();
+    btn_ban.init_button("⛔ 停用");
+    btn_ban.set_pos(w - 150, 14);
+    btn_ban.set_size(60, 24);
+    panel.add_child(btn_ban);
+    let btn_unban = new Button();
+    btn_unban.init_button("✓ 启用");
+    btn_unban.set_pos(w - 80, 14);
+    btn_unban.set_size(60, 24);
+    panel.add_child(btn_unban);
+    _um_widgets = {
+        "panel": panel,
+        "list": list,
+        "detail": detail,
+        "btn_refresh": btn_refresh,
+        "btn_ban": btn_ban,
+        "btn_unban": btn_unban
+    };
+    btn_refresh.onClick = fn() { refresh(); };
+    list.onChange = fn() { _show_detail(); };
+    btn_ban.onClick = fn() { _set_status("banned"); };
+    btn_unban.onClick = fn() { _set_status("active"); };
+    refresh();
+    return _um_widgets;
+}
+
+let _um_cache = [];
+
+fn refresh() {
+    if (_um_widgets != nullptr) {
+        let resp = admin_get("/api/admin/users");
+        let data = admin_parse(resp);
+        if (data == nullptr or not data["ok"]) {
+            notify_error("用户管理", "加载失败");
+        } else {
+            _um_cache = data["data"];
+            let lb = _um_widgets["list"];
+            lb.clear();
+            let i = 0;
+            while (i < len(_um_cache)) {
+                let u = _um_cache[i];
+                let icon = "🟢";
+                if (u["status"] == "banned") { icon = "⛔"; }
+                let r = "👑";
+                if (u["role"] == "student") { r = "🎓"; }
+                if (u["role"] == "teacher") { r = "📚"; }
+                lb.add_item(icon + " " + r + " " + u["username"] + "  AC:" + str(u["total_accepted"]) + "/" + str(u["total_submissions"]));
+                i = i + 1;
+            }
+            if (len(_um_cache) == 0) { lb.add_item("(无用户)"); }
+        }
+    }
+}
+
+fn _current_user() {
+    if (_um_widgets == nullptr) { return nullptr; }
+    let idx = _um_widgets["list"].get_selected();
+    if (idx < 0 or idx >= len(_um_cache)) { return nullptr; }
+    return _um_cache[idx];
+}
+
+fn _show_detail() {
+    let u = _current_user();
+    if (u != nullptr) {
+        let t = "== 用户详情 ==\n";
+        t = t + "ID: " + u["id"] + "\n";
+        t = t + "用户名: " + u["username"] + "\n";
+        t = t + "角色: " + u["role"] + "\n";
+        t = t + "状态: " + u["status"] + "\n";
+        t = t + "邮箱: ";
+        if (u["email"] != nullptr) {
+            t = t + u["email"];
+        } else {
+            t = t + "(未填)";
+        }
+        t = t + "\n";
+        t = t + "班级: ";
+        if (u["class_id"] != "") {
+            t = t + u["class_id"];
+        } else {
+            t = t + "(未分)";
+        }
+        t = t + "\n";
+        t = t + "提交数: " + str(u["total_submissions"]) + "\n";
+        t = t + "通过数: " + str(u["total_accepted"]) + "\n";
+        t = t + "注册时间: " + str(u["created_at"]) + "\n";
+        t = t + "最后登录: " + str(u["last_login"]) + "\n";
+        _um_widgets["detail"].set_text(t);
+    }
+}
+
+fn _set_status(s) {
+    let u = _current_user();
+    if (u == nullptr) {
+        notify_warning("提示", "请先选择用户");
+    } else {
+        let body = json_stringify({"status": s});
+        let resp = admin_put("/api/admin/users/" + u["id"], body);
+        let data = admin_parse(resp);
+        if (data == nullptr or not data["ok"]) {
+            notify_error("操作失败", http_get_body(resp));
+        } else {
+            refresh();
+            notify_info("成功", "用户状态已更新");
+        }
+    }
+}

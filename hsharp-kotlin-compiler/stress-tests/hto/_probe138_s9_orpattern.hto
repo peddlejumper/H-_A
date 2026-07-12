@@ -1,0 +1,16 @@
+# _probe138_s9_orpattern.hto — match or-pattern (1 | 2 => ...)
+# 测试: match 是否支持 or-pattern (多字面量用 | 分隔)
+# 预期: 语法错误 — parse_pattern() 不处理 BITOR
+#   解析 2 后期望 FAT_ARROW (=>) 但遇到 | -> SyntaxError
+
+fn test(x) {
+    return match x {
+        1 => "a",
+        2 | 3 => "b",
+        _ => "c"
+    };
+}
+print(test(1));
+print(test(2));
+print(test(3));
+print(test(9));

@@ -1,0 +1,7 @@
+# r5_150_mod_c.hto — leaf module C for nested-import chain (A -> B -> C)
+
+let r5_150_c_val = 300;
+
+fn r5_150_c() {
+    return r5_150_c_val;
+}

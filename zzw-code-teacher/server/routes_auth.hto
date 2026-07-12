@@ -1,0 +1,92 @@
+# server/routes_auth.hto
+# 认证路由: /api/auth/register, /api/auth/login, /api/auth/logout, /api/auth/me
+
+import "shared/json_utils.hto";
+import "shared/storage.hto";
+import "shared/auth.hto";
+import "shared/models.hto";
+
+fn register() {
+    route("POST", "/api/auth/register", _register);
+    route("POST", "/api/auth/login", _login);
+    route("GET", "/api/auth/me", _me);
+    route("GET", "/api/health", _health);
+}
+
+fn _register(req) {
+    let body = body_json(req);
+    let username = json_get(body, "username");
+    let password = json_get(body, "password");
+    let role = json_get(body, "role");
+    if (username == nullptr or password == nullptr) {
+        return http_response(400, json_stringify(json_response_err("用户名/密码必填")), "application/json");
+    }
+    if (role == nullptr) { role = "student"; }
+    if (role != "student" and role != "teacher" and role != "admin") {
+        return http_response(400, json_stringify(json_response_err("role 非法")), "application/json");
+    }
+    # 检查唯一
+    let existing = storage_find_one("users", "username", username);
+    if (existing != nullptr) {
+        return http_response(409, json_stringify(json_response_err("用户名已存在")), "application/json");
+    }
+    let uid = "u_" + str(time_now()) + "_" + str(rand_int(1000, 9999));
+    let u = user_new(uid, username, password_hash(password), role);
+    storage_insert("users", u);
+    let tok = token_generate(uid);
+    return http_response(200, json_stringify({
+        "ok": true,
+        "data": {"token": tok, "user": user_to_json(u)},
+        "error": ""
+    }), "application/json");
+}
+
+fn _login(req) {
+    let body = body_json(req);
+    let username = json_get(body, "username");
+    let password = json_get(body, "password");
+    if (username == nullptr or password == nullptr) {
+        return http_response(400, json_stringify(json_response_err("用户名/密码必填")), "application/json");
+    }
+    let u = storage_find_one("users", "username", username);
+    if (u == nullptr) {
+        return http_response(401, json_stringify(json_response_err("用户不存在")), "application/json");
+    }
+    if (u["status"] == "banned") {
+        return http_response(403, json_stringify(json_response_err("账号已停用")), "application/json");
+    }
+    if (not password_verify(password, u["password_hash"])) {
+        return http_response(401, json_stringify(json_response_err("密码错误")), "application/json");
+    }
+    u["last_login"] = time_now();
+    storage_update("users", u["id"], u);
+    let tok = token_generate(u["id"]);
+    return http_response(200, json_stringify({
+        "ok": true,
+        "data": {"token": tok, "user": user_to_json(u)},
+        "error": ""
+    }), "application/json");
+}
+
+fn _me(req) {
+    # 鉴权在中间件
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    return http_response(200, json_stringify({
+        "ok": true,
+        "data": user_to_json(req["user"]),
+        "error": ""
+    }), "application/json");
+}
+
+fn _health(req) {
+    return http_response(200, json_stringify({
+        "ok": true,
+        "data": {"status": "ok", "service": "zzw-code-teacher", "ts": time_now()},
+        "error": ""
+    }), "application/json");
+}
+
+# 自动注册
+register();

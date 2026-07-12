@@ -1,0 +1,794 @@
+# round3_111_match.hto — match 穷尽性与复杂模式
+# 测试智能体 #111。聚焦 round2_92 未覆盖或未深入的边界。
+# 每个 probe 用 try/catch 包住，输出 r111_<name>:<result>，便于失败定位。
+# 注：H# lambda 须 fn(params) { body }，无 expr-body。
+# 注：or 模式 `1 | 2 | 3` 不支持（编译期错误），故跳过。
+# 注：match arm body 须为表达式（不能是 break/continue/throw 语句）。
+
+# ============================================================
+# 工具：安全执行包装
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# T01: guard 中函数调用 — n if is_prime(n) =>
+# ============================================================
+fn is_prime(n) {
+    if (n < 2) { return false; }
+    let i = 2;
+    while (i * i <= n) {
+        if (n % i == 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+fn classify(n) {
+    return match n {
+        x if is_prime(x) => "prime:" + str(x),
+        x if x < 2 => "small",
+        _ => "composite"
+    };
+}
+safe("r111_guard_fn_prime", fn() { return classify(7); });
+safe("r111_guard_fn_small", fn() { return classify(0); });
+safe("r111_guard_fn_comp", fn() { return classify(8); });
+safe("r111_guard_fn_prime2", fn() { return classify(13); });
+
+# ============================================================
+# T02: guard 中复杂条件 — && 和 ||
+# ============================================================
+fn range_check(n) {
+    return match n {
+        x if x > 0 && x < 100 => "in-range",
+        x if x < 0 || x >= 100 => "out-range",
+        _ => "edge"
+    };
+}
+safe("r111_guard_and_50", fn() { return range_check(50); });
+safe("r111_guard_and_0", fn() { return range_check(0); });
+safe("r111_guard_and_99", fn() { return range_check(99); });
+safe("r111_guard_and_100", fn() { return range_check(100); });
+safe("r111_guard_or_neg", fn() { return range_check(-5); });
+safe("r111_guard_or_big", fn() { return range_check(200); });
+
+# ============================================================
+# T03: match 作为参数 / 元素 / 值
+# (注：print 是语句不是表达式，故不能 print(match x{...}) 直接调用)
+# ============================================================
+# match 作为函数实参
+fn double_it(x) { return x * 2; }
+safe("r111_match_arg_func", fn() {
+    return double_it(match 3 { 1 => 10, 2 => 20, _ => 30 });
+});
+
+# match 作为 list 元素
+safe("r111_match_in_list", fn() {
+    let xs = [match 1 { 1 => 100, _ => 0 }, match 2 { 2 => 200, _ => 0 }];
+    return xs;
+});
+
+# match 作为 dict 值
+safe("r111_match_in_dict", fn() {
+    let d = {"a": match 1 { 1 => "A", _ => "?" }, "b": match 2 { 2 => "B", _ => "?" }};
+    return d;
+});
+
+# match 作为字符串拼接的操作数
+safe("r111_match_concat_arg", fn() {
+    return "v=" + (match 2 { 1 => "one", 2 => "two", _ => "other" }) + "!";
+});
+
+# ============================================================
+# T04: 分支返回不同类型
+# ============================================================
+fn mixed_types(x) {
+    return match x {
+        1 => "one",
+        2 => 2,
+        3 => true,
+        4 => null,
+        _ => [1, 2, 3]
+    };
+}
+safe("r111_mixed_str", fn() { return mixed_types(1); });
+safe("r111_mixed_int", fn() { return mixed_types(2); });
+safe("r111_mixed_bool", fn() { return mixed_types(3); });
+safe("r111_mixed_null", fn() { return mixed_types(4); });
+safe("r111_mixed_list", fn() { return mixed_types(9); });
+
+# ============================================================
+# T05: 类型模式 — 不存在的类名 (运行时?)
+# ============================================================
+class Plain { }
+fn nonexistent_type(x) {
+    return match x {
+        is NonExistentClass => "nec",
+        _ => "other"
+    };
+}
+let plain_inst = new Plain();
+safe("r111_type_nonexistent", fn() { return nonexistent_type(42); });
+safe("r111_type_nonexistent_inst", fn() { return nonexistent_type(plain_inst); });
+
+# ============================================================
+# T06: 类型模式 — interface (implements)
+# ============================================================
+interface Drawable { }
+class Circle implements Drawable { }
+class Square implements Drawable { }
+class Triangle { }
+fn draw_match(x) {
+    return match x {
+        is Drawable => "drawable",
+        _ => "not-drawable"
+    };
+}
+let circle_inst = new Circle();
+let square_inst = new Square();
+let triangle_inst = new Triangle();
+safe("r111_iface_circle", fn() { return draw_match(circle_inst); });
+safe("r111_iface_square", fn() { return draw_match(square_inst); });
+safe("r111_iface_triangle", fn() { return draw_match(triangle_inst); });
+safe("r111_iface_int", fn() { return draw_match(42); });
+
+# ============================================================
+# T07: 类型模式 — 类型绑定 + guard 组合
+# ============================================================
+fn typ_bind_guard(x) {
+    return match x {
+        is int as n if n > 100 => "big-int:" + str(n),
+        is int as n if n < 0 => "neg-int:" + str(n),
+        is int as n => "int:" + str(n),
+        is str as s if len(s) > 3 => "long-str:" + s,
+        is str as s => "short-str:" + s,
+        _ => "other"
+    };
+}
+safe("r111_tbg_big", fn() { return typ_bind_guard(200); });
+safe("r111_tbg_neg", fn() { return typ_bind_guard(-7); });
+safe("r111_tbg_int", fn() { return typ_bind_guard(50); });
+safe("r111_tbg_long", fn() { return typ_bind_guard("hello"); });
+safe("r111_tbg_short", fn() { return typ_bind_guard("hi"); });
+safe("r111_tbg_other", fn() { return typ_bind_guard(3.14); });
+
+# ============================================================
+# T08: 类型模式 — 继承链顺序 (子类在前 vs 父类在前)
+# ============================================================
+class Animal { }
+class Mammal extends Animal { }
+class Dog extends Mammal { }
+
+fn hier_child_first(x) {
+    return match x {
+        is Dog => "dog",
+        is Mammal => "mammal",
+        is Animal => "animal",
+        _ => "other"
+    };
+}
+fn hier_parent_first(x) {
+    return match x {
+        is Animal => "animal",
+        is Mammal => "mammal",
+        is Dog => "dog",
+        _ => "other"
+    };
+}
+let dog = new Dog();
+let mam = new Mammal();
+let ani = new Animal();
+safe("r111_hier_cf_dog", fn() { return hier_child_first(dog); });
+safe("r111_hier_cf_mam", fn() { return hier_child_first(mam); });
+safe("r111_hier_cf_ani", fn() { return hier_child_first(ani); });
+# 父类在前：所有实例都应命中 is Animal
+safe("r111_hier_pf_dog", fn() { return hier_parent_first(dog); });
+safe("r111_hier_pf_mam", fn() { return hier_parent_first(mam); });
+safe("r111_hier_pf_ani", fn() { return hier_parent_first(ani); });
+
+# ============================================================
+# T09: 字面量匹配 — 浮点边界 (回归 round2_92 的 0.0 匹配 0 bug)
+# ============================================================
+fn float_lit(x) {
+    return match x {
+        0.0 => "zero-float",
+        0 => "zero-int",
+        1.0 => "one-float",
+        1 => "one-int",
+        _ => "other"
+    };
+}
+safe("r111_flit_0.0", fn() { return float_lit(0.0); });
+safe("r111_flit_0", fn() { return float_lit(0); });
+safe("r111_flit_1.0", fn() { return float_lit(1.0); });
+safe("r111_flit_1", fn() { return float_lit(1); });
+safe("r111_flit_2.5", fn() { return float_lit(2.5); });
+
+# 整数 vs 浮点：1.5 不应匹配 1
+fn int_vs_float(x) {
+    return match x {
+        1 => "int-1",
+        1.5 => "float-1.5",
+        _ => "other"
+    };
+}
+safe("r111_ivf_1", fn() { return int_vs_float(1); });
+safe("r111_ivf_1.5", fn() { return int_vs_float(1.5); });
+safe("r111_ivf_2", fn() { return int_vs_float(2); });
+
+# ============================================================
+# T10: 绑定模式 — 同名绑定在多个 arm 中复用
+# ============================================================
+fn reuse_bind(x) {
+    return match x {
+        n if n > 0 => "pos:" + str(n),
+        n if n < 0 => "neg:" + str(n),
+        n => "zero:" + str(n)
+    };
+}
+safe("r111_reuse_pos", fn() { return reuse_bind(5); });
+safe("r111_reuse_neg", fn() { return reuse_bind(-3); });
+safe("r111_reuse_zero", fn() { return reuse_bind(0); });
+
+# ============================================================
+# T11: 嵌套 match — 4 层
+# ============================================================
+fn nest4(a, b, c, d) {
+    return match a {
+        0 => match b {
+            0 => match c {
+                0 => match d {
+                    0 => "0000",
+                    _ => "000x"
+                },
+                _ => "00x"
+            },
+            _ => "0xx"
+        },
+        _ => "xxxx"
+    };
+}
+safe("r111_nest4_0000", fn() { return nest4(0, 0, 0, 0); });
+safe("r111_nest4_000x", fn() { return nest4(0, 0, 0, 9); });
+safe("r111_nest4_00x", fn() { return nest4(0, 0, 9, 9); });
+safe("r111_nest4_0xx", fn() { return nest4(0, 9, 9, 9); });
+safe("r111_nest4_xxxx", fn() { return nest4(9, 9, 9, 9); });
+
+# ============================================================
+# T12: match 表达式 + 算术 / 字符串拼接
+# ============================================================
+fn arith_match(x) {
+    return (match x { 1 => 10, 2 => 20, _ => 0 }) + 5;
+}
+safe("r111_arith_1", fn() { return arith_match(1); });
+safe("r111_arith_2", fn() { return arith_match(2); });
+safe("r111_arith_9", fn() { return arith_match(9); });
+
+fn concat_match(x) {
+    return "result=" + (match x { 1 => "a", _ => "b" }) + "!";
+}
+safe("r111_concat_1", fn() { return concat_match(1); });
+safe("r111_concat_9", fn() { return concat_match(9); });
+
+# ============================================================
+# T13: scrutinee 副作用 — 函数调用仅求值一次 (round2 bug 复测)
+# 用闭包形式：bump 捕获外部 counter，每次调用 +1
+# ============================================================
+fn make_bumper() {
+    let counter = 0;
+    fn bump() {
+        counter = counter + 1;
+        return counter;
+    }
+    return bump;
+}
+let bumper = make_bumper();
+fn scrut_once_local() {
+    return match bumper() {
+        1 => "first",
+        2 => "second",
+        _ => "later"
+    };
+}
+# 第一次调用：bumper() 返回 1 → "first"
+safe("r111_scrut_local_1", fn() { return scrut_once_local(); });
+# 第二次调用：bumper() 返回 2 → "second"
+safe("r111_scrut_local_2", fn() { return scrut_once_local(); });
+# 第三次调用：bumper() 返回 3 → "later"
+safe("r111_scrut_local_3", fn() { return scrut_once_local(); });
+
+# scrutinee 复杂表达式 (函数调用 + 算术)
+fn double(x) { return x * 2; }
+fn complex_scrut(x) {
+    return match double(x) + 1 {
+        5 => "five",
+        11 => "eleven",
+        _ => "other"
+    };
+}
+safe("r111_complex_5", fn() { return complex_scrut(2); });
+safe("r111_complex_11", fn() { return complex_scrut(5); });
+safe("r111_complex_other", fn() { return complex_scrut(0); });
+
+# ============================================================
+# T14: 变体模式 — 字段顺序 vs 绑定名 (回归 round2)
+# ============================================================
+union Pair {
+    P: a, b;
+}
+union Triple {
+    T: x, y, z;
+}
+union Opt {
+    Some: v;
+    None;
+}
+fn destructure_pair(p) {
+    return match p {
+        P(a, b) => "a=" + str(a) + ",b=" + str(b)
+    };
+}
+let pair_inst = Pair{P: 3, 4};
+safe("r111_var_pair", fn() { return destructure_pair(pair_inst); });
+
+# 字段名换绑：用不同名字绑定相同位置
+fn destructure_pair_rename(p) {
+    return match p {
+        P(first, second) => "f=" + str(first) + ",s=" + str(second)
+    };
+}
+let pair_inst2 = Pair{P: 10, 20};
+safe("r111_var_pair_rename", fn() { return destructure_pair_rename(pair_inst2); });
+
+fn destructure_triple(t) {
+    return match t {
+        T(a, b, c) => str(a) + "+" + str(b) + "+" + str(c) + "=" + str(a + b + c)
+    };
+}
+let triple_inst = Triple{T: 1, 2, 3};
+safe("r111_var_triple", fn() { return destructure_triple(triple_inst); });
+
+# 错误元数：Some(a, b) 对单字段 Some — round2 显示匹配 b=null
+fn wrong_arity(x) {
+    return match x {
+        Some(a, b) => "two:" + str(a) + "," + str(b),
+        Some(v) => "one:" + str(v),
+        _ => "other"
+    };
+}
+let some_inst = Opt{Some: 5};
+safe("r111_var_wrong_arity", fn() { return wrong_arity(some_inst); });
+
+# ============================================================
+# T15: 变体模式 — 非变体实例应不匹配 (round2 显示 None 错误匹配 int)
+# 注：单标识符 `None` 在解析时会被识别为 binding，故 None(无括号) 总会匹配。
+# ============================================================
+# 关键测试：None (无括号) 在非 union 实例上的行为
+fn none_on_int(x) {
+    return match x {
+        None => "none-binding",   # 解析为 binding 模式，绑定 None=int
+        _ => "other"
+    };
+}
+safe("r111_none_on_int", fn() { return none_on_int(42); });
+safe("r111_none_on_str", fn() { return none_on_int("hi"); });
+
+# 变体模式 (带括号) 对非变体实例应不匹配
+fn variant_on_int(x) {
+    return match x {
+        Some(v) => "some:" + str(v),
+        None => "none-binding",
+        _ => "other"
+    };
+}
+let some_inst7 = Opt{Some: 7};
+let none_inst = Opt{None};
+safe("r111_variant_on_int", fn() { return variant_on_int(42); });
+safe("r111_variant_on_str", fn() { return variant_on_int("hi"); });
+safe("r111_variant_on_some", fn() { return variant_on_int(some_inst7); });
+safe("r111_variant_on_none", fn() { return variant_on_int(none_inst); });
+
+# ============================================================
+# T16: 穷尽性 — 无 _ 且所有 arm 都不匹配
+# ============================================================
+fn only_one(x) {
+    return match x {
+        1 => "one"
+    };
+}
+safe("r111_nonex_1", fn() { return only_one(1); });
+safe("r111_nonex_2", fn() { return only_one(2); });
+safe("r111_nonex_str", fn() { return only_one("a"); });
+safe("r111_nonex_null", fn() { return only_one(null); });
+
+# 类型穷尽：只有 is int 和 is str, 输入 bool
+fn only_int_str(x) {
+    return match x {
+        is int => "int",
+        is str => "str"
+    };
+}
+safe("r111_nonex_bool", fn() { return only_int_str(true); });
+safe("r111_nonex_list", fn() { return only_int_str([1, 2]); });
+safe("r111_nonex_typ_null", fn() { return only_int_str(null); });
+
+# 空 match (无 arm) — 编译期或运行期错误?
+fn empty_match(x) {
+    return match x { };
+}
+safe("r111_empty_match", fn() { return empty_match(42); });
+
+# ============================================================
+# T17: match 内 throw (通过函数调用)
+# ============================================================
+fn throw_if_neg(x) {
+    if (x < 0) { throw "negative"; }
+    return x;
+}
+fn match_throw(x) {
+    return match x {
+        n if n < 0 => throw_if_neg(n),
+        _ => "ok"
+    };
+}
+safe("r111_throw_neg", fn() { return match_throw(-5); });
+safe("r111_throw_zero", fn() { return match_throw(0); });
+safe("r111_throw_pos", fn() { return match_throw(5); });
+
+# ============================================================
+# T18: match 返回闭包
+# ============================================================
+fn get_handler(kind) {
+    return match kind {
+        "add" => fn(x, y) { return x + y; },
+        "sub" => fn(x, y) { return x - y; },
+        _ => fn(x, y) { return 0; }
+    };
+}
+safe("r111_ret_closure_add", fn() {
+    let h = get_handler("add");
+    return h(3, 4);
+});
+safe("r111_ret_closure_sub", fn() {
+    let h = get_handler("sub");
+    return h(10, 4);
+});
+safe("r111_ret_closure_def", fn() {
+    let h = get_handler("mul");
+    return h(3, 4);
+});
+
+# ============================================================
+# T19: guard 引用绑定变量 + 外层变量
+# ============================================================
+let threshold = 10;
+fn outer_and_bind(x) {
+    return match x {
+        n if n > threshold => "big:" + str(n),
+        n if n > 0 => "small-pos:" + str(n),
+        _ => "zero-or-neg"
+    };
+}
+safe("r111_outer_bind_big", fn() { return outer_and_bind(20); });
+safe("r111_outer_bind_small", fn() { return outer_and_bind(5); });
+safe("r111_outer_bind_zero", fn() { return outer_and_bind(0); });
+safe("r111_outer_bind_neg", fn() { return outer_and_bind(-3); });
+
+# ============================================================
+# T20: guard 中比较运算符 (==, !=, <=, >=)
+# ============================================================
+fn cmp_guard(x) {
+    return match x {
+        n if n == 0 => "eq-0",
+        n if n != 1 => "ne-1",
+        n if n <= 5 => "le-5",
+        n if n >= 10 => "ge-10",
+        _ => "other"
+    };
+}
+safe("r111_cmp_0", fn() { return cmp_guard(0); });
+safe("r111_cmp_1", fn() { return cmp_guard(1); });
+safe("r111_cmp_3", fn() { return cmp_guard(3); });
+safe("r111_cmp_10", fn() { return cmp_guard(10); });
+safe("r111_cmp_99", fn() { return cmp_guard(99); });
+
+# ============================================================
+# T21: 字面量匹配 — null 与 false / 0 的区分
+# ============================================================
+fn null_vs_others(x) {
+    return match x {
+        null => "null",
+        false => "false",
+        0 => "zero",
+        _ => "other"
+    };
+}
+safe("r111_nvo_null", fn() { return null_vs_others(null); });
+safe("r111_nvo_false", fn() { return null_vs_others(false); });
+safe("r111_nvo_zero", fn() { return null_vs_others(0); });
+safe("r111_nvo_other", fn() { return null_vs_others(42); });
+
+# ============================================================
+# T22: 类型模式次序 — is null vs is bool (null 不是 bool)
+# ============================================================
+fn type_order_nb(x) {
+    return match x {
+        is null => "is-null",
+        is bool => "is-bool",
+        _ => "other"
+    };
+}
+safe("r111_tonb_null", fn() { return type_order_nb(null); });
+safe("r111_tonb_true", fn() { return type_order_nb(true); });
+safe("r111_tonb_false", fn() { return type_order_nb(false); });
+safe("r111_tonb_int", fn() { return type_order_nb(0); });
+
+# ============================================================
+# T23: 字符串字面量 — 含特殊字符
+# ============================================================
+fn special_str(x) {
+    return match x {
+        "" => "empty",
+        " " => "space",
+        "\t" => "tab",
+        "\n" => "newline",
+        "\\" => "backslash",
+        "\"" => "quote",
+        _ => "other"
+    };
+}
+safe("r111_sstr_empty", fn() { return special_str(""); });
+safe("r111_sstr_space", fn() { return special_str(" "); });
+safe("r111_sstr_tab", fn() { return special_str("\t"); });
+safe("r111_sstr_nl", fn() { return special_str("\n"); });
+safe("r111_sstr_bs", fn() { return special_str("\\"); });
+safe("r111_sstr_q", fn() { return special_str("\""); });
+safe("r111_sstr_other", fn() { return special_str("hi"); });
+
+# ============================================================
+# T24: 多个 guard 串联 — guard 失败继续下一个 arm
+# ============================================================
+fn multi_guard(x) {
+    return match x {
+        n if n > 0 && n < 10 => "small-pos",
+        n if n >= 10 && n < 100 => "mid",
+        n if n >= 100 && n < 1000 => "big",
+        n if n >= 1000 => "huge",
+        n if n == 0 => "zero",
+        _ => "neg"
+    };
+}
+safe("r111_multi_5", fn() { return multi_guard(5); });
+safe("r111_multi_50", fn() { return multi_guard(50); });
+safe("r111_multi_500", fn() { return multi_guard(500); });
+safe("r111_multi_5000", fn() { return multi_guard(5000); });
+safe("r111_multi_0", fn() { return multi_guard(0); });
+safe("r111_multi_neg", fn() { return multi_guard(-5); });
+
+# ============================================================
+# T25: match + 枚举值（用全局常量模拟枚举）
+# ============================================================
+let COLOR_RED = 1;
+let COLOR_GREEN = 2;
+let COLOR_BLUE = 3;
+fn color_name(c) {
+    return match c {
+        1 => "red",
+        2 => "green",
+        3 => "blue",
+        _ => "unknown"
+    };
+}
+safe("r111_color_red", fn() { return color_name(COLOR_RED); });
+safe("r111_color_green", fn() { return color_name(COLOR_GREEN); });
+safe("r111_color_blue", fn() { return color_name(COLOR_BLUE); });
+safe("r111_color_other", fn() { return color_name(99); });
+
+# ============================================================
+# T26: 类型模式 — is int 匹配整数值浮点 (回归 round2)
+# ============================================================
+fn int_valued_float(x) {
+    return match x {
+        is int as n => "int:" + str(n),
+        is float as f => "float:" + str(f),
+        _ => "other"
+    };
+}
+safe("r111_ivf_3.0", fn() { return int_valued_float(3.0); });
+safe("r111_ivf_3", fn() { return int_valued_float(3); });
+safe("r111_ivf_3.14", fn() { return int_valued_float(3.14); });
+safe("r111_ivf_neg2.0", fn() { return int_valued_float(-2.0); });
+safe("r111_ivf_big", fn() { return int_valued_float(1000000000.0); });
+
+# ============================================================
+# T27: 大整数 / 极端值字面量匹配
+# ============================================================
+fn extreme_lit(x) {
+    return match x {
+        9223372036854775807 => "max-i64",
+        2147483647 => "max-i32",
+        -2147483648 => "min-i32",
+        3.14159265358979 => "pi-prec",
+        _ => "other"
+    };
+}
+safe("r111_extreme_maxi64", fn() { return extreme_lit(9223372036854775807); });
+safe("r111_extreme_maxi32", fn() { return extreme_lit(2147483647); });
+safe("r111_extreme_mini32", fn() { return extreme_lit(-2147483648); });
+safe("r111_extreme_pi", fn() { return extreme_lit(3.14159265358979); });
+safe("r111_extreme_other", fn() { return extreme_lit(42); });
+
+# ============================================================
+# T28: 重复 arm — 第一个匹配
+# ============================================================
+fn dup_arm(x) {
+    return match x {
+        5 => "first",
+        5 => "second",
+        5 => "third",
+        _ => "other"
+    };
+}
+safe("r111_dup_5", fn() { return dup_arm(5); });
+safe("r111_dup_7", fn() { return dup_arm(7); });
+
+# ============================================================
+# T29: 类型绑定作用域 — 跨 arm 不应残留
+# ============================================================
+fn bind_scope(x) {
+    let n = "outer-n";
+    return match x {
+        is int as n => "int-n=" + str(n),
+        _ => "n=" + str(n)
+    };
+}
+safe("r111_scope_int", fn() { return bind_scope(42); });
+# _ arm 中 n 应为外层值 "outer-n"，不应残留 42
+safe("r111_scope_other", fn() { return bind_scope("hi"); });
+
+# 类型绑定 + guard 失败 — 绑定是否残留到下一个 arm
+fn bind_scope_guard(x) {
+    let n = "outer";
+    return match x {
+        is int as n if n > 100 => "big:" + str(n),
+        is int as n => "int:" + str(n),
+        _ => "n=" + str(n)
+    };
+}
+safe("r111_scope_g_big", fn() { return bind_scope_guard(200); });
+safe("r111_scope_g_int", fn() { return bind_scope_guard(50); });
+safe("r111_scope_g_other", fn() { return bind_scope_guard("hi"); });
+
+# ============================================================
+# T30: match 返回 match (链式)
+# ============================================================
+fn chain_match(x) {
+    return match x {
+        1 => match x { 1 => "one-one", _ => "?" },
+        2 => match x { 2 => "two-two", _ => "?" },
+        _ => "other"
+    };
+}
+safe("r111_chain_1", fn() { return chain_match(1); });
+safe("r111_chain_2", fn() { return chain_match(2); });
+safe("r111_chain_3", fn() { return chain_match(3); });
+
+# ============================================================
+# T31: chan 模式 — send/recv/close 边界
+# ============================================================
+fn chan_close_match() {
+    let ch = chan_new(0);
+    chan_close(ch);
+    return match ch {
+        chan close => "closed",
+        _ => "other"
+    };
+}
+safe("r111_chan_close", fn() { return chan_close_match(); });
+
+fn chan_recv_match() {
+    let ch = chan_new(2);
+    chan_send(ch, "v1");
+    return match ch {
+        chan recv(v) => "recv:" + str(v),
+        _ => "other"
+    };
+}
+safe("r111_chan_recv", fn() { return chan_recv_match(); });
+
+fn chan_send_match() {
+    let ch = chan_new(2);
+    return match ch {
+        chan send(_) => "can-send",
+        _ => "no-send"
+    };
+}
+safe("r111_chan_send", fn() { return chan_send_match(); });
+
+# 空 channel: recv 不匹配
+fn chan_empty_recv() {
+    let ch = chan_new(2);
+    return match ch {
+        chan recv(v) => "recv:" + str(v),
+        _ => "no-recv"
+    };
+}
+safe("r111_chan_empty", fn() { return chan_empty_recv(); });
+
+# ============================================================
+# T32: 类型模式 — list/dict 内容 (无解构)
+# ============================================================
+fn collection_match(x) {
+    return match x {
+        is list as l => "list:" + str(len(l)),
+        is dict as d => "dict:" + str(len(d)),
+        is str as s => "str:" + str(len(s)),
+        _ => "other"
+    };
+}
+safe("r111_coll_list", fn() { return collection_match([1, 2, 3]); });
+safe("r111_coll_empty_list", fn() { return collection_match([]); });
+safe("r111_coll_dict", fn() { return collection_match({"a": 1, "b": 2, "c": 3}); });
+safe("r111_coll_empty_dict", fn() { return collection_match({}); });
+safe("r111_coll_str", fn() { return collection_match("hello"); });
+safe("r111_coll_empty_str", fn() { return collection_match(""); });
+safe("r111_coll_int", fn() { return collection_match(42); });
+
+# ============================================================
+# T33: 顺序 — 字面量在 _ 之前才匹配；_ 在前总是命中
+# ============================================================
+fn wild_first(x) {
+    return match x {
+        _ => "wild",
+        1 => "one"
+    };
+}
+safe("r111_wf_1", fn() { return wild_first(1); });
+safe("r111_wf_9", fn() { return wild_first(9); });
+
+# 绑定在前
+fn bind_first(x) {
+    return match x {
+        v => "bind:" + str(v),
+        1 => "one"
+    };
+}
+safe("r111_bf_1", fn() { return bind_first(1); });
+safe("r111_bf_9", fn() { return bind_first(9); });
+
+# ============================================================
+# T34: match 在循环中 — break/continue 通过外部控制
+# ============================================================
+fn match_in_loop(xs) {
+    let total = 0;
+    for x in xs {
+        let r = match x {
+            0 => 0,            # 跳过
+            n if n > 0 => n,   # 累加
+            _ => 0             # 负数跳过
+        };
+        total = total + r;
+    }
+    return total;
+}
+safe("r111_loop_match", fn() { return match_in_loop([1, -2, 3, 0, 5]); });
+
+# ============================================================
+# T35: match 表达式语句 — 值被丢弃
+# ============================================================
+let stmt_ran = false;
+match 5 { _ => 99 };
+stmt_ran = true;
+print("r111_stmt_discard:" + str(stmt_ran));
+
+# 丢弃后不影响后续
+let after = match 7 { 7 => 1, _ => 0 } + match 8 { 8 => 1, _ => 0 };
+print("r111_two_matches:" + str(after));
+
+print("=== r111 done ===");

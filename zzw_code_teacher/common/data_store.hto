@@ -1,0 +1,190 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# common/data_store.hto — 数据持久化（题目/用户/提交记录）
+# 用文件 JSON 存储。使用 json_parse / json_stringify host 函数。
+# ═══════════════════════════════════════════════════════════════════════════
+
+let _DATA_DIR = "zzw_code_teacher/data";
+
+# ── 简易文件读写封装 ──
+fn ds_read(name) {
+    let path = _DATA_DIR + "/" + name + ".json";
+    if (fs_exists(path) == false) {
+        return nullptr;
+    }
+    let raw = read_file(path);
+    if (raw == nullptr or raw == "") {
+        return nullptr;
+    }
+    return json_parse(raw);
+}
+
+fn ds_write(name, data) {
+    let path = _DATA_DIR + "/" + name + ".json";
+    if (fs_exists(_DATA_DIR) == false) {
+        fs_mkdir(_DATA_DIR);
+    }
+    let raw = json_stringify(data);
+    write_file(path, raw);
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 题目管理
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn problems_all() {
+    let data = ds_read("problems");
+    if (data == nullptr) {
+        # 返回内置示例题库
+        return [
+            {
+                "id": "P001",
+                "title": "两数之和",
+                "difficulty": "简单",
+                "desc": "给定一个整数数组 nums 和一个目标值 target，请你在该数组中找出和为目标值的那两个整数，并返回它们的下标。\n\n示例：\n输入：nums = [2, 7, 11, 15], target = 9\n输出：[0, 1]\n\n提示：你可以假设每种输入只会对应一个答案。",
+                "template": "fn two_sum(nums, target) {\n    # 在此编写你的代码\n    \n}\n",
+                "hint": "考虑用字典记录已遍历的值与其下标，一次遍历即可。",
+                "passed": 0,
+                "submitted": 0
+            },
+            {
+                "id": "P002",
+                "title": "反转链表",
+                "difficulty": "中等",
+                "desc": "给你单链表的头节点 head，请你反转链表，并返回反转后的链表。\n\n示例：\n输入：1 -> 2 -> 3 -> 4 -> 5\n输出：5 -> 4 -> 3 -> 2 -> 1",
+                "template": "fn reverse_list(head) {\n    # 在此编写你的代码\n    \n}\n",
+                "hint": "用三个指针 prev / curr / next 逐步翻转。",
+                "passed": 0,
+                "submitted": 0
+            },
+            {
+                "id": "P003",
+                "title": "有效括号",
+                "difficulty": "简单",
+                "desc": "给定一个只包括 '('、')'、'{'、'}'、'['、']' 的字符串 s，判断字符串是否有效。\n\n有效字符串需满足：左括号必须用相同类型的右括号闭合，且顺序正确。",
+                "template": "fn is_valid(s) {\n    # 在此编写你的代码\n    \n}\n",
+                "hint": "用栈：遇左括号入栈，遇右括号检查栈顶是否匹配。",
+                "passed": 0,
+                "submitted": 0
+            },
+            {
+                "id": "P004",
+                "title": "斐波那契数列",
+                "difficulty": "简单",
+                "desc": "写一个函数 fib(n)，返回斐波那契数列的第 n 项（从 0 开始）。\n\n示例：\nfib(0) = 0\nfib(1) = 1\nfib(10) = 55",
+                "template": "fn fib(n) {\n    # 在此编写你的代码\n    \n}\n",
+                "hint": "递归简单但效率低；试试迭代或记忆化。",
+                "passed": 0,
+                "submitted": 0
+            },
+            {
+                "id": "P005",
+                "title": "二分查找",
+                "difficulty": "简单",
+                "desc": "给定一个升序排序的数组 nums 和目标值 target，返回 target 在数组中的下标，不存在则返回 -1。",
+                "template": "fn binary_search(nums, target) {\n    # 在此编写你的代码\n    \n}\n",
+                "hint": "维护 left / right 两个指针，每次比较中间元素。",
+                "passed": 0,
+                "submitted": 0
+            }
+        ];
+    }
+    return data;
+}
+
+fn problems_save(problems) {
+    return ds_write("problems", problems);
+}
+
+fn problem_by_id(pid) {
+    let all = problems_all();
+    let i = 0;
+    while (i < len(all)) {
+        if (all[i]["id"] == pid) {
+            return all[i];
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 用户管理
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn users_all() {
+    let data = ds_read("users");
+    if (data == nullptr) {
+        return [
+            {"id": "U001", "name": "alice", "role": "student", "solved": 3, "submitted": 5},
+            {"id": "U002", "name": "bob", "role": "student", "solved": 1, "submitted": 4},
+            {"id": "U003", "name": "admin", "role": "teacher", "solved": 0, "submitted": 0}
+        ];
+    }
+    return data;
+}
+
+fn users_save(users) {
+    return ds_write("users", users);
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 提交记录
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn submissions_all() {
+    let data = ds_read("submissions");
+    if (data == nullptr) {
+        return [];
+    }
+    return data;
+}
+
+fn submissions_save(subs) {
+    return ds_write("submissions", subs);
+}
+
+fn submissions_add(sub) {
+    let all = submissions_all();
+    push(all, sub);
+    return submissions_save(all);
+}
+
+fn submissions_by_user(uid) {
+    let all = submissions_all();
+    let result = [];
+    let i = 0;
+    while (i < len(all)) {
+        if (all[i]["user"] == uid) {
+            push(result, all[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 评测统计
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn stats_overview() {
+    let subs = submissions_all();
+    let users = users_all();
+    let problems = problems_all();
+    let total = len(subs);
+    let passed = 0;
+    let i = 0;
+    while (i < len(subs)) {
+        if (subs[i]["result"] == "通过") {
+            passed = passed + 1;
+        }
+        i = i + 1;
+    }
+    return {
+        "total_submissions": total,
+        "total_passed": passed,
+        "pass_rate": (total > 0) ? (passed * 100 / total) : 0,
+        "total_users": len(users),
+        "total_problems": len(problems)
+    };
+}

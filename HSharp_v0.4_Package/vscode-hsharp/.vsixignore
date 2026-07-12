@@ -1,0 +1,20 @@
+# Exclude Python sources OUTSIDE the bundled python/ dir, plus __pycache__,
+# git data and old bootstrap files. The Kotlin jars in lib/ and the Python
+# compiler in python/ are kept (they are required for the extension to work).
+python/
+# Re-include the bundled Python compiler source (overrides the rule above)
+!python/hsharp_compile.py
+!python/lexer.py
+!python/parser.py
+!python/compiler.py
+!python/tokens.py
+!python/h_ast.py
+# Top-level Python files are NOT shipped with the extension.
+**/*.py
+**/*.pyc
+**/__pycache__/
+**/.git/
+**/.git/**
+bootstrap/
+**/hsvm
+**/hsvm.c

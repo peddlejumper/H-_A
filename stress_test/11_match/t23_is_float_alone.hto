@@ -1,0 +1,24 @@
+# t23 - is float matches ALL numbers (including integers)
+# HVM.typeMatch: "float" returns true for ANY HNumber.
+# So is float matches 42 (integer value) as well as 3.14.
+fn typ(x) {
+    return match x {
+        is float as f => "float:" + str(f),
+        _ => "other"
+    };
+}
+print("t23_float_3.14:" + typ(3.14));
+print("t23_float_42:" + typ(42));
+print("t23_float_0:" + typ(0));
+print("t23_str:" + typ("hi"));
+
+# is int matches whole-number floats (3.0 considered int)
+fn typ2(x) {
+    return match x {
+        is int as n => "int:" + str(n),
+        _ => "other"
+    };
+}
+print("t23_int_42:" + typ2(42));
+print("t23_int_3.0:" + typ2(3.0));
+print("t23_int_3.14:" + typ2(3.14));

@@ -1,0 +1,40 @@
+# P0-4 verification: break/continue inside try must not leak exception handlers.
+
+let result = "";
+for i in [1, 2, 3] {
+    try {
+        if (i == 2) {
+            result = result + "break;";
+            break;
+        }
+        result = result + "i=" + i + ";";
+    } catch (e) {
+        result = result + "err;";
+    }
+    result = result + "after-try;";
+}
+print(result);
+
+let caught_outer = false;
+try {
+    throw "boom";
+} catch (e) {
+    caught_outer = true;
+    print("caught: " + e);
+}
+print("caught_outer=" + caught_outer);
+
+let sum = 0;
+for j in [1, 2, 3, 4] {
+    try {
+        if (j % 2 == 0) {
+            continue;
+        }
+        sum = sum + j;
+    } catch (e) {
+        sum = sum + 100;
+    }
+    result = result + ".";
+}
+print("sum=" + sum);
+print("done");

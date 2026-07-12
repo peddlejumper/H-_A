@@ -1,0 +1,32 @@
+# T03 - UNION_MAKE multi-field variant: probe field-order / misalignment
+# If UNION_MAKE misaligns fields, w/h/d will be permuted.
+union Box {
+    Cuboid: w, h, d;
+}
+
+let b = Box{Cuboid: 10, 20, 30};
+print(b.w);
+print(b.h);
+print(b.d);
+
+# Reconstruct field order via positional list to be sure
+fn fieldlist(x) {
+    return [x.w, x.h, x.d];
+}
+print(fieldlist(b));
+
+# Second variant with different arity to stress the variant lookup
+union Mixed {
+    One: a;
+    Two: a, b;
+    Three: a, b, c;
+}
+let m1 = Mixed{One: 1};
+let m2 = Mixed{Two: 1, 2};
+let m3 = Mixed{Three: 1, 2, 3};
+print(m1.a);
+print(m2.a);
+print(m2.b);
+print(m3.a);
+print(m3.b);
+print(m3.c);

@@ -1,0 +1,16 @@
+# 10 - 嵌套 for 循环 (3 层)
+# 目的: 三层 for 嵌套，三个 JUMP 回边都需要修正
+let total = 0;
+let cnt = 0;
+for i in [1, 2] {
+    for j in [10, 20] {
+        for k in [100, 200, 300] {
+            total = total + i + j + k;
+            cnt = cnt + 1;
+        }
+    }
+}
+print("total=" + str(total));
+print("expected_total=2598");
+print("cnt=" + str(cnt));
+print("expected_cnt=12");

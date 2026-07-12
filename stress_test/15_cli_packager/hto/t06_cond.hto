@@ -1,0 +1,16 @@
+# t06_cond.hto - conditional branches
+fn classify(n) {
+    if (n > 100) {
+        return "big";
+    } else {
+        if (n > 10) {
+            return "medium";
+        } else {
+            return "small";
+        }
+    }
+}
+
+print(classify(150));
+print(classify(50));
+print(classify(5));

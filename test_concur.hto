@@ -1,0 +1,85 @@
+# 测试并发模拟(回调 + 列表模拟 channel)
+
+# 1. 回调模拟异步
+fn async_task(name, delay, callback) {
+    print("Start task: " + name);
+    let result = "Result of " + name;
+    callback(result);
+}
+
+fn on_complete(data) {
+    print("Callback got: " + data);
+}
+
+async_task("TaskA", 100, on_complete);
+
+# 2. 列表模拟 Channel
+fn channel_new() {
+    return {"buffer": [], "closed": false};
+}
+fn channel_send(ch, item) {
+    if (ch["closed"]) {
+        throw "send on closed channel";
+    }
+    push(ch["buffer"], item);
+}
+fn channel_recv(ch) {
+    if (len(ch["buffer"]) == 0) {
+        if (ch["closed"]) {
+            throw "channel closed and empty";
+        }
+        throw "channel empty";
+    }
+    return pop(ch["buffer"]);
+}
+fn channel_close(ch) {
+    ch["closed"] = true;
+}
+
+let ch = channel_new();
+channel_send(ch, "hello");
+channel_send(ch, "world");
+print(channel_recv(ch));
+print(channel_recv(ch));
+channel_close(ch);
+
+# 3. 生产者-消费者模拟
+fn producer(ch, count) {
+    let i = 0;
+    while (i < count) {
+        channel_send(ch, "item-" + i);
+        i = i + 1;
+    }
+    channel_close(ch);
+}
+fn consumer(ch) {
+    let items = [];
+    while (len(ch["buffer"]) > 0) {
+        push(items, channel_recv(ch));
+    }
+    return items;
+}
+let ch2 = channel_new();
+producer(ch2, 3);
+print(consumer(ch2));
+
+# 4. fan-out/fan-in 模拟
+fn fan_out(tasks) {
+    let results = [];
+    for t in tasks {
+        push(results, t() + "-done");
+    }
+    return results;
+}
+let workers = [
+    fn() { return "w1"; },
+    fn() { return "w2"; },
+    fn() { return "w3"; }
+];
+print(fan_out(workers));
+
+# 5. dict_keys/values/items
+let d = {"a": 1, "b": 2, "c": 3};
+print(dict_keys(d));
+print(dict_values(d));
+print(dict_items(d));

@@ -1,0 +1,14 @@
+# 测试 generate_book.py 中的 Point 模式
+class Point {
+    fn init(x, y) {
+        self.x = x;
+        self.y = y;
+    }
+    fn distance() {
+        return self.x * self.x + self.y * self.y;
+    }
+}
+let p = new Point();
+p.init(3, 4);
+print(p.x);
+print(p.distance());

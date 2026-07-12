@@ -1,0 +1,89 @@
+# 02 — exception payload preservation
+# Covers: parallel fn 内抛异常，await 时重抛原始 payload（非包装）
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# throw 字符串
+parallel fn boom_str() {
+    throw "boom";
+}
+let caught_str = false;
+let msg_str = "";
+try {
+    let v = await boom_str();
+} catch (e) {
+    caught_str = true;
+    msg_str = str(e);
+}
+check("str_payload_caught",  caught_str, "not caught");
+check("str_payload_intact",  msg_str == "boom", "got [" + msg_str + "]");
+check("str_payload_not_wrapped", msg_str != "H# exception: boom", "was wrapped: " + msg_str);
+
+# throw 数字
+parallel fn boom_num() {
+    throw 404;
+}
+let msg_num = "";
+let caught_num = false;
+try {
+    let v = await boom_num();
+} catch (e) {
+    caught_num = true;
+    msg_num = str(e);
+}
+check("num_payload_caught", caught_num, "not caught");
+check("num_payload_intact", msg_num == "404", "got [" + msg_num + "]");
+
+# throw 一个 list
+parallel fn boom_list() {
+    throw [1, 2, 3];
+}
+let caught_list = false;
+let list_ok = false;
+try {
+    let v = await boom_list();
+} catch (e) {
+    caught_list = true;
+    # e 应该就是那个 list 本身
+    list_ok = (len(e) == 3 and e[0] == 1 and e[2] == 3);
+}
+check("list_payload_caught", caught_list, "not caught");
+check("list_payload_intact", list_ok, "list payload corrupted");
+
+# throw 一个 dict
+parallel fn boom_dict() {
+    throw {"code": 500, "reason": "err"};
+}
+let caught_dict = false;
+let dict_ok = false;
+try {
+    let v = await boom_dict();
+} catch (e) {
+    caught_dict = true;
+    dict_ok = (e["code"] == 500 and e["reason"] == "err");
+}
+check("dict_payload_caught", caught_dict, "not caught");
+check("dict_payload_intact", dict_ok, "dict payload corrupted");
+
+# 异常在 concurrent {} 内应被 join 重抛
+parallel fn child_fail() {
+    throw "child-boom";
+}
+let cc = false;
+let cm = "";
+try {
+    concurrent {
+        let f = child_fail();
+        let _ = await f;
+    }
+} catch (e) {
+    cc = true;
+    cm = str(e);
+}
+check("concurrent_rethrows", cc, "not rethrown");
+check("concurrent_msg_intact", cm == "child-boom", "got [" + cm + "]");
+
+print("T02_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

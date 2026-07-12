@@ -1,0 +1,2561 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# test_hwdui.hto — HwdUI 库完整测试
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/hwdui.hto";
+
+let tests_passed = 0;
+let tests_failed = 0;
+let test_total = 0;
+
+fn assert(condition, test_name) {
+    test_total = test_total + 1;
+    if (condition) {
+        tests_passed = tests_passed + 1;
+        return 0;
+    }
+    tests_failed = tests_failed + 1;
+    print("  FAIL: " + test_name);
+}
+
+fn test_summary() {
+    print("");
+    print("═════════════════════════════════");
+    print("Test Results: " + tests_passed + "/" + test_total + " passed");
+    if (tests_failed == 0) {
+        print("ALL TESTS PASSED ✓");
+    } else {
+        print("FAILURES: " + tests_failed);
+    }
+    print("═════════════════════════════════");
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 1：基础初始化
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 1: 基础初始化 ──");
+assert(hwdui_init() == true, "hwdui_init returns true");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 2：Window 创建
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 2: Window ──");
+let win = hwdui_create_window("测试窗口", 800, 600);
+assert(win != nullptr, "Window created");
+assert(win.widget_type == "Window", "Window widget_type");
+assert(win.title == "测试窗口", "Window title");
+assert(win.width == 800, "Window width");
+assert(win.height == 600, "Window height");
+assert(win.visible == true, "Window visible");
+assert(win.closable == true, "Window closable");
+assert(win.resizable == true, "Window resizable");
+assert(len(hwdui_get_active_windows()) == 1, "Active windows count = 1");
+
+win.set_title("新标题");
+assert(win.title == "新标题", "Window set_title");
+
+win.center_on_screen(1920, 1080);
+assert(win.x == (1920 - 800) / 2, "Window center x");
+assert(win.y == (1080 - 600) / 2, "Window center y");
+assert(win.centered == true, "Window centered flag");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 3：zzwUI 基类方法
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 3: zzwUI 基类 ──");
+
+win.set_pos(10, 20);
+assert(win.x == 10, "zzwUI set_pos x");
+assert(win.y == 20, "zzwUI set_pos y");
+
+win.set_size(640, 480);
+assert(win.width == 640, "zzwUI set_size width");
+assert(win.height == 480, "zzwUI set_size height");
+
+win.set_bounds(0, 0, 1024, 768);
+assert(win.x == 0, "zzwUI set_bounds x");
+assert(win.y == 0, "zzwUI set_bounds y");
+assert(win.width == 1024, "zzwUI set_bounds w");
+assert(win.height == 768, "zzwUI set_bounds h");
+
+win.set_min_size(400, 300);
+assert(win._hwdui_min_w == 400, "zzwUI set_min_size w");
+assert(win._hwdui_min_h == 300, "zzwUI set_min_size h");
+
+win.set_max_size(2048, 1536);
+assert(win._hwdui_max_w == 2048, "zzwUI set_max_size w");
+assert(win._hwdui_max_h == 1536, "zzwUI set_max_size h");
+
+win.set_padding(10, 5, 10, 5);
+assert(win._hwdui_pad_left == 10, "zzwUI set_padding left");
+assert(win._hwdui_pad_top == 5, "zzwUI set_padding top");
+
+win.set_margin(3, 3, 3, 3);
+assert(win._hwdui_margin_left == 3, "zzwUI set_margin left");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 4：可见性和启用状态
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 4: 可见性/启用 ──");
+win.hide();
+assert(win.visible == false, "Window hide");
+win.show();
+assert(win.visible == true, "Window show");
+assert(win.is_visible() == true, "is_visible");
+
+win.disable();
+assert(win.enabled == false, "Window disable");
+win.enable_w();
+assert(win.enabled == true, "Window enable_w");
+assert(win.is_enabled() == true, "is_enabled");
+
+win.set_enabled(false);
+assert(win.enabled == false, "set_enabled false");
+win.set_enabled(true);
+assert(win.enabled == true, "set_enabled true");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 5：Button 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 5: Button ──");
+let btn = new Button();
+btn.init_btn("点击我");
+assert(btn != nullptr, "Button created");
+assert(btn.widget_type == "Button", "Button widget_type");
+assert(btn.text == "点击我", "Button text");
+assert(btn.width == 100, "Button default width");
+assert(btn.height == 30, "Button default height");
+assert(btn.is_toggle == false, "Button not toggle by default");
+
+btn.set_text("新按钮");
+assert(btn.text == "新按钮", "Button set_text");
+
+btn.set_icon("★");
+assert(btn.icon == "★", "Button set_icon");
+
+btn.is_toggle = true;
+btn.set_checked(true);
+assert(btn.is_checked == true, "Button set_checked");
+assert(btn.is_pressed() == true, "Button is_pressed");
+btn.toggle();
+assert(btn.is_checked == false, "Button toggle off");
+btn.toggle();
+assert(btn.is_checked == true, "Button toggle on");
+
+btn.set_default(true);
+assert(btn.is_default == true, "Button set_default");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 6：Label 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 6: Label ──");
+let lbl = new Label();
+lbl.init_label("你好世界");
+assert(lbl != nullptr, "Label created");
+assert(lbl.widget_type == "Label", "Label widget_type");
+assert(lbl.text == "你好世界", "Label text");
+assert(lbl.font_size == 12, "Label font_size");
+assert(lbl.text_align == "left", "Label text_align");
+
+lbl.set_text("更新文本");
+assert(lbl.text == "更新文本", "Label set_text");
+assert(lbl.get_text() == "更新文本", "Label get_text");
+
+lbl.set_font_size(16);
+assert(lbl.font_size == 16, "Label set_font_size");
+
+lbl.set_color("#FF0000");
+assert(lbl.text_color == "#FF0000", "Label set_color");
+
+lbl.set_alignment("center");
+assert(lbl.text_align == "center", "Label set_alignment");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 7：TextBox 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 7: TextBox ──");
+let tb = new TextBox();
+tb.init_tb("初始文字");
+assert(tb != nullptr, "TextBox created");
+assert(tb.widget_type == "TextBox", "TextBox widget_type");
+assert(tb.text == "初始文字", "TextBox text");
+assert(tb.readonly == false, "TextBox not readonly");
+
+tb.set_text("新文字");
+assert(tb.text == "新文字", "TextBox set_text");
+assert(tb.get_text() == "新文字", "TextBox get_text");
+assert(tb.cursor_pos == len("新文字"), "TextBox cursor_pos after set_text");
+
+tb.clear();
+assert(tb.text == "", "TextBox clear");
+assert(tb.cursor_pos == 0, "TextBox cursor after clear");
+
+tb.append("追加");
+assert(tb.text == "追加", "TextBox append");
+
+tb.set_placeholder("请输入...");
+assert(tb.placeholder == "请输入...", "TextBox set_placeholder");
+
+tb.set_readonly(true);
+assert(tb.readonly == true, "TextBox set_readonly");
+
+tb.set_multiline(true);
+assert(tb.multiline == true, "TextBox set_multiline");
+
+tb.set_max_length(10);
+assert(tb.max_length == 10, "TextBox set_max_length");
+
+tb.set_password_mode(true);
+assert(tb.is_password == true, "TextBox set_password_mode");
+
+tb.set_text("abcd");
+tb.select_all();
+assert(tb.selection_start == 0, "TextBox select_all start");
+assert(tb.selection_end == 4, "TextBox select_all end");
+
+assert(tb.get_text_length() == 4, "TextBox get_text_length");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 8：Panel 容器和布局
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 8: Panel 布局 ──");
+let panel = new Panel();
+panel.init_panel("vbox");
+assert(panel != nullptr, "Panel created");
+assert(panel.widget_type == "Panel", "Panel widget_type");
+assert(panel.layout_type == "vbox", "Panel layout_type vbox");
+
+panel.set_spacing(8);
+assert(panel.spacing == 8, "Panel set_spacing");
+
+panel.set_layout_type("hbox");
+assert(panel.layout_type == "hbox", "Panel set_layout_type hbox");
+
+panel.set_layout_type("absolute");
+assert(panel.layout_type == "absolute", "Panel layout_type absolute");
+
+# add children
+let child1 = new Label();
+child1.init_label("子控件1");
+child1.width = 100;
+child1.height = 20;
+
+let child2 = new Label();
+child2.init_label("子控件2");
+child2.width = 100;
+child2.height = 20;
+
+panel.add_child(child1);
+panel.add_child(child2);
+assert(panel.get_child_count() == 2, "Panel child count = 2");
+assert(panel.has_child(child1) == true, "Panel has child1");
+assert(panel.get_child_at(0) == child1, "Panel get_child_at 0");
+assert(panel.get_child_at(1) == child2, "Panel get_child_at 1");
+
+panel.remove_child(child1);
+assert(panel.get_child_count() == 1, "Panel after remove = 1");
+assert(panel.has_child(child1) == false, "Panel no longer has child1");
+assert(child1.parent == nullptr, "Removed child parent nullptr");
+
+panel.add_child(child1);
+panel.remove_all_children();
+assert(panel.get_child_count() == 0, "Panel after remove_all = 0");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 9：VBox 布局
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 9: VBox 布局 ──");
+let vbox = new Panel();
+vbox.init_panel("vbox");
+vbox.width = 300;
+vbox.height = 200;
+vbox.set_padding(5, 5, 5, 5);
+
+let a = new Button();
+a.init_btn("A");
+a.width = 100;
+a.height = 30;
+let b = new Button();
+b.init_btn("B");
+b.width = 100;
+b.height = 40;
+
+vbox.add_child(a);
+vbox.add_child(b);
+vbox.do_layout();
+
+assert(a.x == 5, "VBox: child A x at padding");
+assert(b.x == 5, "VBox: child B x at padding");
+assert(a.y == 5, "VBox: child A y at top");
+assert(b.y > a.y + a.height, "VBox: child B below A");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 10：HBox 布局
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 10: HBox 布局 ──");
+let hbox = new Panel();
+hbox.init_panel("hbox");
+hbox.width = 300;
+hbox.height = 200;
+hbox.set_padding(5, 5, 5, 5);
+
+let c = new Button();
+c.init_btn("C");
+c.width = 80;
+c.height = 30;
+let d = new Button();
+d.init_btn("D");
+d.width = 90;
+d.height = 30;
+
+hbox.add_child(c);
+hbox.add_child(d);
+hbox.do_layout();
+
+assert(c.x == 5, "HBox: child C x at padding");
+assert(d.x > c.x + c.width, "HBox: child D right of C");
+assert(c.y == 5, "HBox: child C y at top");
+assert(d.y == 5, "HBox: child D y at top");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 11：事件系统
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 11: 事件系统 ──");
+let event_fired = false;
+
+fn on_click_handler(widget) {
+    event_fired = true;
+}
+
+let evt_btn = new Button();
+evt_btn.init_btn("事件按钮");
+evt_btn.onClick = on_click_handler;
+
+evt_btn.click();
+assert(event_fired == true, "Button click fires onClick callback");
+
+let evt_btn2 = new Button();
+evt_btn2.init_btn("空回调");
+evt_btn2.click();  # 不应报错
+assert(true, "Button click with nullptr callback handles gracefully");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 12：find_by_id
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 12: find_by_id ──");
+let root = new Panel();
+root.init_panel("absolute");
+
+let deep = new Button();
+deep.init_btn("深层按钮");
+deep.id = "deep_btn";
+
+let mid = new Panel();
+mid.init_panel("vbox");
+mid.id = "mid_panel";
+mid.add_child(deep);
+
+root.add_child(mid);
+
+let found = root.find_by_id("deep_btn");
+assert(found != nullptr, "find_by_id finds deep child");
+assert(found.id == "deep_btn", "find_by_id returns correct widget");
+
+let not_found = root.find_by_id("nonexistent");
+assert(not_found == nullptr, "find_by_id returns nullptr for nonexistent");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 13：CheckBox 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 13: CheckBox ──");
+let cb = new CheckBox();
+cb.init_cb("同意条款");
+assert(cb != nullptr, "CheckBox created");
+assert(cb.widget_type == "CheckBox", "CheckBox widget_type");
+assert(cb.checked == false, "CheckBox default unchecked");
+
+cb.set_checked(true);
+assert(cb.is_checked() == true, "CheckBox set_checked true");
+cb.toggle();
+assert(cb.is_checked() == false, "CheckBox toggle to false");
+cb.set_text("新条款");
+assert(cb.text == "新条款", "CheckBox set_text");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 14：RadioButton 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 14: RadioButton ──");
+let rb = new RadioButton();
+rb.init_rb("选项A", "group1");
+assert(rb != nullptr, "RadioButton created");
+assert(rb.widget_type == "RadioButton", "RadioButton widget_type");
+assert(rb.checked == false, "RadioButton default unchecked");
+assert(rb.group_name == "group1", "RadioButton group");
+
+rb.set_checked(true);
+assert(rb.is_checked() == true, "RadioButton set_checked");
+rb.set_group("group2");
+assert(rb.get_group() == "group2", "RadioButton set_group");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 15：Slider 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 15: Slider ──");
+let sld = new Slider();
+sld.init_slider(0, 200, 50);
+assert(sld != nullptr, "Slider created");
+assert(sld.widget_type == "Slider", "Slider widget_type");
+assert(sld.min_val == 0, "Slider min_val");
+assert(sld.max_val == 200, "Slider max_val");
+assert(sld.val == 50, "Slider val");
+assert(sld.step == 1, "Slider step");
+
+sld.set_value(100);
+assert(sld.get_value() == 100, "Slider set_value 100");
+sld.set_value(999);
+assert(sld.get_value() == 200, "Slider clamped to max_val");
+sld.set_value(-99);
+assert(sld.get_value() == 0, "Slider clamped to min_val");
+
+sld.set_range(10, 150);
+assert(sld.min_val == 10, "Slider set_range min");
+assert(sld.max_val == 150, "Slider set_range max");
+
+sld.set_step(5);
+assert(sld.step == 5, "Slider set_step");
+
+sld.set_value(80);
+let pct = sld.get_percentage();
+# (80-10)/(150-10)*100 = 70/140*100 = 50
+assert(pct == 50, "Slider get_percentage");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 16：ProgressBar 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 16: ProgressBar ──");
+let pb = new ProgressBar();
+pb.init_pb(0, 100);
+assert(pb != nullptr, "ProgressBar created");
+assert(pb.widget_type == "ProgressBar", "ProgressBar widget_type");
+assert(pb.val == 0, "ProgressBar starts at min");
+assert(pb.is_complete() == false, "ProgressBar not complete");
+
+pb.set_value(50);
+assert(pb.get_value() == 50, "ProgressBar set_value");
+pb.increment(25);
+assert(pb.get_value() == 75, "ProgressBar increment 25");
+pb.set_value(100);
+assert(pb.is_complete() == true, "ProgressBar is_complete");
+
+pb.set_range(0, 200);
+assert(pb.min_val == 0, "ProgressBar set_range min");
+assert(pb.max_val == 200, "ProgressBar set_range max");
+
+pb.set_mode("indeterminate");
+assert(pb.mode == "indeterminate", "ProgressBar set_mode");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 17：Image 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 17: Image ──");
+let img = new Image();
+img.init_img("icon.png");
+assert(img != nullptr, "Image created");
+assert(img.widget_type == "Image", "Image widget_type");
+assert(img.source == "icon.png", "Image source");
+assert(img.scale_mode == "fit", "Image default scale_mode");
+
+img.set_source("photo.jpg");
+assert(img.get_source() == "photo.jpg", "Image set_source");
+img.set_scale_mode("fill");
+assert(img.scale_mode == "fill", "Image set_scale_mode");
+img.set_alt_text("照片");
+assert(img.alt_text == "照片", "Image set_alt_text");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 18：ListBox 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 18: ListBox ──");
+let lb = new ListBox();
+lb.init_lb();
+assert(lb != nullptr, "ListBox created");
+assert(lb.widget_type == "ListBox", "ListBox widget_type");
+assert(lb.get_item_count() == 0, "ListBox starts empty");
+
+lb.add_item("苹果");
+lb.add_item("香蕉");
+lb.add_item("橙子");
+assert(lb.get_item_count() == 3, "ListBox 3 items");
+assert(lb.get_item(0) == "苹果", "ListBox get_item 0");
+assert(lb.get_item(1) == "香蕉", "ListBox get_item 1");
+
+lb.select_item(1);
+assert(lb.get_selected_index() == 1, "ListBox select_item");
+assert(lb.get_selected() == "香蕉", "ListBox get_selected");
+
+lb.remove_item(2);
+assert(lb.get_item_count() == 2, "ListBox after remove = 2");
+
+lb.deselect_all();
+assert(lb.get_selected_index() == -1, "ListBox deselect_all");
+
+lb.clear_items();
+assert(lb.get_item_count() == 0, "ListBox clear_items");
+
+let new_list = ["A", "B", "C", "D"];
+lb.set_items(new_list);
+assert(lb.get_item_count() == 4, "ListBox set_items");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 19：ComboBox 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 19: ComboBox ──");
+let cmb = new ComboBox();
+cmb.init_combo();
+assert(cmb != nullptr, "ComboBox created");
+assert(cmb.widget_type == "ComboBox", "ComboBox widget_type");
+assert(cmb.is_dropped == false, "ComboBox not dropped");
+assert(cmb.editable == false, "ComboBox not editable");
+
+cmb.add_item("选项1");
+cmb.add_item("选项2");
+cmb.add_item("选项3");
+assert(cmb.get_item_count() == 3, "ComboBox 3 items");
+
+cmb.select_item(2);
+assert(cmb.get_selected() == "选项3", "ComboBox get_selected");
+
+cmb.set_editable(true);
+assert(cmb.editable == true, "ComboBox set_editable");
+
+cmb.drop_down();
+assert(cmb.is_dropped == true, "ComboBox drop_down");
+cmb.close_drop();
+assert(cmb.is_dropped == false, "ComboBox close_drop");
+cmb.toggle_drop();
+assert(cmb.is_dropped == true, "ComboBox toggle_drop");
+
+let idx = cmb.find_item("选项2");
+assert(idx == 1, "ComboBox find_item");
+
+cmb.clear_items();
+assert(cmb.get_item_count() == 0, "ComboBox clear_items");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 20：ScrollView 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 20: ScrollView ──");
+let sv = new ScrollView();
+sv.init_sv();
+assert(sv != nullptr, "ScrollView created");
+assert(sv.widget_type == "ScrollView", "ScrollView widget_type");
+assert(sv.scroll_x == 0, "ScrollView scroll_x defaults 0");
+assert(sv.scroll_y == 0, "ScrollView scroll_y defaults 0");
+
+sv.set_content_size(500, 500);
+assert(sv.content_width == 500, "ScrollView content_width");
+assert(sv.content_height == 500, "ScrollView content_height");
+
+sv.scroll_to(100, 200);
+assert(sv.scroll_x == 100, "ScrollView scroll_to x");
+assert(sv.scroll_y == 200, "ScrollView scroll_to y");
+
+sv.scroll_by(50, -50);
+assert(sv.scroll_x == 150, "ScrollView scroll_by x +50");
+assert(sv.scroll_y == 150, "ScrollView scroll_by y -50");
+
+sv.scroll_to(9999, 9999);
+let max_x = 500 - 200;
+let max_y = 500 - 200;
+assert(sv.scroll_x == max_x, "ScrollView clamped to max x");
+assert(sv.scroll_y == max_y, "ScrollView clamped to max y");
+
+let pos = sv.get_scroll_pos();
+assert(pos["x"] == max_x, "ScrollView get_scroll_pos x");
+assert(pos["y"] == max_y, "ScrollView get_scroll_pos y");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 21：TabControl 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 21: TabControl ──");
+let tc = new TabControl();
+tc.init_tc();
+assert(tc != nullptr, "TabControl created");
+assert(tc.widget_type == "TabControl", "TabControl widget_type");
+assert(tc.active_tab == -1, "TabControl no active tab");
+
+let tab_content_1 = new Label();
+tab_content_1.init_label("第一页内容");
+let tab_content_2 = new Label();
+tab_content_2.init_label("第二页内容");
+
+tc.add_tab("首页", tab_content_1);
+assert(tc.get_tab_count() == 1, "TabControl 1 tab");
+assert(tc.active_tab == 0, "TabControl first tab active");
+assert(tc.get_tab_title(0) == "首页", "TabControl tab title");
+
+tc.add_tab("设置", tab_content_2);
+assert(tc.get_tab_count() == 2, "TabControl 2 tabs");
+
+tc.select_tab(1);
+assert(tc.active_tab == 1, "TabControl select_tab 1");
+
+let active = tc.get_active_tab();
+assert(active != nullptr, "TabControl get_active_tab");
+assert(active["title"] == "设置", "TabControl active tab title");
+
+let active_content = tc.get_active_content();
+assert(active_content != nullptr, "TabControl get_active_content");
+assert(active_content.text == "第二页内容", "TabControl active content text");
+
+tc.set_tab_position("bottom");
+assert(tc.tab_position == "bottom", "TabControl set_tab_position");
+
+tc.set_tab_height(36);
+assert(tc.tab_height == 36, "TabControl set_tab_height");
+
+tc.remove_tab(0);
+assert(tc.get_tab_count() == 1, "TabControl after remove = 1");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 22：Separator 控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 22: Separator ──");
+let sep_h = new Separator();
+sep_h.init_sep("horizontal");
+assert(sep_h != nullptr, "Separator horizontal created");
+assert(sep_h.widget_type == "Separator", "Separator widget_type");
+assert(sep_h.sep_orientation == "horizontal", "Separator orientation h");
+assert(sep_h.height == 2, "Separator h height");
+
+let sep_v = new Separator();
+sep_v.init_sep("vertical");
+assert(sep_v != nullptr, "Separator vertical created");
+assert(sep_v.width == 2, "Separator v width");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 23：Widget 层级遍历
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 23: 层级遍历 ──");
+
+# Build a widget tree in a Window
+let app_win = hwdui_create_window("应用窗口", 800, 600);
+let vbox_panel = new Panel();
+vbox_panel.init_panel("vbox");
+vbox_panel.id = "main_vbox";
+
+let top_label = new Label();
+top_label.init_label("欢迎使用 HwdUI");
+top_label.id = "welcome";
+vbox_panel.add_child(top_label);
+
+let btn_row = new Panel();
+btn_row.init_panel("hbox");
+btn_row.id = "btn_row";
+let ok_btn = new Button();
+ok_btn.init_btn("确定");
+ok_btn.id = "ok_btn";
+let cancel_btn = new Button();
+cancel_btn.init_btn("取消");
+cancel_btn.id = "cancel_btn";
+btn_row.add_child(ok_btn);
+btn_row.add_child(cancel_btn);
+
+vbox_panel.add_child(btn_row);
+app_win.add_child(vbox_panel);
+
+let found_ok = app_win.find_by_id("ok_btn");
+assert(found_ok != nullptr, "Tree find_by_id deep search");
+assert(found_ok.id == "ok_btn", "Tree found correct widget");
+
+let found_cancel = app_win.find_by_id("cancel_btn");
+assert(found_cancel != nullptr, "Tree find_by_id cancel");
+
+assert(app_win.get_root() == app_win, "get_root on Window returns self");
+assert(ok_btn.get_root() == app_win, "get_root on child returns Window");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 24：CSS 引擎 — Selector 选择器
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 24: CSS Selector ──");
+
+# Type selector
+let sel_btn = hwdui_sel_type("Button");
+assert(sel_btn != nullptr, "Selector created");
+assert(sel_btn.matches(btn) == true, "Type selector matches Button");
+assert(sel_btn.matches(lbl) == false, "Type selector does not match Label");
+
+# Universal selector
+let sel_all = hwdui_sel_universal();
+assert(sel_all.matches(btn) == true, "Universal selector matches Button");
+assert(sel_all.matches(lbl) == true, "Universal selector matches Label");
+assert(sel_all.matches(tb) == true, "Universal selector matches TextBox");
+
+# Class selector
+btn.addClass("primary");
+let sel_class = hwdui_sel_class("primary");
+assert(sel_class.matches(btn) == true, "Class selector matches widget with class");
+assert(sel_class.matches(lbl) == false, "Class selector does not match widget without class");
+
+# Compound selector: type + class
+let sel_type_class = hwdui_sel_type_class("Button", "primary");
+assert(sel_type_class.matches(btn) == true, "Type+class selector matches");
+assert(sel_type_class.matches(lbl) == false, "Type+class selector does not match wrong type");
+
+# Pseudo selector
+btn.setPseudoState("hover");
+let sel_pseudo = hwdui_sel_type_pseudo("Button", "hover");
+assert(sel_pseudo.matches(btn) == true, "Pseudo selector matches hover state");
+btn.setPseudoState("normal");
+assert(sel_pseudo.matches(btn) == false, "Pseudo selector does not match normal state");
+
+# ID selector
+btn.setCssId("submitBtn");
+let sel_id = hwdui_sel_id("submitBtn");
+assert(sel_id.matches(btn) == true, "ID selector matches");
+assert(sel_id.matches(lbl) == false, "ID selector does not match wrong ID");
+
+# Specificity
+assert(sel_id.getSpecificity() > sel_class.getSpecificity(), "ID specificity > class specificity");
+assert(sel_class.getSpecificity() > sel_btn.getSpecificity(), "Class specificity > type specificity");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 25：CSS 引擎 — Class/ID 管理
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 25: CSS Class/ID 管理 ──");
+let css_widget = new Button();
+css_widget.init_btn("CSS测试");
+
+assert(css_widget.hasClass("test") == false, "hasClass false by default");
+css_widget.addClass("test");
+assert(css_widget.hasClass("test") == true, "hasClass true after addClass");
+
+css_widget.addClass("featured");
+assert(css_widget.hasClass("test") == true, "hasClass keeps existing class");
+assert(css_widget.hasClass("featured") == true, "hasClass second class");
+
+css_widget.removeClass("test");
+assert(css_widget.hasClass("test") == false, "hasClass false after removeClass");
+assert(css_widget.hasClass("featured") == true, "hasClass other class retained");
+
+css_widget.toggleClass("active");
+assert(css_widget.hasClass("active") == true, "toggleClass adds missing class");
+css_widget.toggleClass("active");
+assert(css_widget.hasClass("active") == false, "toggleClass removes existing class");
+
+let classes = css_widget.getClasses();
+assert(len(classes) == 1, "getClasses count");
+assert(classes[0] == "featured", "getClasses content");
+
+css_widget.setCssId("widget_001");
+assert(css_widget.getCssId() == "widget_001", "setCssId/getCssId");
+
+css_widget.setClasses(["a", "b", "c"]);
+assert(css_widget.hasClass("a") == true, "setClasses bulk a");
+assert(css_widget.hasClass("b") == true, "setClasses bulk b");
+assert(css_widget.hasClass("c") == true, "setClasses bulk c");
+assert(css_widget.hasClass("featured") == false, "setClasses replaces old classes");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 26：CSS 引擎 — Stylesheet 样式表
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 26: CSS Stylesheet ──");
+hwdui_clear_all_stylesheets();
+
+let sheet = hwdui_create_stylesheet("test_sheet");
+assert(sheet != nullptr, "Stylesheet created");
+assert(sheet.name == "test_sheet", "Stylesheet name");
+assert(sheet.getRuleCount() == 0, "Stylesheet starts empty");
+
+# Add rules
+let btn_sel = hwdui_sel_type("Button");
+sheet.addRule(btn_sel, [
+    ["color", "#ff0000"],
+    ["font-size", "14"],
+    ["background-color", "#cccccc"]
+]);
+assert(sheet.getRuleCount() == 1, "Stylesheet addRule count");
+
+# Get rule back
+let rule0 = sheet.getRule(0);
+assert(rule0 != nullptr, "getRule returns rule");
+assert(rule0.selector == btn_sel, "Rule selector matches");
+
+# Match rules
+let test_btn = new Button();
+test_btn.init_btn("匹配测试");
+let matched = sheet.matchRules(test_btn);
+assert(len(matched) == 1, "matchRules finds 1 rule for Button");
+
+# Remove rule
+sheet.removeRule(0);
+assert(sheet.getRuleCount() == 0, "Stylesheet removeRule");
+
+# Clear rules
+sheet.addRule(btn_sel, [["color", "#000"]]);
+sheet.addRule(btn_sel, [["font-size", "12"]]);
+sheet.clearRules();
+assert(sheet.getRuleCount() == 0, "Stylesheet clearRules");
+
+# Remove stylesheet
+hwdui_remove_stylesheet(sheet);
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 27：CSS 引擎 — 主题系统
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 27: CSS Theme ──");
+hwdui_clear_all_stylesheets();
+
+let light = hwdui_theme_light();
+assert(light != nullptr, "Light theme created");
+assert(light.getRuleCount() > 0, "Light theme has rules");
+
+hwdui_clear_all_stylesheets();
+
+let dark = hwdui_theme_dark();
+assert(dark != nullptr, "Dark theme created");
+assert(dark.getRuleCount() > 0, "Dark theme has rules");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 28：CSS 引擎 — 级联计算样式
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 28: CSS Cascade ──");
+hwdui_clear_all_stylesheets();
+
+# 创建样式表：type → class → ID 逐层覆盖
+let cascade_sheet = hwdui_create_stylesheet("cascade_test");
+
+cascade_sheet.addRule(hwdui_sel_type("Button"), [
+    ["background-color", "#aaa"],
+    ["color", "#111"],
+    ["font-size", "12"]
+]);
+
+cascade_sheet.addRule(hwdui_sel_type_class("Button", "primary"), [
+    ["background-color", "#336699"],
+    ["color", "#ffffff"]
+]);
+
+cascade_sheet.addRule(hwdui_sel_id("hero_btn"), [
+    ["background-color", "#ff6600"],
+    ["font-size", "18"]
+]);
+
+# 普通 Button：只匹配 type selector
+let normal_btn = new Button();
+normal_btn.init_btn("普通");
+let normal_cs = normal_btn.getComputedStyle();
+assert(normal_cs["background-color"] == "#aaa", "Cascade: type base bg");
+assert(normal_cs["color"] == "#111", "Cascade: type base color");
+assert(normal_cs["font-size"] == "12", "Cascade: type base font-size");
+
+# primary Button：匹配 type + class
+let primary_btn = new Button();
+primary_btn.init_btn("主要");
+primary_btn.addClass("primary");
+let primary_cs = primary_btn.getComputedStyle();
+assert(primary_cs["background-color"] == "#336699", "Cascade: class overrides bg");
+assert(primary_cs["color"] == "#ffffff", "Cascade: class overrides color");
+assert(primary_cs["font-size"] == "12", "Cascade: class inherits font-size from type");
+
+# hero Button：匹配 type + id（最高特异性）
+let hero_btn = new Button();
+hero_btn.init_btn("英雄");
+hero_btn.setCssId("hero_btn");
+let hero_cs = hero_btn.getComputedStyle();
+assert(hero_cs["background-color"] == "#ff6600", "Cascade: id overrides bg");
+assert(hero_cs["font-size"] == "18", "Cascade: id overrides font-size");
+assert(hero_cs["color"] == "#111", "Cascade: id inherits color from type");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 29：CSS 引擎 — Inline Style 最高优先级
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 29: CSS Inline Style ──");
+hwdui_clear_all_stylesheets();
+
+let inline_sheet = hwdui_create_stylesheet("inline_test");
+inline_sheet.addRule(hwdui_sel_type("Button"), [
+    ["background-color", "#aaa"],
+    ["color", "#111"],
+    ["border-radius", "4"]
+]);
+
+let inline_btn = new Button();
+inline_btn.init_btn("内联");
+
+# 没有内联样式时，使用样式表规则
+let cs1 = inline_btn.getComputedStyle();
+assert(cs1["background-color"] == "#aaa", "Inline: stylesheet base bg");
+
+# 添加内联样式覆盖
+inline_btn.setInlineStyle("background-color", "#ff0000");
+inline_btn.setInlineStyle("border-radius", "8");
+let cs2 = inline_btn.getComputedStyle();
+assert(cs2["background-color"] == "#ff0000", "Inline: inline overrides bg");
+assert(cs2["border-radius"] == "8", "Inline: inline overrides border-radius");
+assert(cs2["color"] == "#111", "Inline: non-overridden keeps stylesheet value");
+
+# 测试 setInlineStyles 批量设置
+let inline_btn2 = new Button();
+inline_btn2.init_btn("批量内联");
+inline_btn2.setInlineStyles([
+    ["background-color", "#00ff00"],
+    ["color", "#ffffff"],
+    ["font-size", "16"]
+]);
+let cs3 = inline_btn2.getComputedStyle();
+assert(cs3["background-color"] == "#00ff00", "setInlineStyles bg");
+assert(cs3["color"] == "#ffffff", "setInlineStyles color");
+assert(cs3["font-size"] == "16", "setInlineStyles font-size");
+
+# 删除内联样式
+inline_btn2.removeInlineStyle("background-color");
+let cs4 = inline_btn2.getComputedStyle();
+assert(cs4["background-color"] == "#aaa", "removeInlineStyle falls back to stylesheet");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 30：CSS 引擎 — 伪状态样式
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 30: CSS Pseudo States ──");
+hwdui_clear_all_stylesheets();
+
+let pseudo_sheet = hwdui_create_stylesheet("pseudo_test");
+pseudo_sheet.addRule(hwdui_sel_type("Button"), [
+    ["background-color", "#cccccc"],
+    ["color", "#333333"]
+]);
+pseudo_sheet.addRule(hwdui_sel_type_pseudo("Button", "hover"), [
+    ["background-color", "#aaaaaa"],
+    ["color", "#111111"]
+]);
+pseudo_sheet.addRule(hwdui_sel_type_pseudo("Button", "disabled"), [
+    ["color", "#999999"],
+    ["opacity", "0.5"]
+]);
+
+let pseudo_btn = new Button();
+pseudo_btn.init_btn("伪状态测试");
+
+# normal 状态
+pseudo_btn.setPseudoState("normal");
+let cs_n = pseudo_btn.getComputedStyle();
+assert(cs_n["background-color"] == "#cccccc", "Pseudo: normal bg");
+assert(cs_n["color"] == "#333333", "Pseudo: normal color");
+
+# hover 状态
+pseudo_btn.setPseudoState("hover");
+let cs_h = pseudo_btn.getComputedStyle();
+assert(cs_h["background-color"] == "#aaaaaa", "Pseudo: hover overrides bg");
+assert(cs_h["color"] == "#111111", "Pseudo: hover overrides color");
+assert(cs_h["opacity"] == nullptr, "Pseudo: hover does not get disabled opacity");
+
+# disabled 状态
+pseudo_btn.setPseudoState("disabled");
+let cs_d = pseudo_btn.getComputedStyle();
+assert(cs_d["background-color"] == "#cccccc", "Pseudo: disabled inherits type bg");
+assert(cs_d["color"] == "#999999", "Pseudo: disabled overrides color");
+assert(cs_d["opacity"] == "0.5", "Pseudo: disabled gets opacity");
+
+# 恢复 normal
+pseudo_btn.setPseudoState("normal");
+assert(pseudo_btn.getPseudoState() == "normal", "getPseudoState returns normal");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 31：CSS 引擎 — 兼容旧 set_style/get_style API
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 31: CSS 兼容旧 API ──");
+hwdui_clear_all_stylesheets();
+
+let compat_btn = new Button();
+compat_btn.init_btn("兼容按钮");
+compat_btn.set_style("bg_color", "#336699");
+compat_btn.set_style("border_radius", "4");
+compat_btn.set_style("font_size", "14");
+
+assert(compat_btn.styles["bg_color"] == "#336699", "Legacy: set_style bg_color");
+assert(compat_btn.styles["border_radius"] == "4", "Legacy: set_style border_radius");
+assert(compat_btn.styles["font_size"] == "14", "Legacy: set_style font_size");
+
+assert(compat_btn.get_style("bg_color") == "#336699", "Legacy: get_style bg_color");
+assert(compat_btn.get_style("border_radius") == "4", "Legacy: get_style border_radius");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 32：CSS 引擎 — 80+ CSS 属性支持验证
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 32: CSS 属性全覆盖 ──");
+hwdui_clear_all_stylesheets();
+
+let prop_sheet = hwdui_create_stylesheet("prop_test");
+prop_sheet.addRule(hwdui_sel_type("Button"), [
+    ["color", "#333"],
+    ["background-color", "#fff"],
+    ["border-color", "#999"],
+    ["border-width", "2"],
+    ["border-style", "solid"],
+    ["border-radius", "6"],
+    ["font-size", "14"],
+    ["font-family", "Arial"],
+    ["font-weight", "bold"],
+    ["text-align", "center"],
+    ["text-decoration", "none"],
+    ["opacity", "1.0"],
+    ["margin", "4"],
+    ["padding", "8"],
+    ["width", "120"],
+    ["height", "36"],
+    ["display", "block"],
+    ["cursor", "pointer"],
+    ["z-index", "10"],
+    ["box-shadow", "0 2 4 rgba(0,0,0,0.2)"],
+    ["transition", "all 0.3s ease"],
+    ["transform", "none"]
+]);
+
+let prop_btn = new Button();
+prop_btn.init_btn("属性测试");
+let pcs = prop_btn.getComputedStyle();
+
+assert(pcs["color"] == "#333", "Property: color");
+assert(pcs["background-color"] == "#fff", "Property: background-color");
+assert(pcs["border-color"] == "#999", "Property: border-color");
+assert(pcs["border-width"] == "2", "Property: border-width");
+assert(pcs["border-style"] == "solid", "Property: border-style");
+assert(pcs["border-radius"] == "6", "Property: border-radius");
+assert(pcs["font-size"] == "14", "Property: font-size");
+assert(pcs["font-family"] == "Arial", "Property: font-family");
+assert(pcs["font-weight"] == "bold", "Property: font-weight");
+assert(pcs["text-align"] == "center", "Property: text-align");
+assert(pcs["text-decoration"] == "none", "Property: text-decoration");
+assert(pcs["opacity"] == "1.0", "Property: opacity");
+assert(pcs["margin"] == "4", "Property: margin");
+assert(pcs["padding"] == "8", "Property: padding");
+assert(pcs["width"] == "120", "Property: width");
+assert(pcs["height"] == "36", "Property: height");
+assert(pcs["display"] == "block", "Property: display");
+assert(pcs["cursor"] == "pointer", "Property: cursor");
+assert(pcs["z-index"] == "10", "Property: z-index");
+assert(pcs["box-shadow"] == "0 2 4 rgba(0,0,0,0.2)", "Property: box-shadow");
+assert(pcs["transition"] == "all 0.3s ease", "Property: transition");
+
+# getComputedStyleValue
+assert(prop_btn.getComputedStyleValue("border-radius") == "6", "getComputedStyleValue");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 33：CSS 引擎 — Margin/Padding 计算
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 33: CSS Margin/Padding ──");
+hwdui_clear_all_stylesheets();
+
+let mp_sheet = hwdui_create_stylesheet("mp_test");
+mp_sheet.addRule(hwdui_sel_type("Button"), [
+    ["margin", "10"],
+    ["margin-left", "20"],
+    ["padding", "5"],
+    ["padding-top", "15"]
+]);
+
+let mp_btn = new Button();
+mp_btn.init_btn("间距测试");
+
+let margin = hwdui_get_computed_margin(mp_btn);
+assert(margin["left"] == "20", "Margin: left override");
+assert(margin["top"] == "10", "Margin: top from shorthand");
+assert(margin["right"] == "10", "Margin: right from shorthand");
+assert(margin["bottom"] == "10", "Margin: bottom from shorthand");
+
+let padding = hwdui_get_computed_padding(mp_btn);
+assert(padding["top"] == "15", "Padding: top override");
+assert(padding["left"] == "5", "Padding: left from shorthand");
+assert(padding["right"] == "5", "Padding: right from shorthand");
+assert(padding["bottom"] == "5", "Padding: bottom from shorthand");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 34：CSS 引擎 — 多样式表叠加
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 34: CSS 多样式表 ──");
+hwdui_clear_all_stylesheets();
+
+let s1 = hwdui_create_stylesheet("base");
+s1.addRule(hwdui_sel_type("Label"), [
+    ["color", "#111"],
+    ["font-size", "12"],
+    ["font-family", "serif"]
+]);
+
+let s2 = hwdui_create_stylesheet("override");
+s2.addRule(hwdui_sel_type("Label"), [
+    ["color", "#ff0000"],
+    ["font-size", "16"]
+]);
+
+let multi_lbl = new Label();
+multi_lbl.init_label("多样式表");
+
+# s2 在 s1 之后注册，同特异性时后者覆盖前者
+let mcs = multi_lbl.getComputedStyle();
+assert(mcs["color"] == "#ff0000", "Multi-sheet: later sheet overrides color");
+assert(mcs["font-size"] == "16", "Multi-sheet: later sheet overrides font-size");
+assert(mcs["font-family"] == "serif", "Multi-sheet: base sheet provides font-family");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 35：CSS 引擎 — 跨 Widget 类型主题应用
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 35: CSS 跨类型主题 ──");
+hwdui_clear_all_stylesheets();
+hwdui_theme_light();
+
+let thm_btn = new Button();
+thm_btn.init_btn("主题按钮");
+let thm_lbl = new Label();
+thm_lbl.init_label("主题标签");
+let thm_tb = new TextBox();
+thm_tb.init_tb("主题输入");
+
+let bcs = thm_btn.getComputedStyle();
+let lcs = thm_lbl.getComputedStyle();
+let tcs = thm_tb.getComputedStyle();
+
+assert(bcs["cursor"] == "pointer", "Theme: Button cursor pointer");
+assert(lcs["font-family"] == "sans-serif", "Theme: Label font-family");
+assert(tcs["border-style"] == "solid", "Theme: TextBox border-style");
+assert(bcs["border-radius"] == "4", "Theme: Button border-radius");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 36：CSS 引擎 — 全局默认样式
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 36: CSS 全局默认 ──");
+hwdui_clear_all_stylesheets();
+
+hwdui_set_default_styles([
+    ["font-family", "system-ui"],
+    ["font-size", "14"],
+    ["color", "#222222"]
+]);
+
+let def_btn = new Button();
+def_btn.init_btn("默认");
+let dcs = def_btn.getComputedStyle();
+assert(dcs["font-family"] == "system-ui", "Default: font-family");
+assert(dcs["font-size"] == "14", "Default: font-size");
+assert(dcs["color"] == "#222222", "Default: color");
+
+# 样式表覆盖默认值
+let override_sheet = hwdui_create_stylesheet("override_default");
+override_sheet.addRule(hwdui_sel_type("Button"), [
+    ["font-size", "20"]
+]);
+let dcs2 = def_btn.getComputedStyle();
+assert(dcs2["font-size"] == "20", "Default: stylesheet overrides default font-size");
+assert(dcs2["font-family"] == "system-ui", "Default: font-family still from defaults");
+
+# 重置默认值
+hwdui_set_default_styles([]);
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 37：hwdui_summary 更新验证
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 37: hwdui_summary v2 ──");
+hwdui_summary();
+assert(true, "hwdui_summary v2 runs without error");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 38：Window minimze/maximize/restore
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 38: Window 状态 ──");
+let state_win = hwdui_create_window("状态窗口", 400, 300);
+state_win.set_pos(100, 100);
+
+state_win.minimize();
+assert(state_win.is_minimized == true, "Window minimize");
+
+state_win.restore();
+assert(state_win.x == 100, "Window restore x");
+assert(state_win.y == 100, "Window restore y");
+assert(state_win.width == 400, "Window restore w");
+assert(state_win.height == 300, "Window restore h");
+assert(state_win.is_minimized == false, "Window no longer minimized");
+
+state_win.maximize();
+assert(state_win.is_maximized == true, "Window maximize");
+state_win.restore();
+assert(state_win.is_maximized == false, "Window unmaximize");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 39：Window get_client_area
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 39: Window client_area ──");
+let ca = state_win.get_client_area();
+assert(ca != nullptr, "Window get_client_area");
+assert(ca["y"] == state_win.title_height, "Client area y = title_height");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 40：zzwUI contains_point
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 40: contains_point ──");
+let rect = new Panel();
+rect.init_panel("absolute");
+rect.set_bounds(50, 50, 200, 100);
+assert(rect.contains_point(60, 60) == true, "contains_point inside");
+assert(rect.contains_point(250, 100) == true, "contains_point edge");
+assert(rect.contains_point(30, 60) == false, "contains_point outside left");
+assert(rect.contains_point(60, 30) == false, "contains_point outside top");
+assert(rect.contains_point(300, 60) == false, "contains_point outside right");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 41：bring_to_front / send_to_back
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 41: Z-ordering ──");
+let zparent = new Panel();
+zparent.init_panel("absolute");
+let z1 = new Button();
+z1.init_btn("Z1");
+let z2 = new Button();
+z2.init_btn("Z2");
+let z3 = new Button();
+z3.init_btn("Z3");
+zparent.add_child(z1);
+zparent.add_child(z2);
+zparent.add_child(z3);
+
+z1.bring_to_front();
+let last_child = zparent.get_child_at(2);
+assert(last_child == z1, "bring_to_front: z1 is last child");
+
+z2.send_to_back();
+let first_child = zparent.get_child_at(0);
+assert(first_child == z2, "send_to_back: z2 is first child");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 42：hwdui_close_all_windows
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 42: 关闭所有窗口 ──");
+hwdui_close_all_windows();
+assert(len(hwdui_get_active_windows()) == 0, "hwdui_close_all_windows");
+assert(hwdui_get_window_count() == 0, "Get window count = 0");
+assert(hwdui_get_active_window() == nullptr, "Get active window nullptr");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 43：MenuBar / Menu / MenuItem
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 43: MenuBar ──");
+let mb = new MenuBar();
+mb.init_mb();
+let file_menu = mb.addMenuText("File");
+file_menu.addAction("New", fn(item) { });
+file_menu.addAction("Open", fn(item) { });
+file_menu.addSeparator();
+file_menu.addAction("Exit", fn(item) { });
+assert(mb.getMenuCount() == 1, "MenuBar: 1 menu");
+assert(file_menu.getItemCount() == 4, "Menu: 4 items (3 actions + separator)");
+
+# separator item
+let sep_item = file_menu.getItem(2);
+assert(sep_item.separator, "MenuItem: separator flag");
+
+# submenu
+let edit_menu = mb.addMenuText("Edit");
+let sub = new Menu();
+sub.init_menu("Insert");
+sub.addAction("Date", fn(item) { });
+edit_menu.addSubmenu("Insert", sub);
+assert(edit_menu.getItemCount() == 1, "Menu: 1 submenu item");
+
+# findItem
+let found = file_menu.findItem(file_menu.items[0].id);
+assert(found != nullptr, "Menu: findItem by id");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 44：ToolBar / ToolButton
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 44: ToolBar ──");
+let tb = new ToolBar();
+tb.init_tb();
+tb.addButton("New", "N", fn(btn) { });
+tb.addButton("Open", "O", fn(btn) { });
+tb.addSeparator();
+let toggle = tb.addToggleButton("Bold", "B", fn(btn) { });
+assert(tb.getButtonCount() == 4, "ToolBar: 4 buttons");
+assert(toggle.is_toggle, "ToolButton: toggle mode");
+
+tb.do_layout();
+assert(tb.buttons[1].x > tb.buttons[0].x, "ToolBar: horizontal layout");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 45：TreeView / TreeNode
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 45: TreeView ──");
+let tv = new TreeView();
+tv.init_tv();
+let root = tv.getRoot();
+root.addChildText("Fruits");
+let veg = root.addChildText("Vegetables");
+veg.addChildText("Carrot");
+veg.addChildText("Broccoli");
+let music = root.addChildText("Music");
+music.addChildText("Rock");
+music.addChildText("Jazz");
+tv.expandAll();
+let visible = tv.getVisibleNodes();
+assert(len(visible) == 8, "TreeView: 8 visible nodes (root + 2 + 2 + 3)");
+assert(veg.hasChildren(), "TreeNode: has children");
+assert(veg.getChildCount() == 2, "TreeNode: 2 children");
+
+# findById
+let carrot = tv.findById(veg.children[0].id);
+assert(carrot != nullptr, "TreeView: findById");
+assert(carrot.text == "Carrot", "TreeView: found Carrot");
+
+# getPath
+let path = veg.getPath();
+assert(len(path) == 2, "TreeNode: path depth 2");
+
+# collapse
+tv.collapseNode(veg);
+let visible2 = tv.getVisibleNodes();
+assert(len(visible2) == 6, "TreeView: 6 visible after collapse (2 children hidden)");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 46：TableView
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 46: TableView ──");
+let tbl = new TableView();
+tbl.init_tbl();
+tbl.addColumn("Name", 150);
+tbl.addColumn("Age", 80);
+tbl.addColumn("City", 120);
+tbl.addRow(["Alice", 30, "NYC"]);
+tbl.addRow(["Bob", 25, "LA"]);
+tbl.addRow(["Charlie", 35, "SF"]);
+assert(tbl.getRowCount() == 3, "TableView: 3 rows");
+assert(tbl.getColumnCount() == 3, "TableView: 3 columns");
+assert(tbl.getCell(0, 0) == "Alice", "TableView: cell(0,0)");
+assert(tbl.getCell(1, 2) == "LA", "TableView: cell(1,2)");
+
+# sort
+tbl.sortByColumn(0);
+assert(tbl.getCell(0, 0) == "Alice", "TableView: sort by name");
+
+# select
+tbl.selectRow(1);
+assert(tbl.getSelectedRow() == 1, "TableView: selected row");
+
+# remove
+tbl.removeRow(0);
+assert(tbl.getRowCount() == 2, "TableView: remove row");
+
+# clear
+tbl.clearRows();
+assert(tbl.getRowCount() == 0, "TableView: clear rows");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 47：Splitter
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 47: Splitter ──");
+let sp = new Splitter();
+sp.init_split("horizontal");
+sp.width = 500;
+sp.height = 400;
+let p1 = new Panel();
+p1.init_panel("absolute");
+let p2 = new Panel();
+p2.init_panel("absolute");
+sp.setFirst(p1);
+sp.setSecond(p2);
+sp.setSplitPos(200);
+sp.do_layout();
+assert(p1.width == 200, "Splitter: first panel width");
+assert(p2.width == 500 - 200 - 4, "Splitter: second panel width");
+assert(p1.height == 400, "Splitter: full height");
+
+# lock
+sp.setLocked(true);
+sp.setSplitPos(300);
+assert(sp.getSplitPos() == 200, "Splitter: locked position");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 48：StatusBar
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 48: StatusBar ──");
+let sb = new StatusBar();
+sb.init_sb();
+sb.setText("Ready");
+sb.addPanel("Ln 1, Col 1", 100);
+sb.addPanel("UTF-8", 60);
+sb.addPanel("H#", 50);
+assert(sb.getText() == "Ready", "StatusBar: main text");
+assert(sb.getPanelCount() == 3, "StatusBar: 3 panels");
+sb.setPanelText(0, "Ln 10, Col 5");
+assert(sb.getPanelText(0) == "Ln 10, Col 5", "StatusBar: panel text update");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 49：Dialog / MessageBox
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 49: Dialog ──");
+let dlg = new Dialog();
+dlg.init_dlg("Test", 400, 200);
+dlg.addButton("OK", 1);
+dlg.addButton("Cancel", 0);
+assert(dlg.getResult() == 0, "Dialog: initial result");
+assert(len(dlg.buttons) == 2, "Dialog: 2 buttons");
+
+# MessageBox
+let alert_box = hwdui_alert("Title", "Hello World");
+assert(alert_box != nullptr, "MessageBox: alert created");
+
+let confirm_box = hwdui_confirm("Confirm", "Are you sure?");
+assert(confirm_box != nullptr, "MessageBox: confirm created");
+
+let prompt_box = hwdui_prompt("Input", "Enter name:", "default");
+assert(prompt_box != nullptr, "MessageBox: prompt created");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 50：SpinBox
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 50: SpinBox ──");
+let sb2 = new SpinBox();
+sb2.init_sp(0, 100, 50);
+assert(sb2.getValue() == 50, "SpinBox: initial value");
+sb2.increment();
+assert(sb2.getValue() == 51, "SpinBox: increment");
+sb2.decrement();
+assert(sb2.getValue() == 50, "SpinBox: decrement");
+sb2.setStep(10);
+sb2.increment();
+assert(sb2.getValue() == 60, "SpinBox: step 10");
+sb2.setRange(0, 55);
+assert(sb2.getValue() == 55, "SpinBox: clamp to max");
+sb2.setPrefix("$");
+sb2.setSuffix(".00");
+assert(sb2.getText() == "$55.00", "SpinBox: formatted text");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 51：GroupBox
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 51: GroupBox ──");
+let gb = new GroupBox();
+gb.init_gb("Settings");
+assert(gb.getTitle() == "Settings", "GroupBox: title");
+gb.setCollapsible(true);
+gb.toggleCollapse();
+assert(gb.isCollapsed(), "GroupBox: collapsed");
+gb.toggleCollapse();
+assert(gb.isCollapsed() == false, "GroupBox: expanded again");
+
+let rect = gb.getContentRect();
+assert(rect["x"] == gb._hwdui_pad_left, "GroupBox: content rect x");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 52：DockPanel
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 52: DockPanel ──");
+let dp = new DockPanel();
+dp.init_dp();
+dp.width = 600;
+dp.height = 400;
+let top_bar = new Panel();
+top_bar.init_panel("absolute");
+dp.dockTop(top_bar, 30);
+let content = new Panel();
+content.init_panel("absolute");
+dp.dockFill(content);
+dp.do_layout();
+assert(content.width == 600, "DockPanel: fill width");
+assert(content.height == 400, "DockPanel: fill height");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 53：FlowPanel
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 53: FlowPanel ──");
+let fp = new FlowPanel();
+fp.init_fp();
+fp.width = 300;
+fp.height = 200;
+let b1 = new Button();
+b1.init_btn("B1");
+b1.width = 80;
+b1.height = 30;
+let b2 = new Button();
+b2.init_btn("B2");
+b2.width = 80;
+b2.height = 30;
+let b3 = new Button();
+b3.init_btn("B3");
+b3.width = 80;
+b3.height = 30;
+fp.add_child(b1);
+fp.add_child(b2);
+fp.add_child(b3);
+fp.do_layout();
+assert(b1.x == fp._hwdui_pad_left, "FlowPanel: first child at pad_left");
+assert(b2.x > b1.x, "FlowPanel: second child to the right");
+assert(b2.y == b1.y, "FlowPanel: same line");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 54：Animation
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 54: Animation ──");
+let anim_btn = new Button();
+anim_btn.init_btn("Animate");
+anim_btn.x = 0;
+let anim = new Animation();
+anim.init_anim(anim_btn, "x", 100, 500);
+anim.setEasing("easeOut");
+anim.start();
+assert(anim.running, "Animation: running");
+anim.update(250);
+assert(anim_btn.x > 50, "Animation: halfway > 50");
+anim.update(250);
+assert(anim_btn.x == 100, "Animation: reached target");
+
+# fade helpers
+let fade_btn = new Button();
+fade_btn.init_btn("Fade");
+let fade_in = hwdui_fade_in(fade_btn, 300);
+assert(fade_in != nullptr, "Animation: fade_in helper");
+
+let slide_btn = new Button();
+slide_btn.init_btn("Slide");
+let slide = hwdui_slide_in(slide_btn, "left", 300);
+assert(slide != nullptr, "Animation: slide_in helper");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 55：ContextMenu
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 55: ContextMenu ──");
+let cm = new ContextMenu();
+cm.init_cm();
+cm.addAction("Cut", fn(item) { });
+cm.addAction("Copy", fn(item) { });
+cm.addSeparator();
+cm.addAction("Paste", fn(item) { });
+assert(cm.getItemCount() == 4, "ContextMenu: 4 items");
+cm.showAt(100, 200);
+assert(cm.visible, "ContextMenu: visible after showAt");
+cm.hide();
+assert(cm.visible == false, "ContextMenu: hidden");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 56：FileDialog
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 56: FileDialog ──");
+let fd = new FileDialog();
+fd.init_fd("Open File", "open", "*.hto");
+fd.setFilePath("/home/test.hto");
+assert(fd.getFilePath() == "/home/test.hto", "FileDialog: file path");
+assert(fd.mode == "open", "FileDialog: mode open");
+assert(fd.filter == "*.hto", "FileDialog: filter");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 57：新主题
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 57: 新主题 ──");
+hwdui_clear_all_stylesheets();
+let mat_sheet = hwdui_theme_material();
+assert(mat_sheet != nullptr, "Theme: material created");
+let ocean_sheet = hwdui_theme_ocean();
+assert(ocean_sheet != nullptr, "Theme: ocean created");
+let forest_sheet = hwdui_theme_forest();
+assert(forest_sheet != nullptr, "Theme: forest created");
+let cyber_sheet = hwdui_theme_cyberpunk();
+assert(cyber_sheet != nullptr, "Theme: cyberpunk created");
+
+hwdui_clear_all_stylesheets();
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 58：Canvas 绘图控件
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 58: Canvas ──");
+let canvas = new Canvas();
+canvas.init_canvas(400, 300);
+assert(canvas != nullptr, "Canvas created");
+assert(canvas.widget_type == "Canvas", "Canvas widget_type");
+assert(canvas.width == 400, "Canvas width");
+assert(canvas.height == 300, "Canvas height");
+
+canvas.drawLine(0, 0, 100, 100, "#000000", 2);
+assert(len(canvas.lines) == 1, "Canvas: 1 line");
+assert(canvas.lines[0]["x1"] == 0, "Canvas: line x1");
+assert(canvas.lines[0]["y1"] == 0, "Canvas: line y1");
+assert(canvas.lines[0]["x2"] == 100, "Canvas: line x2");
+assert(canvas.lines[0]["y2"] == 100, "Canvas: line y2");
+assert(canvas.lines[0]["color"] == "#000000", "Canvas: line color");
+assert(canvas.lines[0]["width"] == 2, "Canvas: line width");
+
+canvas.drawRect(10, 20, 80, 60, "#FF0000", false, 1);
+assert(len(canvas.rects) == 1, "Canvas: 1 rect");
+assert(canvas.rects[0]["fill"] == false, "Canvas: rect outline");
+
+canvas.fillRect(50, 50, 100, 80, "#00FF00");
+assert(len(canvas.rects) == 2, "Canvas: 2 rects (fillRect added)");
+assert(canvas.rects[1]["fill"] == true, "Canvas: fillRect fill=true");
+
+canvas.drawCircle(150, 150, 50, "#0000FF", false, 2);
+assert(len(canvas.circles) == 1, "Canvas: 1 circle");
+assert(canvas.circles[0]["cx"] == 150, "Canvas: circle cx");
+assert(canvas.circles[0]["cy"] == 150, "Canvas: circle cy");
+assert(canvas.circles[0]["radius"] == 50, "Canvas: circle radius");
+
+canvas.fillCircle(200, 200, 30, "#FF00FF");
+assert(len(canvas.circles) == 2, "Canvas: 2 circles");
+assert(canvas.circles[1]["fill"] == true, "Canvas: fillCircle fill=true");
+
+canvas.drawText(10, 250, "Hello Canvas", "#333333", 14);
+assert(len(canvas.texts) == 1, "Canvas: 1 text");
+assert(canvas.texts[0]["text"] == "Hello Canvas", "Canvas: text content");
+assert(canvas.texts[0]["color"] == "#333333", "Canvas: text color");
+assert(canvas.texts[0]["size"] == 14, "Canvas: text size");
+
+canvas.drawImage(0, 0, 100, 80, "test.png");
+assert(len(canvas.images) == 1, "Canvas: 1 image");
+assert(canvas.images[0]["path"] == "test.png", "Canvas: image path");
+
+canvas.clear();
+assert(len(canvas.lines) == 0, "Canvas: clear lines");
+assert(len(canvas.rects) == 0, "Canvas: clear rects");
+assert(len(canvas.circles) == 0, "Canvas: clear circles");
+assert(len(canvas.texts) == 0, "Canvas: clear texts");
+assert(len(canvas.images) == 0, "Canvas: clear images");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 59：GridPanel 网格布局
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 59: GridPanel ──");
+let gp = new GridPanel();
+gp.init_grid(2, 3);
+assert(gp != nullptr, "GridPanel created");
+assert(gp.widget_type == "GridPanel", "GridPanel widget_type");
+assert(gp.rows == 2, "GridPanel rows");
+assert(gp.cols == 3, "GridPanel cols");
+assert(len(gp.row_heights) == 2, "GridPanel row_heights count");
+assert(len(gp.col_widths) == 3, "GridPanel col_widths count");
+
+gp.setRowHeight(0, 100);
+gp.setColWidth(1, 200);
+assert(gp.row_heights[0] == 100, "GridPanel setRowHeight");
+assert(gp.col_widths[1] == 200, "GridPanel setColWidth");
+
+gp.setSpacing(5, 8);
+assert(gp.row_spacing == 5, "GridPanel row_spacing");
+assert(gp.col_spacing == 8, "GridPanel col_spacing");
+
+let gbtn1 = new Button();
+gbtn1.init_btn("G1");
+gbtn1.width = 80;
+gbtn1.height = 30;
+gp.addChildAt(gbtn1, 0, 0);
+assert(gp.get_child_count() == 1, "GridPanel: 1 child");
+
+gp.width = 600;
+gp.height = 400;
+gp.do_layout();
+# First child should be positioned at padding
+assert(gbtn1.x >= gp._hwdui_pad_left, "GridPanel: child positioned");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 60：Timer 定时器
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 60: Timer ──");
+let tick_count = 0;
+fn on_timer_tick(timer) {
+    tick_count = tick_count + 1;
+}
+
+let timer = new Timer();
+timer.init_timer(100, on_timer_tick);
+assert(timer != nullptr, "Timer created");
+assert(timer.interval_ms == 100, "Timer interval");
+assert(timer.running == false, "Timer not running by default");
+assert(timer.repeats == true, "Timer repeats by default");
+
+timer.start();
+assert(timer.running == true, "Timer started");
+assert(timer.isRunning() == true, "Timer isRunning");
+
+timer._tick(50);
+assert(tick_count == 0, "Timer: not fired at 50ms");
+timer._tick(60);
+assert(tick_count == 1, "Timer: fired at 110ms");
+assert(timer.running == true, "Timer: still running after tick");
+
+timer.setRepeats(false);
+timer._tick(100);
+assert(tick_count == 2, "Timer: fired again");
+assert(timer.running == false, "Timer: stopped after single shot");
+
+timer.setInterval(500);
+assert(timer.interval_ms == 500, "Timer: setInterval");
+
+timer.restart();
+assert(timer.running == true, "Timer: restart");
+timer.stop();
+assert(timer.running == false, "Timer: stop");
+
+hwdui_timer_stop_all();
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 61：Notification 通知
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 61: Notification ──");
+let notif = new Notification();
+notif.init_notify("信息", "这是一条通知", "info");
+assert(notif != nullptr, "Notification created");
+assert(notif.title == "信息", "Notification title");
+assert(notif.message == "这是一条通知", "Notification message");
+assert(notif.type == "info", "Notification type");
+assert(notif.visible == false, "Notification not visible by default");
+
+notif.setTimeout(5000);
+assert(notif.timeout == 5000, "Notification setTimeout");
+
+notif.show();
+assert(notif.visible == true, "Notification visible after show");
+
+notif.close();
+assert(notif.visible == false, "Notification hidden after close");
+
+# Convenience functions
+let n_info = notify_info("标题", "信息通知");
+assert(n_info != nullptr, "notify_info created");
+assert(n_info.type == "info", "notify_info type");
+
+let n_success = notify_success("成功", "操作成功");
+assert(n_success != nullptr, "notify_success created");
+assert(n_success.type == "success", "notify_success type");
+
+let n_warn = notify_warning("警告", "注意");
+assert(n_warn != nullptr, "notify_warning created");
+assert(n_warn.type == "warning", "notify_warning type");
+
+let n_err = notify_error("错误", "出错了");
+assert(n_err != nullptr, "notify_error created");
+assert(n_err.type == "error", "notify_error type");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 62：Tooltip 提示
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 62: Tooltip ──");
+let tip = new Tooltip();
+tip.init_tooltip("这是提示文本");
+assert(tip != nullptr, "Tooltip created");
+assert(tip.text == "这是提示文本", "Tooltip text");
+assert(tip.delay == 500, "Tooltip default delay");
+assert(tip.visible == false, "Tooltip not visible");
+
+tip.setText("新提示");
+assert(tip.text == "新提示", "Tooltip setText");
+
+tip.setDelay(300);
+assert(tip.delay == 300, "Tooltip setDelay");
+
+tip.showAt(100, 200);
+assert(tip.visible == true, "Tooltip visible after showAt");
+assert(tip.x == 110, "Tooltip x offset");
+assert(tip.y == 210, "Tooltip y offset");
+
+assert(hwdui_tooltip_get() == tip, "hwdui_tooltip_get returns current tip");
+
+tip.hide();
+assert(tip.visible == false, "Tooltip hidden");
+assert(hwdui_tooltip_get() == nullptr, "hwdui_tooltip_get nullptr after hide");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 测试 63：KeyboardHandler 键盘导航
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 63: KeyboardHandler ──");
+let kh = new KeyboardHandler();
+kh.init_kh();
+assert(kh != nullptr, "KeyboardHandler created");
+assert(kh.enabled == true, "KeyboardHandler enabled");
+
+let kw1 = new Button();
+kw1.init_btn("Widget1");
+let kw2 = new Button();
+kw2.init_btn("Widget2");
+let kw3 = new Button();
+kw3.init_btn("Widget3");
+
+kh.addWidget(kw1);
+kh.addWidget(kw2);
+kh.addWidget(kw3);
+assert(len(kh.tab_order) == 3, "KeyboardHandler: 3 widgets");
+
+kh.setCurrent(kw1);
+assert(kh.getCurrent() == kw1, "KeyboardHandler: current is kw1");
+
+let next_w = kh.next();
+assert(next_w == kw2, "KeyboardHandler: next is kw2");
+assert(kh.getCurrent() == kw2, "KeyboardHandler: current updated to kw2");
+
+let prev_w = kh.prev();
+assert(prev_w == kw1, "KeyboardHandler: prev is kw1");
+
+# Wrap around
+kh.setCurrent(kw3);
+let wrap_next = kh.next();
+assert(wrap_next == kw1, "KeyboardHandler: wrap next to first");
+
+# Skip disabled
+kw2.disable();
+kh.setCurrent(kw1);
+let skip_next = kh.next();
+assert(skip_next == kw3, "KeyboardHandler: skip disabled widget");
+
+kh.removeWidget(kw2);
+assert(len(kh.tab_order) == 2, "KeyboardHandler: remove widget");
+
+kh.clear();
+assert(len(kh.tab_order) == 0, "KeyboardHandler: clear");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 64: Serializer
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 64: Serializer ──");
+let ser = new Serializer();
+ser.init_serializer();
+assert(ser != nullptr, "Serializer created");
+
+let win = new Window();
+win.init_win("Serialize Test");
+let panel = new Panel();
+panel.init_panel("vbox");
+win.add_child(panel);
+let btn = new Button();
+btn.init_btn("OK");
+panel.add_child(btn);
+
+let ser_data = ser.serialize(win);
+assert(ser_data != nullptr, "Serializer: serialize returns data");
+assert(ser_data["widget_type"] == "Window", "Serializer: widget_type preserved");
+assert(ser_data["children"] != nullptr, "Serializer: children serialized");
+assert(len(ser_data["children"]) >= 1, "Serializer: has child panel");
+
+let children = ser_data["children"];
+let child0 = children[0];
+assert(child0["widget_type"] == "Panel", "Serializer: child type preserved");
+assert(child0["children"] != nullptr, "Serializer: grandchild serialized");
+assert(len(child0["children"]) >= 1, "Serializer: has grandchild button");
+
+let root_data = ser.serialize_root(win);
+assert(root_data != nullptr, "Serializer: serialize_root works");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 65: Deserializer
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 65: Deserializer ──");
+let deser = new Deserializer();
+deser.init_deserializer();
+assert(deser != nullptr, "Deserializer created");
+
+let restored = deser.deserialize(ser_data);
+assert(restored != nullptr, "Deserializer: deserialize returns widget");
+assert(restored.widget_type == "Window", "Deserializer: type restored");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 66: ColorPicker
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 66: ColorPicker ──");
+let cp = new ColorPicker();
+cp.init_colorpicker("#FF0000");
+assert(cp != nullptr, "ColorPicker created");
+assert(cp.getColor() == "#FF0000", "ColorPicker: initial color");
+
+cp.setColor("#00FF00");
+assert(cp.getColor() == "#00FF00", "ColorPicker: setColor works");
+
+let cp_changed = false;
+fn cp_callback(widget, color) {
+    let cp_changed = true;
+    assert(color == "#0000FF", "ColorPicker: callback color correct");
+    return 0;
+}
+cp.setOnColorChanged(cp_callback);
+cp.setColor("#0000FF");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 67: Calendar
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 67: Calendar ──");
+let cal = new Calendar();
+cal.init_calendar();
+assert(cal != nullptr, "Calendar created");
+assert(cal.getSelectedDate() == nullptr, "Calendar: no initial date");
+
+cal.setSelectedDate("2026-06-06");
+assert(cal.getSelectedDate() == "2026-06-06", "Calendar: setSelectedDate works");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 68: SplitPane
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 68: SplitPane ──");
+let sp = new SplitPane();
+sp.init_split("horizontal");
+assert(sp != nullptr, "SplitPane created");
+assert(sp.orientation == "horizontal", "SplitPane: orientation");
+assert(sp.divider_position == 0.5, "SplitPane: default divider");
+
+let left = new Panel();
+left.init_panel("vbox");
+sp.setFirstPanel(left);
+assert(sp.first_panel == left, "SplitPane: first panel set");
+
+let right = new Panel();
+right.init_panel("vbox");
+sp.setSecondPanel(right);
+assert(sp.second_panel == right, "SplitPane: second panel set");
+
+sp.setDividerPosition(0.7);
+assert(sp.divider_position == 0.7, "SplitPane: setDividerPosition");
+
+# Test layout
+sp.x = 0;
+sp.y = 0;
+sp.width = 800;
+sp.height = 600;
+sp.do_layout();
+assert(left.width > 0, "SplitPane: first panel has width");
+assert(right.width > 0, "SplitPane: second panel has width");
+
+# Vertical split
+let spv = new SplitPane();
+spv.init_split("vertical");
+spv.x = 0;
+spv.y = 0;
+spv.width = 800;
+spv.height = 600;
+let top = new Panel();
+top.init_panel("vbox");
+let bottom = new Panel();
+bottom.init_panel("vbox");
+spv.setFirstPanel(top);
+spv.setSecondPanel(bottom);
+spv.do_layout();
+assert(top.height > 0, "SplitPane: vertical first panel has height");
+assert(bottom.height > 0, "SplitPane: vertical second panel has height");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 69: DataBinding
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 69: DataBinding ──");
+let data_obj = {"name": "Alice", "age": 30};
+let target_widget = {"text": ""};
+
+let ctx = new DataContext();
+ctx.init_context(data_obj);
+assert(ctx != nullptr, "DataContext created");
+
+let binding = new Binding();
+binding.init_binding(data_obj, "name", target_widget, "text");
+assert(binding != nullptr, "Binding created");
+
+ctx.add_binding(binding);
+ctx.update_all();
+assert(target_widget["text"] == "Alice", "DataBinding: value propagated");
+
+data_obj["name"] = "Bob";
+ctx.update_all();
+assert(target_widget["text"] == "Bob", "DataBinding: updated value");
+
+# Converter
+let conv_data = {"price": 100};
+let conv_target = {"text": ""};
+let conv_bind = new Binding();
+conv_bind.init_binding(conv_data, "price", conv_target, "text");
+fn dollars_to_yuan(price) {
+    return price * 7.2;
+}
+conv_bind.setConverter(dollars_to_yuan);
+conv_bind.update();
+assert(conv_target["text"] == 720.0, "DataBinding: converter works");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 70: Accordion
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 70: Accordion ──");
+let accord = new Accordion();
+accord.init_accordion();
+assert(accord != nullptr, "Accordion created");
+
+let acc_content1 = new Panel();
+acc_content1.init_panel("vbox");
+let acc_content2 = new Panel();
+acc_content2.init_panel("vbox");
+
+accord.addItem("Section 1", acc_content1);
+accord.addItem("Section 2", acc_content2);
+assert(len(accord.items) == 2, "Accordion: items added");
+assert(acc_content1.visible == false, "Accordion: content1 hidden by default");
+assert(acc_content2.visible == false, "Accordion: content2 hidden by default");
+
+accord.toggleItem(0);
+assert(accord.items[0].expanded == true, "Accordion: toggleItem expands");
+assert(acc_content1.visible == true, "Accordion: content1 visible after toggle");
+
+accord.toggleItem(1);
+assert(accord.items[0].expanded == false, "Accordion: single mode collapses previous");
+assert(accord.items[1].expanded == true, "Accordion: new item expanded");
+
+accord.setAllowMultiple(true);
+accord.toggleItem(0);
+assert(accord.items[0].expanded == true, "Accordion: multiple mode allows both");
+assert(accord.items[1].expanded == true, "Accordion: both expanded");
+
+accord.expandItem(0);
+assert(accord.items[0].expanded == true, "Accordion: expandItem works");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 71: Stepper
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 71: Stepper ──");
+let step = new Stepper();
+step.init_stepper(50);
+assert(step != nullptr, "Stepper created");
+assert(step.getValue() == 50, "Stepper: initial value");
+
+step.increment();
+assert(step.getValue() == 51, "Stepper: increment");
+
+step.decrement();
+assert(step.getValue() == 50, "Stepper: decrement");
+
+step.setRange(0, 200);
+step.setStep(10);
+step.increment();
+assert(step.getValue() == 60, "Stepper: step increase");
+
+step.setValue(250);
+assert(step.getValue() == 200, "Stepper: clamped to max");
+
+step.setValue(-10);
+assert(step.getValue() == 0, "Stepper: clamped to min");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 72: Rating
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 72: Rating ──");
+let rating = new Rating();
+rating.init_rating();
+assert(rating != nullptr, "Rating created");
+assert(rating.getRating() == 0, "Rating: initial value");
+assert(rating.max_stars == 5, "Rating: default max stars");
+
+rating.setRating(3);
+assert(rating.getRating() == 3, "Rating: setRating");
+
+rating.setRating(10);
+assert(rating.getRating() == 5, "Rating: clamped to max");
+
+rating.setRating(-1);
+assert(rating.getRating() == 0, "Rating: clamped to min");
+
+rating.setMaxStars(10);
+rating.setRating(8);
+assert(rating.getRating() == 8, "Rating: higher max stars");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 73: CircularProgress
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 73: CircularProgress ──");
+let cp_bar = new CircularProgress();
+cp_bar.init_circular();
+assert(cp_bar != nullptr, "CircularProgress created");
+assert(cp_bar.getValue() == 0, "CircularProgress: initial value");
+assert(cp_bar.max_value == 100, "CircularProgress: default max");
+assert(cp_bar.show_text == true, "CircularProgress: show_text default");
+
+cp_bar.setValue(50);
+assert(cp_bar.getValue() == 50, "CircularProgress: setValue");
+assert(cp_bar.getPercentage() == 50.0, "CircularProgress: percentage");
+
+cp_bar.setValue(150);
+assert(cp_bar.getValue() == 100, "CircularProgress: clamped");
+
+cp_bar.setMaxValue(200);
+cp_bar.setValue(100);
+assert(cp_bar.getPercentage() == 50.0, "CircularProgress: percentage with custom max");
+
+cp_bar.setShowText(false);
+assert(cp_bar.show_text == false, "CircularProgress: setShowText");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 74: ToggleSwitch
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 74: ToggleSwitch ──");
+let ts = new ToggleSwitch();
+ts.init_toggle();
+assert(ts != nullptr, "ToggleSwitch created");
+assert(ts.widget_type == "ToggleSwitch", "ToggleSwitch widget_type");
+assert(ts.isChecked() == false, "ToggleSwitch: default unchecked");
+assert(ts.on_color == "#4CAF50", "ToggleSwitch: default on color");
+assert(ts.off_color == "#CCCCCC", "ToggleSwitch: default off color");
+
+ts.setChecked(true);
+assert(ts.isChecked() == true, "ToggleSwitch: setChecked true");
+
+ts.toggle();
+assert(ts.isChecked() == false, "ToggleSwitch: toggle off");
+
+ts.toggle();
+assert(ts.isChecked() == true, "ToggleSwitch: toggle on");
+
+ts.setColors("#00FF00", "#FF0000");
+assert(ts.on_color == "#00FF00", "ToggleSwitch: setColors on");
+assert(ts.off_color == "#FF0000", "ToggleSwitch: setColors off");
+
+let ts_callback_fired = false;
+fn ts_callback(widget, state) {
+    let ts_callback_fired = true;
+    assert(state == true, "ToggleSwitch: callback state");
+    return 0;
+}
+ts.setOnToggle(ts_callback);
+ts.setChecked(true);
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 75: PasswordBox
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 75: PasswordBox ──");
+let pw = new PasswordBox();
+pw.init_pw();
+assert(pw != nullptr, "PasswordBox created");
+assert(pw.widget_type == "PasswordBox", "PasswordBox widget_type");
+assert(pw.echo_char == "*", "PasswordBox: default echo char");
+
+pw.setText("secret123");
+assert(pw.getRealText() == "secret123", "PasswordBox: real text stored");
+assert(pw.getMaskedText() == "*********", "PasswordBox: masked text");
+
+pw.setEchoChar("#");
+pw.setText("abc");
+assert(pw.getMaskedText() == "###", "PasswordBox: custom echo char");
+
+pw.appendChar("d");
+assert(pw.getRealText() == "abcd", "PasswordBox: appendChar");
+
+pw.deleteLast();
+assert(pw.getRealText() == "abc", "PasswordBox: deleteLast");
+
+pw.clear();
+assert(pw.getRealText() == "", "PasswordBox: clear");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 76: SearchBox
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 76: SearchBox ──");
+let sb = new SearchBox();
+sb.init_search();
+assert(sb != nullptr, "SearchBox created");
+assert(sb.widget_type == "SearchBox", "SearchBox widget_type");
+assert(sb.show_clear_btn == true, "SearchBox: show_clear_btn default");
+
+sb.set_placeholder("Search...");
+assert(sb.getPlaceholder() == "Search...", "SearchBox: placeholder");
+
+sb.set_text("hello");
+let search_fired = false;
+fn search_cb(widget, text) {
+    let search_fired = true;
+    assert(text == "hello", "SearchBox: search callback text");
+    return 0;
+}
+sb.setOnSearch(search_cb);
+sb.search();
+
+let clear_fired = false;
+fn clear_cb(widget) {
+    let clear_fired = true;
+    return 0;
+}
+sb.setOnClear(clear_cb);
+sb.clear();
+assert(sb.text == "", "SearchBox: text cleared");
+
+sb.setShowClearButton(false);
+assert(sb.show_clear_btn == false, "SearchBox: setShowClearButton");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 77: LinkLabel
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 77: LinkLabel ──");
+let ll = new LinkLabel();
+ll.init_link("Click here", "https://example.com");
+assert(ll != nullptr, "LinkLabel created");
+assert(ll.widget_type == "LinkLabel", "LinkLabel widget_type");
+assert(ll.text == "Click here", "LinkLabel: text");
+assert(ll.getUrl() == "https://example.com", "LinkLabel: url");
+assert(ll.isVisited() == false, "LinkLabel: not visited by default");
+assert(ll.underline == true, "LinkLabel: underline default");
+
+ll.setUrl("https://new-url.com");
+assert(ll.getUrl() == "https://new-url.com", "LinkLabel: setUrl");
+
+ll.setVisited(true);
+assert(ll.isVisited() == true, "LinkLabel: setVisited");
+
+ll.setUnderline(false);
+assert(ll.underline == false, "LinkLabel: setUnderline");
+
+let link_clicked = false;
+fn link_cb(widget, url) {
+    let link_clicked = true;
+    assert(url == "https://new-url.com", "LinkLabel: click callback url");
+    return 0;
+}
+ll.setOnLinkClicked(link_cb);
+ll.click();
+assert(ll.isVisited() == true, "LinkLabel: visited after click");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 78: Badge
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 78: Badge ──");
+let badge = new Badge();
+badge.init_badge();
+assert(badge != nullptr, "Badge created");
+assert(badge.widget_type == "Badge", "Badge widget_type");
+assert(badge.getCount() == 0, "Badge: default count 0");
+assert(badge.max_count == 99, "Badge: default max_count");
+assert(badge.show_zero == false, "Badge: show_zero default");
+assert(badge.isVisible() == false, "Badge: not visible when count=0 and show_zero=false");
+
+badge.setCount(5);
+assert(badge.getCount() == 5, "Badge: setCount");
+assert(badge.isVisible() == true, "Badge: visible when count>0");
+assert(badge.getDisplayText() == 5, "Badge: display text");
+
+badge.increment();
+assert(badge.getCount() == 6, "Badge: increment");
+
+badge.decrement();
+assert(badge.getCount() == 5, "Badge: decrement");
+
+badge.decrement();
+badge.decrement();
+badge.decrement();
+badge.decrement();
+badge.decrement();
+assert(badge.getCount() == 0, "Badge: decrement to 0");
+
+badge.setCount(-5);
+assert(badge.getCount() == 0, "Badge: negative count clamped to 0");
+
+badge.setCount(150);
+assert(badge.getDisplayText() == "99+", "Badge: overflow display");
+
+badge.setMaxCount(50);
+assert(badge.getDisplayText() == "50+", "Badge: custom max overflow");
+
+badge.setShowZero(true);
+badge.setCount(0);
+assert(badge.isVisible() == true, "Badge: visible when show_zero=true");
+assert(badge.getDisplayText() == "0", "Badge: show zero text");
+
+badge.setBadgeColor("#0000FF");
+assert(badge.badge_color == "#0000FF", "Badge: setBadgeColor");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 79: DateTimePicker
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 79: DateTimePicker ──");
+let dtp = new DateTimePicker();
+dtp.init_dtp();
+assert(dtp != nullptr, "DateTimePicker created");
+assert(dtp.widget_type == "DateTimePicker", "DateTimePicker widget_type");
+assert(dtp.getDate() == "", "DateTimePicker: empty date default");
+assert(dtp.getTime() == "00:00", "DateTimePicker: default time");
+assert(dtp.is24Hour() == false, "DateTimePicker: 12h default");
+
+dtp.setDate("2026-06-06");
+assert(dtp.getDate() == "2026-06-06", "DateTimePicker: setDate");
+
+dtp.setTime("14:30");
+assert(dtp.getTime() == "14:30", "DateTimePicker: setTime");
+
+assert(dtp.getDateTime() == "2026-06-06 14:30", "DateTimePicker: getDateTime");
+
+dtp.setDateTime("2026-12-25", "08:00");
+assert(dtp.getDateTime() == "2026-12-25 08:00", "DateTimePicker: setDateTime");
+
+dtp.setUse24Hour(true);
+assert(dtp.is24Hour() == true, "DateTimePicker: setUse24Hour");
+
+let dtp_callback_fired = false;
+fn dtp_cb(widget, date, time) {
+    let dtp_callback_fired = true;
+    assert(date == "2026-12-25", "DateTimePicker: callback date");
+    assert(time == "08:00", "DateTimePicker: callback time");
+    return 0;
+}
+dtp.setOnDateTimeChanged(dtp_cb);
+dtp._notify();
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 80: TagInput
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 80: TagInput ──");
+let ti = new TagInput();
+ti.init_taginput();
+assert(ti != nullptr, "TagInput created");
+assert(ti.widget_type == "TagInput", "TagInput widget_type");
+assert(ti.getTagCount() == 0, "TagInput: empty by default");
+assert(ti.allow_duplicates == false, "TagInput: duplicates not allowed");
+
+ti.addTag("JavaScript");
+ti.addTag("Python");
+ti.addTag("H#");
+assert(ti.getTagCount() == 3, "TagInput: 3 tags added");
+assert(ti.hasTag("Python") == true, "TagInput: hasTag Python");
+assert(ti.hasTag("Ruby") == false, "TagInput: hasTag Ruby");
+
+ti.addTag("JavaScript");
+assert(ti.getTagCount() == 3, "TagInput: duplicate not added");
+
+ti.removeTag("Python");
+assert(ti.getTagCount() == 2, "TagInput: removeTag");
+assert(ti.hasTag("Python") == false, "TagInput: Python removed");
+
+ti.addTag("Go");
+ti.removeTagAt(0);
+assert(ti.getTagCount() == 2, "TagInput: removeTagAt");
+
+ti.setMaxTags(2);
+ti.addTag("Rust");
+assert(ti.getTagCount() == 2, "TagInput: max_tags limit");
+
+ti.setAllowDuplicates(true);
+ti.setMaxTags(0);
+ti.addTag("Go");
+assert(ti.getTagCount() == 3, "TagInput: duplicate allowed");
+
+ti.clearTags();
+assert(ti.getTagCount() == 0, "TagInput: clearTags");
+
+let tags_changed = false;
+fn tags_cb(widget, tags) {
+    let tags_changed = true;
+    return 0;
+}
+ti.setOnTagsChanged(tags_cb);
+ti.addTag("Test");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 81: Breadcrumb
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 81: Breadcrumb ──");
+let bc = new Breadcrumb();
+bc.init_breadcrumb();
+assert(bc != nullptr, "Breadcrumb created");
+assert(bc.widget_type == "Breadcrumb", "Breadcrumb widget_type");
+assert(bc.getItemCount() == 0, "Breadcrumb: empty");
+assert(bc.separator == ">", "Breadcrumb: default separator");
+
+bc.addItem("Home", {"path": "/"});
+bc.addItem("Products", {"path": "/products"});
+bc.addItem("Detail", {"path": "/products/1"});
+assert(bc.getItemCount() == 3, "Breadcrumb: 3 items");
+
+let item0 = bc.getItem(0);
+assert(item0 != nullptr, "Breadcrumb: getItem(0)");
+assert(item0.text == "Home", "Breadcrumb: item0 text");
+assert(item0.is_last == false, "Breadcrumb: item0 not last");
+
+let item2 = bc.getItem(2);
+assert(item2.is_last == true, "Breadcrumb: last item marked");
+
+bc.setSeparator("/");
+assert(bc.separator == "/", "Breadcrumb: setSeparator");
+
+bc.removeLast();
+assert(bc.getItemCount() == 2, "Breadcrumb: removeLast");
+
+bc.clear();
+assert(bc.getItemCount() == 0, "Breadcrumb: clear");
+
+bc.setPath(["Home", "Settings", "Profile"]);
+assert(bc.getItemCount() == 3, "Breadcrumb: setPath");
+assert(bc.getItem(2).is_last == true, "Breadcrumb: setPath last item");
+
+let bc_clicked = false;
+fn bc_cb(widget, index, item) {
+    let bc_clicked = true;
+    assert(index == 1, "Breadcrumb: click callback index");
+    assert(item.text == "Settings", "Breadcrumb: click callback text");
+    return 0;
+}
+bc.setOnItemClicked(bc_cb);
+bc.clickItem(1);
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 82: RichLabel
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 82: RichLabel ──");
+let rl = new RichLabel();
+rl.init_rich("Plain text");
+assert(rl != nullptr, "RichLabel created");
+assert(rl.widget_type == "RichLabel", "RichLabel widget_type");
+assert(rl.text == "Plain text", "RichLabel: base text");
+
+rl.setMarkup("Hello <b>World</b>!");
+assert(rl.getMarkup() == "Hello <b>World</b>!", "RichLabel: markup stored");
+assert(rl.getSegmentCount() > 0, "RichLabel: segments parsed");
+assert(rl.getPlainText() == "Hello World!", "RichLabel: plain text");
+
+rl.setMarkup("<b>Bold</b> and <i>Italic</i>");
+assert(rl.getSegmentCount() >= 2, "RichLabel: bold + italic segments");
+
+rl.setMarkup("Normal text only");
+assert(rl.getSegmentCount() == 1, "RichLabel: plain text segment");
+assert(rl.getPlainText() == "Normal text only", "RichLabel: no tags plain text");
+
+rl.setMarkup("No tags here");
+let segs = rl.getSegments();
+assert(len(segs) == 1, "RichLabel: single segment");
+assert(segs[0]["bold"] == false, "RichLabel: segment not bold");
+assert(segs[0]["italic"] == false, "RichLabel: segment not italic");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 83: EventBus
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 83: EventBus ──");
+let bus = new EventBus();
+bus.init_bus();
+assert(bus != nullptr, "EventBus created");
+assert(bus.hasListeners("test") == false, "EventBus: no listeners initially");
+
+let event_count = 0;
+let event_data = nullptr;
+fn handler(evt, data) {
+    event_count = event_count + 1;
+    event_data = data;
+    return 0;
+}
+
+bus.on("click", handler);
+assert(bus.hasListeners("click") == true, "EventBus: hasListeners after on");
+
+bus.emit("click", {"x": 10, "y": 20});
+assert(event_count == 1, "EventBus: emit triggers handler");
+
+bus.off("click", handler);
+assert(bus.hasListeners("click") == false, "EventBus: no listeners after off");
+
+let once_count = 0;
+fn once_handler(evt, data) {
+    once_count = once_count + 1;
+    return 0;
+}
+bus.once("load", once_handler);
+bus.emit("load", nullptr);
+bus.emit("load", nullptr);
+assert(once_count == 1, "EventBus: once fires only once");
+
+bus.clear();
+assert(bus.hasListeners("click") == false, "EventBus: clear all");
+
+bus.on("topic", handler);
+bus.clearEvent("topic");
+assert(bus.hasListeners("topic") == false, "EventBus: clearEvent");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 84: Clipboard
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 84: Clipboard ──");
+let clip = new Clipboard();
+clip.init_clipboard();
+assert(clip != nullptr, "Clipboard created");
+assert(clip.hasContent() == false, "Clipboard: empty initially");
+assert(clip.getType() == "text", "Clipboard: default type text");
+
+clip.copy("Hello World");
+assert(clip.hasContent() == true, "Clipboard: has content after copy");
+assert(clip.paste() == "Hello World", "Clipboard: paste returns content");
+
+clip.copy("Second");
+clip.copyWithType("Second", "html");
+assert(clip.paste() == "Second", "Clipboard: paste second content");
+assert(clip.getType() == "html", "Clipboard: type updated");
+
+let info = clip.pasteWithType();
+assert(info["content"] == "Second", "Clipboard: pasteWithType content");
+assert(info["type"] == "html", "Clipboard: pasteWithType type");
+
+assert(clip.getHistoryCount() == 2, "Clipboard: history has 2 entries");
+clip.clearHistory();
+assert(clip.getHistoryCount() == 0, "Clipboard: clearHistory");
+
+clip.clear();
+assert(clip.hasContent() == false, "Clipboard: clear");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 85: UndoRedo
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 85: UndoRedo ──");
+let ur = new UndoRedo();
+ur.init_ur();
+assert(ur != nullptr, "UndoRedo created");
+assert(ur.canUndo() == false, "UndoRedo: cannot undo initially");
+assert(ur.canRedo() == false, "UndoRedo: cannot redo initially");
+assert(ur.getUndoCount() == 0, "UndoRedo: 0 undo items");
+assert(ur.max_history == 50, "UndoRedo: default max_history");
+
+let undo_count = 0;
+let redo_count = 0;
+fn do_undo() {
+    undo_count = undo_count + 1;
+    return 0;
+}
+fn do_redo() {
+    redo_count = redo_count + 1;
+    return 0;
+}
+
+ur.execute("Test action", do_undo, do_redo);
+assert(ur.canUndo() == true, "UndoRedo: can undo after execute");
+assert(ur.canRedo() == false, "UndoRedo: cannot redo after execute");
+assert(ur.getUndoDescription() == "Test action", "UndoRedo: undo description");
+assert(ur.getRedoDescription() == "", "UndoRedo: redo description empty");
+
+ur.undo();
+assert(undo_count == 1, "UndoRedo: undo executed");
+assert(ur.canRedo() == true, "UndoRedo: can redo after undo");
+assert(ur.getRedoDescription() == "Test action", "UndoRedo: redo description");
+
+ur.redo();
+assert(redo_count == 1, "UndoRedo: redo executed");
+
+# Multiple undo
+ur.execute("Action 1", do_undo, do_redo);
+ur.execute("Action 2", do_undo, do_redo);
+assert(ur.getUndoCount() == 3, "UndoRedo: 3 undo items");
+
+ur.undo();
+assert(ur.getUndoCount() == 2, "UndoRedo: 2 items after undo");
+
+ur.undo();
+assert(ur.getUndoCount() == 1, "UndoRedo: 1 item after undo");
+
+ur.undo();
+assert(ur.canUndo() == false, "UndoRedo: cannot undo after all undone");
+
+ur.redo();
+ur.redo();
+ur.redo();
+assert(ur.canRedo() == false, "UndoRedo: cannot redo after all redone");
+
+# setMaxHistory
+ur.setMaxHistory(5);
+assert(ur.max_history == 5, "UndoRedo: setMaxHistory");
+
+ur.clear();
+assert(ur.canUndo() == false, "UndoRedo: clear");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Test 86: hwdui_summary v5.0
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Test 86: hwdui_summary v5.0 ──");
+hwdui_summary();
+assert(true, "hwdui_summary v5.0 runs without error");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 打印结果
+# ═══════════════════════════════════════════════════════════════════════════
+test_summary();

@@ -1,0 +1,174 @@
+# shared/highlighter.hto
+# H# 语法高亮(轻量,基于词法分析)
+# 输入: 源码字符串
+# 输出: list of {"text": str, "type": "keyword"|"string"|"number"|"comment"|"operator"|"identifier"|"builtin"}
+
+let _HS_KEYWORDS = [
+    "let", "fn", "if", "elif", "else", "while", "for", "in",
+    "return", "print", "import", "class", "new", "extends",
+    "private", "public", "static", "interface", "implements",
+    "union", "super", "is", "as", "module", "concept", "coro",
+    "asm", "ptr", "true", "false", "nullptr", "auto",
+    "try", "catch", "throw", "del", "and", "or", "not",
+    "continue", "break"
+];
+
+let _HS_BUILTINS = [
+    "len", "push", "pop", "read_file", "write_file", "str", "int",
+    "float", "type", "abs", "min", "max", "range", "keys", "values",
+    "items", "has_key", "print_error", "input", "time_now",
+    "substring", "ord", "chr"
+];
+
+# 高亮入口
+fn highlight(source) {
+    let tokens = [];
+    let i = 0;
+    let n = len(source);
+    while (i < n) {
+        let c = source[i];
+        # 1. 注释(#...)
+        if (c == "#") {
+            let j = i;
+            while (j < n and source[j] != "\n") {
+                j = j + 1;
+            }
+            tokens.append({"text": substring(source, i, j - i), "type": "comment"});
+            i = j;
+            continue;
+        }
+        # 2. 字符串(双引号)
+        if (c == "\"") {
+            let j = i + 1;
+            while (j < n and source[j] != "\"") {
+                if (source[j] == "\\" and j + 1 < n) {
+                    j = j + 2;
+                } else {
+                    j = j + 1;
+                }
+            }
+            if (j < n) { j = j + 1; }
+            tokens.append({"text": substring(source, i, j - i), "type": "string"});
+            i = j;
+            continue;
+        }
+        # 3. 数字
+        if (c >= "0" and c <= "9") {
+            let j = i;
+            while (j < n and ((source[j] >= "0" and source[j] <= "9") or source[j] == ".")) {
+                j = j + 1;
+            }
+            tokens.append({"text": substring(source, i, j - i), "type": "number"});
+            i = j;
+            continue;
+        }
+        # 4. 标识符 / 关键字
+        if ((c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or c == "_") {
+            let j = i;
+            while (j < n and ((source[j] >= "a" and source[j] <= "z") or
+                              (source[j] >= "A" and source[j] <= "Z") or
+                              (source[j] >= "0" and source[j] <= "9") or
+                              source[j] == "_")) {
+                j = j + 1;
+            }
+            let word = substring(source, i, j - i);
+            let t = "identifier";
+            if (_contains(_HS_KEYWORDS, word)) {
+                t = "keyword";
+            } else if (_contains(_HS_BUILTINS, word)) {
+                t = "builtin";
+            }
+            tokens.append({"text": word, "type": t});
+            i = j;
+            continue;
+        }
+        # 5. 空白 / 换行(原样保留)
+        if (c == " " or c == "\t" or c == "\n" or c == "\r") {
+            let j = i;
+            while (j < n and (source[j] == " " or source[j] == "\t" or
+                              source[j] == "\n" or source[j] == "\r")) {
+                j = j + 1;
+            }
+            tokens.append({"text": substring(source, i, j - i), "type": "whitespace"});
+            i = j;
+            continue;
+        }
+        # 6. 运算符
+        if (_is_operator_char(c)) {
+            let j = i;
+            while (j < n and _is_operator_char(source[j])) {
+                j = j + 1;
+            }
+            tokens.append({"text": substring(source, i, j - i), "type": "operator"});
+            i = j;
+            continue;
+        }
+        # 7. 其它单字符
+        tokens.append({"text": c, "type": "identifier"});
+        i = i + 1;
+    }
+    return tokens;
+}
+
+fn _contains(arr, s) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] == s) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn _is_operator_char(c) {
+    return c == "+" or c == "-" or c == "*" or c == "/" or c == "%" or
+           c == "=" or c == "<" or c == ">" or c == "!" or
+           c == "&" or c == "|" or c == "^" or c == "~";
+}
+
+# ============= 主题 =============
+# 配色映射:H# ZZW 主题(深色)
+
+fn highlight_color(token_type) {
+    if (token_type == "keyword") { return "#C586C0"; }
+    if (token_type == "string")  { return "#CE9178"; }
+    if (token_type == "number")  { return "#B5CEA8"; }
+    if (token_type == "comment") { return "#6A9955"; }
+    if (token_type == "builtin") { return "#DCDCAA"; }
+    if (token_type == "operator") { return "#D4D4D4"; }
+    return "#D4D4D4";
+}
+
+# 把 tokens 拍平成带颜色的 HTML(供 HwdUI 渲染)
+fn highlight_to_html(source) {
+    let toks = highlight(source);
+    let out = "";
+    let i = 0;
+    while (i < len(toks)) {
+        let t = toks[i];
+        if (t["type"] == "whitespace") {
+            out = out + _html_escape(t["text"]);
+        } else {
+            out = out + "<span style=\"color:" + highlight_color(t["type"]) + "\">";
+            out = out + _html_escape(t["text"]);
+            out = out + "</span>";
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn _html_escape(s) {
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let c = s[i];
+        if (c == "<") { out = out + "&lt;"; }
+        else if (c == ">") { out = out + "&gt;"; }
+        else if (c == "&") { out = out + "&amp;"; }
+        else { out = out + c; }
+        i = i + 1;
+    }
+    return out;
+}

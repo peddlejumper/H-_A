@@ -1,0 +1,60 @@
+# 01 — submit 100 tasks to WorkerPool
+# Covers: parallel fn 提交 100 个任务到 WorkerPool，全部 await 收集结果
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+parallel fn sq(n) {
+    return n * n;
+}
+
+# 提交 100 个任务，先拿到 100 个 future，再统一 await
+let futs = [];
+let i = 0;
+while (i < 100) {
+    push(futs, sq(i));
+    i = i + 1;
+}
+check("submitted_100", len(futs) == 100, "len=" + str(len(futs)));
+
+# 全部 await，求和 0^2+1^2+...+99^2 = 328350
+let total = 0;
+let j = 0;
+while (j < 100) {
+    total = total + await futs[j];
+    j = j + 1;
+}
+check("sum_of_squares", total == 328350, "total=" + str(total));
+
+# 每个 future 都应幂等可再次 await
+check("reawait_first", await futs[0] == 0, "f0=" + str(await futs[0]));
+check("reawait_last",  await futs[99] == 9801, "f99=" + str(await futs[99]));
+
+# 混合提交：交替 sq + 一个长任务
+parallel fn slow_identity(x) {
+    let k = 0;
+    while (k < 20000) { k = k + 1; }
+    return x;
+}
+let mix = [];
+let m = 0;
+while (m < 50) {
+    push(mix, sq(m));
+    push(mix, slow_identity(m + 1000));
+    m = m + 1;
+}
+let mix_ok = true;
+let mi = 0;
+while (mi < len(mix)) {
+    if (mi % 2 == 0) {
+        if (await mix[mi] != (mi / 2) * (mi / 2)) { mix_ok = false; }
+    } else {
+        if (await mix[mi] != (mi / 2) + 1000) { mix_ok = false; }
+    }
+    mi = mi + 1;
+}
+check("mixed_100_tasks", mix_ok, "mixed results mismatched");
+
+print("T01_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

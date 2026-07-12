@@ -1,0 +1,21 @@
+# Probe: class method throw with proper field access (no `this`)
+print("== P-THIS ==");
+class Service {
+    let name = "svc";
+    fn check(x) {
+        if (x < 0) { throw "bad x in " + name; }
+        return x;
+    }
+}
+let svc = new Service();
+try {
+    svc.check(-1);
+} catch (e) {
+    print("caught: " + e);
+}
+try {
+    print("ok: " + svc.check(7));
+} catch (e) {
+    print("should NOT catch: " + e);
+}
+print("done");

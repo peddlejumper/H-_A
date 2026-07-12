@@ -1,0 +1,38 @@
+# t13 — crypto_* boundaries: empty string, base32 (actually base64?) encode/decode
+print("== t13 crypto ==");
+try {
+    print("crypto_sha256(\"\")=" + crypto_sha256(""));
+} catch (e) {
+    print("crypto_sha256(\"\") ERR: " + str(e));
+}
+try {
+    print("crypto_sha256(\"abc\")=" + crypto_sha256("abc"));
+} catch (e) {
+    print("crypto_sha256(\"abc\") ERR: " + str(e));
+}
+try {
+    print("crypto_base32_encode(\"\")=[" + crypto_base32_encode("") + "]");
+} catch (e) {
+    print("crypto_base32_encode(\"\") ERR: " + str(e));
+}
+# KEY: base32 of "hello" should be "NBSWY3DP" if real base32; Kotlin uses Base64 -> "aGVsbG8="
+try {
+    print("crypto_base32_encode(\"hello\")=" + crypto_base32_encode("hello"));
+} catch (e) {
+    print("crypto_base32_encode(\"hello\") ERR: " + str(e));
+}
+try {
+    print("crypto_base32_decode(\"aGVsbG8=\")=" + crypto_base32_decode("aGVsbG8="));
+} catch (e) {
+    print("crypto_base32_decode ERR: " + str(e));
+}
+try {
+    print("crypto_crc32(\"hello\")=" + str(crypto_crc32("hello")));
+} catch (e) {
+    print("crypto_crc32 ERR: " + str(e));
+}
+try {
+    print("crypto_base32_decode(\"!!notb64!!\")=" + crypto_base32_decode("!!notb64!!"));
+} catch (e) {
+    print("crypto_base32_decode(bad) ERR: " + str(e));
+}

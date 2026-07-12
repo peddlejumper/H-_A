@@ -1,0 +1,42 @@
+# 20 - 边界场景: for over range(0), for with late break, for with first-iter break
+# 目的: 触发 fixForLoopJumps 的边界情况
+# range(0) 为空
+let z = 0;
+for i in range(0) { z = z + 1; }
+print("range0=" + str(z));
+print("expected=0");
+
+# 第一次迭代就 break (JUMP 回边从未执行，但仍存在于 bytecode)
+let fb = -1;
+let fi = 0;
+for x in [100, 200, 300] {
+    fi = fi + 1;
+    fb = x;
+    break;
+}
+print("first_break_val=" + str(fb));
+print("expected_first_break=100");
+print("first_break_iters=" + str(fi));
+print("expected_first_break_iters=1");
+
+# continue 在第一次迭代
+let fc = 0;
+let fs = 0;
+for x in [5, 6, 7] {
+    fc = fc + 1;
+    if (x == 5) { continue; }
+    fs = fs + x;
+}
+print("first_cont_sum=" + str(fs));
+print("expected_first_cont=13");
+print("first_cont_cnt=" + str(fc));
+print("expected_first_cont_cnt=3");
+
+# break 在最后一次迭代
+let lb = 0;
+for x in [1, 2, 3] {
+    lb = x;
+    if (x == 3) { break; }
+}
+print("last_break=" + str(lb));
+print("expected_last_break=3");

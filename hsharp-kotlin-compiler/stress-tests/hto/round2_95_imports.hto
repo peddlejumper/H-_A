@@ -1,0 +1,102 @@
+# Round-2 #95 — Module imports & namespaces
+# Probes: import .hbc, import .hto, import name, namespace access,
+#         side effects, re-import caching, name leakage, private names,
+#         module declaration, nonexistent imports, nested imports.
+#
+# Helper modules (pre-compiled to /tmp/*.hbc):
+#   r2_95_helper.hto   — fn r2_95_double, _private_val, public_val, side-effect print
+#   r2_95_helper2.hto  — NOT compiled (.hto source only)
+#   r2_95_mod_b.hto    — imports r2_95_mod_c, fn r2_95_b
+#   r2_95_mod_c.hto    — fn r2_95_c
+#
+# Parser only supports:  import "path";   import name;
+# It does NOT support:   from X import Y;   import X as Y;
+
+# ── T1: import pre-compiled .hbc — side effect should run EXACTLY once
+print("=== T1: import .hbc ===");
+import "r2_95_helper.hbc";
+print("T1 ns-call r2_95_helper.r2_95_double(5)=");
+print(r2_95_helper.r2_95_double(5));
+
+# ── T2: name leakage — r2_95_double leaked into host globals (bug)
+print("=== T2: name leakage ===");
+print("T2 direct r2_95_double(5)=");
+print(r2_95_double(5));
+
+# ── T3: private name — _private_val exported (no privacy enforcement)
+print("=== T3: private name ===");
+print("T3 _private_val=");
+print(_private_val);
+print("T3 r2_95_get_private()=");
+print(r2_95_get_private());
+
+# ── T4: re-import — side effect runs AGAIN (no caching, bug)
+print("=== T4: re-import ===");
+import "r2_95_helper.hbc";
+print("T4 done");
+
+# ── T5: import .hto file — NOT executed, stored as HString (bug)
+print("=== T5: import .hto (no execution) ===");
+import "r2_95_helper2.hto";
+print("T5 len(r2_95_helper2)=");
+print(len(r2_95_helper2));
+
+# ── T6: import nonexistent FILE — should raise error
+print("=== T6: nonexistent file ===");
+try {
+    import "r2_95_nonexistent.hto";
+    print("T6 BUG_NO_ERROR");
+} catch (e) {
+    print("T6 CAUGHT");
+}
+
+# ── T7: import nonexistent NAME — should raise but doesn't (bug)
+print("=== T7: nonexistent name ===");
+import r2_95_nonexistent_mod;
+print("T7 available flag=");
+print(r2_95_nonexistent_mod.available);
+
+# ── T8: module declaration — namespace via `module M { ... }`
+print("=== T8: module declaration ===");
+module M {
+    fn m_add(a, b) { return a + b; }
+    let m_val = 7;
+}
+print("T8 M.m_add(3,4)=");
+print(M.m_add(3, 4));
+print("T8 M.m_val=");
+print(M.m_val);
+
+# ── T9: nested imports — B imports C, main uses C's function (via leakage)
+# BUG: nested import exports are lost (C's names go into B's globals, not B's env,
+#      and only B's env is copied back to main)
+print("=== T9: nested imports ===");
+import "r2_95_mod_b.hbc";
+try {
+    print("T9 r2_95_c()=");
+    print(r2_95_c());
+} catch (e) {
+    print("T9 r2_95_c FAILED");
+}
+print("T9 r2_95_b() (directly in mod_b)=");
+print(r2_95_b());
+print("T9 mod_b has r2_95_c? ");
+print(has_key(r2_95_mod_b, "r2_95_c"));
+
+# ── T10: module dict pollution — r2_95_helper dict contains ALL globals
+print("=== T10: module dict pollution ===");
+print("T10 r2_95_helper has m_add? ");
+print(has_key(r2_95_helper, "m_add"));
+print("T10 r2_95_helper has r2_95_c? ");
+print(has_key(r2_95_helper, "r2_95_c"));
+
+# ── T11: circular import — should error, but catch(Throwable) swallows it
+print("=== T11: circular import ===");
+try {
+    import "r2_95_circ_a.hbc";
+    print("T11 circ_a len=");
+    print(len(r2_95_circ_a));
+    print("T11 NO_ERROR_BUG");
+} catch (e) {
+    print("T11 CAUGHT");
+}

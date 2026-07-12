@@ -1,0 +1,12 @@
+import "bootstrap/tokenize.hto";
+
+let src = "let x = 42;\nfn add(a, b) { return a + b; }\nprint(x);";
+
+let tokens = tokenize(src);
+print("Token count: " + len(tokens));
+let i = 0;
+while (i < len(tokens)) {
+    let t = tokens[i];
+    print(t["type"] + " -> " + t["value"]);
+    i = i + 1;
+}

@@ -1,0 +1,28 @@
+# t09_closure_cell.hto - 闭包 cell 共享
+# 多个闭包共享同一捕获变量，测试 cell 共享语义
+fn make_pair() {
+    let count = 0;
+    let inc = fn() {
+        count = count + 1;
+        return count;
+    };
+    let dec = fn() {
+        count = count - 1;
+        return count;
+    };
+    let get = fn() {
+        return count;
+    };
+    return [inc, dec, get];
+}
+let fns = make_pair();
+let inc = fns[0];
+let dec = fns[1];
+let get = fns[2];
+print(inc());
+print(inc());
+print(inc());
+print(get());
+print(dec());
+print(dec());
+print(get());

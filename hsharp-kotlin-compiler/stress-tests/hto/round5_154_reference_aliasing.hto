@@ -1,0 +1,582 @@
+# Round5-154 — 引用语义与别名 (reference semantics & aliasing)
+# 对照 Python 语义: list/dict/instance 是引用类型, number/string 是值类型
+# 测试 15 个子领域 S1..S15
+# 策略: 每个子领域用 try/catch 包裹可能出错的操作, 明确打印 实际值 与 预期值
+
+# ============================================================
+# 深拷贝辅助函数 (S5 使用) — 递归拷贝 list/dict, 数字字符串原样返回
+# ============================================================
+fn deepCopy(v) {
+    if (v is list) {
+        let r = [];
+        for x in v { push(r, deepCopy(x)); }
+        return r;
+    }
+    if (v is dict) {
+        let r = {};
+        for k, val in v { r[k] = deepCopy(val); }
+        return r;
+    }
+    return v;
+}
+
+# ============================================================
+# S1: 列表引用 — let a=[1]; let b=a; b[0]=9; a[0] 是否变 9?
+# 预期(Python): 引用语义, a[0]=9
+# ============================================================
+print("=== S1 list-reference ===");
+
+# S1.1: 基础列表引用 — 索引赋值经别名影响原列表
+let s1a = [1, 2, 3];
+let s1b = s1a;
+s1b[0] = 99;
+print("S1.1 orig[0]=" + str(s1a[0]) + " alias[0]=" + str(s1b[0]));
+# 预期: orig[0]=99, alias[0]=99
+
+# S1.2: 多级别名 — a->b->c 共享同一列表
+let s1d = [10, 20];
+let s1e = s1d;
+let s1f = s1e;
+s1f[1] = 999;
+print("S1.2 orig[1]=" + str(s1d[1]) + " via-c[1]=" + str(s1f[1]));
+# 预期: orig[1]=999, via-c[1]=999
+
+# S1.3: 别名 push — 经别名 push 影响原列表
+let s1g = [1];
+let s1h = s1g;
+push(s1h, 2);
+push(s1h, 3);
+print("S1.3 orig=" + str(s1g) + " len=" + str(len(s1g)));
+# 预期: orig=[1,2,3], len=3
+
+# ============================================================
+# S2: 字典引用 — let a={"k":1}; let b=a; b["k"]=9; a["k"] 是否变 9?
+# 预期(Python): 引用语义, a["k"]=9
+# ============================================================
+print("=== S2 dict-reference ===");
+
+# S2.1: 基础字典引用 — 索引赋值经别名影响原字典
+let s2a = {"k": 1, "m": 2};
+let s2b = s2a;
+s2b["k"] = 99;
+print("S2.1 orig[k]=" + str(s2a["k"]) + " alias[k]=" + str(s2b["k"]));
+# 预期: orig[k]=99, alias[k]=99
+
+# S2.2: 别名添加新键 — 经别名添加影响原字典
+let s2c = {"a": 1};
+let s2d = s2c;
+s2d["b"] = 2;
+print("S2.2 orig-len=" + str(len(s2c)) + " orig-has-b=" + str(s2c.has_key("b")));
+# 预期: orig-len=2, orig-has-b=true
+
+# S2.3: 别名 remove — 经别名删除影响原字典
+let s2e = {"x": 1, "y": 2};
+let s2f = s2e;
+s2f.remove("x");
+print("S2.3 orig-has-x=" + str(s2e.has_key("x")) + " orig-len=" + str(len(s2e)));
+# 预期: orig-has-x=false, orig-len=1
+
+# ============================================================
+# S3: 列表浅拷贝 — let b = a[:]; b[0]=99; a[0] 不变?
+# 预期(Python): 浅拷贝, 顶层独立, a[0]=1
+# ============================================================
+print("=== S3 list-shallow-copy ===");
+
+# S3.1: 切片 a[:] 拷贝 — 顶层索引赋值独立
+let s3a_orig = [1, 2, 3];
+let s3a_copy = s3a_orig[:];
+s3a_copy[0] = 99;
+print("S3.1 orig[0]=" + str(s3a_orig[0]) + " copy[0]=" + str(s3a_copy[0]));
+# 预期: orig[0]=1, copy[0]=99
+
+# S3.2: list() 构造拷贝 — 独立
+let s3b_orig = [10, 20, 30];
+let s3b_copy = list(s3b_orig);
+s3b_copy[1] = 999;
+print("S3.2 orig[1]=" + str(s3b_orig[1]) + " copy[1]=" + str(s3b_copy[1]));
+# 预期: orig[1]=20, copy[1]=999
+
+# S3.3: 拷贝后 push — 独立
+let s3c_orig = [1];
+let s3c_copy = s3c_orig[:];
+push(s3c_copy, 2);
+print("S3.3 orig=" + str(s3c_orig) + " copy=" + str(s3c_copy));
+# 预期: orig=[1], copy=[1,2]
+
+# S3.4: 拷贝后 pop — 独立
+let s3d_orig = [1, 2, 3];
+let s3d_copy = s3d_orig[:];
+s3d_copy.pop();
+print("S3.4 orig=" + str(s3d_orig) + " copy=" + str(s3d_copy));
+# 预期: orig=[1,2,3], copy=[1,2]
+
+# ============================================================
+# S4: 字典浅拷贝 — d.copy() (刚实现), 修改副本, 嵌套对象的引用语义
+# 预期(Python): 浅拷贝, 顶层独立, 嵌套对象共享
+# ============================================================
+print("=== S4 dict-shallow-copy ===");
+
+# S4.1: d.copy() 基础 — 顶层键赋值独立
+let s4a_orig = {"k": 1, "m": 2};
+let s4a_copy = s4a_orig.copy();
+s4a_copy["k"] = 99;
+print("S4.1 orig[k]=" + str(s4a_orig["k"]) + " copy[k]=" + str(s4a_copy["k"]));
+# 预期: orig[k]=1, copy[k]=99
+
+# S4.2: d.copy() 添加新键 — 独立
+let s4b_orig = {"a": 1};
+let s4b_copy = s4b_orig.copy();
+s4b_copy["b"] = 2;
+print("S4.2 orig-len=" + str(len(s4b_orig)) + " copy-len=" + str(len(s4b_copy)));
+# 预期: orig-len=1, copy-len=2
+
+# S4.3: dict() 构造拷贝 — 独立
+let s4c_orig = {"x": 10};
+let s4c_copy = dict(s4c_orig);
+s4c_copy["x"] = 999;
+print("S4.3 orig[x]=" + str(s4c_orig["x"]) + " copy[x]=" + str(s4c_copy["x"]));
+# 预期: orig[x]=10, copy[x]=999
+
+# S4.4: 浅拷贝嵌套字典 — 修改嵌套对象经副本影响原 (浅拷贝语义)
+let s4d_orig = {"outer": {"inner": 1}};
+let s4d_copy = s4d_orig.copy();
+s4d_copy["outer"]["inner"] = 99;
+print("S4.4 orig-inner=" + str(s4d_orig["outer"]["inner"]) + " copy-inner=" + str(s4d_copy["outer"]["inner"]));
+# 预期(浅拷贝): orig-inner=99, copy-inner=99 (嵌套共享)
+
+# S4.5: 浅拷贝嵌套列表 — 修改嵌套列表经副本影响原
+let s4e_orig = {"data": [1, 2, 3]};
+let s4e_copy = s4e_orig.copy();
+s4e_copy["data"][0] = 999;
+print("S4.5 orig-data[0]=" + str(s4e_orig["data"][0]) + " copy-data[0]=" + str(s4e_copy["data"][0]));
+# 预期(浅拷贝): orig-data[0]=999 (嵌套共享)
+
+# ============================================================
+# S5: 深拷贝 — 手动深拷贝函数, 嵌套结构完全独立
+# 预期(Python): 深拷贝后, 任何层级修改都不影响原
+# ============================================================
+print("=== S5 deep-copy ===");
+
+# S5.1: 深拷贝嵌套列表 — 修改副本嵌套层不影响原
+let s5a_orig = [[1, 2], [3, 4]];
+let s5a_copy = deepCopy(s5a_orig);
+s5a_copy[0][0] = 99;
+print("S5.1 orig[0][0]=" + str(s5a_orig[0][0]) + " copy[0][0]=" + str(s5a_copy[0][0]));
+# 预期(深拷贝): orig[0][0]=1, copy[0][0]=99
+
+# S5.2: 深拷贝嵌套字典 — 修改副本嵌套层不影响原
+let s5b_orig = {"outer": {"inner": 1}};
+let s5b_copy = deepCopy(s5b_orig);
+s5b_copy["outer"]["inner"] = 99;
+print("S5.2 orig-inner=" + str(s5b_orig["outer"]["inner"]) + " copy-inner=" + str(s5b_copy["outer"]["inner"]));
+# 预期(深拷贝): orig-inner=1, copy-inner=99
+
+# S5.3: 深拷贝三层嵌套 — 完全独立
+let s5c_orig = {"a": {"b": {"c": 1}}};
+let s5c_copy = deepCopy(s5c_orig);
+s5c_copy["a"]["b"]["c"] = 999;
+print("S5.3 orig=" + str(s5c_orig["a"]["b"]["c"]) + " copy=" + str(s5c_copy["a"]["b"]["c"]));
+# 预期(深拷贝): orig=1, copy=999
+
+# S5.4: 深拷贝含列表的字典 — 独立
+let s5d_orig = {"items": [1, 2, 3]};
+let s5d_copy = deepCopy(s5d_orig);
+s5d_copy["items"].push(4);
+s5d_copy["items"][0] = 99;
+print("S5.4 orig=" + str(s5d_orig["items"]) + " copy=" + str(s5d_copy["items"]));
+# 预期(深拷贝): orig=[1,2,3], copy=[99,2,3,4]
+
+# S5.5: 深拷贝后顶层也独立
+let s5e_orig = [1, 2, 3];
+let s5e_copy = deepCopy(s5e_orig);
+s5e_copy[0] = 99;
+print("S5.5 orig[0]=" + str(s5e_orig[0]) + " copy[0]=" + str(s5e_copy[0]));
+# 预期(深拷贝): orig[0]=1, copy[0]=99
+
+# ============================================================
+# S6: 函数参数引用 — 函数内修改 list/dict 参数, 影响外部
+# 预期(Python): 引用传递, 函数内变异影响原对象
+# ============================================================
+print("=== S6 fn-param-reference ===");
+
+# S6.1: 函数内 push list 参数 — 影响原
+fn s6_pushList(l, v) {
+    push(l, v);
+    return len(l);
+}
+let s6a = [1, 2, 3];
+let s6a_ret = s6_pushList(s6a, 99);
+print("S6.1 ret=" + str(s6a_ret) + " orig=" + str(s6a));
+# 预期(引用): ret=4, orig=[1,2,3,99]
+
+# S6.2: 函数内索引赋值 list 参数 — 影响原
+fn s6_setIndex(l, i, v) { l[i] = v; }
+let s6b = [1, 2, 3];
+s6_setIndex(s6b, 1, 99);
+print("S6.2 orig=" + str(s6b));
+# 预期(引用): [1,99,3]
+
+# S6.3: 函数内修改 dict 参数 — 影响原
+fn s6_setDict(d, k, v) { d[k] = v; }
+let s6c = {"k": 1};
+s6_setDict(s6c, "k", 99);
+print("S6.3 orig[k]=" + str(s6c["k"]));
+# 预期(引用): 99
+
+# S6.4: 函数内重绑定参数 — 不影响原 (重绑定 vs 变异)
+fn s6_rebind(l) {
+    l = [100, 200];
+    return l;
+}
+let s6d = [1, 2, 3];
+let s6d_ret = s6_rebind(s6d);
+print("S6.4 orig=" + str(s6d) + " ret=" + str(s6d_ret));
+# 预期: orig=[1,2,3], ret=[100,200]
+
+# ============================================================
+# S7: 函数返回引用 — 函数返回内部 list, 外部修改影响返回对象
+# 预期(Python): 返回的是引用, 外部修改直接作用于返回的对象
+# ============================================================
+print("=== S7 fn-return-reference ===");
+
+# S7.1: 函数返回内部列表 — 外部修改不影响函数内已销毁的局部 (但引用同一对象)
+fn s7_makeList() {
+    let inner = [1, 2, 3];
+    return inner;
+}
+let s7a = s7_makeList();
+s7a[0] = 99;
+s7a.push(4);
+print("S7.1 got=" + str(s7a) + " len=" + str(len(s7a)));
+# 预期: got=[99,2,3,4], len=4
+
+# S7.2: 函数返回字典 — 外部修改
+fn s7_makeDict() {
+    let inner = {"k": 1};
+    return inner;
+}
+let s7b = s7_makeDict();
+s7b["k"] = 99;
+s7b["new"] = 2;
+print("S7.2 k=" + str(s7b["k"]) + " len=" + str(len(s7b)));
+# 预期: k=99, len=2
+
+# S7.3: 函数返回列表, 两个调用者共享同一引用? (各自独立调用应独立)
+fn s7_makeFresh() { return [1, 2]; }
+let s7c = s7_makeFresh();
+let s7d = s7_makeFresh();
+s7c[0] = 99;
+print("S7.3 c=" + str(s7c) + " d=" + str(s7d));
+# 预期: c=[99,2], d=[1,2] (各自独立调用产生独立对象)
+
+# S7.4: 函数返回内部列表的元素 (嵌套) — 修改返回的嵌套对象
+fn s7_makeNested() {
+    let outer = [[1, 2], [3, 4]];
+    return outer[0];
+}
+let s7e = s7_makeNested();
+s7e[0] = 999;
+print("S7.4 returned=" + str(s7e));
+# 预期: returned=[999,2]
+
+# ============================================================
+# S8: 字符串不可变 — s[0]="x" 应报错
+# 预期(Python): 字符串不可变, 索引赋值应抛 TypeError
+# ============================================================
+print("=== S8 string-immutable ===");
+
+# S8.1: 字符串索引赋值 — 应抛错
+let s8a = "hello";
+let s8a_err = "no-err";
+try {
+    s8a[0] = "x";
+} catch (e) {
+    s8a_err = "caught";
+}
+print("S8.1 err=" + s8a_err + " str=" + str(s8a));
+# 预期: err=caught, str=hello (未变)
+
+# S8.2: 字符串索引读取 — 应正常
+let s8b = "abc";
+print("S8.2 s8b[0]=" + str(s8b[0]) + " s8b[2]=" + str(s8b[2]));
+# 预期: s8b[0]=a, s8b[2]=c
+
+# S8.3: 字符串方法返回新字符串 — 原字符串不变
+let s8c = "Hello";
+let s8c_upper = s8c.upper();
+print("S8.3 orig=" + str(s8c) + " upper=" + str(s8c_upper));
+# 预期: orig=Hello, upper=HELLO
+
+# S8.4: 字符串拼接 — 产生新字符串, 原不变
+let s8d = "ab";
+let s8e = s8d + "cd";
+print("S8.4 orig=" + str(s8d) + " concat=" + str(s8e));
+# 预期: orig=ab, concat=abcd
+
+# ============================================================
+# S9: 数字不可变 — 数字赋值是值拷贝
+# 预期(Python): 数字是不可变值类型, b=a 后 b=10 不影响 a
+# ============================================================
+print("=== S9 number-immutable ===");
+
+# S9.1: 整数赋值 — 值拷贝
+let s9a = 5;
+let s9b = s9a;
+s9b = 10;
+print("S9.1 a=" + str(s9a) + " b=" + str(s9b));
+# 预期: a=5, b=10
+
+# S9.2: 浮点数赋值 — 值拷贝
+let s9c = 3.14;
+let s9d = s9c;
+s9d = 2.71;
+print("S9.2 c=" + str(s9c) + " d=" + str(s9d));
+# 预期: c=3.14, d=2.71
+
+# S9.3: 数字作为函数参数 — 函数内重赋值不影响原
+fn s9_modifyNum(n) {
+    n = n + 100;
+    return n;
+}
+let s9e = 42;
+let s9e_ret = s9_modifyNum(s9e);
+print("S9.3 orig=" + str(s9e) + " ret=" + str(s9e_ret));
+# 预期: orig=42, ret=142
+
+# S9.4: 布尔值赋值 — 值拷贝
+let s9f = true;
+let s9g = s9f;
+s9g = false;
+print("S9.4 f=" + str(s9f) + " g=" + str(s9g));
+# 预期: f=true, g=false
+
+# ============================================================
+# S10: 嵌套引用 — let a=[[1,2],[3,4]]; let b=a[:]; b[0][0]=9; a[0][0]?
+# 预期(Python): 浅拷贝, 嵌套列表共享 -> a[0][0]=9
+# ============================================================
+print("=== S10 nested-reference ===");
+
+# S10.1: 浅拷贝嵌套列表 — 修改嵌套元素经副本影响原
+let s10a_orig = [[1, 2], [3, 4]];
+let s10a_copy = s10a_orig[:];
+s10a_copy[0][0] = 99;
+print("S10.1 orig[0][0]=" + str(s10a_orig[0][0]) + " copy[0][0]=" + str(s10a_copy[0][0]));
+# 预期(浅拷贝): orig[0][0]=99, copy[0][0]=99
+
+# S10.2: 浅拷贝嵌套列表 — 顶层替换独立
+let s10b_orig = [[1, 2], [3, 4]];
+let s10b_copy = s10b_orig[:];
+s10b_copy[0] = [99, 99];
+print("S10.2 orig=" + str(s10b_orig) + " copy=" + str(s10b_copy));
+# 预期: orig=[[1,2],[3,4]], copy=[[99,99],[3,4]]
+
+# S10.3: 别名嵌套 — 直接共享
+let s10c_orig = [[1, 2], [3, 4]];
+let s10c_alias = s10c_orig;
+s10c_alias[1][1] = 777;
+print("S10.3 orig[1][1]=" + str(s10c_orig[1][1]));
+# 预期(引用): 777
+
+# S10.4: 浅拷贝后 push 到嵌套子列表 — 共享
+let s10d_orig = [[1], [2]];
+let s10d_copy = s10d_orig[:];
+push(s10d_copy[0], 99);
+print("S10.4 orig[0]=" + str(s10d_orig[0]) + " copy[0]=" + str(s10d_copy[0]));
+# 预期(浅拷贝): orig[0]=[1,99], copy[0]=[1,99]
+
+# ============================================================
+# S11: 类实例引用 — let a = new Foo(); let b = a; b.x = 9; a.x?
+# 预期(Python): 引用语义, a.x=9
+# ============================================================
+print("=== S11 class-instance-reference ===");
+
+class S11Box {
+    let x = 0;
+    let y = 0;
+    fn init(px, py) {
+        x = px;
+        y = py;
+    }
+    fn get() { return x; }
+}
+
+# S11.1: 类实例别名 — 字段赋值经别名影响原
+let s11a = new S11Box(1, 2);
+let s11b = s11a;
+s11b.x = 99;
+print("S11.1 a.x=" + str(s11a.x) + " b.x=" + str(s11b.x));
+# 预期(引用): a.x=99, b.x=99
+
+# S11.2: 类实例别名 — 方法调用修改字段
+let s11c = new S11Box(10, 20);
+let s11d = s11c;
+s11d.x = 100;
+print("S11.2 c.get()=" + str(s11c.get()) + " d.get()=" + str(s11d.get()));
+# 预期(引用): c.get()=100, d.get()=100
+
+# S11.3: 类实例含列表字段 — 别名修改列表字段
+class S11Container {
+    let items = [];
+    fn init() { items = [1, 2, 3]; }
+}
+let s11e = new S11Container();
+let s11f = s11e;
+push(s11f.items, 4);
+print("S11.3 e.items=" + str(s11e.items) + " len=" + str(len(s11e.items)));
+# 预期(引用): e.items=[1,2,3,4], len=4
+
+# S11.4: 类实例重绑定 — 不影响原
+let s11g = new S11Box(1, 1);
+let s11h = s11g;
+s11h = new S11Box(99, 99);
+print("S11.4 g.x=" + str(s11g.x) + " h.x=" + str(s11h.x));
+# 预期: g.x=1, h.x=99
+
+# ============================================================
+# S12: 列表方法副作用 — push(a,1) 修改原 vs a+[1] 返回新
+# 预期(Python): push/pop/append 原地修改; + 产生新列表
+# ============================================================
+print("=== S12 list-method-side-effects ===");
+
+# S12.1: push 原地修改 — 返回 null, 原列表变
+let s12a = [1, 2];
+let s12a_ret = push(s12a, 3);
+print("S12.1 ret=" + str(s12a_ret) + " list=" + str(s12a));
+# 预期: ret=null (push 返回 null), list=[1,2,3]
+
+# S12.2: .push() 方法原地修改
+let s12b = [1, 2];
+let s12b_ret = s12b.push(3);
+print("S12.2 ret=" + str(s12b_ret) + " list=" + str(s12b));
+# 预期: ret=null, list=[1,2,3]
+
+# S12.3: + 产生新列表 — 原不变
+let s12c = [1, 2];
+let s12d = s12c + [3, 4];
+print("S12.3 orig=" + str(s12c) + " concat=" + str(s12d));
+# 预期: orig=[1,2], concat=[1,2,3,4]
+
+# S12.4: pop 原地修改并返回值
+let s12e = [1, 2, 3];
+let s12e_popped = s12e.pop();
+print("S12.4 popped=" + str(s12e_popped) + " list=" + str(s12e));
+# 预期: popped=3, list=[1,2]
+
+# S12.5: * 产生新列表 (非原地)
+let s12f = [1, 2];
+let s12g = s12f * 2;
+print("S12.5 orig=" + str(s12f) + " repeated=" + str(s12g));
+# 预期: orig=[1,2], repeated=[1,2,1,2]
+
+# ============================================================
+# S13: 赋值链 — let a = b = [1,2] (如果支持)
+# 注: H# 赋值是语句非表达式, a = b = [1,2] 在解析阶段即 SyntaxError
+# (见 _probe138_s8_assignchain.hto 注释: expression() 不处理 EQ)
+# 因此本子领域不可执行, 仅作注释记录
+# ============================================================
+print("=== S13 assign-chain (unsupported) ===");
+print("S13 NOTE: a = b = [1,2] is a syntax error in H# (assignment is a statement, not an expression)");
+# 预期: 不支持, 编译期 SyntaxError
+
+# S13.1: 顺序赋值替代 — 先声明 b, 再 a=b
+let s13b = [1, 2];
+let s13a = s13b;
+s13a[0] = 99;
+print("S13.1 a=" + str(s13a) + " b=" + str(s13b));
+# 预期(引用替代): a=[99,2], b=[99,2] (a 和 b 共享同一列表)
+
+# ============================================================
+# S14: 列表重复引用 — let a = [[]] * 3; a[0].push(1); a[1] 也有 1?
+# 预期(Python): [[]] * 3 中三个子列表是同一引用, a[1] 也有 1
+# ============================================================
+print("=== S14 list-repeat-reference ===");
+
+# S14.1: [[]] * 3 — 三个子列表共享同一引用
+let s14a = [[]] * 3;
+s14a[0].push(1);
+print("S14.1 a[0]=" + str(s14a[0]) + " a[1]=" + str(s14a[1]) + " a[2]=" + str(s14a[2]));
+# 预期(Python 语义): a[0]=[1], a[1]=[1], a[2]=[1] (共享引用)
+
+# S14.2: [0] * 3 — 数字不可变, 互不影响
+let s14b = [0] * 3;
+s14b[0] = 99;
+print("S14.2 b=" + str(s14b));
+# 预期: b=[99,0,0] (数字值拷贝)
+
+# S14.3: [[]] * 2 后再 push 到 a[1] — 验证双向共享
+let s14c = [[]] * 2;
+s14c[1].push("x");
+print("S14.3 c[0]=" + str(s14c[0]) + " c[1]=" + str(s14c[1]));
+# 预期(Python): c[0]=[x], c[1]=[x] (共享)
+
+# S14.4: [[1,2]] * 2 — 含初始元素的子列表共享
+let s14d = [[1, 2]] * 2;
+s14d[0].push(3);
+print("S14.4 d[0]=" + str(s14d[0]) + " d[1]=" + str(s14d[1]));
+# 预期(Python): d[0]=[1,2,3], d[1]=[1,2,3] (共享)
+
+# ============================================================
+# S15: 闭包捕获引用 — 闭包捕获 list, 闭包内修改, 外部可见
+# 预期(Python): 闭包通过 cell 捕获变量引用, 变异对外可见
+# ============================================================
+print("=== S15 closure-capture-reference ===");
+
+# S15.1: 闭包捕获列表 — 闭包内 push, 外部可见
+fn s15_makePusher() {
+    let buf = [];
+    fn pusher(v) {
+        push(buf, v);
+        return len(buf);
+    }
+    return pusher;
+}
+let s15a = s15_makePusher();
+s15a(1);
+s15a(2);
+s15a(3);
+print("S15.1 ret1=" + str(s15a(4)));
+# 预期: ret1=4 (闭包内 push 累积, 返回 len)
+
+# S15.2: 闭包捕获列表 — 多个闭包共享同一捕获列表
+fn s15_makePair() {
+    let shared = [];
+    fn adder(v) { push(shared, v); return shared; }
+    fn getter() { return shared; }
+    return [adder, getter];
+}
+let s15b = s15_makePair();
+let s15b_adder = s15b[0];
+let s15b_getter = s15b[1];
+s15b_adder("a");
+s15b_adder("b");
+let s15b_got = s15b_getter();
+print("S15.2 got=" + str(s15b_got) + " len=" + str(len(s15b_got)));
+# 预期: got=[a,b], len=2
+
+# S15.3: 闭包捕获字典 — 闭包内修改字典, 外部可见
+fn s15_makeDictMutator() {
+    let d = {};
+    fn mutator(k, v) { d[k] = v; return d; }
+    return mutator;
+}
+let s15c = s15_makeDictMutator();
+s15c("a", 1);
+s15c("b", 2);
+let s15c_ret = s15c("c", 3);
+print("S15.3 ret=" + str(s15c_ret) + " len=" + str(len(s15c_ret)));
+# 预期: ret={a:1,b:2,c:3}, len=3
+
+# S15.4: 闭包捕获后通过返回值暴露 — 外部直接修改捕获对象
+fn s15_makeBuffer() {
+    let buf = [1, 2, 3];
+    fn getBuf() { return buf; }
+    return getBuf;
+}
+let s15d_get = s15_makeBuffer();
+let s15d_buf = s15d_get();
+s15d_buf[0] = 99;
+let s15d_buf2 = s15d_get();
+print("S15.4 buf2[0]=" + str(s15d_buf2[0]));
+# 预期(引用): buf2[0]=99 (两次 get 返回同一引用, 外部修改可见)
+
+print("=== S1..S15 DONE ===");

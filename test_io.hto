@@ -1,0 +1,10 @@
+# Test file I/O
+write_file("test_output.txt", "Hello from H#!\nLine 2\n");
+let content = read_file("test_output.txt");
+print(content);
+print("File read success");
+
+# Test time
+let t = time_now();
+print(t);
+print("Time type: " + str(t));

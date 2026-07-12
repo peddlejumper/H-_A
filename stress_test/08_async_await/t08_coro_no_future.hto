@@ -1,0 +1,8 @@
+# t08: coro fn is the low-level API and must NOT wrap its result
+# in an HFuture.  HVM.kt:948-954: only `is_async` triggers the
+# HFuture wrap; `is_coro` alone returns raw.
+coro fn g() {
+    return 99;
+}
+let r = g();
+print(r);

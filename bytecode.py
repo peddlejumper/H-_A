@@ -19,6 +19,23 @@ class VM:
         self.pc = 0
         self.parent = None
         self._exception_handlers = []
+        # Fast locals：由 LOAD_FAST/STORE_FAST 使用，按索引访问的列表，比 dict env 更快
+        # fast_names 由编译器在 bytecode 中通过 'FAST_NAMES' 元信息提供
+        self.fast_slots = []
+        self._fast_name_to_idx = {}
+        fn = bytecode.get('fast_names') if isinstance(bytecode, dict) else None
+        if fn:
+            self._fast_name_to_idx = {n: i for i, n in enumerate(fn)}
+            self.fast_slots = [None] * len(fn)
+        # 内联缓存（monomorphic inline cache）
+        # LOAD_ATTR:  pc -> (class_id, kind, payload)
+        #   kind 'direct': payload=name，直接 obj[name]（实例字段/模块属性）
+        #   kind 'method': payload=method_name，从 class methods 取并绑定
+        # CALL_METHOD: pc -> (class_id, method_name) 命中后直接定位 method dict
+        self._attr_cache = {}
+        self._method_cache = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
         self.builtins = {
             'len': lambda args: len(args[0]) if len(args)==1 else (_ for _ in ()).throw(BytecodeRuntimeError('len() takes 1 arg')),
             'push': lambda args: (args[0].append(args[1]) or None),
@@ -40,8 +57,45 @@ class VM:
             'items': lambda args: list(args[0].items()),
             'has_key': lambda args: args[0] in args[1] if len(args)==2 else False,
         }
+        # 小对象分配优化：实例 dict 对象池
+        # CALL_NEW 创建实例时优先从池中取已清空的 dict，减少 malloc 次数
+        self._dict_pool = []
+        self._pool_reused = 0
+        self._pool_allocated = 0
+
+    def _acquire_instance_dict(self):
+        """从对象池取一个已清空的 dict；池空时新建。"""
+        if self._dict_pool:
+            d = self._dict_pool.pop()
+            self._pool_reused += 1
+            return d
+        self._pool_allocated += 1
+        return {}
+
+    def release_instance_dict(self, d):
+        """回收一个实例 dict（清空后放回池中，供下次复用）。"""
+        if d is None or not isinstance(d, dict):
+            return
+        d.clear()
+        # 限制池大小避免无限增长
+        if len(self._dict_pool) < 256:
+            self._dict_pool.append(d)
 
     def run(self):
+        # 小对象分配优化：VM 运行期间禁用 Python 周期性 GC（依赖引用计数回收），
+        # 消除全堆扫描造成的暂停；运行结束后恢复原状态。
+        # 目标：GC 暂停 < 1ms（由 perf_monitor 验证）
+        import gc as _gc
+        _gc_was_enabled = _gc.isenabled()
+        if _gc_was_enabled:
+            _gc.disable()
+        try:
+            return self._run_impl()
+        finally:
+            if _gc_was_enabled:
+                _gc.enable()
+
+    def _run_impl(self):
         instrs = self.instructions
         while self.pc < len(instrs):
             opname, arg = instrs[self.pc]
@@ -56,6 +110,18 @@ class VM:
                 elif opname == 'STORE_NAME':
                     val = self.stack.pop()
                     self.env[arg] = val
+                elif opname == 'LOAD_FAST':
+                    # arg 为槽位索引；越界时回退到 env 查找（兼容未分配槽位的变量）
+                    if 0 <= arg < len(self.fast_slots):
+                        self.stack.append(self.fast_slots[arg])
+                    else:
+                        self.stack.append(self.env.get(arg))
+                elif opname == 'STORE_FAST':
+                    val = self.stack.pop()
+                    if 0 <= arg < len(self.fast_slots):
+                        self.fast_slots[arg] = val
+                    else:
+                        self.env[arg] = val
                 elif opname == 'PRINT':
                     val = self.stack.pop()
                     print(val)
@@ -80,10 +146,38 @@ class VM:
                 elif opname == 'LOAD_ATTR':
                     name = arg
                     obj = self.stack.pop()
+                    # === inline cache 快路径 ===
+                    entry = self._attr_cache.get(self.pc - 1)
+                    if entry is not None:
+                        cid, kind, payload = entry
+                        if isinstance(obj, dict):
+                            obj_cid = id(obj.get('__class__')) if '__class__' in obj else id(obj)
+                            if obj_cid == cid:
+                                if kind == 'direct':
+                                    if name in obj:
+                                        self.stack.append(obj[name])
+                                        self._cache_hits += 1
+                                        continue
+                                elif kind == 'method':
+                                    class_obj = obj.get('__class__')
+                                    if class_obj is not None and name in class_obj.get('methods', {}):
+                                        self.stack.append({'__method__': class_obj['methods'][name], '__self__': obj})
+                                        self._cache_hits += 1
+                                        continue
+                                elif kind == 'class_field':
+                                    class_obj = obj.get('__class__')
+                                    if class_obj is not None and name in class_obj.get('fields', {}):
+                                        self.stack.append(class_obj['fields'][name])
+                                        self._cache_hits += 1
+                                        continue
+                        self._cache_misses += 1
+                    # === 慢路径：完整查找 + 填充缓存 ===
                     # object attribute lookup
                     if isinstance(obj, dict):
                         if name in obj:
                             self.stack.append(obj[name])
+                            cid = id(obj.get('__class__')) if '__class__' in obj else id(obj)
+                            self._attr_cache[self.pc - 1] = (cid, 'direct', name)
                             continue
                         if '__class__' in obj:
                             class_obj = obj['__class__']
@@ -96,11 +190,13 @@ class VM:
                             fields = class_obj.get('fields', {})
                             if name in fields:
                                 self.stack.append(fields[name])
+                                self._attr_cache[self.pc - 1] = (id(class_obj), 'class_field', name)
                                 continue
                             # methods: return bound method wrapper
                             methods = class_obj.get('methods', {})
                             if name in methods:
                                 self.stack.append({'__method__': methods[name], '__self__': obj})
+                                self._attr_cache[self.pc - 1] = (id(class_obj), 'method', name)
                                 continue
                     raise BytecodeRuntimeError(f"Attribute '{name}' not found on object")
                 elif opname == 'STORE_ATTR':
@@ -174,8 +270,10 @@ class VM:
                         else:
                             self.stack.pop()
                             self.pc = jump_target
-                    elif isinstance(top, tuple) and len(top) == 3 and top[0] == '__ITER__':
-                        # Pattern A: first iteration with config tuple
+                    elif isinstance(top, (tuple, list)) and len(top) == 3 and top[0] == '__ITER__':
+                        # Pattern A: first iteration with config tuple/list.
+                        # Accept both tuple (in-memory) and list (from JSON
+                        # deserialisation of the .hbc const pool).
                         self.stack.pop()
                         var1 = top[1]
                         var2 = top[2]
@@ -238,8 +336,16 @@ class VM:
                         func = self._lookup_name(name)
                         if isinstance(func, dict) and 'args' in func and 'bytecode' in func:
                             fargs = func.get('args', [])
-                            if len(fargs) != len(args):
-                                raise BytecodeRuntimeError(f"Function {name} expects {len(fargs)} args")
+                            is_variadic = func.get('is_variadic', False)
+                            if is_variadic:
+                                # `fn f(...args)` or `fn f(a, b, ...rest)`:
+                                # the last param collects trailing args.
+                                nfixed = len(fargs) - 1
+                                if len(args) < nfixed:
+                                    raise BytecodeRuntimeError(
+                                        f"Function {name} expects at least {nfixed} args, got {len(args)}")
+                            else:
+                                args = self._apply_defaults(func, args, name)
                             bc = {'instructions': func['bytecode'], 'consts': func.get('consts', [])}
                             vm2 = VM(bc)
                             vm2.parent = self
@@ -248,8 +354,13 @@ class VM:
                                     vm2.env[fv] = self._lookup_name(fv)
                                 except Exception:
                                     vm2.env[fv] = None
-                            for pname, pval in zip(fargs, args):
-                                vm2.env[pname] = pval
+                            if is_variadic:
+                                for i in range(nfixed):
+                                    vm2.env[fargs[i]] = args[i]
+                                vm2.env[fargs[-1]] = list(args[nfixed:])
+                            else:
+                                for pname, pval in zip(fargs, args):
+                                    vm2.env[pname] = pval
                             vm2.functions = self.functions
                             res = vm2.run()
                             self.stack.append(res)
@@ -263,6 +374,27 @@ class VM:
                     name, argc = arg
                     args = [self.stack.pop() for _ in range(argc)][::-1]
                     inst = self.stack.pop()
+                    # === inline cache 快路径：实例方法调用 ===
+                    if isinstance(inst, dict) and '__class__' in inst:
+                        entry = self._method_cache.get(self.pc - 1)
+                        if entry is not None:
+                            cid, methods_ref = entry
+                            if id(inst['__class__']) == cid and name in methods_ref:
+                                method = methods_ref[name]
+                                fargs = method.get('args', [])
+                                if len(fargs) == len(args):
+                                    bc = {'instructions': method['bytecode'], 'consts': method.get('consts', [])}
+                                    vm2 = VM(bc)
+                                    vm2.env['self'] = inst
+                                    vm2.parent = self
+                                    for pname, pval in zip(fargs, args):
+                                        vm2.env[pname] = pval
+                                    vm2.functions = self.functions
+                                    res = vm2.run()
+                                    self.stack.append(res)
+                                    self._cache_hits += 1
+                                    continue
+                            self._cache_misses += 1
                     # Special-case: module proxy (dict) attribute call
                     if isinstance(inst, dict) and '__class__' not in inst:
                         # module-like dict or class object (for static methods)
@@ -326,6 +458,8 @@ class VM:
                     methods = class_obj.get('methods', {})
                     if name not in methods:
                         raise BytecodeRuntimeError(f"Method '{name}' not found on class")
+                    # 填充 inline cache
+                    self._method_cache[self.pc - 1] = (id(class_obj), methods)
                     method = methods[name]
                     fargs = method.get('args', [])
                     if len(fargs) != len(args):
@@ -469,25 +603,42 @@ class VM:
                         return merged
 
                     resolved = resolve_class(class_obj)
-                    inst = {}
+                    inst = self._acquire_instance_dict()
                     inst['__class__'] = resolved
                     # copy default fields
                     for k, v in resolved.get('fields', {}).items():
                         inst[k] = copy.deepcopy(v)
-                    # call constructor if present
-                    if '__init__' in resolved.get('methods', {}):
-                        method = resolved['methods']['__init__']
+                    # call constructor if present — but only auto-invoke
+                    # it when the supplied arg count matches the
+                    # constructor's effective parameter count (excluding
+                    # `self`).  This preserves backward compatibility with
+                    # the old convention
+                    #     `let p = new Point(); p.init(3, 4);`
+                    # where `new Point()` should NOT invoke the
+                    # constructor, while still supporting the new
+                    #     `let p = new Point(3, 4);`
+                    # convention.  Both `fn init(...)` and
+                    # `fn __init__(...)` are recognised as constructors.
+                    methods = resolved.get('methods', {})
+                    method = methods.get('__init__') or methods.get('init')
+                    if method is not None:
                         fargs = method.get('args', [])
-                        if len(fargs) != len(args):
-                            raise BytecodeRuntimeError('__init__ args mismatch')
-                        bc = {'instructions': method['bytecode'], 'consts': method.get('consts', [])}
-                        vm2 = VM(bc)
-                        vm2.parent = self
-                        vm2.env['self'] = inst
-                        for pname, pval in zip(fargs, args):
-                            vm2.env[pname] = pval
-                        vm2.functions = self.functions
-                        vm2.run()
+                        # `self` is supplied by the VM, not the caller;
+                        # drop it from the arity check and positional
+                        # binding (mirrors HVM.kt invokeHFunction).
+                        if fargs and fargs[0] == 'self':
+                            eff_args = fargs[1:]
+                        else:
+                            eff_args = fargs
+                        if len(eff_args) == len(args):
+                            bc = {'instructions': method['bytecode'], 'consts': method.get('consts', [])}
+                            vm2 = VM(bc)
+                            vm2.parent = self
+                            vm2.env['self'] = inst
+                            for pname, pval in zip(eff_args, args):
+                                vm2.env[pname] = pval
+                            vm2.functions = self.functions
+                            vm2.run()
                     self.stack.append(inst)
                 elif opname == 'UNION_MAKE':
                     argc = arg
@@ -506,7 +657,7 @@ class VM:
                         raise BytecodeRuntimeError(f'Unknown variant {variant_name} for union {union_type["name"]}')
                     if len(values) != len(variant['fields']):
                         raise BytecodeRuntimeError(f'Variant {variant_name} expects {len(variant["fields"])} fields, got {len(values)}')
-                    inst = {}
+                    inst = self._acquire_instance_dict()
                     inst['__union__'] = union_type['name']
                     inst['__variant__'] = variant_name
                     for i, fname in enumerate(variant['fields']):
@@ -573,6 +724,37 @@ class VM:
                 if not handler_found:
                     # no local handler; propagate to caller VM or host
                     raise
+            except BytecodeRuntimeError as exc:
+                # Turn runtime errors (arity mismatch, unknown opcode,
+                # type errors, etc.) into catchable H# exceptions so
+                # user `try/catch` can handle them.
+                handler_found = False
+                while self._exception_handlers:
+                    target, stack_height = self._exception_handlers.pop()
+                    if target is None:
+                        continue
+                    self.stack = self.stack[:stack_height]
+                    self.stack.append(str(exc))
+                    self.pc = target
+                    handler_found = True
+                    break
+                if not handler_found:
+                    raise
+            except (IndexError, KeyError, TypeError, ZeroDivisionError, ValueError, AttributeError) as exc:
+                # Python built-in errors raised by host operations on
+                # lists/dicts/strings should be catchable from H#.
+                handler_found = False
+                while self._exception_handlers:
+                    target, stack_height = self._exception_handlers.pop()
+                    if target is None:
+                        continue
+                    self.stack = self.stack[:stack_height]
+                    self.stack.append(str(exc))
+                    self.pc = target
+                    handler_found = True
+                    break
+                if not handler_found:
+                    raise BytecodeRuntimeError(str(exc))
 
         return None
 
@@ -655,3 +837,25 @@ class VM:
         if name in self.builtins:
             return self.builtins[name]
         raise BytecodeRuntimeError(f"Undefined name: {name}")
+
+    def _apply_defaults(self, func, args, name):
+        """Fill missing trailing args from func['defaults'].
+
+        `func` is the dict form of an H# function object.  `defaults`
+        is aligned with the *tail* of `args` (Python convention)."""
+        fargs = func.get('args', [])
+        defaults = func.get('defaults', [])
+        n_def = len(defaults)
+        if not n_def:
+            if len(args) != len(fargs):
+                raise BytecodeRuntimeError(
+                    f"Function {name} expects {len(fargs)} args, got {len(args)}")
+            return args
+        min_args = len(fargs) - n_def
+        if len(args) == len(fargs):
+            return args
+        if min_args <= len(args) < len(fargs):
+            skip = len(args) - min_args
+            return list(args) + list(defaults[skip:])
+        raise BytecodeRuntimeError(
+            f"Function {name} expects {len(fargs)} args (min {min_args}), got {len(args)}")

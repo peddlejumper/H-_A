@@ -1,0 +1,821 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+             xmlns:v="using:ZZW.CodeTeacher.Client.Views"
+             xmlns:cvt="using:ZZW.CodeTeacher.Client.Converters"
+             xmlns:dto="using:ZZW.CodeTeacher.Application.DTOs"
+             xmlns:svc="using:ZZW.CodeTeacher.Client.Services"
+             x:Class="ZZW.CodeTeacher.Client.Views.MainIdeView"
+             x:DataType="vm:MainIdeViewModel">
+
+  <Grid RowDefinitions="Auto,*,Auto" Background="Transparent">
+
+    <!-- ═══ 工具栏:主操作 + 状态 + 通知中心 + ⋯ 菜单 ═══ -->
+    <Border Grid.Row="0" Classes="toolbar" Padding="14,10" Margin="16,16,16,0">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <!-- 左:主操作 -->
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+          <Button Classes="primary" Content="运行样例" Command="{Binding RunSampleCommand}" />
+          <Button Classes="secondary" Content="提交评测" Command="{Binding SubmitCommand}" />
+        </StackPanel>
+        <!-- 中:状态文字 -->
+        <TextBlock Grid.Column="1" Text="{Binding Status}" VerticalAlignment="Center" Margin="16,0"
+                   Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis" />
+        <!-- 右:通知中心 + ⋯ 菜单 -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+          <!-- 通知中心:小铃铛,未读数 Badge,点击弹出公告浮层 -->
+          <Button Classes="secondary" Padding="10,4" MinWidth="52" FontSize="12"
+                  HorizontalContentAlignment="Center" ToolTip.Tip="通知中心">
+            <Grid>
+              <TextBlock Text="通知" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              <!-- 未读数 Badge(>0 时显示) -->
+              <Border Classes="badge error" MinWidth="18" Height="18" Padding="4,0"
+                      HorizontalAlignment="Right" VerticalAlignment="Top"
+                      Margin="0,-4,-4,0"
+                      IsVisible="{Binding Announcements.UnreadCount, Converter={x:Static cvt:CountToBoolConverter.InvertedInstance}}">
+                <TextBlock Text="{Binding Announcements.UnreadCount}" Foreground="{DynamicResource ErrorRed}" FontSize="10"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+            </Grid>
+            <Button.Flyout>
+              <Flyout Placement="BottomEdgeAlignedRight">
+                <Border Width="340" Padding="0">
+                  <DockPanel>
+                    <!-- 标题栏 -->
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="12,10,8,6">
+                      <TextBlock Grid.Column="0" Classes="section" Text="通知中心" />
+                      <Button Grid.Column="1" Classes="secondary" Content="刷新" Padding="6,2" FontSize="11"
+                              Command="{Binding Announcements.RefreshCommand}" />
+                    </Grid>
+                    <!-- 教师发布入口 -->
+                    <StackPanel DockPanel.Dock="Top" Margin="12,0,12,6"
+                                IsVisible="{Binding IsTeacher}">
+                      <Button Classes="secondary" Content="{Binding Announcements.IsCreating, StringFormat={}{0:#收起发布;发布公告;}}"
+                              HorizontalAlignment="Left" FontSize="11" Padding="8,3"
+                              Command="{Binding Announcements.ToggleCreateFormCommand}" />
+                      <!-- 发布表单(展开时显示) -->
+                      <Border Classes="glass-inset" Padding="10" Margin="0,6,0,0"
+                              IsVisible="{Binding Announcements.IsCreating}">
+                        <StackPanel Spacing="6">
+                          <TextBox Text="{Binding Announcements.NewTitle, Mode=TwoWay}" Watermark="公告标题" FontSize="12" />
+                          <TextBox Text="{Binding Announcements.NewContent, Mode=TwoWay}" Watermark="公告内容"
+                                   AcceptsReturn="True" TextWrapping="Wrap" Height="60" FontSize="12" />
+                          <Button Classes="primary" Content="发布" HorizontalAlignment="Right" FontSize="11" Padding="10,3"
+                                  Command="{Binding Announcements.CreateAnnouncementCommand}"
+                                  IsEnabled="{Binding !Announcements.IsLoading}" />
+                        </StackPanel>
+                      </Border>
+                    </StackPanel>
+                    <!-- 空状态 -->
+                    <TextBlock DockPanel.Dock="Top" Text="暂无公告" Classes="empty" Margin="12,4" IsVisible="{Binding Announcements.Items.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}" />
+                    <!-- 公告列表 -->
+                    <ScrollViewer MaxHeight="320" Padding="4,0,4,8">
+                      <ItemsControl ItemsSource="{Binding Announcements.Items}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="dto:AnnouncementDto">
+                            <Button Classes="text" Padding="10,8" Margin="0,2"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding $parent[ItemsControl].DataContext.Announcements.MarkReadCommand}"
+                                    CommandParameter="{Binding}">
+                              <StackPanel Spacing="3">
+                                <Grid ColumnDefinitions="*,Auto">
+                                  <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" FontSize="12"
+                                             Foreground="{DynamicResource InkPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                  <!-- 未读小圆点 -->
+                                  <Ellipse Grid.Column="1" Width="8" Height="8" Fill="{DynamicResource ErrorRed}"
+                                           VerticalAlignment="Center" Margin="6,0,0,0"
+                                           IsVisible="{Binding !IsRead}" />
+                                </Grid>
+                                <TextBlock Text="{Binding Content}" Foreground="{DynamicResource InkSecondaryBrush}"
+                                           FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                  <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10" />
+                                  <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:MM-dd HH:mm}}"
+                                             Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                                </StackPanel>
+                              </StackPanel>
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Border>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+          <!-- ⋯ 菜单 -->
+          <Button Classes="secondary" Content="⋯" Padding="8,4" Width="40" FontSize="14"
+                  HorizontalContentAlignment="Center" ToolTip.Tip="更多">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="学习画像" Command="{Binding OpenProfileCommand}" />
+                <MenuItem Header="今日复习" Command="{Binding OpenReviewProfileCommand}"
+                          IsVisible="{Binding ReviewDueCount, Converter={x:Static cvt:CountToBoolConverter.InvertedInstance}}" />
+                <MenuItem Header="知识广场" Command="{Binding OpenBlogCommand}" />
+                <MenuItem Header="加入班级" Command="{Binding OpenJoinGroupCommand}" />
+                <MenuItem Header="教师后台" Command="{Binding OpenTeacherDashboardCommand}" IsVisible="{Binding IsTeacher}" />
+                <Separator />
+                <MenuItem Header="{Binding CheckInLabel}" Command="{Binding CheckInCommand}" IsEnabled="{Binding CanCheckIn}" />
+                <Separator />
+                <MenuItem Header="设置" Command="{Binding OpenAiSettingsCommand}" />
+                <MenuItem Header="退出登录" Command="{Binding LogoutCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- 三栏 + 可拖拽分隔条 -->
+    <Grid Grid.Row="1" ColumnDefinitions="256,5,*,5,380" Margin="16,10,16,0">
+
+      <!-- 左:题目浏览器 -->
+      <Border Grid.Column="0" Classes="panel" Padding="0" MinWidth="180">
+        <DockPanel>
+          <!-- AI 推荐题目(可折叠;点击加载到编辑器) -->
+          <Expander DockPanel.Dock="Top" Header="为你推荐" IsExpanded="True" Margin="12,12,12,4" Padding="8,4">
+            <StackPanel Spacing="3" Margin="0,4,0,0">
+              <TextBlock Text="暂无推荐" Classes="empty"
+                         IsVisible="{Binding Recommendations.Recommendations.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}" />
+              <ItemsControl ItemsSource="{Binding Recommendations.Recommendations}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="dto:RecommendedProblemDto">
+                    <Button Classes="text"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            Padding="8,6" Margin="0,2"
+                            Command="{Binding $parent[UserControl].DataContext.OpenRecommendedProblemCommand}"
+                            CommandParameter="{Binding ProblemId}">
+                      <StackPanel Spacing="2">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                          <TextBlock Grid.Column="0" Text="{Binding Code}" Foreground="{DynamicResource BrandBlueBrush}"
+                                     FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+                          <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="{DynamicResource InkPrimaryBrush}"
+                                     FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="2"
+                                     Text="{Binding Difficulty, Converter={x:Static cvt:DifficultyToStringConverter.Instance}}"
+                                     Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10" VerticalAlignment="Center" />
+                        </Grid>
+                        <TextBlock Text="{Binding Reason}" Foreground="{DynamicResource InkMutedBrush}"
+                                   FontSize="10" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Expander>
+
+          <!-- 按知识点浏览(树;选中知识点筛选题目列表) -->
+          <Expander DockPanel.Dock="Top" Header="按知识点浏览" IsExpanded="False" Margin="12,4,12,4" Padding="8,4">
+            <StackPanel Spacing="4" Margin="0,4,0,0">
+              <Button Classes="secondary" Content="全部题目(清除筛选)" FontSize="10" Padding="6,3"
+                      HorizontalAlignment="Stretch"
+                      Command="{Binding KnowledgeTree.ClearFilterCommand}"
+                      IsVisible="{Binding KnowledgeTree.IsFiltering}" />
+              <TextBlock Text="{Binding KnowledgeTree.FilterLabel, StringFormat=当前筛选: {0}}"
+                         Foreground="{DynamicResource BrandBlueBrush}" FontSize="10"
+                         IsVisible="{Binding KnowledgeTree.IsFiltering}" />
+              <TextBlock Text="暂无知识点" Classes="empty"
+                         IsVisible="{Binding KnowledgeTree.Tree.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}" />
+              <TreeView ItemsSource="{Binding KnowledgeTree.Tree}" Background="Transparent" BorderThickness="0"
+                        MaxHeight="220">
+                <TreeView.ItemTemplate>
+                  <TreeDataTemplate ItemsSource="{Binding Children}">
+                    <Button Classes="text" Padding="6,4"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Command="{Binding $parent[UserControl].DataContext.KnowledgeTree.SelectPointCommand}"
+                            CommandParameter="{Binding}">
+                      <TextBlock Text="{Binding Name}" FontSize="11"
+                                 Foreground="{DynamicResource InkSecondaryBrush}" />
+                    </Button>
+                  </TreeDataTemplate>
+                </TreeView.ItemTemplate>
+              </TreeView>
+            </StackPanel>
+          </Expander>
+
+          <!-- 最近浏览(本地持久化,可折叠;点击直接加载该题) -->
+          <Expander DockPanel.Dock="Top" Header="最近浏览" IsExpanded="False" Margin="12,12,12,4" Padding="8,4">
+            <ItemsControl ItemsSource="{Binding RecentProblems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="svc:RecentProblemItem">
+                  <Button Classes="text"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          Padding="8,6" Margin="0,2"
+                          Command="{Binding $parent[ItemsControl].DataContext.OpenRecentCommand}"
+                          CommandParameter="{Binding}">
+                    <Grid ColumnDefinitions="Auto,*">
+                      <TextBlock Grid.Column="0" Text="{Binding Code}" Foreground="{DynamicResource InkSecondaryBrush}"
+                                 FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0" />
+                      <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="{DynamicResource InkPrimaryBrush}"
+                                 FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    </Grid>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+          <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="12,12,12,8">
+            <TextBlock Classes="section" Text="题目列表" />
+            <TextBox Text="{Binding Browser.SearchText}" Watermark="搜索题目(回车)…" FontSize="12">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding Browser.ApplyFilterCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Grid ColumnDefinitions="*,Auto">
+              <ComboBox Grid.Column="0" ItemsSource="{Binding Browser.DifficultyOptions}"
+                        SelectedItem="{Binding Browser.DifficultyFilter, Mode=TwoWay}"
+                        HorizontalAlignment="Stretch" FontSize="12"
+                        PlaceholderText="全部难度">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding ., Converter={x:Static cvt:DifficultyToStringConverter.Instance}}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <Button Grid.Column="1" Classes="secondary" Content="刷新"
+                      Command="{Binding Browser.RefreshCommand}" Margin="4,0,0,0" FontSize="12" />
+            </Grid>
+          </StackPanel>
+          <ListBox DataContext="{Binding Browser}"
+                   ItemsSource="{Binding Rows}"
+                   SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                   Classes="text" Padding="6,2">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ProblemRowVm">
+                <StackPanel Margin="2,4">
+                  <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <Rectangle Grid.Column="0" Width="3" Height="14" VerticalAlignment="Center"
+                               Fill="{Binding StatusColor}" Margin="0,0,8,0" />
+                    <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="{DynamicResource InkPrimaryBrush}"
+                               FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Text="{Binding SubmitCount, StringFormat=提交{0}}"
+                               Foreground="{DynamicResource InkMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0" />
+                    <Button Grid.Column="3" Classes="text" Padding="6,2"
+                            VerticalAlignment="Center" ToolTip.Tip="收藏/取消收藏"
+                            Command="{Binding $parent[ItemsControl].DataContext.ToggleFavoriteCommand}"
+                            CommandParameter="{Binding}">
+                      <TextBlock Text="{Binding FavoriteMark}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="14" />
+                    </Button>
+                  </Grid>
+                  <StackPanel Orientation="Horizontal" Spacing="6" Margin="11,3,0,0">
+                    <TextBlock Text="{Binding Code}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="10" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Difficulty}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" />
+                    <TextBlock Text="{Binding TestCaseCount, StringFormat=用例 {0}}"
+                               Foreground="{DynamicResource InkMutedBrush}" FontSize="11" />
+                  </StackPanel>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+
+      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="Transparent" />
+
+      <!-- 中:编辑器 + 结果 -->
+      <Grid Grid.Column="2" RowDefinitions="*,Auto" MinWidth="320" Margin="0">
+
+        <!-- 编辑器卡片 -->
+        <Border Grid.Row="0" Classes="panel" Padding="0">
+          <DockPanel>
+            <!-- 编辑器工具栏 -->
+            <Border DockPanel.Dock="Top" Classes="glass-inset" Padding="12,8" BorderThickness="0,0,0,1"
+                    CornerRadius="16,16,0,0">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <TextBlock Classes="section" Text="编辑器" />
+                  <TextBlock Text="{Binding Editor.Title}" Foreground="{DynamicResource InkPrimaryBrush}" FontSize="13"
+                             VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Editor.Tags}" Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                             VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <TextBlock Text="语言:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" VerticalAlignment="Center" />
+                  <ComboBox ItemsSource="{Binding Editor.AvailableLanguages}"
+                            SelectedItem="{Binding Editor.Language, Mode=TwoWay}"
+                            MinWidth="100" FontSize="12" />
+                  <Separator Width="1" Margin="4,0" />
+                  <Button Classes="secondary" Content="A−" FontSize="11" Padding="8,3"
+                          Command="{Binding Editor.ZoomOutCommand}" ToolTip.Tip="缩小字号" />
+                  <TextBlock Text="{Binding Editor.FontSize}" Foreground="{DynamicResource InkTertiaryBrush}"
+                             FontSize="11" VerticalAlignment="Center" MinWidth="20" HorizontalAlignment="Center" />
+                  <Button Classes="secondary" Content="A+" FontSize="11" Padding="8,3"
+                          Command="{Binding Editor.ZoomInCommand}" ToolTip.Tip="放大字号" />
+                  <Separator Width="1" Margin="4,0" />
+                  <Button Classes="secondary icon" Content="⋯"
+                          HorizontalContentAlignment="Center" ToolTip.Tip="更多">
+                    <Button.Flyout>
+                      <MenuFlyout>
+                        <MenuItem Header="重置模板" Command="{Binding Editor.ResetTemplateCommand}" />
+                        <MenuItem Header="清空代码" Command="{Binding Editor.ClearCodeCommand}" />
+                        <MenuItem Header="代码片段库" Command="{Binding OpenSnippetLibraryCommand}" />
+                        <Separator />
+                        <MenuItem Header="导出代码" Click="OnExportCodeClick" />
+                        <Separator />
+                        <MenuItem Header="{Binding IsDescriptionExpanded, StringFormat={}{0:#隐藏描述;显示描述;}}"
+                                  Command="{Binding ToggleDescriptionCommand}" />
+                      </MenuFlyout>
+                    </Button.Flyout>
+                  </Button>
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <!-- 编辑器底部状态栏 -->
+            <Border DockPanel.Dock="Bottom" Classes="glass-inset" Padding="12,4" BorderThickness="0,1,0,0"
+                    CornerRadius="0,0,0,0">
+              <Grid ColumnDefinitions="Auto,Auto,*">
+                <TextBlock Grid.Column="0" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" VerticalAlignment="Center">
+                  <Run Text="行 " /><Run Text="{Binding Editor.LineCount}" />
+                </TextBlock>
+                <TextBlock Grid.Column="1" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" VerticalAlignment="Center" Margin="12,0,0,0">
+                  <Run Text="字符 " /><Run Text="{Binding Editor.CharCount}" />
+                </TextBlock>
+                <TextBlock Grid.Column="2" Text="Tab 键插入 4 空格" Foreground="{DynamicResource InkMutedBrush}"
+                           FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+
+            <!-- 问题描述(可折叠) -->
+            <Border DockPanel.Dock="Bottom" Classes="glass-inset" Padding="0" BorderThickness="0,1,0,0"
+                    MaxHeight="190">
+              <DockPanel>
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="12,8">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="section" Text="题目描述" />
+                    <TextBlock Text="{Binding IsDescriptionExpanded, StringFormat={}{0:#已展开;已折叠;}}"
+                               Classes="muted" FontSize="11" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="text" Content="展开/收起"
+                          Padding="8,4" FontSize="11"
+                          Command="{Binding ToggleDescriptionCommand}" />
+                </Grid>
+                <ScrollViewer IsVisible="{Binding IsDescriptionExpanded}" Padding="12,0,12,10">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding Editor.Description}" Foreground="{DynamicResource InkSecondaryBrush}"
+                               TextWrapping="Wrap" FontSize="12" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                      <TextBlock Text="样例输入:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" VerticalAlignment="Center" />
+                      <Border Background="{DynamicResource GlassInsetBrush}" CornerRadius="10" Padding="8,3"
+                              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                        <TextBlock Text="{Binding Editor.SampleInput}" Foreground="{DynamicResource InkPrimaryBrush}" FontFamily="{StaticResource CodeFontFamily}" FontSize="11" />
+                      </Border>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Text="样例输出:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" VerticalAlignment="Center" />
+                      <Border Background="{DynamicResource GlassInsetBrush}" CornerRadius="10" Padding="8,3"
+                              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1">
+                        <TextBlock Text="{Binding Editor.SampleOutput}" Foreground="{DynamicResource InkPrimaryBrush}" FontFamily="{StaticResource CodeFontFamily}" FontSize="11" />
+                      </Border>
+                    </StackPanel>
+                  </StackPanel>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+
+            <!-- 代码编辑区 -->
+            <v:CodeEditorView DataContext="{Binding Editor}" />
+          </DockPanel>
+        </Border>
+
+        <!-- 评测结果 -->
+        <Border Grid.Row="1" Classes="panel" Padding="0" Margin="0,8,0,0"
+                MaxHeight="280">
+          <DockPanel>
+            <Border DockPanel.Dock="Top" Classes="glass-inset" Padding="12,8" BorderThickness="0,0,0,1"
+                    CornerRadius="16,16,0,0">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <TextBlock Classes="section" Text="评测结果" />
+                  <TextBlock Text="{Binding Runner.Status}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+                  <TextBlock Text="{Binding IsRunnerExpanded, StringFormat={}{0:#已展开;已折叠;}}"
+                             Classes="muted" FontSize="11" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="text" Content="展开/收起"
+                        Padding="8,4" FontSize="11"
+                        Command="{Binding ToggleRunnerCommand}" />
+              </Grid>
+            </Border>
+            <DockPanel IsVisible="{Binding IsRunnerExpanded}">
+              <!-- 我的提交历史(可折叠,评测结果下方) -->
+              <Expander DockPanel.Dock="Bottom" Header="{Binding ProblemSubmissions.Count, StringFormat=我的提交历史 ({0})}"
+                        IsExpanded="{Binding IsHistoryExpanded, Mode=TwoWay}"
+                        Padding="10,4" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource BorderDefaultBrush}">
+                <StackPanel Spacing="3" Margin="0,4,0,0">
+                  <TextBlock Text="暂无该题提交历史" Classes="empty"
+                             IsVisible="{Binding ProblemSubmissions.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}" />
+                  <TextBlock Text="点击行可加载该次提交代码到编辑器复盘" Foreground="{DynamicResource InkTertiaryBrush}"
+                             FontSize="10" Margin="0,0,0,2"
+                             IsVisible="{Binding ProblemSubmissions.Count, Converter={x:Static cvt:CountToBoolConverter.InvertedInstance}}" />
+                  <ItemsControl ItemsSource="{Binding ProblemSubmissions}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="dto:SubmissionDto">
+                        <Button Classes="text" Padding="8,5"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Margin="0,1"
+                                Command="{Binding $parent[ItemsControl].DataContext.LoadHistoryCodeCommand}"
+                                CommandParameter="{Binding}">
+                          <Grid ColumnDefinitions="70,90,*,70,90">
+                            <TextBlock Grid.Column="0" Text="{Binding Status}" FontSize="11"
+                                       Foreground="{Binding Status, Converter={x:Static cvt:StatusToColorConverter.Instance}}" />
+                            <TextBlock Grid.Column="1" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" VerticalAlignment="Center">
+                              <Run Text="{Binding Score}" /><Run Text="/" /><Run Text="{Binding TotalCases}" />
+                            </TextBlock>
+                            <TextBlock Grid.Column="2" Text="{Binding ErrorMessage}" Foreground="{DynamicResource InkTertiaryBrush}"
+                                       FontSize="10" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="3" Text="{Binding Language}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="4" Text="{Binding SubmittedAt, StringFormat={}{0:MM-dd HH:mm}}"
+                                       Foreground="{DynamicResource InkMutedBrush}" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                          </Grid>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Expander>
+              <ScrollViewer>
+                <TextBox Text="{Binding Runner.Output, Mode=OneWay}" IsReadOnly="True"
+                         Background="Transparent" Foreground="{DynamicResource InkPrimaryBrush}"
+                         FontFamily="{StaticResource CodeFontFamily}" FontSize="12"
+                         AcceptsReturn="True" TextWrapping="NoWrap" BorderThickness="0" Padding="12,8" />
+              </ScrollViewer>
+            </DockPanel>
+          </DockPanel>
+        </Border>
+      </Grid>
+
+      <GridSplitter Grid.Column="3" ResizeDirection="Columns" Background="Transparent" />
+
+      <!-- 右:教练/平台/讨论 -->
+      <Border Grid.Column="4" Classes="panel" Padding="0" MinWidth="260">
+        <TabControl Background="Transparent" Padding="0">
+          <TabItem Header="教练助手">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="4" Margin="12,12,12,6">
+                <Button Classes="secondary" Content="思路提示" Command="{Binding AiChat.GetHintCommand}" />
+                <Button Classes="secondary" Content="错误解释" Command="{Binding AiChat.ExplainErrorCommand}" />
+                <Button Classes="secondary icon" Content="⋯"
+                        HorizontalContentAlignment="Center" Margin="4,0,0,0" ToolTip.Tip="更多">
+                  <Button.Flyout>
+                    <MenuFlyout>
+                      <MenuItem Header="代码审查" Command="{Binding AiChat.ReviewCodeCommand}" />
+                      <Separator />
+                      <MenuItem Header="导出对话" Click="OnExportChatClick" />
+                    </MenuFlyout>
+                  </Button.Flyout>
+                </Button>
+              </StackPanel>
+              <!-- AI 未配置时的提示横幅:左侧 2px 蓝竖线 -->
+              <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource BrandBlueBrush}" BorderThickness="2,0,0,0"
+                      Padding="10,8" Margin="12,0,12,6"
+                      IsVisible="{Binding !AiChat.IsAiAvailable}">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="AI 未接入" Foreground="{DynamicResource BrandBlueBrush}" FontWeight="SemiBold" FontSize="12" />
+                  <TextBlock Text="{Binding AiChat.UnavailableHint}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" TextWrapping="Wrap" />
+                  <Button Classes="primary" Content="去配置 AI" FontSize="11" Margin="0,4,0,0" Padding="10,4"
+                          Command="{Binding OpenAiSettingsCommand}" HorizontalAlignment="Left" />
+                </StackPanel>
+              </Border>
+              <StackPanel DockPanel.Dock="Bottom" Margin="12" Spacing="6">
+                <TextBox Text="{Binding AiChat.UserInput, Mode=TwoWay}"
+                         Watermark="向教练提问…" Height="56"
+                         AcceptsReturn="True" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                  <Button Classes="secondary" Content="停止生成" Command="{Binding AiChat.StopStreamingCommand}"
+                          IsVisible="{Binding AiChat.IsThinking}" Foreground="{DynamicResource ErrorRed}" />
+                  <Button Classes="primary" Content="发送" Command="{Binding AiChat.SendFreeChatCommand}" />
+                </StackPanel>
+              </StackPanel>
+              <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding AiChat.History}" Margin="12,4">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:ChatMessage">
+                      <Border Classes="chat-bubble">
+                        <StackPanel>
+                          <TextBlock Text="{Binding Prefix}" FontWeight="SemiBold" FontSize="11"
+                                     Foreground="{DynamicResource BrandBlueBrush}" />
+                          <TextBlock Text="{Binding Body}" Foreground="{DynamicResource InkSecondaryBrush}"
+                                     TextWrapping="Wrap" FontSize="12" Margin="0,3,0,0" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
+          </TabItem>
+          <TabItem Header="第三方平台">
+            <v:ExternalPanelView DataContext="{Binding External}" />
+          </TabItem>
+          <TabItem Header="讨论区">
+            <DockPanel DataContext="{Binding DiscussionVm}" LastChildFill="True">
+              <!-- 顶部:发新帖(可折叠) -->
+              <Expander DockPanel.Dock="Top" Header="发新帖" IsExpanded="False" Margin="10,10,10,4"
+                        Padding="8,4">
+                <StackPanel Spacing="6" Margin="0,6,0,0">
+                  <TextBox Text="{Binding NewDiscussionTitle, Mode=TwoWay}" Watermark="讨论标题" />
+                  <TextBox Text="{Binding NewDiscussionContent, Mode=TwoWay}" Watermark="讨论内容(可选)"
+                           AcceptsReturn="True" TextWrapping="Wrap" Height="60" />
+                  <Button Classes="primary" Content="发布讨论" HorizontalAlignment="Right"
+                          Command="{Binding CreateDiscussionCommand}" IsEnabled="{Binding !IsPosting}" />
+                </StackPanel>
+              </Expander>
+
+              <!-- 中部:讨论列表 + 底部回复 -->
+              <Grid RowDefinitions="*,*" Margin="10,4,10,10">
+
+                <!-- 讨论列表 -->
+                <Border Grid.Row="0" Classes="panel" Padding="0">
+                  <DockPanel>
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="12,8,12,4">
+                      <TextBlock Grid.Column="0" Classes="section" Text="讨论列表" VerticalAlignment="Center" />
+                      <Button Grid.Column="1" Classes="secondary" Content="⋯" Padding="4,2" Width="24" FontSize="12"
+                              HorizontalContentAlignment="Center" ToolTip.Tip="更多">
+                        <Button.Flyout>
+                          <MenuFlyout>
+                            <MenuItem Header="刷新" Command="{Binding RefreshCurrentCommand}" />
+                          </MenuFlyout>
+                        </Button.Flyout>
+                      </Button>
+                    </Grid>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding StatusHint}" Margin="12,0,12,4"
+                               Foreground="{DynamicResource InkMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+                    <ScrollViewer>
+                      <ItemsControl ItemsSource="{Binding Discussions}" Margin="8,4,8,8">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="dto:DiscussionListItemDto">
+                            <Button Classes="text"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                    Padding="10,7" Margin="0,2"
+                                    Command="{Binding $parent[ItemsControl].DataContext.SelectDiscussionCommand}"
+                                    CommandParameter="{Binding}">
+                              <StackPanel Spacing="3">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12"
+                                           Foreground="{DynamicResource InkPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                  <TextBlock Text="{Binding Username}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10" />
+                                  <TextBlock Text="{Binding ReplyCount, StringFormat=回复 {0}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                                  <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:MM-dd HH:mm}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                                </StackPanel>
+                              </StackPanel>
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Border>
+
+                <!-- 回复区 -->
+                <Border Grid.Row="1" Classes="panel" Padding="0" Margin="0,8,0,0">
+                  <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="12,8,12,4" Spacing="2">
+                      <TextBlock Classes="section" Text="回复" />
+                      <TextBlock Text="{Binding SelectedDiscussion.Title}" FontSize="11"
+                                 Foreground="{DynamicResource InkTertiaryBrush}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Margin="12,8" Spacing="6">
+                      <TextBox Text="{Binding ReplyContent, Mode=TwoWay}" Watermark="写下你的回复…" />
+                      <Button Classes="primary" Content="发送回复" HorizontalAlignment="Right"
+                              Command="{Binding CreateReplyCommand}" IsEnabled="{Binding !IsPosting}" />
+                    </StackPanel>
+                    <ScrollViewer>
+                      <ItemsControl ItemsSource="{Binding Replies}" Margin="8,4,8,8">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="dto:DiscussionReplyDto">
+                            <Border Classes="chat-bubble" Padding="8,6">
+                              <StackPanel Spacing="3">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                  <TextBlock Text="{Binding Username}" Foreground="{DynamicResource BrandBlueBrush}" FontSize="11" FontWeight="SemiBold" />
+                                  <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:MM-dd HH:mm}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Content}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" TextWrapping="Wrap" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Border>
+              </Grid>
+            </DockPanel>
+          </TabItem>
+
+          <!-- 题解(右栏第 3 个 Tab,讨论区之后):列表/详情/发布/点赞/采纳 -->
+          <TabItem Header="题解">
+            <DockPanel DataContext="{Binding Solutions}" LastChildFill="True">
+              <!-- 顶部:排序 + 刷新 + 状态提示 -->
+              <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="10,10,10,6">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="排序:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" VerticalAlignment="Center" />
+                    <RadioButton Content="热门" GroupName="SolutionSort" FontSize="11"
+                                 IsChecked="{Binding SortMode, Converter={x:Static cvt:StringEqualsConverter.Instance}, ConverterParameter=hot, Mode=TwoWay}" />
+                    <RadioButton Content="最新" GroupName="SolutionSort" FontSize="11"
+                                 IsChecked="{Binding SortMode, Converter={x:Static cvt:StringEqualsConverter.Instance}, ConverterParameter=new, Mode=TwoWay}" />
+                    <RadioButton Content="已采纳" GroupName="SolutionSort" FontSize="11"
+                                 IsChecked="{Binding SortMode, Converter={x:Static cvt:StringEqualsConverter.Instance}, ConverterParameter=accepted, Mode=TwoWay}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="secondary" Content="刷新" FontSize="11" Padding="6,2"
+                          Command="{Binding RefreshCommand}" />
+                </Grid>
+                <TextBlock Text="{Binding StatusHint}" Foreground="{DynamicResource InkMutedBrush}" FontSize="11" TextWrapping="Wrap" />
+              </StackPanel>
+
+              <!-- 底部:发布题解表单(可折叠) -->
+              <Expander DockPanel.Dock="Bottom" Header="发布题解" IsExpanded="{Binding IsCreating, Mode=TwoWay}"
+                        Padding="8,4" Margin="10,4,10,10">
+                <StackPanel Spacing="6" Margin="0,6,0,0">
+                  <TextBox Text="{Binding NewTitle, Mode=TwoWay}" Watermark="题解标题" FontSize="12" />
+                  <TextBox Text="{Binding NewContent, Mode=TwoWay}" Watermark="题解正文(Markdown)"
+                           AcceptsReturn="True" TextWrapping="Wrap" Height="70" FontSize="12" />
+                  <Grid ColumnDefinitions="*,120">
+                    <TextBox Grid.Column="0" Text="{Binding NewCode, Mode=TwoWay}" Watermark="代码(可选)"
+                             AcceptsReturn="True" TextWrapping="NoWrap" Height="56" FontSize="11"
+                             FontFamily="{StaticResource CodeFontFamily}" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding LanguageOptions}"
+                              SelectedItem="{Binding NewLanguage, Mode=TwoWay}"
+                              Margin="6,0,0,0" FontSize="11" HorizontalAlignment="Stretch" />
+                  </Grid>
+                  <Button Classes="primary" Content="发布" HorizontalAlignment="Right" FontSize="11" Padding="10,3"
+                          Command="{Binding CreateSolutionCommand}" IsEnabled="{Binding !IsPosting}" />
+                </StackPanel>
+              </Expander>
+
+              <!-- 中部:题解列表 + 详情(可滚动) -->
+              <ScrollViewer>
+                <StackPanel Spacing="8" Margin="10,4,10,4">
+                  <TextBlock Text="暂无题解,来写第一篇吧" Classes="empty"
+                             IsVisible="{Binding Solutions.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}" />
+                  <ItemsControl ItemsSource="{Binding Solutions}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="dto:SolutionListItemDto">
+                        <Button Classes="text"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Padding="10,7" Margin="0,2"
+                                Command="{Binding $parent[ItemsControl].DataContext.SelectSolutionCommand}"
+                                CommandParameter="{Binding}">
+                          <StackPanel Spacing="3">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                              <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" FontSize="12"
+                                         Foreground="{DynamicResource InkPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="1" Text="已采纳" Foreground="{DynamicResource SuccessGreen}"
+                                         FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0"
+                                         IsVisible="{Binding IsAccepted}" />
+                              <TextBlock Grid.Column="2" Text="{Binding LikeCount, StringFormat=赞 {0}}"
+                                         Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10"
+                                         VerticalAlignment="Center" Margin="6,0,0,0" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="{Binding Username}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10" />
+                              <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:MM-dd HH:mm}}"
+                                         Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                            </StackPanel>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+
+                  <!-- 详情区(选中后显示) -->
+                  <Border Classes="glass-inset" Padding="12" Margin="0,6,0,0"
+                          IsVisible="{Binding Detail, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+                    <StackPanel Spacing="6">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="section" Text="{Binding Detail.Title}" FontSize="12"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="已采纳" Foreground="{DynamicResource SuccessGreen}"
+                                   FontSize="10" VerticalAlignment="Center"
+                                   IsVisible="{Binding Detail.IsAccepted}" />
+                      </Grid>
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Detail.Username}" Foreground="{DynamicResource BrandBlueBrush}"
+                                   FontSize="11" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Detail.CreatedAt, StringFormat={}{0:MM-dd HH:mm}}"
+                                   Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                      </StackPanel>
+                      <TextBlock Text="{Binding Detail.Content}" Foreground="{DynamicResource InkSecondaryBrush}"
+                                 FontSize="12" TextWrapping="Wrap" />
+                      <Border Background="{DynamicResource GlassInsetBrush}" CornerRadius="12" Padding="8"
+                              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+                              IsVisible="{Binding Detail.Code, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+                        <ScrollViewer MaxHeight="180">
+                          <TextBox Text="{Binding Detail.Code, Mode=OneWay}" IsReadOnly="True"
+                                   Background="Transparent" Foreground="{DynamicResource InkPrimaryBrush}"
+                                   FontFamily="{StaticResource CodeFontFamily}" FontSize="11"
+                                   AcceptsReturn="True" TextWrapping="NoWrap" BorderThickness="0" />
+                        </ScrollViewer>
+                      </Border>
+                      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                        <Button Classes="secondary" Content="{Binding Detail.LikeCount, StringFormat=赞 {0}}"
+                                FontSize="11" Padding="8,3"
+                                Command="{Binding ToggleLikeCommand}"
+                                CommandParameter="{Binding SelectedSolution}" />
+                        <Button Classes="secondary" Content="采纳" FontSize="11" Padding="8,3"
+                                Command="{Binding AcceptCommand}"
+                                CommandParameter="{Binding SelectedSolution}"
+                                IsVisible="{Binding !Detail.IsAccepted}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </ScrollViewer>
+            </DockPanel>
+          </TabItem>
+        </TabControl>
+      </Border>
+    </Grid>
+
+    <ProgressBar Grid.Row="2" IsIndeterminate="True" IsVisible="{Binding IsBusy}"
+                 Margin="16,10,16,16" />
+
+    <!-- 代码片段库浮层(编辑器 ⋯ 菜单 → 代码片段库 打开) -->
+    <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding IsSnippetLibraryOpen}"
+            Background="{DynamicResource ScrimBrush}">
+      <Border Width="520" MaxHeight="560" Background="{DynamicResource GlassSurfaceBrush}"
+              CornerRadius="24" Padding="18"
+              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+              BoxShadow="{DynamicResource Elevation4}">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Classes="section" Text="代码片段库" FontSize="14" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="text" Content="关闭" Padding="8,4"
+                    Command="{Binding OpenSnippetLibraryCommand}" ToolTip.Tip="关闭" />
+          </Grid>
+
+          <!-- 添加表单 -->
+          <Grid DockPanel.Dock="Bottom" RowDefinitions="Auto,Auto,Auto,Auto" Margin="0,8,0,0">
+            <TextBox Grid.Row="0" Text="{Binding SnippetLibrary.NewSnippetName, Mode=TwoWay}"
+                     Watermark="片段名称" Margin="0,2" FontSize="12" />
+            <TextBox Grid.Row="1" Text="{Binding SnippetLibrary.NewSnippetLanguage, Mode=TwoWay}"
+                     Watermark="语言(可选,如 Python)" Margin="0,2" FontSize="12" />
+            <TextBox Grid.Row="2" Text="{Binding SnippetLibrary.NewSnippetContent, Mode=TwoWay}"
+                     Watermark="片段内容" AcceptsReturn="True" TextWrapping="Wrap" Height="80"
+                     Margin="0,2" FontSize="12" FontFamily="{StaticResource CodeFontFamily}" />
+            <Button Grid.Row="3" Classes="primary" Content="添加片段" FontSize="12" Padding="10,4"
+                    HorizontalAlignment="Right" Margin="0,4,0,0"
+                    Command="{Binding SnippetLibrary.AddCommand}" />
+          </Grid>
+
+          <!-- 片段列表 -->
+          <ScrollViewer Margin="0,0,0,6">
+            <ItemsControl ItemsSource="{Binding SnippetLibrary.Items}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="svc:SnippetDto">
+                  <Border Classes="glass-inset" Padding="10,7" Margin="0,3">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                      <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Language}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                      </StackPanel>
+                      <Button Grid.Column="1" Classes="secondary" Content="插入" Padding="6,2" Margin="4,0"
+                              FontSize="11" ToolTip.Tip="追加到编辑器"
+                              Command="{Binding $parent[ItemsControl].DataContext.SnippetLibrary.InsertCommand}"
+                              CommandParameter="{Binding}" />
+                      <Button Grid.Column="2" Classes="secondary danger" Content="删除" Padding="6,2" Margin="2,0"
+                              FontSize="11" ToolTip.Tip="删除片段"
+                              Command="{Binding $parent[ItemsControl].DataContext.SnippetLibrary.DeleteCommand}"
+                              CommandParameter="{Binding}" />
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Border>
+
+    <!-- 加入班级弹窗(⋯ 菜单 → 加入班级) -->
+    <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding IsJoinGroupOpen}"
+            Background="{DynamicResource ScrimBrush}">
+      <Border Width="380" Background="{DynamicResource GlassSurfaceBrush}"
+              CornerRadius="24" Padding="18"
+              BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+              BoxShadow="{DynamicResource Elevation4}"
+              HorizontalAlignment="Center" VerticalAlignment="Center">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+            <TextBlock Grid.Column="0" Classes="section" Text="加入班级" FontSize="14" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Classes="text" Content="关闭" Padding="8,4"
+                    Command="{Binding OpenJoinGroupCommand}" ToolTip.Tip="关闭" />
+          </Grid>
+          <StackPanel Spacing="8" Margin="0,8,0,0">
+            <TextBlock Text="输入教师提供的班级邀请码,加入后可查看班级成员与进度。"
+                       Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" TextWrapping="Wrap" />
+            <TextBox Text="{Binding JoinInviteCode, Mode=TwoWay}" Watermark="邀请码" FontSize="13">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding SubmitJoinGroupCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Classes="primary" Content="加入" HorizontalAlignment="Stretch" FontSize="12" Padding="10,5"
+                    Command="{Binding SubmitJoinGroupCommand}" IsEnabled="{Binding !IsJoining}" />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </Border>
+  </Grid>
+</UserControl>

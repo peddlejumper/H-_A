@@ -1,0 +1,30 @@
+# t10 — read_file() on nonexistent path; write_file to a no-permission path
+print("== t10 read_file missing ==");
+try {
+    let s = read_file("/tmp/__hsharp_nonexistent_xyz__.txt");
+    print("read missing OK (unexpected): " + str(s));
+} catch (e) {
+    print("read_file(missing) ERR: " + str(e));
+}
+# read_file on a directory (is a dir, not a file)
+try {
+    let s = read_file("/tmp");
+    print("read dir OK (unexpected): " + str(s));
+} catch (e) {
+    print("read_file(/tmp dir) ERR: " + str(e));
+}
+# write_file to a path whose parent does not exist
+try {
+    write_file("/tmp/__hsharp_nope_dir_xyz__/out.txt", "data");
+    print("write no-parent OK (unexpected)");
+} catch (e) {
+    print("write_file(no-parent) ERR: " + str(e));
+}
+# write + read roundtrip on a normal temp file
+try {
+    let p = "/tmp/__hsharp_rt_test__.txt";
+    write_file(p, "hello-hto");
+    print("read back: " + read_file(p));
+} catch (e) {
+    print("write/read roundtrip ERR: " + str(e));
+}

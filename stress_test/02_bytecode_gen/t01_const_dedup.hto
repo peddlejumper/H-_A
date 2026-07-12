@@ -1,0 +1,15 @@
+# t01_const_dedup.hto - 常量池去重（同值 LOAD_CONST）
+# 预期：相同字面量在 .hbc consts 数组中只出现一次（同索引）
+let a = 42;
+let b = 42;
+let c = 42;
+let s1 = "hello";
+let s2 = "hello";
+let s3 = "hello";
+print(a);
+print(b);
+print(c);
+print(s1);
+print(s2);
+print(s3);
+print(a + b + c);

@@ -1,0 +1,23 @@
+# t12_block_finishes_all.hto
+# concurrent 块结束后所有子任务必须完成：块内 spawn 多个 parallel 但不 await，
+# 仅靠 CONCURRENT_EXIT 的 join 保证全部完成后再继续。
+# 预期：“after” 不会在任何 “done-N” 之前打印；所有 done-N 都在 after 之前。
+parallel fn task(n) {
+    let s = 0;
+    let i = 0;
+    while (i < 50000) {
+        s = s + i;
+        i = i + 1;
+    }
+    print("done-");
+    print(n);
+    return s;
+}
+concurrent {
+    let f1 = task(1);
+    let f2 = task(2);
+    let f3 = task(3);
+    # 故意不 await —— 依赖 CONCURRENT_EXIT 的隐式 join
+    let ignore = f1;
+}
+print("after");

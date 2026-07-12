@@ -1,0 +1,125 @@
+# H# zzwUI Test 12 — TextInput lifecycle
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. init: placeholder + value ──────────────────────────────────────
+let ti = new TextInput();
+ti.init_input("enter name", "Alice");
+check("i/placeholder",   ti.placeholder == "enter name");
+check("i/value",         ti.value == "Alice");
+check("i/max_len",       ti.max_length == 0);
+check("i/password",      ti.is_password == false);
+check("i/cursor",        ti.cursor_pos == 0);
+
+# ─── 2. set_value / get_value identity ─────────────────────────────────
+ti.set_value("Bob");
+check("i/set",           ti.get_value() == "Bob");
+ti.set_value("");
+check("i/set_empty",     ti.get_value() == "");
+
+# ─── 3. set_placeholder ───────────────────────────────────────────────
+ti.set_placeholder("type here");
+check("i/ph2",           ti.placeholder == "type here");
+
+# ─── 4. set_max_length ─────────────────────────────────────────────────
+ti.set_max_length(10);
+check("i/ml",            ti.max_length == 10);
+ti.set_max_length(0);
+check("i/ml0",           ti.max_length == 0);
+
+# ─── 5. set_password ───────────────────────────────────────────────────
+ti.set_password(true);
+check("i/pw_t",          ti.is_password == true);
+ti.set_password(false);
+check("i/pw_f",          ti.is_password == false);
+
+# ─── 6. append single character ───────────────────────────────────────
+ti.clear_input();
+ti.append("a");
+check("i/a1",            ti.value == "a");
+ti.append("b");
+check("i/a2",            ti.value == "ab");
+ti.append("c");
+check("i/a3",            ti.value == "abc");
+
+# ─── 7. append repeated ────────────────────────────────────────────────
+let ti2 = new TextInput();
+ti2.init_input("", "");
+let n = 0;
+while (n < 100) {
+    ti2.append("x");
+    n = n + 1;
+}
+check("i/append_100",    ti2.value == "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                    + "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+# (the above is 100 x's — split across two lines so source stays readable)
+
+# ─── 8. backspace single ──────────────────────────────────────────────
+ti.backspace();
+check("i/bs1",           ti.value == "ab");
+ti.backspace();
+check("i/bs2",           ti.value == "a");
+ti.backspace();
+check("i/bs3",           ti.value == "");
+
+# ─── 9. backspace on empty is a no-op ─────────────────────────────────
+ti.backspace();
+check("i/bs_e",          ti.value == "");
+
+# ─── 10. clear_input ──────────────────────────────────────────────────
+ti.set_value("xyz");
+check("i/cv_pre",        ti.value == "xyz");
+ti.clear_input();
+check("i/cv_post",       ti.value == "");
+check("i/cv_post2",      ti.get_value() == "");
+
+# ─── 11. value longer than max_length (no enforcement in v0.4) ────────
+ti.set_max_length(3);
+ti.set_value("abcdef");
+check("i/long_no_clip",  ti.get_value() == "abcdef");
+check("i/long_ml",       ti.max_length == 3);
+
+# ─── 12. placeholder and value are independent ────────────────────────
+let ti3 = new TextInput();
+ti3.init_input("ph_only", "");
+ti3.set_value("v");
+check("i/ph_only",       ti3.placeholder == "ph_only");
+check("i/v_only",        ti3.value == "v");
+ti3.set_placeholder("new_ph");
+check("i/ph_kept",       ti3.value == "v");
+
+# ─── 13. cursor_pos / selection bookkeeping (defaults 0) ──────────────
+let ti4 = new TextInput();
+ti4.init_input("", "");
+check("i/cursor0",       ti4.cursor_pos == 0);
+check("i/sel_start0",    ti4.selection_start == 0);
+check("i/sel_end0",      ti4.selection_end == 0);
+
+# ─── 14. type-length boundary tests ───────────────────────────────────
+let ti5 = new TextInput();
+ti5.init_input("", "");
+ti5.append("hello");
+check("i/hello",         ti5.value == "hello");
+ti5.set_value("world!");
+check("i/ovr",           ti5.value == "world!");
+ti5.append("?");
+check("i/append_q",      ti5.value == "world!?");
+
+print("12_ZZW_TEXT_INPUT : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

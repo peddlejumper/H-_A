@@ -1,0 +1,516 @@
+# ============================================================
+# round5_156_builtin_validation.hto
+# 内置函数参数验证全面测试 (Round 5, #156)
+# 目标: 对每个内置函数施加边界/错误参数, 检查:
+#   1) 是否抛出 H# 异常 (而非 JVM 异常泄露)
+#   2) 错误信息是否为 H# 语义 (而非 JVM 堆栈信息)
+#   3) 参数个数/类型检查是否完备
+# 方法: 每个用例 try/catch 包裹, 打印 [TAG 预期] 实际
+# ============================================================
+
+print("===== R5-156 BUILTIN VALIDATION =====");
+
+# 辅助: 判断异常消息是否像 JVM 异常 (启发式)
+fn isJvmMsg(s) {
+    let m = str(s);
+    if (m == "Index 0 out of bounds for length 0") { return "JVM-IOBE"; }
+    if (m == "Index 1 out of bounds for length 0") { return "JVM-IOBE"; }
+    if (m == "Index 1 out of bounds for length 1") { return "JVM-IOBE"; }
+    if (m == "Index 2 out of bounds for length 0") { return "JVM-IOBE"; }
+    if (m == "Index 2 out of bounds for length 1") { return "JVM-IOBE"; }
+    if (m == "Index 2 out of bounds for length 2") { return "JVM-IOBE"; }
+    # NumberFormatException 消息以 "For input string" 开头
+    if (len(m) >= 17) {
+        if (substring(m, 0, 17) == "For input string:") { return "JVM-NFE"; }
+    }
+    # ClassCastException 消息
+    if (len(m) >= 16) {
+        if (substring(m, 0, 16) == "class java.lang") { return "JVM-CCE"; }
+    }
+    if (m == "null") { return "JVM-NULL"; }
+    return "H#-OK";
+}
+
+# 通用探测: 调用 expr_fn, 捕获异常, 返回 "ok:<val>" / "err:<msg>"
+fn probe(label, expected, expr_fn) {
+    let result = "";
+    try {
+        let v = expr_fn();
+        result = "ok:" + str(v);
+    } catch (e) {
+        let j = isJvmMsg(e);
+        result = "err[" + j + "]:" + str(e);
+    }
+    print("[" + label + "] expect=" + expected + "]");
+    print("  => " + result);
+}
+
+# ============================================================
+# 1. print — 语句, 不是函数 (PRINT opcode)
+#    print() 和 print(a,b) 是编译期错误, 无法运行时测试
+# ============================================================
+print("--- 1. print ---");
+print("[1.1 print(null)] expect=null]");
+print(null);
+print("[1.2 print(list)] expect=[1, 2, 3]]");
+print([1, 2, 3]);
+print("[1.3 print(dict)] expect={a: 1}]");
+print({"a": 1});
+print("[1.4 print(42)] expect=42]");
+print(42);
+print("[1.5 print(true)] expect=true]");
+print(true);
+print("[1.6 print('')] expect=blank-line]");
+print("");
+# NOTE: print(a, b) 和 print() 是语法错误, 编译期失败, 不能运行时测试
+
+# ============================================================
+# 2. len
+# ============================================================
+print("--- 2. len ---");
+probe("2.1 len(0参)", "err: requires 1 arg", fn() { return len(); });
+probe("2.2 len(42)", "err: not supported", fn() { return len(42); });
+probe("2.3 len(null)", "err: not supported", fn() { return len(null); });
+probe("2.4 len(true)", "err: not supported", fn() { return len(true); });
+probe("2.5 len('')", "ok:0", fn() { return len(""); });
+probe("2.6 len([])", "ok:0", fn() { return len([]); });
+probe("2.7 len({})", "ok:0", fn() { return len({}); });
+fn dummy_fn() { return 1; }
+probe("2.8 len(fn)", "err: not supported", fn() { return len(dummy_fn); });
+probe("2.9 len('hello')", "ok:5", fn() { return len("hello"); });
+probe("2.10 len([1,2,3])", "ok:3", fn() { return len([1, 2, 3]); });
+
+# ============================================================
+# 3. type
+# ============================================================
+print("--- 3. type ---");
+probe("3.1 type(0参)", "err: requires 1 arg", fn() { return type(); });
+probe("3.2 type(42)", "string:number", fn() { return type(42); });
+probe("3.3 type('a')", "string:string", fn() { return type("a"); });
+probe("3.4 type(true)", "string:bool", fn() { return type(true); });
+probe("3.5 type([])", "string:list", fn() { return type([]); });
+probe("3.6 type({})", "string:dict", fn() { return type({}); });
+probe("3.7 type(null)", "string:null", fn() { return type(null); });
+probe("3.8 type(fn)", "string:function", fn() { return type(dummy_fn); });
+
+# ============================================================
+# 4. str
+# ============================================================
+print("--- 4. str ---");
+probe("4.1 str(0参)", "err: requires 1 arg", fn() { return str(); });
+probe("4.2 str(null)", "ok:null", fn() { return str(null); });
+probe("4.3 str(list)", "ok:[1, 2, 3]", fn() { return str([1, 2, 3]); });
+probe("4.4 str(dict)", "ok:{a: 1}", fn() { return str({"a": 1}); });
+probe("4.5 str(fn)", "ok:<native or function>", fn() { return str(dummy_fn); });
+probe("4.6 str(true)", "ok:true", fn() { return str(true); });
+probe("4.7 str(3.14)", "ok:3.14", fn() { return str(3.14); });
+probe("4.8 str(42)", "ok:42", fn() { return str(42); });
+
+# ============================================================
+# 5. int
+# ============================================================
+print("--- 5. int ---");
+probe("5.1 int(0参)", "err: requires 1 arg", fn() { return int(); });
+probe("5.2 int(null)", "err: cannot convert null", fn() { return int(null); });
+probe("5.3 int('abc')", "err: cannot coerce", fn() { return int("abc"); });
+probe("5.4 int('3.14')", "ok:3", fn() { return int("3.14"); });
+probe("5.5 int(true)", "ok:1", fn() { return int(true); });
+probe("5.6 int([])", "err: cannot coerce", fn() { return int([]); });
+probe("5.7 int([1])", "err: cannot coerce", fn() { return int([1]); });
+probe("5.8 int(42)", "ok:42", fn() { return int(42); });
+probe("5.9 int(3.99)", "ok:3", fn() { return int(3.99); });
+probe("5.10 int(-3.14)", "ok:-3", fn() { return int(-3.14); });
+
+# ============================================================
+# 6. float
+# ============================================================
+print("--- 6. float ---");
+probe("6.1 float(0参)", "err: requires 1 arg", fn() { return float(); });
+probe("6.2 float(null)", "err: cannot convert null", fn() { return float(null); });
+probe("6.3 float('abc')", "err: cannot coerce", fn() { return float("abc"); });
+probe("6.4 float(true)", "ok:1", fn() { return float(true); });
+probe("6.5 float([])", "err: cannot coerce", fn() { return float([]); });
+probe("6.6 float(42)", "ok:42", fn() { return float(42); });
+probe("6.7 float('3.14')", "ok:3.14", fn() { return float("3.14"); });
+
+# ============================================================
+# 7. bool
+# ============================================================
+print("--- 7. bool ---");
+probe("7.1 bool(0参)", "err: requires 1 arg", fn() { return bool(); });
+probe("7.2 bool(null)", "ok:false", fn() { return bool(null); });
+probe("7.3 bool(0)", "ok:false", fn() { return bool(0); });
+probe("7.4 bool('')", "ok:false", fn() { return bool(""); });
+probe("7.5 bool([])", "ok:false", fn() { return bool([]); });
+probe("7.6 bool([0])", "ok:true", fn() { return bool([0]); });
+probe("7.7 bool({})", "ok:false", fn() { return bool({}); });
+probe("7.8 bool(1)", "ok:true", fn() { return bool(1); });
+probe("7.9 bool('x')", "ok:true", fn() { return bool("x"); });
+
+# ============================================================
+# 8. range
+# ============================================================
+print("--- 8. range ---");
+probe("8.1 range(0参)", "err: takes 1/2/3 args", fn() { return range(); });
+probe("8.2 range(1,2,3,4)", "err: takes 1/2/3 args", fn() { return range(1, 2, 3, 4); });
+probe("8.3 range('a')", "err: cannot coerce STRING", fn() { return range("a"); });
+probe("8.4 range(1,'a')", "err: cannot coerce STRING", fn() { return range(1, "a"); });
+probe("8.5 range(0,10,0)", "err: step cannot be zero", fn() { return range(0, 10, 0); });
+probe("8.6 range(5)", "ok:[0,1,2,3,4]", fn() { return range(5); });
+probe("8.7 range(1,5)", "ok:[1,2,3,4]", fn() { return range(1, 5); });
+probe("8.8 range(0,10,3)", "ok:[0,3,6,9]", fn() { return range(0, 10, 3); });
+probe("8.9 range(10,0,-2)", "ok:[10,8,6,4,2]", fn() { return range(10, 0, -2); });
+probe("8.10 range(0,5,0.5)", "err: step must be integer", fn() { return range(0, 5, 0.5); });
+
+# ============================================================
+# 9. push
+# ============================================================
+print("--- 9. push ---");
+probe("9.1 push(0参)", "err: expects 2 args", fn() { return push(); });
+probe("9.2 push(1参)", "err: expects 2 args", fn() { return push([1]); });
+probe("9.3 push([],1,2)", "err or ok?", fn() {
+    let a = [];
+    push(a, 1, 2);
+    return a;
+});
+probe("9.4 push(42,1)", "err: requires a list", fn() { return push(42, 1); });
+probe("9.5 push(null,1)", "err: requires a list", fn() { return push(null, 1); });
+probe("9.6 push([],1) normal", "ok:[1]", fn() {
+    let a = [];
+    push(a, 1);
+    return a;
+});
+
+# ============================================================
+# 10. sum
+# ============================================================
+print("--- 10. sum ---");
+probe("10.1 sum(0参)", "err: expects 1 arg", fn() { return sum(); });
+probe("10.2 sum([])", "ok:0", fn() { return sum([]); });
+probe("10.3 sum(['a'])", "err: cannot coerce STRING", fn() { return sum(["a"]); });
+probe("10.4 sum([null])", "ok:0 (null coerces to 0)", fn() { return sum([null]); });
+probe("10.5 sum([true])", "ok:1 (bool coerces to 1)", fn() { return sum([true]); });
+probe("10.6 sum([1,2,3])", "ok:6", fn() { return sum([1, 2, 3]); });
+probe("10.7 sum(42)", "err: requires a list", fn() { return sum(42); });
+
+# ============================================================
+# 11. abs
+# ============================================================
+print("--- 11. abs ---");
+probe("11.1 abs(0参)", "err: requires 1 arg", fn() { return abs(); });
+probe("11.2 abs(null)", "err: expects number", fn() { return abs(null); });
+probe("11.3 abs(true)", "err: expects number", fn() { return abs(true); });
+probe("11.4 abs('a')", "err: expects number", fn() { return abs("a"); });
+probe("11.5 abs([])", "err: expects number", fn() { return abs([]); });
+probe("11.6 abs(-42)", "ok:42", fn() { return abs(-42); });
+probe("11.7 abs(-3.14)", "ok:3.14", fn() { return abs(-3.14); });
+
+# ============================================================
+# 12. ord
+# ============================================================
+print("--- 12. ord ---");
+probe("12.1 ord(0参)", "err: requires 1 arg", fn() { return ord(); });
+probe("12.2 ord(null)", "err: non-empty", fn() { return ord(null); });
+probe("12.3 ord('')", "err: non-empty", fn() { return ord(""); });
+probe("12.4 ord('ab')", "err: single char", fn() { return ord("ab"); });
+probe("12.5 ord(42)", "err or coerced?", fn() { return ord(42); });
+probe("12.6 ord('A')", "ok:65", fn() { return ord("A"); });
+probe("12.7 ord(emoji)", "ok:128512", fn() { return ord("😀"); });
+
+# ============================================================
+# 13. chr
+# ============================================================
+print("--- 13. chr ---");
+probe("13.1 chr(0参)", "err: requires 1 arg", fn() { return chr(); });
+probe("13.2 chr(-1)", "err: out of range", fn() { return chr(-1); });
+probe("13.3 chr(1114112)", "err: out of range (0x110000)", fn() { return chr(1114112); });
+probe("13.4 chr('a')", "err: cannot coerce", fn() { return chr("a"); });
+probe("13.5 chr(55357)", "err: surrogate", fn() { return chr(55357); });
+probe("13.6 chr(65)", "ok:A", fn() { return chr(65); });
+probe("13.7 chr(128512)", "ok:😀", fn() { return chr(128512); });
+probe("13.8 chr(0)", "ok:\\0", fn() { return chr(0); });
+
+# ============================================================
+# 14. min / max
+# ============================================================
+print("--- 14. min/max ---");
+probe("14.1 min(0参)", "err: empty sequence", fn() { return min(); });
+probe("14.2 min([])", "err: empty sequence", fn() { return min([]); });
+probe("14.3 max([])", "err: empty sequence", fn() { return max([]); });
+probe("14.4 min([1])", "ok:1", fn() { return min([1]); });
+probe("14.5 min(['a','b'])", "err: cannot coerce STRING", fn() { return min(["a", "b"]); });
+probe("14.6 min(1,'a')", "err: cannot coerce STRING", fn() { return min(1, "a"); });
+probe("14.7 min([[1],[2]])", "err: cannot coerce LIST", fn() { return min([[1], [2]]); });
+probe("14.8 min(3,1,2)", "ok:1", fn() { return min(3, 1, 2); });
+probe("14.9 max(3,1,2)", "ok:3", fn() { return max(3, 1, 2); });
+probe("14.10 max([1,5,3])", "ok:5", fn() { return max([1, 5, 3]); });
+probe("14.11 min([true,false])", "ok (bool coerces)", fn() { return min([true, false]); });
+
+# ============================================================
+# 15. pow — 直接 try/catch (pow 不检查参数个数, 抛 JVM IOBE)
+# ============================================================
+print("--- 15. pow ---");
+let r15a = "no-err";
+try { let v = pow(); r15a = "ok:" + str(v); } catch (e) { r15a = "err:" + str(e); }
+print("[15.1 pow(0参)] expect=err: needs 2 args]");
+print("  => " + r15a);
+let r15b = "no-err";
+try { let v = pow(1); r15b = "ok:" + str(v); } catch (e) { r15b = "err:" + str(e); }
+print("[15.2 pow(1)] expect=err: needs 2 args]");
+print("  => " + r15b);
+let r15c = "no-err";
+try { let v = pow(2, 3, 4); r15c = "ok:" + str(v); } catch (e) { r15c = "err:" + str(e); }
+print("[15.3 pow(2,3,4)] expect=ok or err? (3 args)]");
+print("  => " + r15c);
+let r15d = "no-err";
+try { let v = pow("a", 2); r15d = "ok:" + str(v); } catch (e) { r15d = "err:" + str(e); }
+print("[15.4 pow('a',2)] expect=err: cannot coerce STRING]");
+print("  => " + r15d);
+let r15e = "no-err";
+try { let v = pow(2, "a"); r15e = "ok:" + str(v); } catch (e) { r15e = "err:" + str(e); }
+print("[15.5 pow(2,'a')] expect=err: cannot coerce STRING]");
+print("  => " + r15e);
+let r15f = "no-err";
+try { let v = pow(0, 0); r15f = "ok:" + str(v); } catch (e) { r15f = "err:" + str(e); }
+print("[15.6 pow(0,0)] expect=ok:1]");
+print("  => " + r15f);
+let r15g = "no-err";
+try { let v = pow(-1, 0.5); r15g = "ok:" + str(v); } catch (e) { r15g = "err:" + str(e); }
+print("[15.7 pow(-1,0.5)] expect=ok:NaN]");
+print("  => " + r15g);
+let r15h = "no-err";
+try { let v = pow(2, 3); r15h = "ok:" + str(v); } catch (e) { r15h = "err:" + str(e); }
+print("[15.8 pow(2,3)] expect=ok:8]");
+print("  => " + r15h);
+
+# ============================================================
+# 16. fmt
+# ============================================================
+print("--- 16. fmt ---");
+probe("16.1 fmt(0参)", "ok:'' (empty)", fn() { return fmt(); });
+probe("16.2 fmt('{}')", "ok:{} (literal, no {N})", fn() { return fmt("{}"); });
+probe("16.3 fmt('{} {}', 1)", "ok:{} {} (1 arg)", fn() { return fmt("{} {}", 1); });
+probe("16.4 fmt('{0} {1}', 1, 2)", "ok:1 2", fn() { return fmt("{0} {1}", 1, 2); });
+probe("16.5 fmt('{0} {1}', 1, 2, 3)", "ok:1 2 (extra ignored)", fn() { return fmt("{0} {1}", 1, 2, 3); });
+probe("16.6 fmt('{x}', 1)", "ok:{x} (literal)", fn() { return fmt("{x}", 1); });
+probe("16.7 fmt('{0}', 'a', 'b')", "ok:a", fn() { return fmt("{0}", "a", "b"); });
+probe("16.8 fmt('hello')", "ok:hello", fn() { return fmt("hello"); });
+
+# ============================================================
+# 17. substring — 直接 try/catch (不检查参数个数)
+# ============================================================
+print("--- 17. substring ---");
+let r17a = "no-err";
+try { let v = substring(); r17a = "ok:" + str(v); } catch (e) { r17a = "err:" + str(e); }
+print("[17.1 substring(0参)] expect=err: needs 3 args]");
+print("  => " + r17a);
+let r17b = "no-err";
+try { let v = substring("a"); r17b = "ok:" + str(v); } catch (e) { r17b = "err:" + str(e); }
+print("[17.2 substring('a')] expect=err: needs 3 args]");
+print("  => " + r17b);
+let r17c = "no-err";
+try { let v = substring("a", 0); r17c = "ok:" + str(v); } catch (e) { r17c = "err:" + str(e); }
+print("[17.3 substring('a',0)] expect=err: needs 3 args]");
+print("  => " + r17c);
+let r17d = "no-err";
+try { let v = substring("abc", 0, 1, 2); r17d = "ok:" + str(v); } catch (e) { r17d = "err:" + str(e); }
+print("[17.4 substring('abc',0,1,2)] expect=ok or err? (4 args)]");
+print("  => " + r17d);
+let r17e = "no-err";
+try { let v = substring(42, 0, 1); r17e = "ok:" + str(v); } catch (e) { r17e = "err:" + str(e); }
+print("[17.5 substring(42,0,1)] expect=ok or coerced]");
+print("  => " + r17e);
+let r17f = "no-err";
+try { let v = substring("hello", 0, 3); r17f = "ok:" + str(v); } catch (e) { r17f = "err:" + str(e); }
+print("[17.6 substring('hello',0,3)] expect=ok:hel]");
+print("  => " + r17f);
+let r17g = "no-err";
+try { let v = substring("hello", 2, 10); r17g = "ok:" + str(v); } catch (e) { r17g = "err:" + str(e); }
+print("[17.7 substring('hello',2,10)] expect=ok:llo (clamp)]");
+print("  => " + r17g);
+let r17h = "no-err";
+try { let v = substring("hello", 0, -1); r17h = "ok:" + str(v); } catch (e) { r17h = "err:" + str(e); }
+print("[17.8 substring('hello',0,-1)] expect=err: non-negative]");
+print("  => " + r17h);
+
+# ============================================================
+# 18. list / dict — list() 不检查参数个数
+# ============================================================
+print("--- 18. list/dict ---");
+let r18a = "no-err";
+try { let v = list(); r18a = "ok:" + str(v); } catch (e) { r18a = "err:" + str(e); }
+print("[18.1 list(0参)] expect=err: needs 1 arg]");
+print("  => " + r18a);
+let r18b = "no-err";
+try { let v = list(42); r18b = "ok:" + str(v); } catch (e) { r18b = "err:" + str(e); }
+print("[18.2 list(42)] expect=err: not supported]");
+print("  => " + r18b);
+probe("18.3 list('abc')", "ok:[a, b, c]", fn() { return list("abc"); });
+probe("18.4 list([1,2])", "ok:[1, 2]", fn() { return list([1, 2]); });
+probe("18.5 list({'a':1})", "ok:[a]", fn() { return list({"a": 1}); });
+probe("18.6 dict(0参)", "ok:{}", fn() { return dict(); });
+probe("18.7 dict([1,2])", "err: requires list of pairs", fn() { return dict([1, 2]); });
+probe("18.8 dict([[1,2]])", "ok:{1: 2}", fn() { return dict([[1, 2]]); });
+probe("18.9 dict(42)", "err: not supported", fn() { return dict(42); });
+
+# ============================================================
+# 19. exit — 直接 try/catch (exit 未在 HNativeBridge 注册)
+# ============================================================
+print("--- 19. exit ---");
+let r19a = "no-err";
+try { let v = exit(); r19a = "ok:" + str(v); } catch (e) { r19a = "caught:" + str(e); }
+print("[19.1 exit(0参)] expect=err (undefined)]");
+print("  => " + r19a);
+let r19b = "no-err";
+try { let v = exit(0); r19b = "ok:" + str(v); } catch (e) { r19b = "caught:" + str(e); }
+print("[19.2 exit(0)] expect=err (undefined)]");
+print("  => " + r19b);
+let r19c = "no-err";
+try { let v = exit("msg"); r19c = "ok:" + str(v); } catch (e) { r19c = "caught:" + str(e); }
+print("[19.3 exit('msg')] expect=err (undefined)]");
+print("  => " + r19c);
+let r19d = "no-err";
+try { let v = exit(1, 2); r19d = "ok:" + str(v); } catch (e) { r19d = "caught:" + str(e); }
+print("[19.4 exit(1,2)] expect=err (undefined)]");
+print("  => " + r19d);
+
+# ============================================================
+# 20. sqrt — 直接 try/catch (不检查参数个数)
+# ============================================================
+print("--- 20. sqrt ---");
+let r20a = "no-err";
+try { let v = sqrt(); r20a = "ok:" + str(v); } catch (e) { r20a = "err:" + str(e); }
+print("[20.1 sqrt(0参)] expect=err: needs 1 arg]");
+print("  => " + r20a);
+let r20b = "no-err";
+try { let v = sqrt(-1); r20b = "ok:" + str(v); } catch (e) { r20b = "err:" + str(e); }
+print("[20.2 sqrt(-1)] expect=ok:NaN]");
+print("  => " + r20b);
+let r20c = "no-err";
+try { let v = sqrt(4); r20c = "ok:" + str(v); } catch (e) { r20c = "err:" + str(e); }
+print("[20.3 sqrt(4)] expect=ok:2]");
+print("  => " + r20c);
+let r20d = "no-err";
+try { let v = sqrt("a"); r20d = "ok:" + str(v); } catch (e) { r20d = "err:" + str(e); }
+print("[20.4 sqrt('a')] expect=err: cannot coerce]");
+print("  => " + r20d);
+
+# ============================================================
+# 21. chan_* 参数验证 — 直接 try/catch
+# ============================================================
+print("--- 21. chan_* ---");
+let r21a = "no-err";
+try { let v = chan_new(); r21a = "ok:" + str(v); } catch (e) { r21a = "err:" + str(e); }
+print("[21.1 chan_new(0参)] expect=err: needs 1 arg]");
+print("  => " + r21a);
+let r21b = "no-err";
+try { let v = chan_new(-1); r21b = "ok:" + str(type(v)); } catch (e) { r21b = "err:" + str(e); }
+print("[21.2 chan_new(-1)] expect=ok: channel (cap<0->0)]");
+print("  => " + r21b);
+let r21c = "no-err";
+try { let v = chan_send(); r21c = "ok:" + str(v); } catch (e) { r21c = "err:" + str(e); }
+print("[21.3 chan_send(0参)] expect=err: needs 2 args]");
+print("  => " + r21c);
+let r21d = "no-err";
+try { let v = chan_send(42, 1); r21d = "ok:" + str(v); } catch (e) { r21d = "err:" + str(e); }
+print("[21.4 chan_send(42,1)] expect=err: must be channel]");
+print("  => " + r21d);
+let r21e = "no-err";
+try { let v = chan_recv(); r21e = "ok:" + str(v); } catch (e) { r21e = "err:" + str(e); }
+print("[21.5 chan_recv(0参)] expect=err: needs 1 arg]");
+print("  => " + r21e);
+let r21f = "no-err";
+try { let v = chan_recv(42); r21f = "ok:" + str(v); } catch (e) { r21f = "err:" + str(e); }
+print("[21.6 chan_recv(42)] expect=err: must be channel]");
+print("  => " + r21f);
+let r21g = "no-err";
+try { let v = chan_close(); r21g = "ok:" + str(v); } catch (e) { r21g = "err:" + str(e); }
+print("[21.7 chan_close(0参)] expect=err: needs 1 arg]");
+print("  => " + r21g);
+let r21h = "no-err";
+try { let v = chan_close(42); r21h = "ok:" + str(v); } catch (e) { r21h = "err:" + str(e); }
+print("[21.8 chan_close(42)] expect=err: must be channel]");
+print("  => " + r21h);
+let r21i = "no-err";
+try { let v = chan_size(); r21i = "ok:" + str(v); } catch (e) { r21i = "err:" + str(e); }
+print("[21.9 chan_size(0参)] expect=err: needs 1 arg]");
+print("  => " + r21i);
+let r21j = "no-err";
+try { let v = chan_size(42); r21j = "ok:" + str(v); } catch (e) { r21j = "err:" + str(e); }
+print("[21.10 chan_size(42)] expect=err: must be channel]");
+print("  => " + r21j);
+let r21k = "no-err";
+try { let v = chan_try_send(); r21k = "ok:" + str(v); } catch (e) { r21k = "err:" + str(e); }
+print("[21.11 chan_try_send(0参)] expect=err: needs 2 args]");
+print("  => " + r21k);
+let r21l = "no-err";
+try { let v = chan_try_recv(); r21l = "ok:" + str(v); } catch (e) { r21l = "err:" + str(e); }
+print("[21.12 chan_try_recv(0参)] expect=err: needs 1 arg]");
+print("  => " + r21l);
+
+# ============================================================
+# 22. parallelism / time_now (0参函数, 传参应被忽略)
+# ============================================================
+print("--- 22. parallelism/time_now ---");
+probe("22.1 parallelism()", "ok: >0", fn() { return parallelism(); });
+probe("22.2 time_now()", "ok: >0", fn() { return time_now(); });
+
+# ============================================================
+# 23. 类型一致性: 确认所有错误都抛 H# 异常 (直接 try/catch)
+# ============================================================
+print("--- 23. 类型一致性 (JVM泄露检查) ---");
+let r23a = "no-err";
+try { let v = list(); r23a = "ok:" + str(v); } catch (e) { r23a = "err:" + str(e); }
+print("[23.1 list() 0参] JVM泄露? => " + r23a);
+let r23b = "no-err";
+try { let v = sqrt(); r23b = "ok:" + str(v); } catch (e) { r23b = "err:" + str(e); }
+print("[23.2 sqrt() 0参] JVM泄露? => " + r23b);
+let r23c = "no-err";
+try { let v = pow(); r23c = "ok:" + str(v); } catch (e) { r23c = "err:" + str(e); }
+print("[23.3 pow() 0参] JVM泄露? => " + r23c);
+let r23d = "no-err";
+try { let v = pow(1); r23d = "ok:" + str(v); } catch (e) { r23d = "err:" + str(e); }
+print("[23.4 pow(1) 1参] JVM泄露? => " + r23d);
+let r23e = "no-err";
+try { let v = substring(); r23e = "ok:" + str(v); } catch (e) { r23e = "err:" + str(e); }
+print("[23.5 substring() 0参] JVM泄露? => " + r23e);
+let r23f = "no-err";
+try { let v = substring("a"); r23f = "ok:" + str(v); } catch (e) { r23f = "err:" + str(e); }
+print("[23.6 substring('a') 1参] JVM泄露? => " + r23f);
+let r23g = "no-err";
+try { let v = substring("a", 0); r23g = "ok:" + str(v); } catch (e) { r23g = "err:" + str(e); }
+print("[23.7 substring('a',0) 2参] JVM泄露? => " + r23g);
+let r23h = "no-err";
+try { let v = chan_new(); r23h = "ok:" + str(v); } catch (e) { r23h = "err:" + str(e); }
+print("[23.8 chan_new() 0参] JVM泄露? => " + r23h);
+let r23i = "no-err";
+try { let v = chan_send(); r23i = "ok:" + str(v); } catch (e) { r23i = "err:" + str(e); }
+print("[23.9 chan_send() 0参] JVM泄露? => " + r23i);
+let r23j = "no-err";
+try { let v = chan_recv(); r23j = "ok:" + str(v); } catch (e) { r23j = "err:" + str(e); }
+print("[23.10 chan_recv() 0参] JVM泄露? => " + r23j);
+let r23k = "no-err";
+try { let v = chan_close(); r23k = "ok:" + str(v); } catch (e) { r23k = "err:" + str(e); }
+print("[23.11 chan_close() 0参] JVM泄露? => " + r23k);
+let r23l = "no-err";
+try { let v = chan_size(); r23l = "ok:" + str(v); } catch (e) { r23l = "err:" + str(e); }
+print("[23.12 chan_size() 0参] JVM泄露? => " + r23l);
+
+print("===== R5-156 DONE =====");
+
+# ============================================================
+# 24. 专项: JVM 异常在 lambda 中的传播 (runFrame 缺少 RuntimeException catch)
+# ============================================================
+print("--- 24. JVM异常在lambda中的传播 ---");
+# H# 异常 (HSharpRuntimeError) 在 lambda 中可以被 try/catch 捕获
+let r24a = "no-err";
+try {
+    let f = fn() { return len(); };
+    let v = f();
+    r24a = "ok:" + str(v);
+} catch (e) { r24a = "caught:" + str(e); }
+print("[24.1 H#异常在lambda中] expect=caught => " + r24a);
+# NOTE: 24.2 (pow() in lambda) 已在第一轮测试中确认会导致 Fatal crash
+# 根因: runFrame() 缺少 catch (ex: RuntimeException), JVM IndexOutOfBounds
+# 异常在嵌套帧中无法被 H# try/catch 捕获, 传播到 HbcLauncher 成为 Fatal
+print("[24.2 JVM异常在lambda中] SKIPPED (已知 Fatal crash, bug #156-S1)");

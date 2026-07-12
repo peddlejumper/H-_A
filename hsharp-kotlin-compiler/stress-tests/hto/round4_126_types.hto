@@ -1,0 +1,333 @@
+# ============================================================
+# round4_126_types.hto — 类型系统一致性矩阵 (Round 4 #126)
+# 深度测试 type() / x is T / x as T / match { is T } 四条路径
+# 的命名与行为一致性。
+#
+# 核心探测目标:
+#   - type() 返回的类型名 vs is/match 接受的类型名是否一致
+#   - int/float 在 type() (统一"number") 与 is/match (区分) 间的差异
+#   - as 转换的强制语义 vs is 检查的严格语义
+#   - 类实例 type() 是否区分类名; is/ match 是否能匹配
+#   - 子类/接口的 is 传递性
+#   - 特殊值 (fn, chan, range, native) 的类型名
+#
+# 每个 probe 用 try/catch 包住, 输出 r126_<section>_<name>:<result>。
+# 注: 类相关测试用顶层 try/catch (避免 lambda 内 new 的已知 bug)。
+# ============================================================
+
+# ============================================================
+# 工具: 安全执行包装
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# === S1. 基本类型 type() 返回值 ===
+# 预期 (基于源码 HNativeBridge._builtin_type):
+#   42     -> "number"
+#   3.14   -> "number"
+#   "s"    -> "string"
+#   true   -> "bool"
+#   null   -> "null"
+#   [1]    -> "list"
+#   {}     -> "dict"
+#   fn(){} -> "function"
+#   print  -> PARSE ERROR (print 是关键字, 不能作为值传递) — 见 BUG-1
+# ============================================================
+print("=== S1. type() basic types ===");
+safe("r126_s1_type_int", fn() { return type(42); });
+safe("r126_s1_type_float", fn() { return type(3.14); });
+safe("r126_s1_type_intval_float", fn() { return type(42.0); });
+safe("r126_s1_type_str", fn() { return type("s"); });
+safe("r126_s1_type_bool", fn() { return type(true); });
+safe("r126_s1_type_null", fn() { return type(null); });
+safe("r126_s1_type_list", fn() { return type([1]); });
+safe("r126_s1_type_dict", fn() { return type({}); });
+safe("r126_s1_type_fn", fn() { return type(fn() { return 1; }); });
+# type(print) — PARSE ERROR: print 是关键字 (TokenType.PRINT), 不能作为参数
+# 这本身是一个发现: print 不是一等值, 无法获取其类型
+# try { print("r126_s1_type_print:" + str(type(print))); } catch (e) { ... }
+
+# ============================================================
+# === S2. is 表达式 — 基本类型 ===
+# 注: is 后只接受 IDENTIFIER, 不接受字符串字面量。
+#     `42 is "int"` 是 PARSE ERROR; 必须写 `42 is int`。
+# 预期 (基于 HVM.isInstance):
+#   42 is int     -> true  (integral)
+#   42 is number  -> true
+#   42 is float   -> true  (int 也是 float)
+#   "s" is str    -> true
+#   "s" is string -> true  (别名)
+#   [1] is list   -> true
+#   {} is dict    -> true
+#   true is bool  -> true
+#   null is null  -> PARSE ERROR (null 是关键字, 不是 IDENTIFIER)
+# ============================================================
+print("=== S2. is expression - basic types ===");
+try { print("r126_s2_is_42_int:" + str(42 is int)); } catch (e) { print("r126_s2_is_42_int:EXC[" + str(e) + "]"); }
+try { print("r126_s2_is_42_number:" + str(42 is number)); } catch (e) { print("r126_s2_is_42_number:EXC[" + str(e) + "]"); }
+try { print("r126_s2_is_42_float:" + str(42 is float)); } catch (e) { print("r126_s2_is_42_float:EXC[" + str(e) + "]"); }
+try { print("r126_s2_is_s_str:" + str("s" is str)); } catch (e) { print("r126_s2_is_s_str:EXC[" + str(e) + "]"); }
+try { print("r126_s2_is_s_string:" + str("s" is string)); } catch (e) { print("r126_s2_is_s_string:EXC[" + str(e) + "]"); }
+try { print("r126_s2_is_list:" + str([1] is list)); } catch (e) { print("r126_s2_is_list:EXC[" + str(e) + "]"); }
+try { print("r126_s2_is_dict:" + str({} is dict)); } catch (e) { print("r126_s2_is_dict:EXC[" + str(e) + "]"); }
+try { print("r126_s2_is_true_bool:" + str(true is bool)); } catch (e) { print("r126_s2_is_true_bool:EXC[" + str(e) + "]"); }
+# null is null: PARSE ERROR (null 是关键字) — 用 match is null 测试 (S9)
+try { print("r126_s2_is_null_int:" + str(null is int)); } catch (e) { print("r126_s2_is_null_int:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S3. int vs float 区分一致性 ===
+# 关键不一致: type() 对 42 和 3.14 都返回 "number",
+#            但 is int / is float 会区分。
+# ============================================================
+print("=== S3. int vs float distinction ===");
+safe("r126_s3_type_42", fn() { return type(42); });
+safe("r126_s3_type_314", fn() { return type(3.14); });
+safe("r126_s3_type_420", fn() { return type(42.0); });
+try { print("r126_s3_is_42_int:" + str(42 is int)); } catch (e) { print("r126_s3_is_42_int:EXC[" + str(e) + "]"); }
+try { print("r126_s3_is_42_float:" + str(42 is float)); } catch (e) { print("r126_s3_is_42_float:EXC[" + str(e) + "]"); }
+try { print("r126_s3_is_314_int:" + str(3.14 is int)); } catch (e) { print("r126_s3_is_314_int:EXC[" + str(e) + "]"); }
+try { print("r126_s3_is_314_float:" + str(3.14 is float)); } catch (e) { print("r126_s3_is_314_float:EXC[" + str(e) + "]"); }
+try { print("r126_s3_is_420_int:" + str(42.0 is int)); } catch (e) { print("r126_s3_is_420_int:EXC[" + str(e) + "]"); }
+try { print("r126_s3_is_420_float:" + str(42.0 is float)); } catch (e) { print("r126_s3_is_420_float:EXC[" + str(e) + "]"); }
+# 一致性核心: type(42)=="number" 为 true, 但 type(42)=="int" 为 false,
+#             然而 42 is int 为 true。命名空间不一致。
+try { print("r126_s3_type_42_eq_number:" + str(type(42) == "number")); } catch (e) { print("r126_s3_type_42_eq_number:EXC[" + str(e) + "]"); }
+try { print("r126_s3_type_42_eq_int:" + str(type(42) == "int")); } catch (e) { print("r126_s3_type_42_eq_int:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S4. 类实例 type() vs is ===
+# 预期: type(new C()) 返回类名 "C" (已修复, 旧版返回 "instance")
+#       c is C 为 true
+#       c is "C" — PARSE ERROR (字符串字面量不允许)
+# ============================================================
+print("=== S4. class instance type() vs is ===");
+class C4 { fn m() { return "c4"; } }
+try { print("r126_s4_type_instance:" + str(type(new C4()))); } catch (e) { print("r126_s4_type_instance:EXC[" + str(e) + "]"); }
+try { print("r126_s4_is_C:" + str(new C4() is C4)); } catch (e) { print("r126_s4_is_C:EXC[" + str(e) + "]"); }
+try { print("r126_s4_type_eq_C:" + str(type(new C4()) == "C")); } catch (e) { print("r126_s4_type_eq_C:EXC[" + str(e) + "]"); }
+try { print("r126_s4_type_eq_instance:" + str(type(new C4()) == "instance")); } catch (e) { print("r126_s4_type_eq_instance:EXC[" + str(e) + "]"); }
+# is 对未关联类
+class D4 { fn m() { return "d4"; } }
+try { print("r126_s4_is_wrong_class:" + str(new C4() is D4)); } catch (e) { print("r126_s4_is_wrong_class:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S5. 子类 is 传递性 ===
+# class A {} class B extends A {}
+# b is A 应为 true (沿基类链)
+# ============================================================
+print("=== S5. subclass is transitive ===");
+class A5 { fn kind() { return "A"; } }
+class B5 extends A5 { fn kind() { return "B"; } }
+class C5 extends B5 { fn kind() { return "C"; } }
+try { print("r126_s5_is_own:" + str(new B5() is B5)); } catch (e) { print("r126_s5_is_own:EXC[" + str(e) + "]"); }
+try { print("r126_s5_is_parent:" + str(new B5() is A5)); } catch (e) { print("r126_s5_is_parent:EXC[" + str(e) + "]"); }
+try { print("r126_s5_is_grandparent:" + str(new C5() is A5)); } catch (e) { print("r126_s5_is_grandparent:EXC[" + str(e) + "]"); }
+try { print("r126_s5_is_sibling:" + str(new B5() is C5)); } catch (e) { print("r126_s5_is_sibling:EXC[" + str(e) + "]"); }
+# type() 对子类实例
+try { print("r126_s5_type_B:" + str(type(new B5()))); } catch (e) { print("r126_s5_type_B:EXC[" + str(e) + "]"); }
+try { print("r126_s5_type_C:" + str(type(new C5()))); } catch (e) { print("r126_s5_type_C:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S6. 接口 is ===
+# interface I {} class C implements I {}
+# c is I 应为 true
+# 传递接口继承: C implements IB, IB extends IA => C is IA?
+# ============================================================
+print("=== S6. interface is ===");
+interface I6 { fn do6(); }
+class C6 implements I6 { fn do6() { return "c6"; } }
+try { print("r126_s6_is_iface:" + str(new C6() is I6)); } catch (e) { print("r126_s6_is_iface:EXC[" + str(e) + "]"); }
+
+# 传递接口继承
+interface IA6 { fn aM(); }
+interface IB6 extends IA6 { fn bM(); }
+class CC6 implements IB6 {
+    fn aM() { return "a"; }
+    fn bM() { return "b"; }
+}
+try { print("r126_s6_is_direct_iface:" + str(new CC6() is IB6)); } catch (e) { print("r126_s6_is_direct_iface:EXC[" + str(e) + "]"); }
+try { print("r126_s6_is_trans_iface:" + str(new CC6() is IA6)); } catch (e) { print("r126_s6_is_trans_iface:EXC[" + str(e) + "]"); }
+
+# 未实现接口
+class Stone6 { }
+try { print("r126_s6_is_unimpl_iface:" + str(new Stone6() is I6)); } catch (e) { print("r126_s6_is_unimpl_iface:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S7. as 转换 — 基本类型 ===
+# as 是强制转换: int 截断, str 转字符串, bool 取真值
+# ============================================================
+print("=== S7. as cast - primitives ===");
+try { let r = 42 as int; print("r126_s7_42_as_int:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_42_as_int:EXC[" + str(e) + "]"); }
+try { let r = 42 as float; print("r126_s7_42_as_float:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_42_as_float:EXC[" + str(e) + "]"); }
+try { let r = 42 as str; print("r126_s7_42_as_str:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_42_as_str:EXC[" + str(e) + "]"); }
+try { let r = 42 as bool; print("r126_s7_42_as_bool:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_42_as_bool:EXC[" + str(e) + "]"); }
+try { let r = "42" as int; print("r126_s7_str42_as_int:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_str42_as_int:EXC[" + str(e) + "]"); }
+try { let r = 3.14 as int; print("r126_s7_314_as_int:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_314_as_int:EXC[" + str(e) + "]"); }
+try { let r = 0 as bool; print("r126_s7_0_as_bool:" + str(r)); } catch (e) { print("r126_s7_0_as_bool:EXC[" + str(e) + "]"); }
+try { let r = null as int; print("r126_s7_null_as_int:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_null_as_int:EXC[" + str(e) + "]"); }
+# as number (别名?) — is 接受 "number", as 也应接受
+try { let r = 42 as number; print("r126_s7_42_as_number:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_42_as_number:EXC[" + str(e) + "]"); }
+# as string (别名)
+try { let r = 42 as string; print("r126_s7_42_as_string:" + str(r) + "|type=" + str(type(r))); } catch (e) { print("r126_s7_42_as_string:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S8. as 类类型 ===
+# class A {} class B extends A {}
+# a as B (向下转型) — 应失败 (isInstance 返回 false => throw)
+# b as A (向上转型) — 应成功
+# ============================================================
+print("=== S8. as class type ===");
+class A8 { fn kind() { return "A"; } }
+class B8 extends A8 { fn kind() { return "B"; } }
+# 向上转型 (成功)
+try { let b = new B8(); let a = b as A8; print("r126_s8_upcast:" + str(a.kind())); } catch (e) { print("r126_s8_upcast:EXC[" + str(e) + "]"); }
+# 向下转型 (失败 — a 实际不是 B)
+try { let a = new A8(); let b = a as B8; print("r126_s8_downcast:" + str(b.kind())); } catch (e) { print("r126_s8_downcast:EXC[" + str(e) + "]"); }
+# 同类型转换 (成功)
+try { let b = new B8(); let b2 = b as B8; print("r126_s8_samecast:" + str(b2.kind())); } catch (e) { print("r126_s8_samecast:EXC[" + str(e) + "]"); }
+# 跨类型转换 (失败 — int as A8)
+try { let r = 5 as A8; print("r126_s8_int_as_class:" + str(r)); } catch (e) { print("r126_s8_int_as_class:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S9. match 类型模式 — 与 type()/is 一致性 ===
+# 核心对比: match x { is T } 使用的类型名 vs type(x) 返回的类型名
+# 预期不一致: type(42)=="number", 但 match 42 { is int => ... } 命中 "is int"
+# ============================================================
+print("=== S9. match type pattern consistency ===");
+fn match_basic(x) {
+    return match x {
+        is int => "int",
+        is float => "float",
+        is str => "str",
+        is bool => "bool",
+        is list => "list",
+        is dict => "dict",
+        is null => "null",
+        _ => "other"
+    };
+}
+safe("r126_s9_match_42", fn() { return match_basic(42); });
+safe("r126_s9_match_314", fn() { return match_basic(3.14); });
+safe("r126_s9_match_420", fn() { return match_basic(42.0); });
+safe("r126_s9_match_str", fn() { return match_basic("s"); });
+safe("r126_s9_match_true", fn() { return match_basic(true); });
+safe("r126_s9_match_list", fn() { return match_basic([1]); });
+safe("r126_s9_match_dict", fn() { return match_basic({}); });
+safe("r126_s9_match_null", fn() { return match_basic(null); });
+
+# match with is number — type() 返回 "number", match 是否能匹配?
+fn match_number(x) {
+    return match x {
+        is number => "is-number",
+        _ => "not-number"
+    };
+}
+safe("r126_s9_match_42_is_number", fn() { return match_number(42); });
+safe("r126_s9_match_314_is_number", fn() { return match_number(3.14); });
+safe("r126_s9_match_str_is_number", fn() { return match_number("s"); });
+
+# match 顺序敏感: is int 在 is number 之前
+fn match_order(x) {
+    return match x {
+        is int => "int-first",
+        is number => "number-second",
+        _ => "other"
+    };
+}
+safe("r126_s9_match_order_42", fn() { return match_order(42); });
+safe("r126_s9_match_order_314", fn() { return match_order(3.14); });
+
+# match 类类型 — 与 type() 一致性
+class C9 { fn m() { return "c9"; } }
+class D9 extends C9 { fn m() { return "d9"; } }
+fn match_class(x) {
+    return match x {
+        is C9 => "is-C9",
+        is D9 => "is-D9",
+        _ => "other"
+    };
+}
+try { print("r126_s9_match_C:" + str(match_class(new C9()))); } catch (e) { print("r126_s9_match_C:EXC[" + str(e) + "]"); }
+try { print("r126_s9_match_D:" + str(match_class(new D9()))); } catch (e) { print("r126_s9_match_D:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# === S10. 特殊值 type() ===
+# fn(){}, chan_new(0), new C(), range(0,3)
+# 注: print 是关键字, 不能作为值 — 无法 type(print) 或 print is T
+# ============================================================
+print("=== S10. special values type() ===");
+safe("r126_s10_type_fn", fn() { return type(fn() { return 1; }); });
+try { let ch = chan_new(0); print("r126_s10_type_chan:" + str(type(ch))); } catch (e) { print("r126_s10_type_chan:EXC[" + str(e) + "]"); }
+try { print("r126_s10_type_instance:" + str(type(new C9()))); } catch (e) { print("r126_s10_type_instance:EXC[" + str(e) + "]"); }
+safe("r126_s10_type_range", fn() { return type(range(0, 3)); });
+# type(print) — PARSE ERROR (print 是关键字), 无法测试
+
+# is 对特殊值
+try { print("r126_s10_is_fn_function:" + str((fn() { return 1; }) is function)); } catch (e) { print("r126_s10_is_fn_function:EXC[" + str(e) + "]"); }
+# `x is fn` — PARSE ERROR (fn 是关键字, 不是 IDENTIFIER) — 见 BUG-2
+# try { print("r126_s10_is_fn_fn:" + str((fn() { return 1; }) is fn)); } catch (e) { ... }
+# `x is chan` — PARSE ERROR (chan 是关键字, 不是 IDENTIFIER) — 见 BUG-2
+# try { let ch = chan_new(0); print("r126_s10_is_chan_chan:" + str(ch is chan)); } catch (e) { ... }
+try { let ch = chan_new(0); print("r126_s10_is_chan_channel:" + str(ch is channel)); } catch (e) { print("r126_s10_is_chan_channel:EXC[" + str(e) + "]"); }
+# range 返回 list, 应与 type() 一致
+try { print("r126_s10_is_range_list:" + str(range(0, 3) is list)); } catch (e) { print("r126_s10_is_range_list:EXC[" + str(e) + "]"); }
+# print is ... — PARSE ERROR (print 是关键字), 无法测试 HNative 的 is 行为 — 见 BUG-1
+
+# ============================================================
+# === S11. 核心一致性矩阵: type() vs is vs match vs as ===
+# 对每个基本类型, 横向对比四条路径
+# ============================================================
+print("=== S11. core consistency matrix ===");
+# int (42)
+safe("r126_s11_int_type", fn() { return type(42); });
+try { print("r126_s11_int_is_int:" + str(42 is int)); } catch (e) { print("r126_s11_int_is_int:EXC[" + str(e) + "]"); }
+try { print("r126_s11_int_is_number:" + str(42 is number)); } catch (e) { print("r126_s11_int_is_number:EXC[" + str(e) + "]"); }
+fn m_int(x) { return match x { is int => "int", _ => "other" }; }
+safe("r126_s11_int_match", fn() { return m_int(42); });
+try { let r = 42 as int; print("r126_s11_int_as:" + str(r)); } catch (e) { print("r126_s11_int_as:EXC[" + str(e) + "]"); }
+
+# float (3.14)
+safe("r126_s11_float_type", fn() { return type(3.14); });
+try { print("r126_s11_float_is_int:" + str(3.14 is int)); } catch (e) { print("r126_s11_float_is_int:EXC[" + str(e) + "]"); }
+try { print("r126_s11_float_is_float:" + str(3.14 is float)); } catch (e) { print("r126_s11_float_is_float:EXC[" + str(e) + "]"); }
+fn m_float(x) { return match x { is float => "float", _ => "other" }; }
+safe("r126_s11_float_match", fn() { return m_float(3.14); });
+
+# str
+safe("r126_s11_str_type", fn() { return type("s"); });
+try { print("r126_s11_str_is_str:" + str("s" is str)); } catch (e) { print("r126_s11_str_is_str:EXC[" + str(e) + "]"); }
+try { print("r126_s11_str_is_string:" + str("s" is string)); } catch (e) { print("r126_s11_str_is_string:EXC[" + str(e) + "]"); }
+fn m_str(x) { return match x { is str => "str", _ => "other" }; }
+safe("r126_s11_str_match", fn() { return m_str("s"); });
+
+# bool
+safe("r126_s11_bool_type", fn() { return type(true); });
+try { print("r126_s11_bool_is_bool:" + str(true is bool)); } catch (e) { print("r126_s11_bool_is_bool:EXC[" + str(e) + "]"); }
+fn m_bool(x) { return match x { is bool => "bool", _ => "other" }; }
+safe("r126_s11_bool_match", fn() { return m_bool(true); });
+
+# null — is 表达式不接受 null 关键字, 只能通过 match
+safe("r126_s11_null_type", fn() { return type(null); });
+fn m_null(x) { return match x { is null => "null", _ => "other" }; }
+safe("r126_s11_null_match", fn() { return m_null(null); });
+
+# list
+safe("r126_s11_list_type", fn() { return type([1]); });
+try { print("r126_s11_list_is_list:" + str([1] is list)); } catch (e) { print("r126_s11_list_is_list:EXC[" + str(e) + "]"); }
+fn m_list(x) { return match x { is list => "list", _ => "other" }; }
+safe("r126_s11_list_match", fn() { return m_list([1]); });
+
+# dict
+safe("r126_s11_dict_type", fn() { return type({}); });
+try { print("r126_s11_dict_is_dict:" + str({} is dict)); } catch (e) { print("r126_s11_dict_is_dict:EXC[" + str(e) + "]"); }
+fn m_dict(x) { return match x { is dict => "dict", _ => "other" }; }
+safe("r126_s11_dict_match", fn() { return m_dict({}); });
+
+print("=== r126 done ===");

@@ -1,0 +1,6 @@
+print("Hello, H#!");
+let name = "H#";
+print("Welcome to " + name);
+print("Hello, World!");
+print("I am learning H#.");
+print("Let us begin!");

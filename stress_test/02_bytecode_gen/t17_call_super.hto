@@ -1,0 +1,22 @@
+# t17_call_super.hto - CALL_SUPER 路径
+class Base {
+    let name = "";
+    fn init(n) { self.name = n; }
+    fn greet() { return "Base.greet: " + self.name; }
+    fn info() { return "base-info"; }
+}
+class Derived extends Base {
+    fn init(n) {
+        super.init(n);
+    }
+    fn greet() {
+        return "Derived.greet: " + self.name + " | " + super.greet();
+    }
+    fn combined() {
+        return super.info() + " + derived";
+    }
+}
+let d = new Derived("Test");
+print(d.greet());
+print(d.combined());
+print(d.name);

@@ -1,0 +1,107 @@
+# 14 — parallel + exception propagation
+# A worker that throws should propagate the exception to the awaiter.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+@parallel fn thrower_string() {
+    throw "boom-string";
+}
+
+@parallel fn thrower_int() {
+    throw 42;
+}
+
+@parallel fn thrower_list() {
+    throw [1, 2, 3];
+}
+
+# await on a throwing worker re-raises the original payload
+let caught1 = false;
+let msg1 = "";
+try {
+    let v = await thrower_string();
+} catch (e) {
+    caught1 = true;
+    msg1 = str(e);
+}
+check("string_caught", caught1, "not caught");
+check("string_payload", msg1 == "boom-string", "msg1=" + msg1);
+
+let caught2 = false;
+let msg2 = "";
+try {
+    let v = await thrower_int();
+} catch (e) {
+    caught2 = true;
+    msg2 = str(e);
+}
+check("int_caught", caught2, "not caught");
+check("int_payload", msg2 == "42", "msg2=" + msg2);
+
+let caught3 = false;
+try {
+    let v = await thrower_list();
+} catch (e) {
+    caught3 = true;
+}
+check("list_caught", caught3, "not caught");
+
+# Worker that throws after some computation
+@parallel fn compute_then_throw(n) {
+    let s = 0;
+    let i = 0;
+    while (i < n) {
+        s = s + i;
+        i = i + 1;
+    }
+    if (s > 0) {
+        throw "computed boom";
+    }
+    return s;
+}
+
+let caught4 = false;
+let msg4 = "";
+try {
+    let v = await compute_then_throw(100);
+} catch (e) {
+    caught4 = true;
+    msg4 = str(e);
+}
+check("compute_throw_caught", caught4, "not caught");
+check("compute_throw_msg",    msg4 == "computed boom", "msg4=" + msg4);
+
+# Exception inside concurrent { } block — should propagate out of the block
+@parallel fn bad_child() {
+    throw "child-fail";
+}
+
+@parallel fn good_child() {
+    return 1;
+}
+
+let caught5 = false;
+let msg5 = "";
+try {
+    concurrent {
+        let bf = bad_child();
+        let gf = good_child();
+        let _a = await bf;
+        let _b = await gf;
+    }
+} catch (e) {
+    caught5 = true;
+    msg5 = str(e);
+}
+check("concurrent_exception_caught", caught5, "not caught");
+check("concurrent_exception_msg",    msg5 == "child-fail", "msg5=" + msg5);
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

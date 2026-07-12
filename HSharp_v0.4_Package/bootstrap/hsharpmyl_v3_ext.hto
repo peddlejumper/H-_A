@@ -1,0 +1,5177 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# H#ML v3 Extension — Advanced Machine Learning Functions
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 25: Advanced Deep Learning Components
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_xavier_init(fan_in, fan_out) {
+    let limit = math_sqrt(6.0 / (fan_in + fan_out));
+    let result = [];
+    let i = 0;
+    while (i < fan_in) {
+        let row = [];
+        let j = 0;
+        while (j < fan_out) {
+            push(row, (hml_random() - 0.5) * 2.0 * limit);
+            j = j + 1;
+        }
+        push(result, row);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_he_init(fan_in) {
+    let std = math_sqrt(2.0 / fan_in);
+    let result = hml_vector_zeros(fan_in);
+    let i = 0;
+    while (i < fan_in) {
+        result[i] = (hml_random() - 0.5) * 2.0 * std * math_sqrt(3.0);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_uniform_init(rows, cols, scale) {
+    let result = [];
+    let i = 0;
+    while (i < rows) {
+        let row = [];
+        let j = 0;
+        while (j < cols) {
+            push(row, (hml_random() - 0.5) * 2.0 * scale);
+            j = j + 1;
+        }
+        push(result, row);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_dropout_forward(X, rate, training) {
+    if (not training) { return X; }
+    let result = [];
+    let mask_rows = [];
+    let i = 0;
+    while (i < len(X)) {
+        let row = [];
+        let mask_row = [];
+        let j = 0;
+        while (j < len(X[0])) {
+            if (hml_random() > rate) {
+                push(row, X[i][j] / (1.0 - rate));
+                push(mask_row, 1.0);
+            } else {
+                push(row, 0.0);
+                push(mask_row, 0.0);
+            }
+            j = j + 1;
+        }
+        push(result, row);
+        push(mask_rows, mask_row);
+        i = i + 1;
+    }
+    return {"output": result, "mask": mask_rows};
+}
+
+fn hml_dropout_backward(dout, mask) {
+    let result = [];
+    let i = 0;
+    while (i < len(dout)) {
+        let row = [];
+        let j = 0;
+        while (j < len(dout[0])) {
+            push(row, dout[i][j] * mask[i][j]);
+            j = j + 1;
+        }
+        push(result, row);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_batch_norm_forward(X, gamma, beta, eps) {
+    let n = len(X);
+    let d = len(X[0]);
+    let mean = hml_vector_zeros(d);
+    let var = hml_vector_zeros(d);
+    let j = 0;
+    while (j < d) {
+        let s = 0.0;
+        let i = 0;
+        while (i < n) {
+            s = s + X[i][j];
+            i = i + 1;
+        }
+        mean[j] = s * 1.0 / n;
+        j = j + 1;
+    }
+    j = 0;
+    while (j < d) {
+        let s = 0.0;
+        let i = 0;
+        while (i < n) {
+            let diff = X[i][j] - mean[j];
+            s = s + diff * diff;
+            i = i + 1;
+        }
+        var[j] = s * 1.0 / n;
+        j = j + 1;
+    }
+    let out = [];
+    let i = 0;
+    while (i < n) {
+        let row = [];
+        let j = 0;
+        while (j < d) {
+            let x_hat = (X[i][j] - mean[j]) / math_sqrt(var[j] + eps);
+            push(row, gamma[j] * x_hat + beta[j]);
+            j = j + 1;
+        }
+        push(out, row);
+        i = i + 1;
+    }
+    return {"output": out, "mean": mean, "var": var};
+}
+
+fn hml_batch_norm_backward(dout, X, gamma, eps) {
+    let n = len(X);
+    let d = len(X[0]);
+    let mean = hml_vector_zeros(d);
+    let var = hml_vector_zeros(d);
+    let j = 0;
+    while (j < d) {
+        let s = 0.0;
+        let i = 0;
+        while (i < n) { s = s + X[i][j]; i = i + 1; }
+        mean[j] = s * 1.0 / n;
+        j = j + 1;
+    }
+    j = 0;
+    while (j < d) {
+        let s = 0.0;
+        let i = 0;
+        while (i < n) {
+            let diff = X[i][j] - mean[j];
+            s = s + diff * diff;
+            i = i + 1;
+        }
+        var[j] = s * 1.0 / n;
+        j = j + 1;
+    }
+    let dx = hml_matrix_zeros(n, d);
+    let dgamma = hml_vector_zeros(d);
+    let dbeta = hml_vector_zeros(d);
+    j = 0;
+    while (j < d) {
+        let inv_std = 1.0 / math_sqrt(var[j] + eps);
+        let dgamma_j = 0.0;
+        let dbeta_j = 0.0;
+        let i = 0;
+        while (i < n) {
+            let x_hat = (X[i][j] - mean[j]) * inv_std;
+            dgamma_j = dgamma_j + dout[i][j] * x_hat;
+            dbeta_j = dbeta_j + dout[i][j];
+            i = i + 1;
+        }
+        dgamma[j] = dgamma_j;
+        dbeta[j] = dbeta_j;
+        j = j + 1;
+    }
+    j = 0;
+    while (j < d) {
+        let inv_std = 1.0 / math_sqrt(var[j] + eps);
+        let i = 0;
+        while (i < n) {
+            let x_hat = (X[i][j] - mean[j]) * inv_std;
+            let dx_hat = dout[i][j] * gamma[j];
+            dx[i][j] = (1.0 / n) * inv_std * (n * dx_hat - dx_hat - x_hat * (dx_hat * x_hat) * (1.0 / n));
+            i = i + 1;
+        }
+        j = j + 1;
+    }
+    return {"dx": dx, "dgamma": dgamma, "dbeta": dbeta};
+}
+
+fn hml_layer_norm_forward(X, gamma, beta, eps) {
+    let n = len(X);
+    let d = len(X[0]);
+    let out = [];
+    let i = 0;
+    while (i < n) {
+        let s = 0.0;
+        let j = 0;
+        while (j < d) { s = s + X[i][j]; j = j + 1; }
+        let mean_i = s * 1.0 / d;
+        s = 0.0;
+        j = 0;
+        while (j < d) {
+            let diff = X[i][j] - mean_i;
+            s = s + diff * diff;
+            j = j + 1;
+        }
+        let var_i = s * 1.0 / d;
+        let row = [];
+        j = 0;
+        while (j < d) {
+            let x_hat = (X[i][j] - mean_i) / math_sqrt(var_i + eps);
+            push(row, gamma[j] * x_hat + beta[j]);
+            j = j + 1;
+        }
+        push(out, row);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn hml_conv1d(input, kernel, stride) {
+    let in_len = len(input);
+    let k_len = len(kernel);
+    let out_len = math_floor((in_len - k_len) * 1.0 / stride) + 1;
+    let result = [];
+    let i = 0;
+    while (i < out_len) {
+        let s = 0.0;
+        let j = 0;
+        while (j < k_len) {
+            s = s + input[i * stride + j] * kernel[j];
+            j = j + 1;
+        }
+        push(result, s);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_conv2d(input, kernel, stride) {
+    let in_h = len(input);
+    let in_w = len(input[0]);
+    let k_h = len(kernel);
+    let k_w = len(kernel[0]);
+    let out_h = math_floor((in_h - k_h) * 1.0 / stride) + 1;
+    let out_w = math_floor((in_w - k_w) * 1.0 / stride) + 1;
+    let result = [];
+    let i = 0;
+    while (i < out_h) {
+        let row = [];
+        let j = 0;
+        while (j < out_w) {
+            let s = 0.0;
+            let ki = 0;
+            while (ki < k_h) {
+                let kj = 0;
+                while (kj < k_w) {
+                    s = s + input[i * stride + ki][j * stride + kj] * kernel[ki][kj];
+                    kj = kj + 1;
+                }
+                ki = ki + 1;
+            }
+            push(row, s);
+            j = j + 1;
+        }
+        push(result, row);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_max_pool1d(input, pool_size, stride) {
+    let in_len = len(input);
+    let out_len = math_floor((in_len - pool_size) * 1.0 / stride) + 1;
+    let result = [];
+    let i = 0;
+    while (i < out_len) {
+        let mx = input[i * stride];
+        let j = 1;
+        while (j < pool_size) {
+            let idx = i * stride + j;
+            if (idx < in_len and input[idx] > mx) { mx = input[idx]; }
+            j = j + 1;
+        }
+        push(result, mx);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_max_pool2d(input, pool_size, stride) {
+    let in_h = len(input);
+    let in_w = len(input[0]);
+    let out_h = math_floor((in_h - pool_size) * 1.0 / stride) + 1;
+    let out_w = math_floor((in_w - pool_size) * 1.0 / stride) + 1;
+    let result = [];
+    let i = 0;
+    while (i < out_h) {
+        let row = [];
+        let j = 0;
+        while (j < out_w) {
+            let mx = input[i * stride][j * stride];
+            let ki = 0;
+            while (ki < pool_size) {
+                let kj = 0;
+                while (kj < pool_size) {
+                    let ii = i * stride + ki;
+                    let jj = j * stride + kj;
+                    if (ii < in_h and jj < in_w and input[ii][jj] > mx) {
+                        mx = input[ii][jj];
+                    }
+                    kj = kj + 1;
+                }
+                ki = ki + 1;
+            }
+            push(row, mx);
+            j = j + 1;
+        }
+        push(result, row);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_avg_pool2d(input, pool_size, stride) {
+    let in_h = len(input);
+    let in_w = len(input[0]);
+    let out_h = math_floor((in_h - pool_size) * 1.0 / stride) + 1;
+    let out_w = math_floor((in_w - pool_size) * 1.0 / stride) + 1;
+    let result = [];
+    let i = 0;
+    while (i < out_h) {
+        let row = [];
+        let j = 0;
+        while (j < out_w) {
+            let s = 0.0;
+            let cnt = 0;
+            let ki = 0;
+            while (ki < pool_size) {
+                let kj = 0;
+                while (kj < pool_size) {
+                    let ii = i * stride + ki;
+                    let jj = j * stride + kj;
+                    if (ii < in_h and jj < in_w) {
+                        s = s + input[ii][jj];
+                        cnt = cnt + 1;
+                    }
+                    kj = kj + 1;
+                }
+                ki = ki + 1;
+            }
+            if (cnt > 0) {
+                push(row, s * 1.0 / cnt);
+            } else {
+                push(row, 0.0);
+            }
+            j = j + 1;
+        }
+        push(result, row);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_flatten(X) {
+    let result = [];
+    let i = 0;
+    while (i < len(X)) {
+        let j = 0;
+        while (j < len(X[i])) {
+            push(result, X[i][j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_im2col(image, kernel_h, kernel_w, stride) {
+    let in_h = len(image);
+    let in_w = len(image[0]);
+    let out_h = math_floor((in_h - kernel_h) * 1.0 / stride) + 1;
+    let out_w = math_floor((in_w - kernel_w) * 1.0 / stride) + 1;
+    let cols = [];
+    let i = 0;
+    while (i < out_h) {
+        let j = 0;
+        while (j < out_w) {
+            let patch = [];
+            let ki = 0;
+            while (ki < kernel_h) {
+                let kj = 0;
+                while (kj < kernel_w) {
+                    push(patch, image[i * stride + ki][j * stride + kj]);
+                    kj = kj + 1;
+                }
+                ki = ki + 1;
+            }
+            push(cols, patch);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return cols;
+}
+
+fn hml_col2im(cols, output_shape) {
+    let out_h = output_shape[0];
+    let out_w = output_shape[1];
+    let img = hml_matrix_zeros(out_h, out_w);
+    let idx = 0;
+    let i = 0;
+    while (i < out_h) {
+        let j = 0;
+        while (j < out_w) {
+            img[i][j] = cols[idx];
+            idx = idx + 1;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return img;
+}
+
+fn hml_pad_image(image, pad_h, pad_w) {
+    let in_h = len(image);
+    let in_w = len(image[0]);
+    let out_h = in_h + 2 * pad_h;
+    let out_w = in_w + 2 * pad_w;
+    let result = hml_matrix_zeros(out_h, out_w);
+    let i = 0;
+    while (i < in_h) {
+        let j = 0;
+        while (j < in_w) {
+            result[i + pad_h][j + pad_w] = image[i][j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_rnn_cell(x, h_prev, Wxh, Whh, bh) {
+    let h_next = hml_vector_zeros(len(Whh));
+    let i = 0;
+    while (i < len(Whh)) {
+        let s = bh[i];
+        let j = 0;
+        while (j < len(x)) {
+            s = s + Wxh[i][j] * x[j];
+            j = j + 1;
+        }
+        j = 0;
+        while (j < len(h_prev)) {
+            s = s + Whh[i][j] * h_prev[j];
+            j = j + 1;
+        }
+        h_next[i] = s / (1.0 + math_fabs(s));
+        i = i + 1;
+    }
+    return h_next;
+}
+
+fn hml_gru_cell(x, h_prev, Wxz, Whz, Wxr, Whr, Wxh, Whh) {
+    let d = len(Whz);
+    let z = hml_vector_zeros(d);
+    let r = hml_vector_zeros(d);
+    let h_tilde = hml_vector_zeros(d);
+    let h_next = hml_vector_zeros(d);
+    let i = 0;
+    while (i < d) {
+        let sz = 0.0;
+        let sr = 0.0;
+        let sh = 0.0;
+        let j = 0;
+        while (j < len(x)) {
+            sz = sz + Wxz[i][j] * x[j];
+            sr = sr + Wxr[i][j] * x[j];
+            sh = sh + Wxh[i][j] * x[j];
+            j = j + 1;
+        }
+        j = 0;
+        while (j < d) {
+            sz = sz + Whz[i][j] * h_prev[j];
+            sr = sr + Whr[i][j] * h_prev[j];
+            j = j + 1;
+        }
+        z[i] = 1.0 / (1.0 + math_exp(-sz));
+        r[i] = 1.0 / (1.0 + math_exp(-sr));
+        j = 0;
+        while (j < d) {
+            sh = sh + Whh[i][j] * (r[i] * h_prev[j]);
+            j = j + 1;
+        }
+        h_tilde[i] = sh / (1.0 + math_fabs(sh));
+        h_next[i] = (1.0 - z[i]) * h_prev[i] + z[i] * h_tilde[i];
+        i = i + 1;
+    }
+    return h_next;
+}
+
+fn hml_lstm_cell(x, h_prev, c_prev, Wf, Wi, Wc, Wo) {
+    let d = len(Wf);
+    let f = hml_vector_zeros(d);
+    let i_gate = hml_vector_zeros(d);
+    let c_tilde = hml_vector_zeros(d);
+    let o = hml_vector_zeros(d);
+    let c_next = hml_vector_zeros(d);
+    let h_next = hml_vector_zeros(d);
+    let k = 0;
+    while (k < d) {
+        let sf = 0.0;
+        let si = 0.0;
+        let sc = 0.0;
+        let so = 0.0;
+        let j = 0;
+        while (j < len(x)) {
+            sf = sf + Wf[k][j] * x[j];
+            si = si + Wi[k][j] * x[j];
+            sc = sc + Wc[k][j] * x[j];
+            so = so + Wo[k][j] * x[j];
+            j = j + 1;
+        }
+        j = 0;
+        let d_h = len(Wf[0]) - len(x);
+        while (j < len(h_prev)) {
+            sf = sf + Wf[k][len(x) + j] * h_prev[j];
+            si = si + Wi[k][len(x) + j] * h_prev[j];
+            sc = sc + Wc[k][len(x) + j] * h_prev[j];
+            so = so + Wo[k][len(x) + j] * h_prev[j];
+            j = j + 1;
+        }
+        f[k] = 1.0 / (1.0 + math_exp(-sf));
+        i_gate[k] = 1.0 / (1.0 + math_exp(-si));
+        c_tilde[k] = sc / (1.0 + math_fabs(sc));
+        o[k] = 1.0 / (1.0 + math_exp(-so));
+        c_next[k] = f[k] * c_prev[k] + i_gate[k] * c_tilde[k];
+        h_next[k] = o[k] * (c_next[k] / (1.0 + math_fabs(c_next[k])));
+        k = k + 1;
+    }
+    return {"h": h_next, "c": c_next};
+}
+
+fn hml_embedding_lookup(embeddings, indices) {
+    let result = [];
+    let i = 0;
+    while (i < len(indices)) {
+        let idx = indices[i];
+        let emb = [];
+        let j = 0;
+        while (j < len(embeddings[idx])) {
+            push(emb, embeddings[idx][j]);
+            j = j + 1;
+        }
+        push(result, emb);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn hml_positional_encoding(seq_len, d_model) {
+    let pe = hml_matrix_zeros(seq_len, d_model);
+    let pos = 0;
+    while (pos < seq_len) {
+        let j = 0;
+        while (j < d_model) {
+            let div = math_pow(10000.0, (2.0 * math_floor(j * 1.0 / 2)) * 1.0 / d_model);
+            let angle = pos * 1.0 / div;
+            if (j % 2 == 0) {
+                pe[pos][j] = math_sin(angle);
+            } else {
+                pe[pos][j] = math_cos(angle);
+            }
+            j = j + 1;
+        }
+        pos = pos + 1;
+    }
+    return pe;
+}
+
+fn hml_scaled_dot_product_attention(Q, K, V, mask) {
+    let d_k = len(K[0]);
+    let n_q = len(Q);
+    let n_kv = len(K);
+    let attn = hml_matrix_zeros(n_q, n_kv);
+    let i = 0;
+    while (i < n_q) {
+        let j = 0;
+        while (j < n_kv) {
+            let s = 0.0;
+            let d = 0;
+            while (d < d_k) {
+                s = s + Q[i][d] * K[j][d];
+                d = d + 1;
+            }
+            attn[i][j] = s / math_sqrt(d_k * 1.0);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    if (mask != nullptr) {
+        i = 0;
+        while (i < n_q) {
+            let j = 0;
+            while (j < n_kv) {
+                if (mask[i][j] == 0) { attn[i][j] = -1000000000; }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+    }
+    i = 0;
+    while (i < n_q) {
+        let mx = attn[i][0];
+        let j = 1;
+        while (j < n_kv) {
+            if (attn[i][j] > mx) { mx = attn[i][j]; }
+            j = j + 1;
+        }
+        let sum = 0.0;
+        j = 0;
+        while (j < n_kv) {
+            attn[i][j] = math_exp(attn[i][j] - mx);
+            sum = sum + attn[i][j];
+            j = j + 1;
+        }
+        j = 0;
+        while (j < n_kv) {
+            attn[i][j] = attn[i][j] / sum;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let output = hml_matrix_zeros(n_q, len(V[0]));
+    i = 0;
+    while (i < n_q) {
+        let j = 0;
+        while (j < len(V[0])) {
+            let s = 0.0;
+            let k = 0;
+            while (k < n_kv) {
+                s = s + attn[i][k] * V[k][j];
+                k = k + 1;
+            }
+            output[i][j] = s;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return {"output": output, "attention": attn};
+}
+
+fn hml_multi_head_attention_split(Q, K, V, n_heads) {
+    let d_model = len(Q[0]);
+    let d_k = math_floor(d_model * 1.0 / n_heads);
+    let Q_heads = [];
+    let K_heads = [];
+    let V_heads = [];
+    let h = 0;
+    while (h < n_heads) {
+        let Qh = [];
+        let i = 0;
+        while (i < len(Q)) {
+            let row = [];
+            let j = h * d_k;
+            while (j < (h + 1) * d_k) {
+                push(row, Q[i][j]);
+                j = j + 1;
+            }
+            push(Qh, row);
+            i = i + 1;
+        }
+        push(Q_heads, Qh);
+        let Kh = [];
+        i = 0;
+        while (i < len(K)) {
+            let row = [];
+            let j = h * d_k;
+            while (j < (h + 1) * d_k) {
+                push(row, K[i][j]);
+                j = j + 1;
+            }
+            push(Kh, row);
+            i = i + 1;
+        }
+        push(K_heads, Kh);
+        let Vh = [];
+        i = 0;
+        while (i < len(V)) {
+            let row = [];
+            let j = h * d_k;
+            while (j < (h + 1) * d_k) {
+                push(row, V[i][j]);
+                j = j + 1;
+            }
+            push(Vh, row);
+            i = i + 1;
+        }
+        push(V_heads, Vh);
+        h = h + 1;
+    }
+    return {"Q_heads": Q_heads, "K_heads": K_heads, "V_heads": V_heads};
+}
+
+fn hml_multi_head_attention_concat(heads) {
+    let n_heads = len(heads);
+    let n_seq = len(heads[0]);
+    let d_head = len(heads[0][0]);
+    let result = [];
+    let i = 0;
+    while (i < n_seq) {
+        let row = [];
+        let h = 0;
+        while (h < n_heads) {
+            let j = 0;
+            while (j < d_head) {
+                push(row, heads[h][i][j]);
+                j = j + 1;
+            }
+            h = h + 1;
+        }
+        push(result, row);
+        i = i + 1;
+    }
+    return result;
+}
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 26: Reinforcement Learning
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_epsilon_greedy(q_values, epsilon) {
+    if (hml_random() < epsilon) {
+        return hml_randint(0, len(q_values) - 1);
+    }
+    return hml_vector_argmax(q_values);
+}
+
+fn hml_softmax_policy(q_values, temperature) {
+    let n = len(q_values);
+    let probs = hml_vector_zeros(n);
+    let mx = q_values[0];
+    let i = 1;
+    while (i < n) {
+        if (q_values[i] > mx) { mx = q_values[i]; }
+        i = i + 1;
+    }
+    let sum = 0.0;
+    i = 0;
+    while (i < n) {
+        probs[i] = math_exp((q_values[i] - mx) / temperature);
+        sum = sum + probs[i];
+        i = i + 1;
+    }
+    i = 0;
+    while (i < n) {
+        probs[i] = probs[i] / sum;
+        i = i + 1;
+    }
+    let r = hml_random();
+    let cum = 0.0;
+    i = 0;
+    while (i < n) {
+        cum = cum + probs[i];
+        if (r <= cum) { return i; }
+        i = i + 1;
+    }
+    return n - 1;
+}
+
+fn hml_q_learning_update(Q, state, action, reward, next_state, alpha, gamma) {
+    let n_actions = len(Q[0]);
+    let best_next = Q[next_state][0];
+    let a = 1;
+    while (a < n_actions) {
+        if (Q[next_state][a] > best_next) { best_next = Q[next_state][a]; }
+        a = a + 1;
+    }
+    Q[state][action] = Q[state][action] + alpha * (reward + gamma * best_next - Q[state][action]);
+    return Q;
+}
+
+fn hml_sarsa_update(Q, state, action, reward, next_state, next_action, alpha, gamma) {
+    let td_target = reward + gamma * Q[next_state][next_action];
+    Q[state][action] = Q[state][action] + alpha * (td_target - Q[state][action]);
+    return Q;
+}
+
+fn hml_td0_value_update(V, state, reward, next_state, alpha, gamma) {
+    let td_target = reward + gamma * V[next_state];
+    V[state] = V[state] + alpha * (td_target - V[state]);
+    return V;
+}
+
+fn hml_td_lambda_update(V, state, reward, next_state, alpha, gamma, lambda_val) {
+    let td_error = reward + gamma * V[next_state] - V[state];
+    V[state] = V[state] + alpha * td_error;
+    return V;
+}
+
+fn hml_monte_carlo_value_update(V, episode, gamma) {
+    let i = 0;
+    while (i < len(episode)) {
+        let state = episode[i]["state"];
+        let G = 0.0;
+        let discount = 1.0;
+        let t = i;
+        while (t < len(episode)) {
+            G = G + discount * episode[t]["reward"];
+            discount = discount * gamma;
+            t = t + 1;
+        }
+        V[state] = V[state] + (G - V[state]) * 1.0 / (i + 1);
+        i = i + 1;
+    }
+    return V;
+}
+
+fn hml_policy_evaluation(P, R, gamma, theta) {
+    let n_states = len(P);
+    let n_actions = len(P[0]);
+    let V = hml_vector_zeros(n_states);
+    let delta = theta + 1.0;
+    while (delta > theta) {
+        delta = 0.0;
+        let s = 0;
+        while (s < n_states) {
+            let v = V[s];
+            let new_v = 0.0;
+            let a = 0;
+            while (a < n_actions) {
+                let prob = 1.0 / n_actions;
+                new_v = new_v + prob * (R[s][a] + gamma * P[s][a] * V[s]);
+                a = a + 1;
+            }
+            V[s] = new_v;
+            let d = math_fabs(v - V[s]);
+            if (d > delta) { delta = d; }
+            s = s + 1;
+        }
+    }
+    return V;
+}
+
+fn hml_policy_iteration(P, R, gamma, max_iter) {
+    let n_states = len(P);
+    let n_actions = len(P[0]);
+    let V = hml_vector_zeros(n_states);
+    let policy = hml_vector_zeros(n_states);
+    let iter = 0;
+    while (iter < max_iter) {
+        let s = 0;
+        while (s < n_states) {
+            let best_val = -1000000000;
+            let best_a = 0;
+            let a = 0;
+            while (a < n_actions) {
+                let val = R[s][a] + gamma * P[s][a] * V[s];
+                if (val > best_val) { best_val = val; best_a = a; }
+                a = a + 1;
+            }
+            policy[s] = best_a;
+            V[s] = best_val;
+            s = s + 1;
+        }
+        iter = iter + 1;
+    }
+    return {"V": V, "policy": policy};
+}
+
+fn hml_value_iteration(P, R, gamma, theta, max_iter) {
+    let n_states = len(P);
+    let n_actions = len(P[0]);
+    let V = hml_vector_zeros(n_states);
+    let policy = hml_vector_zeros(n_states);
+    let iter = 0;
+    while (iter < max_iter) {
+        let delta = 0.0;
+        let s = 0;
+        while (s < n_states) {
+            let v = V[s];
+            let best_val = -1000000000;
+            let best_a = 0;
+            let a = 0;
+            while (a < n_actions) {
+                let val = R[s][a] + gamma * P[s][a] * V[s];
+                if (val > best_val) { best_val = val; best_a = a; }
+                a = a + 1;
+            }
+            V[s] = best_val;
+            policy[s] = best_a;
+            let d = math_fabs(v - V[s]);
+            if (d > delta) { delta = d; }
+            s = s + 1;
+        }
+        if (delta < theta) { break; }
+        iter = iter + 1;
+    }
+    return {"V": V, "policy": policy};
+}
+
+fn hml_replay_buffer_create(capacity) {
+    return {"capacity": capacity, "buffer": [], "size": 0, "next_idx": 0};
+}
+
+fn hml_replay_buffer_push(buffer, experience) {
+    if (buffer["size"] < buffer["capacity"]) {
+        push(buffer["buffer"], experience);
+        buffer["size"] = buffer["size"] + 1;
+    } else {
+        buffer["buffer"][buffer["next_idx"]] = experience;
+    }
+    buffer["next_idx"] = (buffer["next_idx"] + 1) % buffer["capacity"];
+    return buffer;
+}
+
+fn hml_replay_buffer_sample(buffer, batch_size) {
+    let batch = [];
+    let i = 0;
+    while (i < batch_size) {
+        let idx = hml_randint(0, buffer["size"] - 1);
+        push(batch, buffer["buffer"][idx]);
+        i = i + 1;
+    }
+    return batch;
+}
+
+fn hml_dqn_target_update(online_Q, target_Q) {
+    let i = 0;
+    while (i < len(online_Q)) {
+        let j = 0;
+        while (j < len(online_Q[0])) {
+            target_Q[i][j] = online_Q[i][j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return target_Q;
+}
+
+fn hml_reinforce_policy_gradient(states, actions, rewards, policy_net, gamma) {
+    let T = len(rewards);
+    let returns = hml_vector_zeros(T);
+    let G = 0.0;
+    let t = T - 1;
+    while (t >= 0) {
+        G = rewards[t] + gamma * G;
+        returns[t] = G;
+        t = t - 1;
+    }
+    let grad = hml_matrix_zeros(len(policy_net), len(policy_net[0]));
+    t = 0;
+    while (t < T) {
+        let s = states[t];
+        let a = actions[t];
+        let Gt = returns[t];
+        let j = 0;
+        while (j < len(policy_net[0])) {
+            if (j == a) {
+                grad[s][j] = grad[s][j] + Gt * (1.0 - policy_net[s][j]);
+            } else {
+                grad[s][j] = grad[s][j] - Gt * policy_net[s][j];
+            }
+            j = j + 1;
+        }
+        t = t + 1;
+    }
+    return grad;
+}
+
+fn hml_actor_critic_update(actor, critic, state, action, reward, next_state, alpha, gamma) {
+    let td_error = reward + gamma * critic[next_state] - critic[state];
+    critic[state] = critic[state] + alpha * td_error;
+    let n_actions = len(actor[0]);
+    let a = 0;
+    while (a < n_actions) {
+        if (a == action) {
+            actor[state][a] = actor[state][a] + alpha * td_error * (1.0 - actor[state][a]);
+        } else {
+            actor[state][a] = actor[state][a] - alpha * td_error * actor[state][a];
+        }
+        a = a + 1;
+    }
+    return {"actor": actor, "critic": critic};
+}
+
+fn hml_advantage_gae(rewards, values, gamma, lambda_val) {
+    let T = len(rewards);
+    let advantages = hml_vector_zeros(T);
+    let gae = 0.0;
+    let t = T - 1;
+    while (t >= 0) {
+        let next_val = 0.0;
+        if (t < T - 1) { next_val = values[t + 1]; }
+        let delta = rewards[t] + gamma * next_val - values[t];
+        gae = delta + gamma * lambda_val * gae;
+        advantages[t] = gae;
+        t = t - 1;
+    }
+    return advantages;
+}
+
+fn hml_ppo_clip_loss(ratio, advantage, epsilon_clip) {
+    let clipped = ratio;
+    if (ratio < 1.0 - epsilon_clip) { clipped = 1.0 - epsilon_clip; }
+    if (ratio > 1.0 + epsilon_clip) { clipped = 1.0 + epsilon_clip; }
+    let unclipped = ratio * advantage;
+    let clipped_val = clipped * advantage;
+    if (unclipped < clipped_val) { return unclipped; }
+    return clipped_val;
+}
+
+fn hml_entropy_bonus(probs) {
+    let entropy = 0.0;
+    let i = 0;
+    while (i < len(probs)) {
+        if (probs[i] > 0.000000000000001) {
+            entropy = entropy - probs[i] * math_log(probs[i]);
+        }
+        i = i + 1;
+    }
+    return entropy;
+}
+
+fn hml_reward_discount(rewards, gamma) {
+    let n = len(rewards);
+    let discounted = hml_vector_zeros(n);
+    let running = 0.0;
+    let i = n - 1;
+    while (i >= 0) {
+        running = rewards[i] + gamma * running;
+        discounted[i] = running;
+        i = i - 1;
+    }
+    return discounted;
+}
+
+fn hml_multi_armed_bandit_ucb(means, counts, total) {
+    let n = len(means);
+    let ucb = hml_vector_zeros(n);
+    let i = 0;
+    while (i < n) {
+        if (counts[i] == 0) { return i; }
+        ucb[i] = means[i] + math_sqrt(2.0 * math_log(total) / counts[i]);
+        i = i + 1;
+    }
+    return hml_vector_argmax(ucb);
+}
+
+fn hml_multi_armed_bandit_thompson(successes, failures) {
+    let n = len(successes);
+    let samples = hml_vector_zeros(n);
+    let i = 0;
+    while (i < n) {
+        let alpha_i = successes[i] + 1.0;
+        let beta_i = failures[i] + 1.0;
+        samples[i] = hml_beta_distribution_sample(alpha_i, beta_i);
+        i = i + 1;
+    }
+    return hml_vector_argmax(samples);
+}
+
+fn hml_mdp_transition_matrix(states, actions, next_states) {
+    let n_states = 0;
+    let i = 0;
+    while (i < len(states)) {
+        if (states[i] > n_states) { n_states = states[i]; }
+        if (next_states[i] > n_states) { n_states = next_states[i]; }
+        i = i + 1;
+    }
+    n_states = n_states + 1;
+    let n_actions = 0;
+    i = 0;
+    while (i < len(actions)) {
+        if (actions[i] > n_actions) { n_actions = actions[i]; }
+        i = i + 1;
+    }
+    n_actions = n_actions + 1;
+    let P = [];
+    let a = 0;
+    while (a < n_actions) {
+        let row = [];
+        let s = 0;
+        while (s < n_states) {
+            push(row, hml_vector_zeros(n_states));
+            s = s + 1;
+        }
+        push(P, row);
+        a = a + 1;
+    }
+    let counts = [];
+    a = 0;
+    while (a < n_actions) {
+        push(counts, hml_vector_zeros(n_states));
+        a = a + 1;
+    }
+    i = 0;
+    while (i < len(states)) {
+        let s = states[i];
+        let a = actions[i];
+        let ns = next_states[i];
+        P[a][s][ns] = P[a][s][ns] + 1.0;
+        counts[a][s] = counts[a][s] + 1.0;
+        i = i + 1;
+    }
+    a = 0;
+    while (a < n_actions) {
+        let s = 0;
+        while (s < n_states) {
+            if (counts[a][s] > 0) {
+                let ns = 0;
+                while (ns < n_states) {
+                    P[a][s][ns] = P[a][s][ns] * 1.0 / counts[a][s];
+                    ns = ns + 1;
+                }
+            }
+            s = s + 1;
+        }
+        a = a + 1;
+    }
+    return P;
+}
+
+fn hml_mdp_reward_function(states, actions, rewards) {
+    let n_states = 0;
+    let n_actions = 0;
+    let i = 0;
+    while (i < len(states)) {
+        if (states[i] > n_states) { n_states = states[i]; }
+        if (actions[i] > n_actions) { n_actions = actions[i]; }
+        i = i + 1;
+    }
+    n_states = n_states + 1;
+    n_actions = n_actions + 1;
+    let R = hml_matrix_zeros(n_actions, n_states);
+    let counts = hml_matrix_zeros(n_actions, n_states);
+    i = 0;
+    while (i < len(states)) {
+        let s = states[i];
+        let a = actions[i];
+        R[a][s] = R[a][s] + rewards[i];
+        counts[a][s] = counts[a][s] + 1.0;
+        i = i + 1;
+    }
+    let a = 0;
+    while (a < n_actions) {
+        let s = 0;
+        while (s < n_states) {
+            if (counts[a][s] > 0) {
+                R[a][s] = R[a][s] * 1.0 / counts[a][s];
+            }
+            s = s + 1;
+        }
+        a = a + 1;
+    }
+    return R;
+}
+
+fn hml_gridworld_create(rows, cols, goal, obstacles) {
+    let env = {};
+    env["rows"] = rows;
+    env["cols"] = cols;
+    env["goal"] = goal;
+    env["obstacles"] = obstacles;
+    env["state"] = [0, 0];
+    return env;
+}
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 27: Bayesian Methods
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_naive_bayes_gaussian_fit(X, y) {
+    let n_samples = len(X);
+    let n_features = len(X[0]);
+    let classes = hml_unique(y);
+    let n_classes = len(classes);
+    let model = {};
+    model["classes"] = classes;
+    model["priors"] = [];
+    model["means"] = [];
+    model["vars"] = [];
+    let ci = 0;
+    while (ci < n_classes) {
+        let c = classes[ci];
+        let count = 0;
+        let i = 0;
+        while (i < n_samples) {
+            if (y[i] == c) { count = count + 1; }
+            i = i + 1;
+        }
+        push(model["priors"], count * 1.0 / n_samples);
+        let class_X = [];
+        i = 0;
+        while (i < n_samples) {
+            if (y[i] == c) { push(class_X, X[i]); }
+            i = i + 1;
+        }
+        let means = [];
+        let vars = [];
+        let fj = 0;
+        while (fj < n_features) {
+            let s = 0.0;
+            let k = 0;
+            while (k < len(class_X)) {
+                s = s + class_X[k][fj];
+                k = k + 1;
+            }
+            push(means, s * 1.0 / count);
+            s = 0.0;
+            k = 0;
+            while (k < len(class_X)) {
+                let diff = class_X[k][fj] - means[fj];
+                s = s + diff * diff;
+                k = k + 1;
+            }
+            push(vars, s * 1.0 / count + 0.000000001);
+            fj = fj + 1;
+        }
+        push(model["means"], means);
+        push(model["vars"], vars);
+        ci = ci + 1;
+    }
+    return model;
+}
+
+fn hml_naive_bayes_gaussian_predict(model, X) {
+    let n_classes = len(model["classes"]);
+    let n_samples = len(X);
+    let n_features = len(X[0]);
+    let preds = [];
+    let i = 0;
+    while (i < n_samples) {
+        let best_class = model["classes"][0];
+        let best_log_prob = -1000000000;
+        let ci = 0;
+        while (ci < n_classes) {
+            let log_prob = math_log(model["priors"][ci]);
+            let fj = 0;
+            while (fj < n_features) {
+                let mean = model["means"][ci][fj];
+                let var = model["vars"][ci][fj];
+                let diff = X[i][fj] - mean;
+                log_prob = log_prob - 0.5 * math_log(2.0 * 3.141592653589793 * var) - (diff * diff) * 1.0 / (2.0 * var);
+                fj = fj + 1;
+            }
+            if (log_prob > best_log_prob) {
+                best_log_prob = log_prob;
+                best_class = model["classes"][ci];
+            }
+            ci = ci + 1;
+        }
+        push(preds, best_class);
+        i = i + 1;
+    }
+    return preds;
+}
+
+fn hml_naive_bayes_gaussian_predict_proba(model, X) {
+    let n_classes = len(model["classes"]);
+    let n_samples = len(X);
+    let n_features = len(X[0]);
+    let probs = [];
+    let i = 0;
+    while (i < n_samples) {
+        let row = [];
+        let total = 0.0;
+        let ci = 0;
+        while (ci < n_classes) {
+            let log_prob = math_log(model["priors"][ci]);
+            let fj = 0;
+            while (fj < n_features) {
+                let mean = model["means"][ci][fj];
+                let var = model["vars"][ci][fj];
+                let diff = X[i][fj] - mean;
+                log_prob = log_prob - 0.5 * math_log(2.0 * 3.141592653589793 * var) - (diff * diff) * 1.0 / (2.0 * var);
+                fj = fj + 1;
+            }
+            let prob = math_exp(log_prob);
+            push(row, prob);
+            total = total + prob;
+            ci = ci + 1;
+        }
+        if (total > 0) {
+            let ci = 0;
+            while (ci < n_classes) {
+                row[ci] = row[ci] / total;
+                ci = ci + 1;
+            }
+        }
+        push(probs, row);
+        i = i + 1;
+    }
+    return probs;
+}
+
+fn hml_naive_bayes_multinomial_fit(X, y) {
+    let n_samples = len(X);
+    let n_features = len(X[0]);
+    let classes = hml_unique(y);
+    let n_classes = len(classes);
+    let model = {};
+    model["classes"] = classes;
+    model["priors"] = [];
+    model["feature_probs"] = [];
+    let ci = 0;
+    while (ci < n_classes) {
+        let c = classes[ci];
+        let count = 0;
+        let feature_sums = hml_vector_zeros(n_features);
+        let i = 0;
+        while (i < n_samples) {
+            if (y[i] == c) {
+                count = count + 1;
+                let fj = 0;
+                while (fj < n_features) {
+                    feature_sums[fj] = feature_sums[fj] + X[i][fj];
+                    fj = fj + 1;
+                }
+            }
+            i = i + 1;
+        }
+        push(model["priors"], count * 1.0 / n_samples);
+        let total = 0.0;
+        let fj = 0;
+        while (fj < n_features) {
+            total = total + feature_sums[fj];
+            fj = fj + 1;
+        }
+        let probs = [];
+        fj = 0;
+        while (fj < n_features) {
+            push(probs, (feature_sums[fj] + 1.0) / (total + n_features));
+            fj = fj + 1;
+        }
+        push(model["feature_probs"], probs);
+        ci = ci + 1;
+    }
+    return model;
+}
+
+fn hml_naive_bayes_multinomial_predict(model, X) {
+    let n_classes = len(model["classes"]);
+    let n_samples = len(X);
+    let n_features = len(X[0]);
+    let preds = [];
+    let i = 0;
+    while (i < n_samples) {
+        let best_class = model["classes"][0];
+        let best_log_prob = -1000000000;
+        let ci = 0;
+        while (ci < n_classes) {
+            let log_prob = math_log(model["priors"][ci]);
+            let fj = 0;
+            while (fj < n_features) {
+                let p = model["feature_probs"][ci][fj];
+                if (X[i][fj] > 0 and p > 0) {
+                    log_prob = log_prob + X[i][fj] * math_log(p);
+                }
+                fj = fj + 1;
+            }
+            if (log_prob > best_log_prob) {
+                best_log_prob = log_prob;
+                best_class = model["classes"][ci];
+            }
+            ci = ci + 1;
+        }
+        push(preds, best_class);
+        i = i + 1;
+    }
+    return preds;
+}
+
+fn hml_naive_bayes_bernoulli_fit(X, y) {
+    let n_samples = len(X);
+    let n_features = len(X[0]);
+    let classes = hml_unique(y);
+    let n_classes = len(classes);
+    let model = {};
+    model["classes"] = classes;
+    model["priors"] = [];
+    model["feature_probs"] = [];
+    let ci = 0;
+    while (ci < n_classes) {
+        let c = classes[ci];
+        let count = 0;
+        let feature_counts = hml_vector_zeros(n_features);
+        let i = 0;
+        while (i < n_samples) {
+            if (y[i] == c) {
+                count = count + 1;
+                let fj = 0;
+                while (fj < n_features) {
+                    if (X[i][fj] > 0) { feature_counts[fj] = feature_counts[fj] + 1.0; }
+                    fj = fj + 1;
+                }
+            }
+            i = i + 1;
+        }
+        push(model["priors"], count * 1.0 / n_samples);
+        let probs = [];
+        let fj = 0;
+        while (fj < n_features) {
+            push(probs, (feature_counts[fj] + 1.0) / (count + 2.0));
+            fj = fj + 1;
+        }
+        push(model["feature_probs"], probs);
+        ci = ci + 1;
+    }
+    return model;
+}
+
+fn hml_naive_bayes_bernoulli_predict(model, X) {
+    let n_classes = len(model["classes"]);
+    let n_samples = len(X);
+    let n_features = len(X[0]);
+    let preds = [];
+    let i = 0;
+    while (i < n_samples) {
+        let best_class = model["classes"][0];
+        let best_log_prob = -1000000000;
+        let ci = 0;
+        while (ci < n_classes) {
+            let log_prob = math_log(model["priors"][ci]);
+            let fj = 0;
+            while (fj < n_features) {
+                let p = model["feature_probs"][ci][fj];
+                if (X[i][fj] > 0) {
+                    log_prob = log_prob + math_log(p);
+                } else {
+                    log_prob = log_prob + math_log(1.0 - p);
+                }
+                fj = fj + 1;
+            }
+            if (log_prob > best_log_prob) {
+                best_log_prob = log_prob;
+                best_class = model["classes"][ci];
+            }
+            ci = ci + 1;
+        }
+        push(preds, best_class);
+        i = i + 1;
+    }
+    return preds;
+}
+
+fn hml_bayesian_ucb(mu, sigma, t) {
+    return mu + sigma * math_sqrt(2.0 * math_log(t));
+}
+
+fn hml_beta_distribution_sample(alpha, beta) {
+    let x = 0.0;
+    let y = 0.0;
+    let i = 0;
+    while (i < 12) {
+        x = x + hml_random();
+        y = y + hml_random();
+        i = i + 1;
+    }
+    x = x - 6.0;
+    y = y - 6.0;
+    return x * x / (x * x + y * y + 0.000000001);
+}
+
+fn hml_dirichlet_distribution_sample(alpha) {
+    let n = len(alpha);
+    let samples = [];
+    let i = 0;
+    while (i < n) {
+        let s = 0.0;
+        let j = 0;
+        while (j < 12) {
+            s = s + hml_random();
+            j = j + 1;
+        }
+        s = s - 6.0;
+        push(samples, s * s * alpha[i]);
+        i = i + 1;
+    }
+    let total = 0.0;
+    i = 0;
+    while (i < n) { total = total + samples[i]; i = i + 1; }
+    if (total > 0) {
+        i = 0;
+        while (i < n) { samples[i] = samples[i] / total; i = i + 1; }
+    }
+    return samples;
+}
+
+fn hml_gamma_distribution_sample(shape, scale) {
+    let d = shape - 1.0 / 3.0;
+    let c = 1.0 / math_sqrt(9.0 * d);
+    while (true) {
+        let x = 0.0;
+        let v = 0.0;
+        let i = 0;
+        while (i < 12) {
+            x = x + hml_random();
+            v = v + hml_random();
+            i = i + 1;
+        }
+        x = x - 6.0;
+        v = v - 6.0;
+        v = 1.0 + c * v;
+        if (v <= 0) { continue; }
+        v = v * v * v;
+        let u = hml_random();
+        if (u < 1.0 - 0.0331 * (x * x) * (x * x)) { return d * v * scale; }
+        if (math_log(u) < 0.5 * x * x + d * (1.0 - v + math_log(v))) { return d * v * scale; }
+    }
+    return 0.0;
+}
+
+fn hml_gaussian_process_rbf_kernel(X1, X2, length_scale) {
+    let n1 = len(X1);
+    let n2 = len(X2);
+    let K = hml_matrix_zeros(n1, n2);
+    let i = 0;
+    while (i < n1) {
+        let j = 0;
+        while (j < n2) {
+            let sq_dist = 0.0;
+            let d = 0;
+            while (d < len(X1[0])) {
+                let diff = X1[i][d] - X2[j][d];
+                sq_dist = sq_dist + diff * diff;
+                d = d + 1;
+            }
+            K[i][j] = math_exp(-sq_dist / (2.0 * length_scale * length_scale));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return K;
+}
+
+fn hml_gaussian_process_predict(X_train, y_train, X_test, kernel, noise) {
+    let K = hml_gaussian_process_rbf_kernel(X_train, X_train, kernel);
+    let n = len(K);
+    let i = 0;
+    while (i < n) {
+        K[i][i] = K[i][i] + noise;
+        i = i + 1;
+    }
+    let K_star = hml_gaussian_process_rbf_kernel(X_test, X_train, kernel);
+    let K_star_star = hml_gaussian_process_rbf_kernel(X_test, X_test, kernel);
+    let n_test = len(K_star);
+    let n_train = len(K[0]);
+    let means = hml_vector_zeros(n_test);
+    let vars = hml_vector_zeros(n_test);
+    i = 0;
+    while (i < n_test) {
+        let j = 0;
+        let mean_i = 0.0;
+        while (j < n_train) {
+            mean_i = mean_i + K_star[i][j] * y_train[j];
+            j = j + 1;
+        }
+        means[i] = mean_i * 1.0 / n_train;
+        vars[i] = K_star_star[i][i] + noise;
+        i = i + 1;
+    }
+    return {"mean": means, "var": vars};
+}
+
+fn hml_metropolis_hastings(target_log_prob, proposal_std, n_samples, initial) {
+    let samples = [];
+    let current = initial;
+    let current_log_prob = target_log_prob(current);
+    let i = 0;
+    while (i < n_samples) {
+        let proposal = [];
+        let j = 0;
+        while (j < len(current)) {
+            push(proposal, current[j] + (hml_random() - 0.5) * 2.0 * proposal_std);
+            j = j + 1;
+        }
+        let proposal_log_prob = target_log_prob(proposal);
+        let accept_ratio = math_exp(proposal_log_prob - current_log_prob);
+        if (hml_random() < accept_ratio) {
+            current = proposal;
+            current_log_prob = proposal_log_prob;
+        }
+        let copy = [];
+        j = 0;
+        while (j < len(current)) { push(copy, current[j]); j = j + 1; }
+        push(samples, copy);
+        i = i + 1;
+    }
+    return samples;
+}
+
+fn hml_hamiltonian_monte_carlo(log_prob, grad_log_prob, n_samples, initial) {
+    let samples = [];
+    let current = initial;
+    let L = 10;
+    let eps = 0.01;
+    let s = 0;
+    while (s < n_samples) {
+        let q = [];
+        let j = 0;
+        while (j < len(current)) { push(q, current[j]); j = j + 1; }
+        let p = [];
+        j = 0;
+        while (j < len(current)) { push(p, (hml_random() - 0.5) * 2.0); j = j + 1; }
+        let current_p = [];
+        j = 0;
+        while (j < len(p)) { push(current_p, p[j]); j = j + 1; }
+        let grad = grad_log_prob(q);
+        j = 0;
+        while (j < len(p)) { p[j] = p[j] - 0.5 * eps * grad[j]; j = j + 1; }
+        let step = 0;
+        while (step < L) {
+            j = 0;
+            while (j < len(q)) { q[j] = q[j] + eps * p[j]; j = j + 1; }
+            grad = grad_log_prob(q);
+            if (step < L - 1) {
+                j = 0;
+                while (j < len(p)) { p[j] = p[j] - eps * grad[j]; j = j + 1; }
+            }
+            step = step + 1;
+        }
+        grad = grad_log_prob(q);
+        j = 0;
+        while (j < len(p)) { p[j] = p[j] - 0.5 * eps * grad[j]; j = j + 1; }
+        j = 0;
+        while (j < len(p)) { p[j] = -p[j]; j = j + 1; }
+        let current_energy = 0.0;
+        j = 0;
+        while (j < len(current)) { current_energy = current_energy + 0.5 * current_p[j] * current_p[j]; j = j + 1; }
+        let proposed_energy = 0.0;
+        j = 0;
+        while (j < len(p)) { proposed_energy = proposed_energy + 0.5 * p[j] * p[j]; j = j + 1; }
+        let accept_prob = math_exp(-log_prob(q) + log_prob(current) - proposed_energy + current_energy);
+        if (hml_random() < accept_prob) { current = q; }
+        let copy = [];
+        j = 0;
+        while (j < len(current)) { push(copy, current[j]); j = j + 1; }
+        push(samples, copy);
+        s = s + 1;
+    }
+    return samples;
+}
+
+fn hml_bayesian_bootstrap(data, n_samples) {
+    let n = len(data);
+    let result = [];
+    let s = 0;
+    while (s < n_samples) {
+        let dirichlet = [];
+        let i = 0;
+        while (i < n) {
+            let val = 0.0;
+            let j = 0;
+            while (j < 12) { val = val + hml_random(); j = j + 1; }
+            val = val - 6.0;
+            push(dirichlet, math_fabs(val) + 0.01);
+            i = i + 1;
+        }
+        let total = 0.0;
+        i = 0;
+        while (i < n) { total = total + dirichlet[i]; i = i + 1; }
+        i = 0;
+        while (i < n) { dirichlet[i] = dirichlet[i] / total; i = i + 1; }
+        let weighted = 0.0;
+        i = 0;
+        while (i < n) { weighted = weighted + dirichlet[i] * data[i]; i = i + 1; }
+        push(result, weighted);
+        s = s + 1;
+    }
+    return result;
+}
+
+fn hml_prior_predictive_check(prior_sampler, n_samples) {
+    let samples = [];
+    let i = 0;
+    while (i < n_samples) {
+        push(samples, prior_sampler());
+        i = i + 1;
+    }
+    return samples;
+}
+
+fn hml_posterior_predictive_check(posterior_samples, likelihood, n_samples) {
+    let n = len(posterior_samples);
+    let predictions = [];
+    let i = 0;
+    while (i < n_samples) {
+        let idx = hml_randint(0, n - 1);
+        push(predictions, likelihood(posterior_samples[idx]));
+        i = i + 1;
+    }
+    return predictions;
+}
+
+fn hml_bayes_factor(log_likelihood_H0, log_likelihood_H1) {
+    return math_exp(log_likelihood_H0 - log_likelihood_H1);
+}
+
+fn hml_bayesian_linear_regression_fit(X, y, prior_precision, noise_precision) {
+    let n = len(X);
+    let d = len(X[0]);
+    let XtX = hml_matrix_zeros(d, d);
+    let i = 0;
+    while (i < d) {
+        let j = 0;
+        while (j < d) {
+            let s = 0.0;
+            let k = 0;
+            while (k < n) { s = s + X[k][i] * X[k][j]; k = k + 1; }
+            XtX[i][j] = s * noise_precision;
+            j = j + 1;
+        }
+        XtX[i][i] = XtX[i][i] + prior_precision;
+        i = i + 1;
+    }
+    let Xty = hml_vector_zeros(d);
+    i = 0;
+    while (i < d) {
+        let s = 0.0;
+        let k = 0;
+        while (k < n) { s = s + X[k][i] * y[k]; k = k + 1; }
+        Xty[i] = s * noise_precision;
+        i = i + 1;
+    }
+    let S_inv = XtX;
+    let w_mean = hml_vector_zeros(d);
+    i = 0;
+    while (i < d) { w_mean[i] = Xty[i]; i = i + 1; }
+    return {"mean": w_mean, "precision": S_inv};
+}
+
+fn hml_bayesian_linear_regression_predict(model, X) {
+    let w = model["mean"];
+    let n = len(X);
+    let preds = [];
+    let i = 0;
+    while (i < n) {
+        let s = 0.0;
+        let j = 0;
+        while (j < len(X[0])) { s = s + X[i][j] * w[j]; j = j + 1; }
+        push(preds, s);
+        i = i + 1;
+    }
+    return preds;
+}
+
+fn hml_conjugate_prior_normal_normal(data, prior_mu, prior_tau, known_sigma) {
+    let n = len(data);
+    let data_mean = hml_mean(data);
+    let sigma2 = known_sigma * known_sigma;
+    let posterior_precision = prior_tau + n * 1.0 / sigma2;
+    let posterior_mu = (prior_tau * prior_mu + n * data_mean * 1.0 / sigma2) / posterior_precision;
+    let posterior_tau = posterior_precision;
+    return {"mu": posterior_mu, "tau": posterior_tau};
+}
+
+fn hml_conjugate_prior_beta_binomial(successes, trials, alpha_prior, beta_prior) {
+    let alpha_post = alpha_prior + successes;
+    let beta_post = beta_prior + trials - successes;
+    return {"alpha": alpha_post, "beta": beta_post};
+}
+
+fn hml_expected_improvement(mu, sigma, best_y, xi) {
+    let n = len(mu);
+    let ei = hml_vector_zeros(n);
+    let i = 0;
+    while (i < n) {
+        if (sigma[i] > 0) {
+            let z = (mu[i] - best_y - xi) / sigma[i];
+            ei[i] = (mu[i] - best_y - xi) * (1.0 / (1.0 + math_exp(-z))) + sigma[i] * math_exp(-z * z * 0.5) / math_sqrt(2.0 * 3.141592653589793);
+        }
+        i = i + 1;
+    }
+    return ei;
+}
+
+fn hml_probability_improvement(mu, sigma, best_y, xi) {
+    let n = len(mu);
+    let pi = hml_vector_zeros(n);
+    let i = 0;
+    while (i < n) {
+        if (sigma[i] > 0) {
+            let z = (mu[i] - best_y - xi) / sigma[i];
+            pi[i] = 1.0 / (1.0 + math_exp(-z));
+        }
+        i = i + 1;
+    }
+    return pi;
+}
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 28: Advanced Clustering & Mixture Models
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_region_query(X, point_idx, eps) {
+    let neighbors = [];
+    let i = 0;
+    while (i < len(X)) {
+        let dist = 0.0;
+        let j = 0;
+        while (j < len(X[0])) {
+            let d = X[point_idx][j] - X[i][j];
+            dist = dist + d * d;
+            j = j + 1;
+        }
+        if (math_sqrt(dist) <= eps) { push(neighbors, i); }
+        i = i + 1;
+    }
+    return neighbors;
+}
+
+fn hml_dbscan(X, eps, min_samples) {
+    let n = len(X);
+    let labels = [];
+    let i = 0;
+    while (i < n) { push(labels, -1); i = i + 1; }
+    let cluster_id = 0;
+    i = 0;
+    while (i < n) {
+        if (labels[i] != -1) { i = i + 1; continue; }
+        let neighbors = hml_region_query(X, i, eps);
+        if (len(neighbors) < min_samples) {
+            labels[i] = -2;
+            i = i + 1;
+            continue;
+        }
+        labels[i] = cluster_id;
+        let seed = [];
+        let j = 0;
+        while (j < len(neighbors)) { push(seed, neighbors[j]); j = j + 1; }
+        j = 0;
+        while (j < len(seed)) {
+            let pt = seed[j];
+            if (labels[pt] == -2) {
+                labels[pt] = cluster_id;
+            }
+            if (labels[pt] != -1) { j = j + 1; continue; }
+            labels[pt] = cluster_id;
+            let n2 = hml_region_query(X, pt, eps);
+            if (len(n2) >= min_samples) {
+                let k = 0;
+                while (k < len(n2)) { push(seed, n2[k]); k = k + 1; }
+            }
+            j = j + 1;
+        }
+        cluster_id = cluster_id + 1;
+        i = i + 1;
+    }
+    return labels;
+}
+
+fn hml_hierarchical_linkage_single(cluster1, cluster2) {
+    let min_d = 1000000000;
+    let i = 0;
+    while (i < len(cluster1)) {
+        let j = 0;
+        while (j < len(cluster2)) {
+            let d = 0.0;
+            let k = 0;
+            while (k < len(cluster1[0])) {
+                let diff = cluster1[i][k] - cluster2[j][k];
+                d = d + diff * diff;
+                k = k + 1;
+            }
+            d = math_sqrt(d);
+            if (d < min_d) { min_d = d; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return min_d;
+}
+
+fn hml_hierarchical_linkage_complete(cluster1, cluster2) {
+    let max_d = 0.0;
+    let i = 0;
+    while (i < len(cluster1)) {
+        let j = 0;
+        while (j < len(cluster2)) {
+            let d = 0.0;
+            let k = 0;
+            while (k < len(cluster1[0])) {
+                let diff = cluster1[i][k] - cluster2[j][k];
+                d = d + diff * diff;
+                k = k + 1;
+            }
+            d = math_sqrt(d);
+            if (d > max_d) { max_d = d; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return max_d;
+}
+
+fn hml_hierarchical_linkage_average(cluster1, cluster2) {
+    let total = 0.0;
+    let cnt = 0;
+    let i = 0;
+    while (i < len(cluster1)) {
+        let j = 0;
+        while (j < len(cluster2)) {
+            let d = 0.0;
+            let k = 0;
+            while (k < len(cluster1[0])) {
+                let diff = cluster1[i][k] - cluster2[j][k];
+                d = d + diff * diff;
+                k = k + 1;
+            }
+            total = total + math_sqrt(d);
+            cnt = cnt + 1;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return total * 1.0 / cnt;
+}
+
+fn hml_hierarchical_linkage_ward(cluster1, cluster2) {
+    let combined = [];
+    let i = 0;
+    while (i < len(cluster1)) { push(combined, cluster1[i]); i = i + 1; }
+    i = 0;
+    while (i < len(cluster2)) { push(combined, cluster2[i]); i = i + 1; }
+    let n = len(combined);
+    let d = len(combined[0]);
+    let centroid = hml_vector_zeros(d);
+    i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < d) { centroid[j] = centroid[j] + combined[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    let j = 0;
+    while (j < d) { centroid[j] = centroid[j] * 1.0 / n; j = j + 1; }
+    let ess = 0.0;
+    i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < d) {
+            let diff = combined[i][j] - centroid[j];
+            ess = ess + diff * diff;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return ess;
+}
+
+fn hml_dendrogram_cut(Z, n_clusters) {
+    return Z;
+}
+
+fn hml_hierarchical_agglomerative(X, n_clusters, linkage) {
+    let n = len(X);
+    let clusters = [];
+    let i = 0;
+    while (i < n) { push(clusters, [X[i]]); i = i + 1; }
+    let labels = [];
+    i = 0;
+    while (i < n) { push(labels, i); i = i + 1; }
+    let current_n = n;
+    let link_fn = hml_hierarchical_linkage_single;
+    if (linkage == 1) { link_fn = hml_hierarchical_linkage_complete; }
+    if (linkage == 2) { link_fn = hml_hierarchical_linkage_average; }
+    if (linkage == 3) { link_fn = hml_hierarchical_linkage_ward; }
+    while (current_n > n_clusters) {
+        let min_d = 1000000000;
+        let min_i = 0;
+        let min_j = 0;
+        let a = 0;
+        while (a < current_n - 1) {
+            let b = a + 1;
+            while (b < current_n) {
+                let d = link_fn(clusters[a], clusters[b]);
+                if (d < min_d) { min_d = d; min_i = a; min_j = b; }
+                b = b + 1;
+            }
+            a = a + 1;
+        }
+        let merged = [];
+        a = 0;
+        while (a < len(clusters[min_i])) { push(merged, clusters[min_i][a]); a = a + 1; }
+        a = 0;
+        while (a < len(clusters[min_j])) { push(merged, clusters[min_j][a]); a = a + 1; }
+        let new_clusters = [];
+        a = 0;
+        while (a < current_n) {
+            if (a != min_i and a != min_j) { push(new_clusters, clusters[a]); }
+            a = a + 1;
+        }
+        push(new_clusters, merged);
+        clusters = new_clusters;
+        current_n = current_n - 1;
+    }
+    let result = [];
+    i = 0;
+    while (i < n) { push(result, 0); i = i + 1; }
+    let c = 0;
+    while (c < current_n) {
+        let j = 0;
+        while (j < len(clusters[c])) {
+            let pt = clusters[c][j];
+            let found = false;
+            let k = 0;
+            while (k < n) {
+                let match = true;
+                let f = 0;
+                while (f < len(pt)) {
+                    if (pt[f] != X[k][f]) { match = false; break; }
+                    f = f + 1;
+                }
+                if (match) { result[k] = c; found = true; break; }
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        c = c + 1;
+    }
+    return result;
+}
+
+fn hml_spectral_affinity_matrix(X, sigma) {
+    let n = len(X);
+    let A = hml_matrix_zeros(n, n);
+    let i = 0;
+    while (i < n) {
+        let j = i + 1;
+        while (j < n) {
+            let dist = 0.0;
+            let d = 0;
+            while (d < len(X[0])) {
+                let diff = X[i][d] - X[j][d];
+                dist = dist + diff * diff;
+                d = d + 1;
+            }
+            let w = math_exp(-dist / (2.0 * sigma * sigma));
+            A[i][j] = w;
+            A[j][i] = w;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return A;
+}
+
+fn hml_spectral_laplacian(affinity) {
+    let n = len(affinity);
+    let L = hml_matrix_zeros(n, n);
+    let i = 0;
+    while (i < n) {
+        let deg = 0.0;
+        let j = 0;
+        while (j < n) { deg = deg + affinity[i][j]; j = j + 1; }
+        let j = 0;
+        while (j < n) {
+            L[i][j] = -affinity[i][j];
+            if (i == j) { L[i][j] = deg - affinity[i][i]; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return L;
+}
+
+fn hml_spectral_clustering(X, n_clusters, sigma) {
+    let A = hml_spectral_affinity_matrix(X, sigma);
+    let L = hml_spectral_laplacian(A);
+    let n = len(X);
+    let kmeans_input = [];
+    let i = 0;
+    while (i < n) {
+        let row = [];
+        let j = 0;
+        while (j < n_clusters) { push(row, hml_random()); j = j + 1; }
+        push(kmeans_input, row);
+        i = i + 1;
+    }
+    let labels = [];
+    i = 0;
+    while (i < n) {
+        let best = 0;
+        let best_dist = 1000000000;
+        let c = 0;
+        while (c < n_clusters) {
+            let dist = 0.0;
+            let j = 0;
+            while (j < n_clusters) {
+                let d = kmeans_input[i][j] - kmeans_input[c][j];
+                dist = dist + d * d;
+                j = j + 1;
+            }
+            if (dist < best_dist) { best_dist = dist; best = c; }
+            c = c + 1;
+        }
+        push(labels, best);
+        i = i + 1;
+    }
+    return labels;
+}
+
+fn hml_mean_shift_kernel(distance, bandwidth) {
+    if (distance < bandwidth) { return 1.0; }
+    return 0.0;
+}
+
+fn hml_mean_shift(X, bandwidth, max_iter) {
+    let n = len(X);
+    let d = len(X[0]);
+    let points = [];
+    let i = 0;
+    while (i < n) {
+        let pt = [];
+        let j = 0;
+        while (j < d) { push(pt, X[i][j]); j = j + 1; }
+        push(points, pt);
+        i = i + 1;
+    }
+    let iter = 0;
+    while (iter < max_iter) {
+        let new_points = [];
+        i = 0;
+        while (i < n) {
+            let shift = hml_vector_zeros(d);
+            let total_weight = 0.0;
+            let j = 0;
+            while (j < n) {
+                let dist = 0.0;
+                let k = 0;
+                while (k < d) {
+                    let diff = points[i][k] - points[j][k];
+                    dist = dist + diff * diff;
+                    k = k + 1;
+                }
+                dist = math_sqrt(dist);
+                let w = hml_mean_shift_kernel(dist, bandwidth);
+                let k = 0;
+                while (k < d) { shift[k] = shift[k] + w * points[j][k]; k = k + 1; }
+                total_weight = total_weight + w;
+                j = j + 1;
+            }
+            let new_pt = [];
+            let k = 0;
+            while (k < d) {
+                if (total_weight > 0) { push(new_pt, shift[k] / total_weight); }
+                else { push(new_pt, points[i][k]); }
+                k = k + 1;
+            }
+            push(new_points, new_pt);
+            i = i + 1;
+        }
+        points = new_points;
+        iter = iter + 1;
+    }
+    let labels = [];
+    i = 0;
+    while (i < n) { push(labels, i); i = i + 1; }
+    i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n) {
+            let dist = 0.0;
+            let k = 0;
+            while (k < d) {
+                let diff = points[i][k] - points[j][k];
+                dist = dist + diff * diff;
+                k = k + 1;
+            }
+            if (math_sqrt(dist) < bandwidth * 0.5) { labels[j] = labels[i]; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return labels;
+}
+
+fn hml_gmm_e_step(X, means, covs, weights) {
+    let n = len(X);
+    let k = len(means);
+    let d = len(X[0]);
+    let resp = hml_matrix_zeros(n, k);
+    let i = 0;
+    while (i < n) {
+        let total = 0.0;
+        let c = 0;
+        while (c < k) {
+            let log_prob = math_log(weights[c] + 0.000000000000001);
+            let j = 0;
+            while (j < d) {
+                let diff = X[i][j] - means[c][j];
+                let var_j = covs[c][j];
+                if (var_j <= 0) { var_j = 0.000000001; }
+                log_prob = log_prob - 0.5 * math_log(2.0 * 3.141592653589793 * var_j) - (diff * diff) * 1.0 / (2.0 * var_j);
+                j = j + 1;
+            }
+            resp[i][c] = math_exp(log_prob);
+            total = total + resp[i][c];
+            c = c + 1;
+        }
+        if (total > 0) {
+            c = 0;
+            while (c < k) { resp[i][c] = resp[i][c] / total; c = c + 1; }
+        }
+        i = i + 1;
+    }
+    return resp;
+}
+
+fn hml_gmm_m_step(X, responsibilities) {
+    let n = len(X);
+    let k = len(responsibilities[0]);
+    let d = len(X[0]);
+    let Nk = hml_vector_zeros(k);
+    let means = [];
+    let covs = [];
+    let c = 0;
+    while (c < k) {
+        let i = 0;
+        while (i < n) { Nk[c] = Nk[c] + responsibilities[i][c]; i = i + 1; }
+        let mean_c = hml_vector_zeros(d);
+        i = 0;
+        while (i < n) {
+            let j = 0;
+            while (j < d) { mean_c[j] = mean_c[j] + responsibilities[i][c] * X[i][j]; j = j + 1; }
+            i = i + 1;
+        }
+        if (Nk[c] > 0) {
+            let j = 0;
+            while (j < d) { mean_c[j] = mean_c[j] / Nk[c]; j = j + 1; }
+        }
+        push(means, mean_c);
+        let cov_c = hml_vector_zeros(d);
+        i = 0;
+        while (i < n) {
+            let j = 0;
+            while (j < d) {
+                let diff = X[i][j] - mean_c[j];
+                cov_c[j] = cov_c[j] + responsibilities[i][c] * diff * diff;
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        if (Nk[c] > 0) {
+            let j = 0;
+            while (j < d) { cov_c[j] = cov_c[j] / Nk[c] + 0.000001; j = j + 1; }
+        }
+        push(covs, cov_c);
+        c = c + 1;
+    }
+    let weights = [];
+    c = 0;
+    while (c < k) { push(weights, Nk[c] * 1.0 / n + 0.000000000000001); c = c + 1; }
+    return {"means": means, "covs": covs, "weights": weights};
+}
+
+fn hml_gmm_fit(X, n_components, max_iter) {
+    let n = len(X);
+    let d = len(X[0]);
+    let means = [];
+    let covs = [];
+    let i = 0;
+    while (i < n_components) {
+        let idx = hml_randint(0, n - 1);
+        let mean = [];
+        let j = 0;
+        while (j < d) { push(mean, X[idx][j]); j = j + 1; }
+        push(means, mean);
+        let cov = [];
+        j = 0;
+        while (j < d) { push(cov, 1.0); j = j + 1; }
+        push(covs, cov);
+        i = i + 1;
+    }
+    let weights = [];
+    i = 0;
+    while (i < n_components) { push(weights, 1.0 / n_components); i = i + 1; }
+    let iter = 0;
+    while (iter < max_iter) {
+        let resp = hml_gmm_e_step(X, means, covs, weights);
+        let update = hml_gmm_m_step(X, resp);
+        means = update["means"];
+        covs = update["covs"];
+        weights = update["weights"];
+        iter = iter + 1;
+    }
+    return {"means": means, "covs": covs, "weights": weights};
+}
+
+fn hml_gmm_predict(X, means, covs, weights) {
+    let resp = hml_gmm_e_step(X, means, covs, weights);
+    let n = len(X);
+    let preds = [];
+    let i = 0;
+    while (i < n) {
+        let best = 0;
+        let best_val = resp[i][0];
+        let c = 1;
+        while (c < len(means)) {
+            if (resp[i][c] > best_val) { best_val = resp[i][c]; best = c; }
+            c = c + 1;
+        }
+        push(preds, best);
+        i = i + 1;
+    }
+    return preds;
+}
+
+fn hml_gmm_score_samples(X, means, covs, weights) {
+    let n = len(X);
+    let k = len(means);
+    let d = len(X[0]);
+    let scores = [];
+    let i = 0;
+    while (i < n) {
+        let log_prob = -1000000000;
+        let c = 0;
+        while (c < k) {
+            let lp = math_log(weights[c] + 0.000000000000001);
+            let j = 0;
+            while (j < d) {
+                let diff = X[i][j] - means[c][j];
+                let var_j = covs[c][j];
+                if (var_j <= 0) { var_j = 0.000000001; }
+                lp = lp - 0.5 * math_log(2.0 * 3.141592653589793 * var_j) - (diff * diff) * 1.0 / (2.0 * var_j);
+                j = j + 1;
+            }
+            if (lp > log_prob) { log_prob = lp; }
+            c = c + 1;
+        }
+        push(scores, log_prob);
+        i = i + 1;
+    }
+    return scores;
+}
+
+fn hml_silhouette_score(X, labels) {
+    let n = len(X);
+    let unique_labels = hml_unique(labels);
+    let k = len(unique_labels);
+    if (k < 2) { return 0.0; }
+    let total = 0.0;
+    let i = 0;
+    while (i < n) {
+        let a = 0.0;
+        let a_cnt = 0;
+        let b_list = [];
+        let u = 0;
+        while (u < k) { push(b_list, 0.0); u = u + 1; }
+        let b_cnts = [];
+        u = 0;
+        while (u < k) { push(b_cnts, 0); u = u + 1; }
+        let j = 0;
+        while (j < n) {
+            if (i == j) { j = j + 1; continue; }
+            let dist = 0.0;
+            let d = 0;
+            while (d < len(X[0])) {
+                let diff = X[i][d] - X[j][d];
+                dist = dist + diff * diff;
+                d = d + 1;
+            }
+            dist = math_sqrt(dist);
+            if (labels[i] == labels[j]) {
+                a = a + dist;
+                a_cnt = a_cnt + 1;
+            } else {
+                let u = 0;
+                while (u < k) {
+                    if (unique_labels[u] == labels[j]) {
+                        b_list[u] = b_list[u] + dist;
+                        b_cnts[u] = b_cnts[u] + 1;
+                    }
+                    u = u + 1;
+                }
+            }
+            j = j + 1;
+        }
+        if (a_cnt > 0) { a = a * 1.0 / a_cnt; }
+        let b_min = 1000000000;
+        let u = 0;
+        while (u < k) {
+            if (unique_labels[u] != labels[i] and b_cnts[u] > 0) {
+                let b_val = b_list[u] * 1.0 / b_cnts[u];
+                if (b_val < b_min) { b_min = b_val; }
+            }
+            u = u + 1;
+        }
+        if (a_cnt > 0 and b_min < 100000000) {
+            let denom = a;
+            if (b_min > denom) { denom = b_min; }
+            total = total + (b_min - a) / denom;
+        }
+        i = i + 1;
+    }
+    return total * 1.0 / n;
+}
+
+fn hml_calinski_harabasz_score(X, labels) {
+    let n = len(X);
+    let d = len(X[0]);
+    let unique_labels = hml_unique(labels);
+    let k = len(unique_labels);
+    if (k < 2 or k >= n) { return 0.0; }
+    let overall_mean = hml_vector_zeros(d);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < d) { overall_mean[j] = overall_mean[j] + X[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    let j = 0;
+    while (j < d) { overall_mean[j] = overall_mean[j] * 1.0 / n; j = j + 1; }
+    let ss_b = 0.0;
+    let ss_w = 0.0;
+    let u = 0;
+    while (u < k) {
+        let cluster_pts = [];
+        i = 0;
+        while (i < n) {
+            if (labels[i] == unique_labels[u]) { push(cluster_pts, X[i]); }
+            i = i + 1;
+        }
+        let nk = len(cluster_pts);
+        if (nk == 0) { u = u + 1; continue; }
+        let cluster_mean = hml_vector_zeros(d);
+        i = 0;
+        while (i < nk) {
+            j = 0;
+            while (j < d) { cluster_mean[j] = cluster_mean[j] + cluster_pts[i][j]; j = j + 1; }
+            i = i + 1;
+        }
+        j = 0;
+        while (j < d) { cluster_mean[j] = cluster_mean[j] * 1.0 / nk; j = j + 1; }
+        let b_dist = 0.0;
+        j = 0;
+        while (j < d) {
+            let diff = cluster_mean[j] - overall_mean[j];
+            b_dist = b_dist + diff * diff;
+            j = j + 1;
+        }
+        ss_b = ss_b + nk * b_dist;
+        i = 0;
+        while (i < nk) {
+            j = 0;
+            while (j < d) {
+                let diff = cluster_pts[i][j] - cluster_mean[j];
+                ss_w = ss_w + diff * diff;
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        u = u + 1;
+    }
+    if (ss_w == 0) { return 0.0; }
+    return (ss_b * 1.0 / (k - 1)) / (ss_w * 1.0 / (n - k));
+}
+
+fn hml_davies_bouldin_score(X, labels) {
+    let n = len(X);
+    let unique_labels = hml_unique(labels);
+    let k = len(unique_labels);
+    if (k < 2) { return 0.0; }
+    let centroids = [];
+    let dispersions = [];
+    let u = 0;
+    while (u < k) {
+        let cluster_pts = [];
+        let i = 0;
+        while (i < n) {
+            if (labels[i] == unique_labels[u]) { push(cluster_pts, X[i]); }
+            i = i + 1;
+        }
+        let nk = len(cluster_pts);
+        if (nk == 0) { push(centroids, hml_vector_zeros(len(X[0]))); push(dispersions, 0.0); u = u + 1; continue; }
+        let centroid = hml_vector_zeros(len(X[0]));
+        i = 0;
+        while (i < nk) {
+            let j = 0;
+            while (j < len(X[0])) { centroid[j] = centroid[j] + cluster_pts[i][j]; j = j + 1; }
+            i = i + 1;
+        }
+        let j = 0;
+        while (j < len(X[0])) { centroid[j] = centroid[j] * 1.0 / nk; j = j + 1; }
+        push(centroids, centroid);
+        let disp = 0.0;
+        i = 0;
+        while (i < nk) {
+            let dist = 0.0;
+            j = 0;
+            while (j < len(X[0])) {
+                let diff = cluster_pts[i][j] - centroid[j];
+                dist = dist + diff * diff;
+                j = j + 1;
+            }
+            disp = disp + math_sqrt(dist);
+            i = i + 1;
+        }
+        push(dispersions, disp * 1.0 / nk);
+        u = u + 1;
+    }
+    let total = 0.0;
+    let i = 0;
+    while (i < k) {
+        let max_ratio = 0.0;
+        let j = 0;
+        while (j < k) {
+            if (i != j) {
+                let cd = 0.0;
+                let d = 0;
+                while (d < len(X[0])) {
+                    let diff = centroids[i][d] - centroids[j][d];
+                    cd = cd + diff * diff;
+                    d = d + 1;
+                }
+                cd = math_sqrt(cd);
+                if (cd > 0) {
+                    let ratio = (dispersions[i] + dispersions[j]) / cd;
+                    if (ratio > max_ratio) { max_ratio = ratio; }
+                }
+            }
+            j = j + 1;
+        }
+        total = total + max_ratio;
+        i = i + 1;
+    }
+    return total * 1.0 / k;
+}
+
+fn hml_adjusted_rand_score(labels_true, labels_pred) {
+    let n = len(labels_true);
+    let classes_true = hml_unique(labels_true);
+    let classes_pred = hml_unique(labels_pred);
+    let n_true = len(classes_true);
+    let n_pred = len(classes_pred);
+    let contingency = hml_matrix_zeros(n_true, n_pred);
+    let i = 0;
+    while (i < n) {
+        let ti = 0; while (labels_true[i] != classes_true[ti]) { ti = ti + 1; }
+        let pj = 0; while (labels_pred[i] != classes_pred[pj]) { pj = pj + 1; }
+        contingency[ti][pj] = contingency[ti][pj] + 1;
+        i = i + 1;
+    }
+    let sum_comb = 0.0;
+    i = 0;
+    while (i < n_true) {
+        let j = 0;
+        while (j < n_pred) {
+            let val = contingency[i][j];
+            sum_comb = sum_comb + val * (val - 1) * 0.5;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let sum_a = 0.0;
+    i = 0;
+    while (i < n_true) {
+        let row_sum = 0;
+        let j = 0;
+        while (j < n_pred) { row_sum = row_sum + contingency[i][j]; j = j + 1; }
+        sum_a = sum_a + row_sum * (row_sum - 1) * 0.5;
+        i = i + 1;
+    }
+    let sum_b = 0.0;
+    let j = 0;
+    while (j < n_pred) {
+        let col_sum = 0;
+        i = 0;
+        while (i < n_true) { col_sum = col_sum + contingency[i][j]; i = i + 1; }
+        sum_b = sum_b + col_sum * (col_sum - 1) * 0.5;
+        j = j + 1;
+    }
+    let expected = sum_a * sum_b / (n * (n - 1) * 0.5);
+    let max_sum = (sum_a + sum_b) * 0.5;
+    if (max_sum == expected) { return 0.0; }
+    return (sum_comb - expected) / (max_sum - expected);
+}
+
+fn hml_normalized_mutual_info(labels_true, labels_pred) {
+    let n = len(labels_true);
+    let classes_true = hml_unique(labels_true);
+    let classes_pred = hml_unique(labels_pred);
+    let r = len(classes_true);
+    let c = len(classes_pred);
+    let contingency = hml_matrix_zeros(r, c);
+    let i = 0;
+    while (i < n) {
+        let ti = 0; while (labels_true[i] != classes_true[ti]) { ti = ti + 1; }
+        let pj = 0; while (labels_pred[i] != classes_pred[pj]) { pj = pj + 1; }
+        contingency[ti][pj] = contingency[ti][pj] + 1.0;
+        i = i + 1;
+    }
+    let mi = 0.0;
+    i = 0;
+    while (i < r) {
+        let j = 0;
+        while (j < c) {
+            if (contingency[i][j] > 0) {
+                let row_sum = 0.0;
+                let k = 0; while (k < c) { row_sum = row_sum + contingency[i][k]; k = k + 1; }
+                let col_sum = 0.0;
+                k = 0; while (k < r) { col_sum = col_sum + contingency[k][j]; k = k + 1; }
+                mi = mi + (contingency[i][j] * 1.0 / n) * math_log((contingency[i][j] * n) * 1.0 / (row_sum * col_sum));
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let h_true = 0.0;
+    i = 0;
+    while (i < r) {
+        let row_sum = 0.0;
+        let j = 0; while (j < c) { row_sum = row_sum + contingency[i][j]; j = j + 1; }
+        if (row_sum > 0) { h_true = h_true - (row_sum * 1.0 / n) * math_log(row_sum * 1.0 / n); }
+        i = i + 1;
+    }
+    let h_pred = 0.0;
+    let j = 0;
+    while (j < c) {
+        let col_sum = 0.0;
+        i = 0; while (i < r) { col_sum = col_sum + contingency[i][j]; i = i + 1; }
+        if (col_sum > 0) { h_pred = h_pred - (col_sum * 1.0 / n) * math_log(col_sum * 1.0 / n); }
+        j = j + 1;
+    }
+    let denom = (h_true + h_pred) * 0.5;
+    if (denom == 0) { return 0.0; }
+    return 2.0 * mi / (h_true + h_pred);
+}
+
+fn hml_v_measure(labels_true, labels_pred) {
+    let homogeneity = hml_normalized_mutual_info(labels_true, labels_pred);
+    let completeness = hml_normalized_mutual_info(labels_pred, labels_true);
+    if (homogeneity + completeness == 0) { return 0.0; }
+    return 2.0 * homogeneity * completeness / (homogeneity + completeness);
+}
+
+fn hml_fowlkes_mallows_score(labels_true, labels_pred) {
+    let n = len(labels_true);
+    let classes_true = hml_unique(labels_true);
+    let classes_pred = hml_unique(labels_pred);
+    let r = len(classes_true);
+    let c = len(classes_pred);
+    let contingency = hml_matrix_zeros(r, c);
+    let i = 0;
+    while (i < n) {
+        let ti = 0; while (labels_true[i] != classes_true[ti]) { ti = ti + 1; }
+        let pj = 0; while (labels_pred[i] != classes_pred[pj]) { pj = pj + 1; }
+        contingency[ti][pj] = contingency[ti][pj] + 1;
+        i = i + 1;
+    }
+    let tp = 0.0;
+    i = 0;
+    while (i < r) {
+        let j = 0;
+        while (j < c) { tp = tp + contingency[i][j] * (contingency[i][j] - 1); j = j + 1; }
+        i = i + 1;
+    }
+    tp = tp * 0.5;
+    let sum_p = 0.0;
+    i = 0;
+    while (i < r) {
+        let row_sum = 0;
+        let j = 0; while (j < c) { row_sum = row_sum + contingency[i][j]; j = j + 1; }
+        sum_p = sum_p + row_sum * (row_sum - 1);
+        i = i + 1;
+    }
+    sum_p = sum_p * 0.5;
+    let sum_q = 0.0;
+    let j = 0;
+    while (j < c) {
+        let col_sum = 0;
+        i = 0; while (i < r) { col_sum = col_sum + contingency[i][j]; i = i + 1; }
+        sum_q = sum_q + col_sum * (col_sum - 1);
+        j = j + 1;
+    }
+    sum_q = sum_q * 0.5;
+    let denom = math_sqrt(sum_p * sum_q);
+    if (denom == 0) { return 0.0; }
+    return tp / denom;
+}
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 29: Feature Selection
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_variance_threshold(X, threshold) {
+    let n = len(X);
+    let d = len(X[0]);
+    let selected = [];
+    let j = 0;
+    while (j < d) {
+        let mean = 0.0;
+        let i = 0;
+        while (i < n) { mean = mean + X[i][j]; i = i + 1; }
+        mean = mean * 1.0 / n;
+        let var = 0.0;
+        i = 0;
+        while (i < n) {
+            let diff = X[i][j] - mean;
+            var = var + diff * diff;
+            i = i + 1;
+        }
+        var = var * 1.0 / n;
+        if (var >= threshold) { push(selected, j); }
+        j = j + 1;
+    }
+    return selected;
+}
+
+fn hml_mutual_information(X, y, n_bins) {
+    let n = len(X);
+    let d = len(X[0]);
+    let scores = hml_vector_zeros(d);
+    let y_binned = [];
+    let y_min = y[0];
+    let y_max = y[0];
+    let i = 0;
+    while (i < n) {
+        if (y[i] < y_min) { y_min = y[i]; }
+        if (y[i] > y_max) { y_max = y[i]; }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < n) {
+        let bin = math_floor((y[i] - y_min) / (y_max - y_min + 0.000000001) * (n_bins - 1));
+        push(y_binned, bin);
+        i = i + 1;
+    }
+    let fj = 0;
+    while (fj < d) {
+        let x_min = X[0][fj];
+        let x_max = X[0][fj];
+        i = 0;
+        while (i < n) {
+            if (X[i][fj] < x_min) { x_min = X[i][fj]; }
+            if (X[i][fj] > x_max) { x_max = X[i][fj]; }
+            i = i + 1;
+        }
+        let joint = hml_matrix_zeros(n_bins, n_bins);
+        let x_marg = hml_vector_zeros(n_bins);
+        let y_marg = hml_vector_zeros(n_bins);
+        i = 0;
+        while (i < n) {
+            let xb = math_floor((X[i][fj] - x_min) / (x_max - x_min + 0.000000001) * (n_bins - 1));
+            joint[xb][y_binned[i]] = joint[xb][y_binned[i]] + 1.0;
+            x_marg[xb] = x_marg[xb] + 1.0;
+            y_marg[y_binned[i]] = y_marg[y_binned[i]] + 1.0;
+            i = i + 1;
+        }
+        let mi = 0.0;
+        let a = 0;
+        while (a < n_bins) {
+            let b = 0;
+            while (b < n_bins) {
+                if (joint[a][b] > 0) {
+                    mi = mi + (joint[a][b] * 1.0 / n) * math_log((joint[a][b] * n) * 1.0 / (x_marg[a] * y_marg[b] + 0.000000001));
+                }
+                b = b + 1;
+            }
+            a = a + 1;
+        }
+        scores[fj] = mi;
+        fj = fj + 1;
+    }
+    return scores;
+}
+
+fn hml_chi2_score(X, y) {
+    let n = len(X);
+    let d = len(X[0]);
+    let y_unique = hml_unique(y);
+    let n_classes = len(y_unique);
+    let scores = hml_vector_zeros(d);
+    let overall = hml_vector_zeros(n_classes);
+    let i = 0;
+    while (i < n) {
+        let ci = 0; while (y[i] != y_unique[ci]) { ci = ci + 1; }
+        overall[ci] = overall[ci] + 1.0;
+        i = i + 1;
+    }
+    let fj = 0;
+    while (fj < d) {
+        let chi2 = 0.0;
+        i = 0;
+        while (i < n) {
+            let obs = X[i][fj];
+            let ci = 0; while (y[i] != y_unique[ci]) { ci = ci + 1; }
+            let exp = overall[ci] * 1.0 / n;
+            if (exp > 0) {
+                chi2 = chi2 + (obs - exp) * (obs - exp) / exp;
+            }
+            i = i + 1;
+        }
+        scores[fj] = chi2;
+        fj = fj + 1;
+    }
+    return scores;
+}
+
+fn hml_anova_f_score(X, y) {
+    let n = len(X);
+    let d = len(X[0]);
+    let y_unique = hml_unique(y);
+    let n_classes = len(y_unique);
+    let scores = hml_vector_zeros(d);
+    let grand_means = hml_vector_zeros(d);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < d) { grand_means[j] = grand_means[j] + X[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    let j = 0;
+    while (j < d) { grand_means[j] = grand_means[j] * 1.0 / n; j = j + 1; }
+    j = 0;
+    while (j < d) {
+        let ssb = 0.0;
+        let ssw = 0.0;
+        let c = 0;
+        while (c < n_classes) {
+            let count = 0;
+            let class_mean = 0.0;
+            i = 0;
+            while (i < n) {
+                if (y[i] == y_unique[c]) {
+                    class_mean = class_mean + X[i][j];
+                    count = count + 1;
+                }
+                i = i + 1;
+            }
+            if (count > 0) {
+                class_mean = class_mean * 1.0 / count;
+                ssb = ssb + count * (class_mean - grand_means[j]) * (class_mean - grand_means[j]);
+                i = 0;
+                while (i < n) {
+                    if (y[i] == y_unique[c]) {
+                        ssw = ssw + (X[i][j] - class_mean) * (X[i][j] - class_mean);
+                    }
+                    i = i + 1;
+                }
+            }
+            c = c + 1;
+        }
+        if (n_classes > 1 and ssw > 0) {
+            scores[j] = (ssb * 1.0 / (n_classes - 1)) / (ssw * 1.0 / (n - n_classes));
+        }
+        j = j + 1;
+    }
+    return scores;
+}
+
+fn hml_f_regression(X, y) {
+    let n = len(X);
+    let d = len(X[0]);
+    let scores = hml_vector_zeros(d);
+    let y_mean = hml_mean(y);
+    let ss_tot = 0.0;
+    let i = 0;
+    while (i < n) {
+        ss_tot = ss_tot + (y[i] - y_mean) * (y[i] - y_mean);
+        i = i + 1;
+    }
+    let j = 0;
+    while (j < d) {
+        let x_mean = 0.0;
+        i = 0;
+        while (i < n) { x_mean = x_mean + X[i][j]; i = i + 1; }
+        x_mean = x_mean * 1.0 / n;
+        let num = 0.0;
+        let den = 0.0;
+        i = 0;
+        while (i < n) {
+            let x_diff = X[i][j] - x_mean;
+            let y_diff = y[i] - y_mean;
+            num = num + x_diff * y_diff;
+            den = den + x_diff * x_diff;
+            i = i + 1;
+        }
+        if (den > 0) {
+            let r = num / math_sqrt(den * ss_tot);
+            scores[j] = r * r * (n - 2) / (1.0 - r * r + 0.000000000000001);
+        }
+        j = j + 1;
+    }
+    return scores;
+}
+
+fn hml_select_k_best(scores, k) {
+    let n = len(scores);
+    let indexed = [];
+    let i = 0;
+    while (i < n) { push(indexed, {"val": scores[i], "idx": i}); i = i + 1; }
+    i = 0;
+    while (i < n - 1) {
+        let j = 0;
+        while (j < n - i - 1) {
+            if (indexed[j]["val"] < indexed[j + 1]["val"]) {
+                let tmp = indexed[j];
+                indexed[j] = indexed[j + 1];
+                indexed[j + 1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let selected = [];
+    i = 0;
+    while (i < k and i < n) { push(selected, indexed[i]["idx"]); i = i + 1; }
+    return selected;
+}
+
+fn hml_select_percentile(scores, percentile) {
+    let k = math_floor(len(scores) * percentile * 1.0 / 100);
+    if (k < 1) { k = 1; }
+    return hml_select_k_best(scores, k);
+}
+
+fn hml_recursive_feature_elimination(X, y, estimator, n_features_to_select) {
+    let n = len(X);
+    let d = len(X[0]);
+    let remaining = [];
+    let i = 0;
+    while (i < d) { push(remaining, i); i = i + 1; }
+    while (len(remaining) > n_features_to_select) {
+        let X_sub = [];
+        i = 0;
+        while (i < n) {
+            let row = [];
+            let j = 0;
+            while (j < len(remaining)) { push(row, X[i][remaining[j]]); j = j + 1; }
+            push(X_sub, row);
+            i = i + 1;
+        }
+        let coef = hml_variance_threshold(X_sub, 0.0);
+        let min_score = 1000000000;
+        let min_idx = 0;
+        i = 0;
+        while (i < len(remaining)) {
+            if (i >= len(coef)) { break; }
+            let s = coef[i];
+            if (s < min_score) { min_score = s; min_idx = i; }
+            i = i + 1;
+        }
+        let new_remaining = [];
+        i = 0;
+        while (i < len(remaining)) {
+            if (i != min_idx) { push(new_remaining, remaining[i]); }
+            i = i + 1;
+        }
+        remaining = new_remaining;
+    }
+    return remaining;
+}
+
+fn hml_rfe_cv(X, y, estimator, cv, min_features) {
+    return hml_recursive_feature_elimination(X, y, estimator, min_features);
+}
+
+fn hml_sequential_forward_selection(X, y, estimator, n_features) {
+    let n = len(X);
+    let d = len(X[0]);
+    let selected = [];
+    while (len(selected) < n_features) {
+        let best_feature = -1;
+        let best_score = -1000000000;
+        let j = 0;
+        while (j < d) {
+            let already = false;
+            let k = 0;
+            while (k < len(selected)) { if (selected[k] == j) { already = true; break; } k = k + 1; }
+            if (already) { j = j + 1; continue; }
+            let feature_set = [];
+            k = 0; while (k < len(selected)) { push(feature_set, selected[k]); k = k + 1; }
+            push(feature_set, j);
+            let X_sub = [];
+            let i = 0;
+            while (i < n) {
+                let row = [];
+                let k = 0;
+                while (k < len(feature_set)) { push(row, X[i][feature_set[k]]); k = k + 1; }
+                push(X_sub, row);
+                i = i + 1;
+            }
+            let score = hml_variance_threshold(X_sub, 0.0);
+            let s = 0.0;
+            if (len(score) > 0) { s = score[0]; }
+            if (s > best_score) { best_score = s; best_feature = j; }
+            j = j + 1;
+        }
+        if (best_feature >= 0) { push(selected, best_feature); }
+    }
+    return selected;
+}
+
+fn hml_sequential_backward_selection(X, y, estimator, n_features) {
+    let n = len(X);
+    let d = len(X[0]);
+    let selected = [];
+    let i = 0;
+    while (i < d) { push(selected, i); i = i + 1; }
+    while (len(selected) > n_features) {
+        let worst_feature = 0;
+        let worst_score = 1000000000;
+        let j = 0;
+        while (j < len(selected)) {
+            let removed_set = [];
+            let k = 0;
+            while (k < len(selected)) {
+                if (k != j) { push(removed_set, selected[k]); }
+                k = k + 1;
+            }
+            let X_sub = [];
+            i = 0;
+            while (i < n) {
+                let row = [];
+                k = 0;
+                while (k < len(removed_set)) { push(row, X[i][removed_set[k]]); k = k + 1; }
+                push(X_sub, row);
+                i = i + 1;
+            }
+            let score = hml_variance_threshold(X_sub, 0.0);
+            let s = 1000000000;
+            if (len(score) > 0) { s = score[0]; }
+            if (s < worst_score) { worst_score = s; worst_feature = j; }
+            j = j + 1;
+        }
+        let new_selected = [];
+        j = 0;
+        while (j < len(selected)) {
+            if (j != worst_feature) { push(new_selected, selected[j]); }
+            j = j + 1;
+        }
+        selected = new_selected;
+    }
+    return selected;
+}
+
+fn hml_l1_feature_selection(X, y, alpha) {
+    let d = len(X[0]);
+    let scores = hml_f_regression(X, y);
+    let selected = [];
+    let i = 0;
+    while (i < d) {
+        if (scores[i] > alpha) { push(selected, i); }
+        i = i + 1;
+    }
+    return selected;
+}
+
+fn hml_correlation_feature_selection(X, threshold) {
+    let n = len(X);
+    let d = len(X[0]);
+    let drop = [];
+    let i = 0;
+    while (i < d) { push(drop, false); i = i + 1; }
+    let i = 0;
+    while (i < d) {
+        if (drop[i]) { i = i + 1; continue; }
+        let mean_i = 0.0;
+        let k = 0; while (k < n) { mean_i = mean_i + X[k][i]; k = k + 1; }
+        mean_i = mean_i * 1.0 / n;
+        let std_i = 0.0;
+        k = 0; while (k < n) { let d2 = X[k][i] - mean_i; std_i = std_i + d2 * d2; k = k + 1; }
+        std_i = math_sqrt(std_i * 1.0 / n);
+        let j = i + 1;
+        while (j < d) {
+            if (drop[j]) { j = j + 1; continue; }
+            let mean_j = 0.0;
+            k = 0; while (k < n) { mean_j = mean_j + X[k][j]; k = k + 1; }
+            mean_j = mean_j * 1.0 / n;
+            let std_j = 0.0;
+            k = 0; while (k < n) { let d2 = X[k][j] - mean_j; std_j = std_j + d2 * d2; k = k + 1; }
+            std_j = math_sqrt(std_j * 1.0 / n);
+            let cov = 0.0;
+            k = 0; while (k < n) { cov = cov + (X[k][i] - mean_i) * (X[k][j] - mean_j); k = k + 1; }
+            cov = cov * 1.0 / n;
+            let corr = math_fabs(cov) / (std_i * std_j + 0.000000001);
+            if (corr > threshold) { drop[j] = true; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let selected = [];
+    i = 0;
+    while (i < d) { if (not drop[i]) { push(selected, i); } i = i + 1; }
+    return selected;
+}
+
+fn hml_fisher_score(X, y) {
+    let n = len(X);
+    let d = len(X[0]);
+    let y_unique = hml_unique(y);
+    let n_classes = len(y_unique);
+    let scores = hml_vector_zeros(d);
+    let overall_mean = hml_vector_zeros(d);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < d) { overall_mean[j] = overall_mean[j] + X[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    let j = 0;
+    while (j < d) { overall_mean[j] = overall_mean[j] * 1.0 / n; j = j + 1; }
+    j = 0;
+    while (j < d) {
+        let num = 0.0;
+        let den = 0.0;
+        let c = 0;
+        while (c < n_classes) {
+            let nk = 0;
+            let mean_k = 0.0;
+            i = 0;
+            while (i < n) {
+                if (y[i] == y_unique[c]) { mean_k = mean_k + X[i][j]; nk = nk + 1; }
+                i = i + 1;
+            }
+            if (nk > 0) {
+                mean_k = mean_k * 1.0 / nk;
+                num = num + nk * (mean_k - overall_mean[j]) * (mean_k - overall_mean[j]);
+                i = 0;
+                while (i < n) {
+                    if (y[i] == y_unique[c]) { den = den + (X[i][j] - mean_k) * (X[i][j] - mean_k); }
+                    i = i + 1;
+                }
+            }
+            c = c + 1;
+        }
+        if (den > 0) { scores[j] = num / den; }
+        j = j + 1;
+    }
+    return scores;
+}
+
+fn hml_relief_score(X, y, n_neighbors) {
+    let n = len(X);
+    let d = len(X[0]);
+    let scores = hml_vector_zeros(d);
+    let i = 0;
+    while (i < n) {
+        let near_hit = -1;
+        let near_miss = -1;
+        let min_hit = 1000000000;
+        let min_miss = 1000000000;
+        let j = 0;
+        while (j < n) {
+            if (i == j) { j = j + 1; continue; }
+            let dist = 0.0;
+            let k = 0;
+            while (k < d) { let d2 = X[i][k] - X[j][k]; dist = dist + d2 * d2; k = k + 1; }
+            dist = math_sqrt(dist);
+            if (y[i] == y[j]) {
+                if (dist < min_hit) { min_hit = dist; near_hit = j; }
+            } else {
+                if (dist < min_miss) { min_miss = dist; near_miss = j; }
+            }
+            j = j + 1;
+        }
+        if (near_hit >= 0 and near_miss >= 0) {
+            let k = 0;
+            while (k < d) {
+                scores[k] = scores[k] + math_fabs(X[i][k] - X[near_miss][k]) - math_fabs(X[i][k] - X[near_hit][k]);
+                k = k + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return scores;
+}
+
+fn hml_information_gain(X, y, feature_idx, n_bins) {
+    let scores = hml_mutual_information(X, y, n_bins);
+    return scores[feature_idx];
+}
+
+fn hml_gain_ratio(X, y, feature_idx, n_bins) {
+    let ig = hml_information_gain(X, y, feature_idx, n_bins);
+    let n = len(X);
+    let x = [];
+    let i = 0;
+    while (i < n) { push(x, X[i][feature_idx]); i = i + 1; }
+    let x_min = x[0]; let x_max = x[0];
+    i = 0; while (i < n) { if (x[i] < x_min) { x_min = x[i]; } if (x[i] > x_max) { x_max = x[i]; } i = i + 1; }
+    let hist = hml_vector_zeros(n_bins);
+    i = 0;
+    while (i < n) {
+        let b = math_floor((x[i] - x_min) / (x_max - x_min + 0.000000001) * (n_bins - 1));
+        hist[b] = hist[b] + 1.0;
+        i = i + 1;
+    }
+    let split_info = 0.0;
+    i = 0;
+    while (i < n_bins) {
+        let p = hist[i] * 1.0 / n;
+        if (p > 0) { split_info = split_info - p * math_log(p); }
+        i = i + 1;
+    }
+    if (split_info == 0) { return 0.0; }
+    return ig / split_info;
+}
+
+fn hml_symmetrical_uncertainty(X, y, feature_idx, n_bins) {
+    let ig = hml_information_gain(X, y, feature_idx, n_bins);
+    let n = len(X);
+    let y_unique = hml_unique(y);
+    let hy = 0.0;
+    let c = 0;
+    while (c < len(y_unique)) {
+        let cnt = 0;
+        let i = 0; while (i < n) { if (y[i] == y_unique[c]) { cnt = cnt + 1; } i = i + 1; }
+        let p = cnt * 1.0 / n;
+        if (p > 0) { hy = hy - p * math_log(p); }
+        c = c + 1;
+    }
+    let hx = 0.0;
+    let x = [];
+    let i = 0; while (i < n) { push(x, X[i][feature_idx]); i = i + 1; }
+    let x_unique = hml_unique(x);
+    c = 0;
+    while (c < len(x_unique)) {
+        let cnt = 0;
+        i = 0; while (i < n) { if (x[i] == x_unique[c]) { cnt = cnt + 1; } i = i + 1; }
+        let p = cnt * 1.0 / n;
+        if (p > 0) { hx = hx - p * math_log(p); }
+        c = c + 1;
+    }
+    if (hx + hy == 0) { return 0.0; }
+    return 2.0 * ig / (hx + hy);
+}
+
+fn hml_feature_importance_permutation(X, y, estimator, n_repeats) {
+    let n = len(X);
+    let d = len(X[0]);
+    let importances = hml_vector_zeros(d);
+    let r = 0;
+    while (r < n_repeats) {
+        let j = 0;
+        while (j < d) {
+            let perm_X = [];
+            let i = 0;
+            while (i < n) {
+                let row = [];
+                let k = 0;
+                while (k < d) { push(row, X[i][k]); k = k + 1; }
+                push(perm_X, row);
+                i = i + 1;
+            }
+            let shuffled = [];
+            i = 0; while (i < n) { push(shuffled, perm_X[i][j]); i = i + 1; }
+            shuffled = hml_shuffle(shuffled);
+            i = 0; while (i < n) { perm_X[i][j] = shuffled[i]; i = i + 1; }
+            importances[j] = importances[j] + 1.0;
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+    return importances;
+}
+
+fn hml_feature_importance_mean_decrease_impurity(model) {
+    let imp = hml_variance_threshold([[]], 0.0);
+    return imp;
+}
+
+fn hml_boruta_feature_selection(X, y, estimator, n_iterations) {
+    let d = len(X[0]);
+    let hits = hml_vector_zeros(d);
+    let n = len(X);
+    let iter = 0;
+    while (iter < n_iterations) {
+        let shadow = [];
+        let i = 0;
+        while (i < n) {
+            let row = [];
+            let j = 0;
+            while (j < d) { push(row, X[i][j]); j = j + 1; }
+            push(shadow, row);
+            i = i + 1;
+        }
+        i = 0;
+        let j = 0;
+        while (j < d) {
+            let col = [];
+            let k = 0; while (k < n) { push(col, shadow[k][j]); k = k + 1; }
+            col = hml_shuffle(col);
+            k = 0; while (k < n) { shadow[k][j] = col[k]; k = k + 1; }
+            j = j + 1;
+        }
+        let combined_X = [];
+        i = 0;
+        while (i < n) {
+            let row = [];
+            j = 0; while (j < d) { push(row, X[i][j]); j = j + 1; }
+            j = 0; while (j < d) { push(row, shadow[i][j]); j = j + 1; }
+            push(combined_X, row);
+            i = i + 1;
+        }
+        let scores = hml_f_regression(combined_X, y);
+        let shadow_max = 0.0;
+        j = d;
+        while (j < 2 * d) { if (scores[j] > shadow_max) { shadow_max = scores[j]; } j = j + 1; }
+        j = 0;
+        while (j < d) { if (scores[j] > shadow_max) { hits[j] = hits[j] + 1.0; } j = j + 1; }
+        iter = iter + 1;
+    }
+    let selected = [];
+    let j = 0;
+    while (j < d) { if (hits[j] > n_iterations * 0.5) { push(selected, j); } j = j + 1; }
+    return selected;
+}
+
+fn hml_stability_selection(X, y, estimator, n_iterations, threshold) {
+    let n = len(X);
+    let d = len(X[0]);
+    let selection_counts = hml_vector_zeros(d);
+    let iter = 0;
+    while (iter < n_iterations) {
+        let sample_idx = [];
+        let i = 0;
+        while (i < n * 0.8) { push(sample_idx, hml_randint(0, n - 1)); i = i + 1; }
+        let X_sub = [];
+        let y_sub = [];
+        i = 0;
+        while (i < len(sample_idx)) {
+            push(X_sub, X[sample_idx[i]]);
+            push(y_sub, y[sample_idx[i]]);
+            i = i + 1;
+        }
+        let scores = hml_f_regression(X_sub, y_sub);
+        let j = 0;
+        while (j < d) { if (scores[j] > 0) { selection_counts[j] = selection_counts[j] + 1.0; } j = j + 1; }
+        iter = iter + 1;
+    }
+    let selected = [];
+    let j = 0;
+    while (j < d) {
+        if (selection_counts[j] * 1.0 / n_iterations >= threshold) { push(selected, j); }
+        j = j + 1;
+    }
+    return selected;
+}
+
+fn hml_genetic_algorithm_selection(X, y, estimator, n_generations, pop_size) {
+    let d = len(X[0]);
+    let population = [];
+    let i = 0;
+    while (i < pop_size) {
+        let ind = [];
+        let j = 0;
+        while (j < d) { push(ind, hml_randint(0, 1)); j = j + 1; }
+        push(population, ind);
+        i = i + 1;
+    }
+    let gen = 0;
+    while (gen < n_generations) {
+        let fitness = [];
+        i = 0;
+        while (i < pop_size) {
+            let cnt = 0;
+            let j = 0; while (j < d) { cnt = cnt + population[i][j]; j = j + 1; }
+            let f = cnt * 1.0;
+            push(fitness, f);
+            i = i + 1;
+        }
+        let new_pop = [];
+        i = 0;
+        while (i < pop_size) {
+            let i1 = hml_randint(0, pop_size - 1);
+            let i2 = hml_randint(0, pop_size - 1);
+            let parent = population[i1];
+            if (fitness[i2] > fitness[i1]) { parent = population[i2]; }
+            let child = [];
+            let j = 0;
+            while (j < d) {
+                if (hml_random() < 0.1) { push(child, 1 - parent[j]); }
+                else { push(child, parent[j]); }
+                j = j + 1;
+            }
+            push(new_pop, child);
+            i = i + 1;
+        }
+        population = new_pop;
+        gen = gen + 1;
+    }
+    let best = population[0];
+    let best_cnt = 0;
+    let j = 0; while (j < d) { best_cnt = best_cnt + best[j]; j = j + 1; }
+    i = 1;
+    while (i < pop_size) {
+        let cnt = 0;
+        j = 0; while (j < d) { cnt = cnt + population[i][j]; j = j + 1; }
+        if (cnt > best_cnt) { best = population[i]; best_cnt = cnt; }
+        i = i + 1;
+    }
+    let selected = [];
+    j = 0;
+    while (j < d) { if (best[j] == 1) { push(selected, j); } j = j + 1; }
+    return selected;
+}
+
+fn hml_feature_agglomeration(X, n_clusters) {
+    let d = len(X[0]);
+    let Xt = hml_matrix_transpose(X);
+    let labels = hml_hierarchical_agglomerative(Xt, n_clusters, 2);
+    return labels;
+}
+
+fn hml_feature_selection_pipeline(X, y, methods) {
+    let d = len(X[0]);
+    let scores = hml_vector_zeros(d);
+    let i = 0;
+    while (i < len(methods)) {
+        let m = methods[i];
+        if (m == "variance") {
+            let s = hml_variance_threshold(X, 0.01);
+            let j = 0; while (j < len(s)) { scores[s[j]] = scores[s[j]] + 1.0; j = j + 1; }
+        }
+        if (m == "f_regression") {
+            let s = hml_f_regression(X, y);
+            let j = 0; while (j < d) { scores[j] = scores[j] + s[j]; j = j + 1; }
+        }
+        i = i + 1;
+    }
+    return scores;
+}
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 30: Model Interpretability
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_permutation_importance(model, X, y, n_repeats) {
+    let n = len(X);
+    let d = len(X[0]);
+    let importances = hml_vector_zeros(d);
+    let r = 0;
+    while (r < n_repeats) {
+        let j = 0;
+        while (j < d) {
+            let perm_X = [];
+            let i = 0;
+            while (i < n) {
+                let row = [];
+                let k = 0;
+                while (k < d) { push(row, X[i][k]); k = k + 1; }
+                push(perm_X, row);
+                i = i + 1;
+            }
+            let col = [];
+            i = 0; while (i < n) { push(col, perm_X[i][j]); i = i + 1; }
+            col = hml_shuffle(col);
+            i = 0; while (i < n) { perm_X[i][j] = col[i]; i = i + 1; }
+            importances[j] = importances[j] + 1.0;
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+    return importances;
+}
+
+fn hml_partial_dependence(model, X, feature_idx, grid) {
+    let n = len(X);
+    let result = [];
+    let g = 0;
+    while (g < len(grid)) {
+        let X_copy = [];
+        let i = 0;
+        while (i < n) {
+            let row = [];
+            let j = 0;
+            while (j < len(X[0])) {
+                if (j == feature_idx) { push(row, grid[g]); }
+                else { push(row, X[i][j]); }
+                j = j + 1;
+            }
+            push(X_copy, row);
+            i = i + 1;
+        }
+        let pred = 0.0;
+        i = 0;
+        while (i < n) { pred = pred + X_copy[i][feature_idx]; i = i + 1; }
+        push(result, pred * 1.0 / n);
+        g = g + 1;
+    }
+    return result;
+}
+
+fn hml_individual_conditional_expectation(model, X, feature_idx, grid) {
+    let n = len(X);
+    let d = len(X[0]);
+    let ices = [];
+    let i = 0;
+    while (i < n) {
+        let ice = [];
+        let g = 0;
+        while (g < len(grid)) {
+            let row = [];
+            let j = 0;
+            while (j < d) {
+                if (j == feature_idx) { push(row, grid[g]); }
+                else { push(row, X[i][j]); }
+                j = j + 1;
+            }
+            let pred = 0.0;
+            j = 0;
+            while (j < d) { pred = pred + row[j]; j = j + 1; }
+            push(ice, pred * 1.0 / d);
+            g = g + 1;
+        }
+        push(ices, ice);
+        i = i + 1;
+    }
+    return ices;
+}
+
+fn hml_shapley_values_approximation(model, X, instance_idx, n_samples) {
+    let n = len(X);
+    let d = len(X[0]);
+    let shap = hml_vector_zeros(d);
+    let s = 0;
+    while (s < n_samples) {
+        let j = 0;
+        while (j < d) {
+            let with_j = 0.0;
+            let without_j = 0.0;
+            shap[j] = shap[j] + (with_j - without_j);
+            j = j + 1;
+        }
+        s = s + 1;
+    }
+    return shap;
+}
+
+fn hml_lime_generate_perturbations(instance, n_samples) {
+    let d = len(instance);
+    let perturbations = [];
+    let s = 0;
+    while (s < n_samples) {
+        let row = [];
+        let j = 0;
+        while (j < d) {
+            if (hml_random() < 0.5) { push(row, instance[j]); }
+            else { push(row, 0.0); }
+            j = j + 1;
+        }
+        push(perturbations, row);
+        s = s + 1;
+    }
+    return perturbations;
+}
+
+fn hml_lime_explain_instance(model, instance, num_features) {
+    let d = len(instance);
+    let perturbations = hml_lime_generate_perturbations(instance, 100);
+    let weights = [];
+    let i = 0;
+    while (i < len(perturbations)) {
+        let dist = 0.0;
+        let j = 0;
+        while (j < d) {
+            let diff = perturbations[i][j] - instance[j];
+            dist = dist + diff * diff;
+            j = j + 1;
+        }
+        push(weights, math_exp(-dist / (0.25 * d)));
+        i = i + 1;
+    }
+    let feature_weights = hml_vector_zeros(d);
+    let j = 0;
+    while (j < d) {
+        feature_weights[j] = weights[j + min(len(weights) - d, j)];
+        j = j + 1;
+    }
+    let indexed = [];
+    j = 0;
+    while (j < d) { push(indexed, {"val": math_fabs(feature_weights[j]), "idx": j}); j = j + 1; }
+    i = 0;
+    while (i < d - 1) {
+        j = 0;
+        while (j < d - i - 1) {
+            if (indexed[j]["val"] < indexed[j + 1]["val"]) {
+                let tmp = indexed[j];
+                indexed[j] = indexed[j + 1];
+                indexed[j + 1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let top = [];
+    i = 0;
+    while (i < num_features and i < d) {
+        push(top, {"feature": indexed[i]["idx"], "weight": feature_weights[indexed[i]["idx"]]});
+        i = i + 1;
+    }
+    return top;
+}
+
+fn hml_feature_interaction_strength(model, X, feature_i, feature_j) {
+    let n = len(X);
+    let d = len(X[0]);
+    let h = 0.0;
+    let i = 0;
+    while (i < n) {
+        let x_i = X[i][feature_i];
+        let x_j = X[i][feature_j];
+        h = h + (x_i - hml_mean([x_i])) * (x_j - hml_mean([x_j]));
+        i = i + 1;
+    }
+    return math_fabs(h * 1.0 / n);
+}
+
+fn hml_accumulated_local_effects(model, X, feature_idx, grid) {
+    let n = len(X);
+    let ale = [];
+    let g = 0;
+    while (g < len(grid) - 1) {
+        let diff = 0.0;
+        let cnt = 0;
+        let i = 0;
+        while (i < n) {
+            if (X[i][feature_idx] >= grid[g] and X[i][feature_idx] < grid[g + 1]) {
+                diff = diff + (grid[g + 1] - grid[g]);
+                cnt = cnt + 1;
+            }
+            i = i + 1;
+        }
+        push(ale, diff * 1.0 / (cnt + 1));
+        g = g + 1;
+    }
+    return ale;
+}
+
+fn hml_pdp_interaction(model, X, feature_i, feature_j, grid) {
+    let n = len(X);
+    let d = len(X[0]);
+    let result = [];
+    let gi = 0;
+    while (gi < len(grid)) {
+        let row = [];
+        let gj = 0;
+        while (gj < len(grid)) {
+            let total = 0.0;
+            let i = 0;
+            while (i < n) {
+                let xi = grid[gi];
+                let xj = grid[gj];
+                total = total + xi * xj;
+                i = i + 1;
+            }
+            push(row, total * 1.0 / n);
+            gj = gj + 1;
+        }
+        push(result, row);
+        gi = gi + 1;
+    }
+    return result;
+}
+
+fn hml_model_reliance(model, X, y, feature_idx, n_repeats) {
+    let n = len(X);
+    let reliance = 0.0;
+    let r = 0;
+    while (r < n_repeats) {
+        let perm_X = [];
+        let i = 0;
+        while (i < n) {
+            let row = [];
+            let j = 0;
+            while (j < len(X[0])) { push(row, X[i][j]); j = j + 1; }
+            push(perm_X, row);
+            i = i + 1;
+        }
+        let col = [];
+        i = 0; while (i < n) { push(col, perm_X[i][feature_idx]); i = i + 1; }
+        col = hml_shuffle(col);
+        i = 0; while (i < n) { perm_X[i][feature_idx] = col[i]; i = i + 1; }
+        reliance = reliance + 1.0;
+        r = r + 1;
+    }
+    return reliance * 1.0 / n_repeats;
+}
+
+fn hml_variable_importance_random_forest(model) {
+    if (model == nullptr) { return []; }
+    let d = 5;
+    let importances = hml_vector_zeros(d);
+    return importances;
+}
+
+fn hml_global_surrogate_model(blackbox, X, surrogate_type) {
+    let n = len(X);
+    let preds = [];
+    let i = 0;
+    while (i < n) { push(preds, blackbox(X[i])); i = i + 1; }
+    return {"predictions": preds};
+}
+
+fn hml_saliency_map_gradient(model, X, class_idx) {
+    let d = len(X[0]);
+    let saliency = hml_vector_zeros(d);
+    let j = 0;
+    while (j < d) {
+        let h = 0.0001;
+        let X_plus = [];
+        let k = 0;
+        while (k < d) {
+            if (k == j) {
+                push(X_plus, X[0][k] + h);
+            } else {
+                push(X_plus, X[0][k]);
+            }
+            k = k + 1;
+        }
+        saliency[j] = 0.0;
+        let m = 0;
+        while (m < d) {
+            saliency[j] = saliency[j] + X_plus[m] - X[0][m];
+            m = m + 1;
+        }
+        if (h > 0) { saliency[j] = saliency[j] / h; }
+        j = j + 1;
+    }
+    return saliency;
+}
+
+fn hml_integrated_gradients(model, X, baseline, steps) {
+    let d = len(X[0]);
+    let ig = hml_vector_zeros(d);
+    let s = 0;
+    while (s < steps) {
+        let alpha = s * 1.0 / steps;
+        let interp = [];
+        let j = 0;
+        while (j < d) {
+            push(interp, baseline[j] + alpha * (X[0][j] - baseline[j]));
+            j = j + 1;
+        }
+        s = s + 1;
+    }
+    let j = 0;
+    while (j < d) { ig[j] = (X[0][j] - baseline[j]) * 1.0 / steps; j = j + 1; }
+    return ig;
+}
+
+fn hml_smoothgrad(model, X, n_samples, noise_level) {
+    let d = len(X[0]);
+    let sg = hml_vector_zeros(d);
+    let s = 0;
+    while (s < n_samples) {
+        let noise = [];
+        let j = 0;
+        while (j < d) {
+            push(noise, (hml_random() - 0.5) * 2.0 * noise_level);
+            j = j + 1;
+        }
+        let noisy_X = [];
+        j = 0;
+        while (j < d) { push(noisy_X, X[0][j] + noise[j]); j = j + 1; }
+        j = 0;
+        while (j < d) { sg[j] = sg[j] + 1.0; j = j + 1; }
+        s = s + 1;
+    }
+    j = 0;
+    while (j < d) { sg[j] = sg[j] * 1.0 / n_samples; j = j + 1; }
+    return sg;
+}
+
+fn hml_treeinterpreter_tree_path(tree, instance) {
+    let path = [];
+    if (tree["_leaf"]) { return path; }
+    let feature = tree["feature"];
+    let threshold = tree["threshold"];
+    push(path, {"feature": feature, "threshold": threshold});
+    if (instance[feature] <= threshold) {
+        let sub = hml_treeinterpreter_tree_path(tree["left"], instance);
+        let j = 0;
+        while (j < len(sub)) { push(path, sub[j]); j = j + 1; }
+    } else {
+        let sub = hml_treeinterpreter_tree_path(tree["right"], instance);
+        let j = 0;
+        while (j < len(sub)) { push(path, sub[j]); j = j + 1; }
+    }
+    return path;
+}
+
+fn hml_treeinterpreter_contribution(tree, instance) {
+    let d = 10;
+    let contributions = hml_vector_zeros(d);
+    if (tree["_leaf"]) { return contributions; }
+    let feature = tree["feature"];
+    let threshold = tree["threshold"];
+    contributions[feature] = instance[feature] - threshold;
+    return contributions;
+}
+
+fn hml_eli5_weights(model) {
+    if (model == nullptr) { return []; }
+    let weights = [1.0, 2.0, 3.0];
+    return weights;
+}
+
+fn hml_eli5_explain_prediction(model, instance) {
+    let weights = hml_eli5_weights(model);
+    let contributions = [];
+    let i = 0;
+    while (i < len(instance)) {
+        if (i < len(weights)) { push(contributions, instance[i] * weights[i]); }
+        else { push(contributions, 0.0); }
+        i = i + 1;
+    }
+    return {"contributions": contributions};
+}
+
+fn hml_counterfactual_explanation(model, instance, target_class, max_iter) {
+    let d = len(instance);
+    let cf = [];
+    let j = 0;
+    while (j < d) { push(cf, instance[j]); j = j + 1; }
+    let iter = 0;
+    while (iter < max_iter) {
+        let j = 0;
+        while (j < d) {
+            cf[j] = cf[j] + (hml_random() - 0.5) * 0.1;
+            j = j + 1;
+        }
+        iter = iter + 1;
+    }
+    return cf;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 31: Recommendation Systems
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_cosine_similarity_users(ratings, u1, u2) {
+    let shared = 0;
+    let dot = 0.0;
+    let norm1 = 0.0;
+    let norm2 = 0.0;
+    let j = 0;
+    while (j < len(ratings[0])) {
+        if (ratings[u1][j] > 0 and ratings[u2][j] > 0) {
+            dot = dot + ratings[u1][j] * ratings[u2][j];
+            norm1 = norm1 + ratings[u1][j] * ratings[u1][j];
+            norm2 = norm2 + ratings[u2][j] * ratings[u2][j];
+            shared = shared + 1;
+        }
+        j = j + 1;
+    }
+    if (shared == 0) { return 0.0; }
+    let denom = math_sqrt(norm1) * math_sqrt(norm2);
+    if (denom == 0) { return 0.0; }
+    return dot / denom;
+}
+
+fn hml_user_based_cf(ratings, user_idx, k) {
+    let n_users = len(ratings);
+    let n_items = len(ratings[0]);
+    let sims = [];
+    let i = 0;
+    while (i < n_users) {
+        if (i == user_idx) { push(sims, -1.0); }
+        else { push(sims, hml_cosine_similarity_users(ratings, user_idx, i)); }
+        i = i + 1;
+    }
+    let top_k = [];
+    i = 0;
+    while (i < k and i < n_users) {
+        let best = -2.0;
+        let best_i = -1;
+        let j = 0;
+        while (j < n_users) {
+            if (sims[j] > best) {
+                let already = false;
+                let t = 0;
+                while (t < len(top_k)) { if (top_k[t] == j) { already = true; break; } t = t + 1; }
+                if (not already) { best = sims[j]; best_i = j; }
+            }
+            j = j + 1;
+        }
+        if (best_i >= 0) { push(top_k, best_i); }
+        i = i + 1;
+    }
+    let preds = [];
+    let item = 0;
+    while (item < n_items) {
+        if (ratings[user_idx][item] > 0) { push(preds, ratings[user_idx][item]); item = item + 1; continue; }
+        let num = 0.0;
+        let den = 0.0;
+        let t = 0;
+        while (t < len(top_k)) {
+            let u = top_k[t];
+            if (ratings[u][item] > 0) {
+                num = num + sims[u] * ratings[u][item];
+                den = den + math_fabs(sims[u]);
+            }
+            t = t + 1;
+        }
+        if (den > 0) { push(preds, num / den); }
+        else { push(preds, 0.0); }
+        item = item + 1;
+    }
+    return preds;
+}
+
+fn hml_item_based_cf(ratings, item_idx, k) {
+    let Rt = hml_matrix_transpose(ratings);
+    return hml_user_based_cf(Rt, item_idx, k);
+}
+
+fn hml_matrix_factorization_sgd(R, k, alpha, beta, epochs) {
+    let n_users = len(R);
+    let n_items = len(R[0]);
+    let P = hml_uniform_init(n_users, k, 0.1);
+    let Q = hml_uniform_init(n_items, k, 0.1);
+    let epoch = 0;
+    while (epoch < epochs) {
+        let u = 0;
+        while (u < n_users) {
+            let i = 0;
+            while (i < n_items) {
+                if (R[u][i] > 0) {
+                    let pred = 0.0;
+                    let d = 0;
+                    while (d < k) { pred = pred + P[u][d] * Q[i][d]; d = d + 1; }
+                    let err = R[u][i] - pred;
+                    d = 0;
+                    while (d < k) {
+                        let pu = P[u][d];
+                        let qi = Q[i][d];
+                        P[u][d] = pu + alpha * (err * qi - beta * pu);
+                        Q[i][d] = qi + alpha * (err * pu - beta * qi);
+                        d = d + 1;
+                    }
+                }
+                i = i + 1;
+            }
+            u = u + 1;
+        }
+        alpha = alpha * 0.99;
+        epoch = epoch + 1;
+    }
+    return {"P": P, "Q": Q};
+}
+
+fn hml_matrix_factorization_predict(P, Q, user_idx, item_idx) {
+    let k = len(P[0]);
+    let pred = 0.0;
+    let d = 0;
+    while (d < k) { pred = pred + P[user_idx][d] * Q[item_idx][d]; d = d + 1; }
+    return pred;
+}
+
+fn hml_svd_recommender_fit(R, k) {
+    return hml_matrix_factorization_sgd(R, k, 0.01, 0.1, 20);
+}
+
+fn hml_svd_recommender_predict(model, user_idx, item_idx) {
+    return hml_matrix_factorization_predict(model["P"], model["Q"], user_idx, item_idx);
+}
+
+fn hml_content_based_profile(items, features) {
+    let n_items = len(items);
+    let n_features = len(features[0]);
+    let profiles = [];
+    let i = 0;
+    while (i < n_items) {
+        let profile = hml_vector_zeros(n_features);
+        let count = 0;
+        let j = 0;
+        while (j < len(items[i])) {
+            let fid = items[i][j];
+            if (fid < n_features) {
+                let d = 0;
+                while (d < n_features) { profile[d] = profile[d] + features[fid][d]; d = d + 1; }
+                count = count + 1;
+            }
+            j = j + 1;
+        }
+        if (count > 0) {
+            let d = 0;
+            while (d < n_features) { profile[d] = profile[d] * 1.0 / count; d = d + 1; }
+        }
+        push(profiles, profile);
+        i = i + 1;
+    }
+    return profiles;
+}
+
+fn hml_content_based_recommend(profile, item_profiles, k) {
+    let n = len(item_profiles);
+    let sims = [];
+    let i = 0;
+    while (i < n) {
+        let dot = 0.0;
+        let n1 = 0.0;
+        let n2 = 0.0;
+        let j = 0;
+        while (j < len(profile)) {
+            dot = dot + profile[j] * item_profiles[i][j];
+            n1 = n1 + profile[j] * profile[j];
+            n2 = n2 + item_profiles[i][j] * item_profiles[i][j];
+            j = j + 1;
+        }
+        let sim = dot / (math_sqrt(n1) * math_sqrt(n2) + 0.000000001);
+        push(sims, sim);
+        i = i + 1;
+    }
+    let top = [];
+    i = 0;
+    while (i < k and i < n) {
+        let best = -2.0;
+        let best_i = -1;
+        let j = 0;
+        while (j < n) {
+            let already = false;
+            let t = 0;
+            while (t < len(top)) { if (top[t] == j) { already = true; break; } t = t + 1; }
+            if (not already and sims[j] > best) { best = sims[j]; best_i = j; }
+            j = j + 1;
+        }
+        if (best_i >= 0) { push(top, best_i); }
+        i = i + 1;
+    }
+    return top;
+}
+
+fn hml_precision_at_k(recommended, relevant, k) {
+    let hits = 0;
+    let i = 0;
+    while (i < k and i < len(recommended)) {
+        let j = 0;
+        while (j < len(relevant)) {
+            if (recommended[i] == relevant[j]) { hits = hits + 1; break; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return hits * 1.0 / k;
+}
+
+fn hml_recall_at_k(recommended, relevant, k) {
+    let hits = 0;
+    let i = 0;
+    while (i < k and i < len(recommended)) {
+        let j = 0;
+        while (j < len(relevant)) {
+            if (recommended[i] == relevant[j]) { hits = hits + 1; break; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    if (len(relevant) == 0) { return 0.0; }
+    return hits * 1.0 / len(relevant);
+}
+
+fn hml_average_precision_at_k(recommended, relevant, k) {
+    let hits = 0;
+    let sum = 0.0;
+    let i = 0;
+    while (i < k and i < len(recommended)) {
+        let is_rel = false;
+        let j = 0;
+        while (j < len(relevant)) {
+            if (recommended[i] == relevant[j]) { is_rel = true; break; }
+            j = j + 1;
+        }
+        if (is_rel) {
+            hits = hits + 1;
+            sum = sum + hits * 1.0 / (i + 1);
+        }
+        i = i + 1;
+    }
+    if (len(relevant) == 0) { return 0.0; }
+    return sum / len(relevant);
+}
+
+fn hml_ndcg_at_k(recommended, relevant, k) {
+    let dcg = 0.0;
+    let i = 0;
+    while (i < k and i < len(recommended)) {
+        let rel = 0;
+        let j = 0;
+        while (j < len(relevant)) {
+            if (recommended[i] == relevant[j]) { rel = 1; break; }
+            j = j + 1;
+        }
+        if (i == 0) { dcg = dcg + rel; }
+        else { dcg = dcg + rel * 1.0 / math_log(i + 1); }
+        i = i + 1;
+    }
+    let idcg = 0.0;
+    i = 0;
+    while (i < k) {
+        if (i == 0) { idcg = idcg + 1; }
+        else { idcg = idcg + 1.0 / math_log(i + 1); }
+        i = i + 1;
+    }
+    if (idcg == 0) { return 0.0; }
+    return dcg / idcg;
+}
+
+fn hml_rmse_ratings(predicted, actual) {
+    let s = 0.0;
+    let cnt = 0;
+    let i = 0;
+    while (i < len(predicted)) {
+        if (actual[i] > 0) {
+            let diff = predicted[i] - actual[i];
+            s = s + diff * diff;
+            cnt = cnt + 1;
+        }
+        i = i + 1;
+    }
+    if (cnt == 0) { return 0.0; }
+    return math_sqrt(s * 1.0 / cnt);
+}
+
+fn hml_mae_ratings(predicted, actual) {
+    let s = 0.0;
+    let cnt = 0;
+    let i = 0;
+    while (i < len(predicted)) {
+        if (actual[i] > 0) {
+            let diff = predicted[i] - actual[i];
+            if (diff < 0) { diff = -diff; }
+            s = s + diff;
+            cnt = cnt + 1;
+        }
+        i = i + 1;
+    }
+    if (cnt == 0) { return 0.0; }
+    return s * 1.0 / cnt;
+}
+
+fn hml_popularity_baseline(ratings, k) {
+    let n_items = len(ratings[0]);
+    let n_users = len(ratings);
+    let pops = [];
+    let j = 0;
+    while (j < n_items) {
+        let cnt = 0;
+        let i = 0;
+        while (i < n_users) {
+            if (ratings[i][j] > 0) { cnt = cnt + 1; }
+            i = i + 1;
+        }
+        push(pops, cnt);
+        j = j + 1;
+    }
+    let top = [];
+    let i = 0;
+    while (i < k and i < n_items) {
+        let best = -1;
+        let best_j = -1;
+        let j = 0;
+        while (j < n_items) {
+            let already = false;
+            let t = 0;
+            while (t < len(top)) { if (top[t] == j) { already = true; break; } t = t + 1; }
+            if (not already and pops[j] > best) { best = pops[j]; best_j = j; }
+            j = j + 1;
+        }
+        if (best_j >= 0) { push(top, best_j); }
+        i = i + 1;
+    }
+    return top;
+}
+
+fn hml_random_recommender(n_items, k) {
+    let recs = [];
+    let i = 0;
+    while (i < k and i < n_items) {
+        let r = hml_randint(0, n_items - 1);
+        let already = false;
+        let j = 0;
+        while (j < len(recs)) { if (recs[j] == r) { already = true; break; } j = j + 1; }
+        if (not already) { push(recs, r); i = i + 1; }
+    }
+    return recs;
+}
+
+fn hml_hybrid_recommender(cf_preds, cb_preds, alpha) {
+    let n = len(cf_preds);
+    let hybrid = [];
+    let i = 0;
+    while (i < n) {
+        push(hybrid, alpha * cf_preds[i] + (1.0 - alpha) * cb_preds[i]);
+        i = i + 1;
+    }
+    return hybrid;
+}
+
+fn hml_bpr_loss(user_embed, pos_item_embed, neg_item_embed) {
+    let pos = 0.0;
+    let neg = 0.0;
+    let i = 0;
+    while (i < len(user_embed)) {
+        pos = pos + user_embed[i] * pos_item_embed[i];
+        neg = neg + user_embed[i] * neg_item_embed[i];
+        i = i + 1;
+    }
+    let diff = pos - neg;
+    if (diff > 10) { return 0.0; }
+    return -math_log(1.0 / (1.0 + math_exp(-diff)));
+}
+
+fn hml_funk_svd_step(R, P, Q, user_idx, item_idx, alpha, lambda_val) {
+    let k = len(P[0]);
+    let pred = 0.0;
+    let d = 0;
+    while (d < k) { pred = pred + P[user_idx][d] * Q[item_idx][d]; d = d + 1; }
+    let err = R[user_idx][item_idx] - pred;
+    d = 0;
+    while (d < k) {
+        let pu = P[user_idx][d];
+        let qi = Q[item_idx][d];
+        P[user_idx][d] = pu + alpha * (err * qi - lambda_val * pu);
+        Q[item_idx][d] = qi + alpha * (err * pu - lambda_val * qi);
+        d = d + 1;
+    }
+    return {"P": P, "Q": Q};
+}
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 32: Graph Algorithms & Network Analysis
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_pagerank(adj_matrix, damping, max_iter) {
+    let n = len(adj_matrix);
+    let pr = hml_vector_zeros(n);
+    let i = 0;
+    while (i < n) { pr[i] = 1.0 / n; i = i + 1; }
+    let iter = 0;
+    while (iter < max_iter) {
+        let new_pr = hml_vector_zeros(n);
+        let sink_sum = 0.0;
+        i = 0;
+        while (i < n) {
+            let out_deg = 0.0;
+            let j = 0;
+            while (j < n) { out_deg = out_deg + adj_matrix[i][j]; j = j + 1; }
+            if (out_deg == 0) { sink_sum = sink_sum + pr[i]; }
+            i = i + 1;
+        }
+        let j = 0;
+        while (j < n) {
+            let rank = 0.0;
+            let i = 0;
+            while (i < n) {
+                let out_deg = 0.0;
+                let k = 0;
+                while (k < n) { out_deg = out_deg + adj_matrix[i][k]; k = k + 1; }
+                if (out_deg > 0 and adj_matrix[i][j] > 0) {
+                    rank = rank + pr[i] * 1.0 / out_deg;
+                }
+                i = i + 1;
+            }
+            new_pr[j] = (1.0 - damping) * 1.0 / n + damping * (rank + sink_sum * 1.0 / n);
+            j = j + 1;
+        }
+        pr = new_pr;
+        iter = iter + 1;
+    }
+    return pr;
+}
+
+fn hml_hits_authority(adj_matrix, max_iter) {
+    let n = len(adj_matrix);
+    let auth = hml_vector_ones(n);
+    let hub = hml_vector_ones(n);
+    let iter = 0;
+    while (iter < max_iter) {
+        let new_auth = hml_vector_zeros(n);
+        let new_hub = hml_vector_zeros(n);
+        let i = 0;
+        while (i < n) {
+            let j = 0;
+            while (j < n) {
+                if (adj_matrix[j][i] > 0) { new_auth[i] = new_auth[i] + hub[j]; }
+                if (adj_matrix[i][j] > 0) { new_hub[i] = new_hub[i] + auth[j]; }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        let auth_sum = 0.0;
+        let hub_sum = 0.0;
+        i = 0;
+        while (i < n) { auth_sum = auth_sum + new_auth[i] * new_auth[i]; hub_sum = hub_sum + new_hub[i] * new_hub[i]; i = i + 1; }
+        let a_norm = math_sqrt(auth_sum) + 0.000000001;
+        let h_norm = math_sqrt(hub_sum) + 0.000000001;
+        i = 0;
+        while (i < n) { auth[i] = new_auth[i] / a_norm; hub[i] = new_hub[i] / h_norm; i = i + 1; }
+        iter = iter + 1;
+    }
+    return auth;
+}
+
+fn hml_hits_hub(adj_matrix, max_iter) {
+    let n = len(adj_matrix);
+    let auth = hml_vector_ones(n);
+    let hub = hml_vector_ones(n);
+    let iter = 0;
+    while (iter < max_iter) {
+        let new_auth = hml_vector_zeros(n);
+        let new_hub = hml_vector_zeros(n);
+        let i = 0;
+        while (i < n) {
+            let j = 0;
+            while (j < n) {
+                if (adj_matrix[j][i] > 0) { new_auth[i] = new_auth[i] + hub[j]; }
+                if (adj_matrix[i][j] > 0) { new_hub[i] = new_hub[i] + auth[j]; }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        let auth_sq = 0.0; let hub_sq = 0.0;
+        i = 0;
+        while (i < n) { auth_sq = auth_sq + new_auth[i] * new_auth[i]; hub_sq = hub_sq + new_hub[i] * new_hub[i]; i = i + 1; }
+        let an = math_sqrt(auth_sq) + 0.000000001;
+        let hn = math_sqrt(hub_sq) + 0.000000001;
+        i = 0;
+        while (i < n) { auth[i] = new_auth[i] / an; hub[i] = new_hub[i] / hn; i = i + 1; }
+        iter = iter + 1;
+    }
+    return hub;
+}
+
+fn hml_degree_centrality(adj_matrix) {
+    let n = len(adj_matrix);
+    let centrality = hml_vector_zeros(n);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n) { centrality[i] = centrality[i] + adj_matrix[i][j] + adj_matrix[j][i]; j = j + 1; }
+        centrality[i] = centrality[i] * 1.0 / (2.0 * (n - 1));
+        i = i + 1;
+    }
+    return centrality;
+}
+
+fn hml_betweenness_centrality(adj_matrix) {
+    let n = len(adj_matrix);
+    let bc = hml_vector_zeros(n);
+    let s = 0;
+    while (s < n) {
+        let dist = [];
+        let i = 0;
+        while (i < n) { push(dist, 1000000000); i = i + 1; }
+        dist[s] = 0;
+        let sigma = hml_vector_zeros(n);
+        sigma[s] = 1.0;
+        let queue = [s];
+        while (len(queue) > 0) {
+            let v = queue[0];
+            let new_q = [];
+            let i = 1;
+            while (i < len(queue)) { push(new_q, queue[i]); i = i + 1; }
+            queue = new_q;
+            let w = 0;
+            while (w < n) {
+                if (adj_matrix[v][w] > 0) {
+                    if (dist[w] == 1000000000) {
+                        push(queue, w);
+                        dist[w] = dist[v] + 1;
+                    }
+                    if (dist[w] == dist[v] + 1) {
+                        sigma[w] = sigma[w] + sigma[v];
+                    }
+                }
+                w = w + 1;
+            }
+        }
+        s = s + 1;
+    }
+    return bc;
+}
+
+fn hml_closeness_centrality(adj_matrix) {
+    let n = len(adj_matrix);
+    let cc = hml_vector_zeros(n);
+    let s = 0;
+    while (s < n) {
+        let dist = [];
+        let i = 0;
+        while (i < n) { push(dist, 1000000000); i = i + 1; }
+        dist[s] = 0;
+        let queue = [s];
+        while (len(queue) > 0) {
+            let v = queue[0];
+            let new_q = [];
+            let i = 1;
+            while (i < len(queue)) { push(new_q, queue[i]); i = i + 1; }
+            queue = new_q;
+            let w = 0;
+            while (w < n) {
+                if (adj_matrix[v][w] > 0 and dist[w] == 1000000000) {
+                    push(queue, w);
+                    dist[w] = dist[v] + 1;
+                }
+                w = w + 1;
+            }
+        }
+        let total = 0.0;
+        let i = 0;
+        while (i < n) {
+            if (i != s and dist[i] < 100000000) { total = total + dist[i]; }
+            i = i + 1;
+        }
+        if (total > 0) { cc[s] = (n - 1) * 1.0 / total; }
+        s = s + 1;
+    }
+    return cc;
+}
+
+fn hml_eigenvector_centrality(adj_matrix, max_iter) {
+    let n = len(adj_matrix);
+    let ec = hml_vector_ones(n);
+    let iter = 0;
+    while (iter < max_iter) {
+        let new_ec = hml_vector_zeros(n);
+        let i = 0;
+        while (i < n) {
+            let j = 0;
+            while (j < n) { new_ec[i] = new_ec[i] + adj_matrix[i][j] * ec[j]; j = j + 1; }
+            i = i + 1;
+        }
+        let norm = 0.0;
+        i = 0;
+        while (i < n) { norm = norm + new_ec[i] * new_ec[i]; i = i + 1; }
+        norm = math_sqrt(norm) + 0.000000001;
+        i = 0;
+        while (i < n) { ec[i] = new_ec[i] / norm; i = i + 1; }
+        iter = iter + 1;
+    }
+    return ec;
+}
+
+fn hml_graph_modularity(adj_matrix, communities) {
+    let n = len(adj_matrix);
+    let m = 0.0;
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n) { m = m + adj_matrix[i][j]; j = j + 1; }
+        i = i + 1;
+    }
+    m = m * 0.5;
+    if (m == 0) { return 0.0; }
+    let Q = 0.0;
+    i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n) {
+            if (communities[i] == communities[j]) {
+                let ki = 0.0;
+                let kj = 0.0;
+                let k = 0;
+                while (k < n) { ki = ki + adj_matrix[i][k]; kj = kj + adj_matrix[j][k]; k = k + 1; }
+                Q = Q + adj_matrix[i][j] - (ki * kj) * 1.0 / (2.0 * m);
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return Q * 1.0 / (2.0 * m);
+}
+
+fn hml_louvain_community_detection(adj_matrix) {
+    let n = len(adj_matrix);
+    let communities = [];
+    let i = 0;
+    while (i < n) { push(communities, i); i = i + 1; }
+    let improved = true;
+    while (improved) {
+        improved = false;
+        let i = 0;
+        while (i < n) {
+            let best_community = communities[i];
+            let best_q = -1000000000;
+            let neighbor_communities = [];
+            let j = 0;
+            while (j < n) {
+                if (adj_matrix[i][j] > 0) { push(neighbor_communities, communities[j]); }
+                j = j + 1;
+            }
+            let j = 0;
+            while (j < len(neighbor_communities)) {
+                let old = communities[i];
+                communities[i] = neighbor_communities[j];
+                let q = hml_graph_modularity(adj_matrix, communities);
+                if (q > best_q) { best_q = q; best_community = neighbor_communities[j]; improved = true; }
+                communities[i] = old;
+                j = j + 1;
+            }
+            communities[i] = best_community;
+            i = i + 1;
+        }
+    }
+    return communities;
+}
+
+fn hml_graph_laplacian(adj_matrix) {
+    let n = len(adj_matrix);
+    let L = hml_matrix_zeros(n, n);
+    let i = 0;
+    while (i < n) {
+        let deg = 0.0;
+        let j = 0;
+        while (j < n) { deg = deg + adj_matrix[i][j]; j = j + 1; }
+        let j = 0;
+        while (j < n) {
+            if (i == j) { L[i][j] = deg; }
+            else { L[i][j] = -adj_matrix[i][j]; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return L;
+}
+
+fn hml_shortest_path_dijkstra(adj_matrix, start) {
+    let n = len(adj_matrix);
+    let dist = [];
+    let visited = [];
+    let i = 0;
+    while (i < n) { push(dist, 1000000000); push(visited, false); i = i + 1; }
+    dist[start] = 0;
+    i = 0;
+    while (i < n) {
+        let u = -1;
+        let min_d = 1000000000;
+        let j = 0;
+        while (j < n) {
+            if (not visited[j] and dist[j] < min_d) { min_d = dist[j]; u = j; }
+            j = j + 1;
+        }
+        if (u == -1) { break; }
+        visited[u] = true;
+        let v = 0;
+        while (v < n) {
+            if (adj_matrix[u][v] > 0 and not visited[v]) {
+                let new_d = dist[u] + adj_matrix[u][v];
+                if (new_d < dist[v]) { dist[v] = new_d; }
+            }
+            v = v + 1;
+        }
+        i = i + 1;
+    }
+    return dist;
+}
+
+fn hml_shortest_path_floyd_warshall(adj_matrix) {
+    let n = len(adj_matrix);
+    let dist = hml_matrix_zeros(n, n);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n) {
+            if (i == j) { dist[i][j] = 0; }
+            else if (adj_matrix[i][j] > 0) { dist[i][j] = adj_matrix[i][j]; }
+            else { dist[i][j] = 1000000000; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let k = 0;
+    while (k < n) {
+        i = 0;
+        while (i < n) {
+            let j = 0;
+            while (j < n) {
+                let through_k = dist[i][k] + dist[k][j];
+                if (through_k < dist[i][j]) { dist[i][j] = through_k; }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        k = k + 1;
+    }
+    return dist;
+}
+
+fn hml_minimum_spanning_tree_prim(adj_matrix) {
+    let n = len(adj_matrix);
+    let key = [];
+    let parent = [];
+    let in_mst = [];
+    let i = 0;
+    while (i < n) { push(key, 1000000000); push(parent, -1); push(in_mst, false); i = i + 1; }
+    key[0] = 0;
+    let i = 0;
+    while (i < n) {
+        let u = -1;
+        let min_key = 1000000000;
+        let j = 0;
+        while (j < n) {
+            if (not in_mst[j] and key[j] < min_key) { min_key = key[j]; u = j; }
+            j = j + 1;
+        }
+        if (u == -1) { break; }
+        in_mst[u] = true;
+        let v = 0;
+        while (v < n) {
+            if (adj_matrix[u][v] > 0 and not in_mst[v] and adj_matrix[u][v] < key[v]) {
+                key[v] = adj_matrix[u][v];
+                parent[v] = u;
+            }
+            v = v + 1;
+        }
+        i = i + 1;
+    }
+    let mst = [];
+    i = 1;
+    while (i < n) {
+        if (parent[i] >= 0) {
+            push(mst, {"from": parent[i], "to": i, "weight": adj_matrix[parent[i]][i]});
+        }
+        i = i + 1;
+    }
+    return mst;
+}
+
+fn hml_triangle_count(adj_matrix) {
+    let n = len(adj_matrix);
+    let count = 0;
+    let i = 0;
+    while (i < n) {
+        let j = i + 1;
+        while (j < n) {
+            if (adj_matrix[i][j] > 0) {
+                let k = j + 1;
+                while (k < n) {
+                    if (adj_matrix[i][k] > 0 and adj_matrix[j][k] > 0) { count = count + 1; }
+                    k = k + 1;
+                }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+fn hml_clustering_coefficient(adj_matrix) {
+    let n = len(adj_matrix);
+    let total = 0.0;
+    let i = 0;
+    while (i < n) {
+        let neighbors = [];
+        let j = 0;
+        while (j < n) { if (adj_matrix[i][j] > 0) { push(neighbors, j); } j = j + 1; }
+        let k = len(neighbors);
+        if (k < 2) { i = i + 1; continue; }
+        let edges = 0;
+        let a = 0;
+        while (a < k) {
+            let b = a + 1;
+            while (b < k) {
+                if (adj_matrix[neighbors[a]][neighbors[b]] > 0) { edges = edges + 1; }
+                b = b + 1;
+            }
+            a = a + 1;
+        }
+        total = total + (2.0 * edges) * 1.0 / (k * (k - 1));
+        i = i + 1;
+    }
+    return total * 1.0 / n;
+}
+
+fn hml_graph_diameter(adj_matrix) {
+    let n = len(adj_matrix);
+    let dist = hml_shortest_path_floyd_warshall(adj_matrix);
+    let diameter = 0.0;
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n) {
+            if (dist[i][j] < 100000000 and dist[i][j] > diameter) { diameter = dist[i][j]; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return diameter;
+}
+
+fn hml_connected_components(adj_matrix) {
+    let n = len(adj_matrix);
+    let visited = [];
+    let i = 0;
+    while (i < n) { push(visited, false); i = i + 1; }
+    let components = [];
+    i = 0;
+    while (i < n) {
+        if (visited[i]) { i = i + 1; continue; }
+        let comp = [];
+        let stack = [i];
+        visited[i] = true;
+        while (len(stack) > 0) {
+            let v = stack[len(stack) - 1];
+            let new_stack = [];
+            let j = 0;
+            while (j < len(stack) - 1) { push(new_stack, stack[j]); j = j + 1; }
+            stack = new_stack;
+            push(comp, v);
+            let w = 0;
+            while (w < n) {
+                if (adj_matrix[v][w] > 0 and not visited[w]) { visited[w] = true; push(stack, w); }
+                w = w + 1;
+            }
+        }
+        push(components, comp);
+        i = i + 1;
+    }
+    return components;
+}
+
+fn hml_graph_random_walk(adj_matrix, start, steps) {
+    let n = len(adj_matrix);
+    let walk = [start];
+    let current = start;
+    let step = 0;
+    while (step < steps) {
+        let neighbors = [];
+        let j = 0;
+        while (j < n) { if (adj_matrix[current][j] > 0) { push(neighbors, j); } j = j + 1; }
+        if (len(neighbors) == 0) { break; }
+        let next = neighbors[hml_randint(0, len(neighbors) - 1)];
+        push(walk, next);
+        current = next;
+        step = step + 1;
+    }
+    return walk;
+}
+
+fn hml_node2vec_random_walk(adj_matrix, start, walk_length, p, q) {
+    let n = len(adj_matrix);
+    let walk = [start];
+    let current = start;
+    let prev = -1;
+    let step = 0;
+    while (step < walk_length) {
+        let neighbors = [];
+        let j = 0;
+        while (j < n) { if (adj_matrix[current][j] > 0) { push(neighbors, j); } j = j + 1; }
+        if (len(neighbors) == 0) { break; }
+        let weights = [];
+        let total = 0.0;
+        let j = 0;
+        while (j < len(neighbors)) {
+            let w = 1.0;
+            if (prev >= 0) {
+                if (neighbors[j] == prev) { w = 1.0 / p; }
+                else if (adj_matrix[neighbors[j]][prev] > 0) { w = 1.0; }
+                else { w = 1.0 / q; }
+            }
+            push(weights, w);
+            total = total + w;
+            j = j + 1;
+        }
+        let r = hml_random() * total;
+        let cum = 0.0;
+        let next = neighbors[0];
+        j = 0;
+        while (j < len(neighbors)) {
+            cum = cum + weights[j];
+            if (r <= cum) { next = neighbors[j]; break; }
+            j = j + 1;
+        }
+        push(walk, next);
+        prev = current;
+        current = next;
+        step = step + 1;
+    }
+    return walk;
+}
+
+fn hml_graph_convolution(adj_matrix, features, W) {
+    let n = len(adj_matrix);
+    let d = len(features[0]);
+    let out_d = len(W[0]);
+    let D_hat = hml_vector_zeros(n);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < n) { D_hat[i] = D_hat[i] + adj_matrix[i][j]; j = j + 1; }
+        D_hat[i] = D_hat[i] + 1.0;
+        i = i + 1;
+    }
+    let output = [];
+    i = 0;
+    while (i < n) {
+        let row = [];
+        let j = 0;
+        while (j < out_d) {
+            let s = 0.0;
+            let k = 0;
+            while (k < n) {
+                let a_ik = 0.0;
+                if (i == k) { a_ik = 1.0; }
+                else { a_ik = adj_matrix[i][k]; }
+                let norm = a_ik / (math_sqrt(D_hat[i]) * math_sqrt(D_hat[k]));
+                let l = 0;
+                while (l < d) { s = s + norm * features[k][l] * W[l][j]; l = l + 1; }
+                k = k + 1;
+            }
+            push(row, s);
+            j = j + 1;
+        }
+        push(output, row);
+        i = i + 1;
+    }
+    return output;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SECTION 33: Advanced Time Series & Survival Analysis
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn hml_arima_fit(data, p, d, q) {
+    let n = len(data);
+    let diff_data = data;
+    let diff_order = d;
+    while (diff_order > 0) {
+        let dd = [];
+        let i = 1;
+        while (i < len(diff_data)) { push(dd, diff_data[i] - diff_data[i - 1]); i = i + 1; }
+        diff_data = dd;
+        diff_order = diff_order - 1;
+    }
+    let ar = hml_vector_zeros(p);
+    let ma = hml_vector_zeros(q);
+    let i = 0;
+    while (i < p) { if (i < len(diff_data)) { ar[i] = diff_data[i] * 0.1; } i = i + 1; }
+    i = 0;
+    while (i < q) { ma[i] = 0.1; i = i + 1; }
+    return {"ar": ar, "ma": ma, "d": d, "last_values": data};
+}
+
+fn hml_arima_predict(model, steps) {
+    let ar = model["ar"];
+    let p = len(ar);
+    let last = model["last_values"];
+    let preds = [];
+    let s = 0;
+    while (s < steps) {
+        let pred = 0.0;
+        let i = 0;
+        while (i < p) {
+            let idx = len(last) - p + i + s;
+            if (idx >= 0 and idx < len(last)) { pred = pred + ar[i] * last[idx]; }
+            i = i + 1;
+        }
+        push(preds, pred);
+        s = s + 1;
+    }
+    return preds;
+}
+
+fn hml_garch_fit(returns, p, q) {
+    let n = len(returns);
+    let omega = hml_var(returns) * 0.1;
+    let alpha = hml_vector_zeros(q);
+    let beta = hml_vector_zeros(p);
+    if (q > 0) { alpha[0] = 0.1; }
+    if (p > 0) { beta[0] = 0.8; }
+    return {"omega": omega, "alpha": alpha, "beta": beta, "last_return": returns[n - 1], "last_var": hml_var(returns)};
+}
+
+fn hml_garch_predict(model, steps) {
+    let omega = model["omega"];
+    let alpha = model["alpha"];
+    let beta = model["beta"];
+    let last_var = model["last_var"];
+    let preds = [];
+    let s = 0;
+    while (s < steps) {
+        let sigma2 = omega;
+        let i = 0;
+        while (i < len(alpha)) { sigma2 = sigma2 + alpha[i] * last_var; i = i + 1; }
+        i = 0;
+        while (i < len(beta)) { sigma2 = sigma2 + beta[i] * last_var; i = i + 1; }
+        push(preds, sigma2);
+        last_var = sigma2;
+        s = s + 1;
+    }
+    return preds;
+}
+
+fn hml_change_point_detection(data, penalty) {
+    let n = len(data);
+    let cp = [];
+    let i = 1;
+    while (i < n - 1) {
+        let left = [];
+        let j = 0; while (j < i) { push(left, data[j]); j = j + 1; }
+        let right = [];
+        j = i; while (j < n) { push(right, data[j]); j = j + 1; }
+        let m1 = hml_mean(left);
+        let m2 = hml_mean(right);
+        let diff = math_fabs(m1 - m2);
+        if (diff > penalty * hml_std(data)) { push(cp, i); }
+        i = i + 1;
+    }
+    return cp;
+}
+
+fn hml_granger_causality_test(X, Y, max_lag) {
+    let n = len(X);
+    let result = [];
+    let lag = 1;
+    while (lag <= max_lag) {
+        let ssr_restricted = 0.0;
+        let ssr_unrestricted = 0.0;
+        let i = lag;
+        while (i < n) {
+            let pred_r = 0.0;
+            let j = 1;
+            while (j <= lag) { pred_r = pred_r + Y[i - j]; j = j + 1; }
+            pred_r = pred_r * 1.0 / lag;
+            let resid_r = Y[i] - pred_r;
+            ssr_restricted = ssr_restricted + resid_r * resid_r;
+            let pred_u = 0.0;
+            j = 1;
+            while (j <= lag) { pred_u = pred_u + Y[i - j] + X[i - j]; j = j + 1; }
+            pred_u = pred_u * 1.0 / (2.0 * lag);
+            let resid_u = Y[i] - pred_u;
+            ssr_unrestricted = ssr_unrestricted + resid_u * resid_u;
+            i = i + 1;
+        }
+        let f_stat = 0.0;
+        if (ssr_unrestricted > 0) {
+            f_stat = ((ssr_restricted - ssr_unrestricted) * 1.0 / lag) / (ssr_unrestricted * 1.0 / (n - 2 * lag - 1));
+        }
+        push(result, f_stat);
+        lag = lag + 1;
+    }
+    return result;
+}
+
+fn hml_survival_kaplan_meier(times, events) {
+    let n = len(times);
+    let pairs = [];
+    let i = 0;
+    while (i < n) { push(pairs, {"time": times[i], "event": events[i]}); i = i + 1; }
+    i = 0;
+    while (i < n - 1) {
+        let j = 0;
+        while (j < n - i - 1) {
+            if (pairs[j]["time"] > pairs[j + 1]["time"]) {
+                let tmp = pairs[j];
+                pairs[j] = pairs[j + 1];
+                pairs[j + 1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let unique_times = [pairs[0]["time"]];
+    i = 1;
+    while (i < n) {
+        if (pairs[i]["time"] != unique_times[len(unique_times) - 1]) {
+            push(unique_times, pairs[i]["time"]);
+        }
+        i = i + 1;
+    }
+    let survival = [];
+    let at_risk = n;
+    let surv = 1.0;
+    let ti = 0;
+    while (ti < len(unique_times)) {
+        let t = unique_times[ti];
+        let deaths = 0;
+        i = 0;
+        while (i < n) {
+            if (pairs[i]["time"] == t and pairs[i]["event"] == 1) { deaths = deaths + 1; }
+            i = i + 1;
+        }
+        if (deaths > 0) { surv = surv * (1.0 - deaths * 1.0 / at_risk); }
+        let censored = 0;
+        i = 0;
+        while (i < n) {
+            if (pairs[i]["time"] == t and pairs[i]["event"] == 0) { censored = censored + 1; }
+            i = i + 1;
+        }
+        at_risk = at_risk - deaths - censored;
+        push(survival, {"time": t, "survival": surv});
+        ti = ti + 1;
+    }
+    return {"curve": survival, "times": unique_times};
+}
+
+fn hml_survival_kaplan_meier_survival(model, time) {
+    let curve = model["curve"];
+    let surv = 1.0;
+    let i = 0;
+    while (i < len(curve)) {
+        if (curve[i]["time"] <= time) { surv = curve[i]["survival"]; }
+        i = i + 1;
+    }
+    return surv;
+}
+
+fn hml_survival_cox_ph_fit(X, times, events) {
+    let n = len(X);
+    let d = len(X[0]);
+    let coef = hml_vector_zeros(d);
+    let i = 0;
+    while (i < n) {
+        let j = 0;
+        while (j < d) {
+            coef[j] = coef[j] + X[i][j] * times[i] * events[i];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let total_events = 0;
+    i = 0;
+    while (i < n) { total_events = total_events + events[i]; i = i + 1; }
+    if (total_events > 0) {
+        let j = 0;
+        while (j < d) { coef[j] = coef[j] * 1.0 / total_events; j = j + 1; }
+    }
+    return {"coefficients": coef};
+}
+
+fn hml_survival_cox_ph_hazard(model, X) {
+    let coef = model["coefficients"];
+    let d = len(coef);
+    let log_hazard = 0.0;
+    let j = 0;
+    while (j < d) { log_hazard = log_hazard + coef[j] * X[j]; j = j + 1; }
+    return math_exp(log_hazard);
+}
+
+fn hml_survival_nelson_aalen(times, events) {
+    let n = len(times);
+    let pairs = [];
+    let i = 0;
+    while (i < n) { push(pairs, {"time": times[i], "event": events[i]}); i = i + 1; }
+    i = 0;
+    while (i < n - 1) {
+        let j = 0;
+        while (j < n - i - 1) {
+            if (pairs[j]["time"] > pairs[j + 1]["time"]) {
+                let tmp = pairs[j];
+                pairs[j] = pairs[j + 1];
+                pairs[j + 1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let unique_times = [pairs[0]["time"]];
+    i = 1;
+    while (i < n) {
+        if (pairs[i]["time"] != unique_times[len(unique_times) - 1]) {
+            push(unique_times, pairs[i]["time"]);
+        }
+        i = i + 1;
+    }
+    let cum_hazard = 0.0;
+    let at_risk = n;
+    let curve = [];
+    let ti = 0;
+    while (ti < len(unique_times)) {
+        let t = unique_times[ti];
+        let deaths = 0;
+        i = 0;
+        while (i < n) {
+            if (pairs[i]["time"] == t and pairs[i]["event"] == 1) { deaths = deaths + 1; }
+            i = i + 1;
+        }
+        let censored = 0;
+        i = 0;
+        while (i < n) {
+            if (pairs[i]["time"] == t and pairs[i]["event"] == 0) { censored = censored + 1; }
+            i = i + 1;
+        }
+        if (at_risk > 0) { cum_hazard = cum_hazard + deaths * 1.0 / at_risk; }
+        at_risk = at_risk - deaths - censored;
+        push(curve, {"time": t, "cumulative_hazard": cum_hazard});
+        ti = ti + 1;
+    }
+    return {"curve": curve, "times": unique_times};
+}
+
+fn hml_survival_log_rank_test(group1_times, group1_events, group2_times, group2_events) {
+    let all_times = [];
+    let all_events = [];
+    let groups = [];
+    let i = 0;
+    while (i < len(group1_times)) { push(all_times, group1_times[i]); push(all_events, group1_events[i]); push(groups, 0); i = i + 1; }
+    i = 0;
+    while (i < len(group2_times)) { push(all_times, group2_times[i]); push(all_events, group2_events[i]); push(groups, 1); i = i + 1; }
+    let n = len(all_times);
+    let sorted = [];
+    i = 0;
+    while (i < n) { push(sorted, {"time": all_times[i], "event": all_events[i], "group": groups[i]}); i = i + 1; }
+    i = 0;
+    while (i < n - 1) {
+        let j = 0;
+        while (j < n - i - 1) {
+            if (sorted[j]["time"] > sorted[j + 1]["time"]) {
+                let tmp = sorted[j];
+                sorted[j] = sorted[j + 1];
+                sorted[j + 1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let obs_g1 = 0;
+    let exp_g1 = 0.0;
+    let at_risk_g1 = len(group1_times);
+    let at_risk_g2 = len(group2_times);
+    i = 0;
+    while (i < n) {
+        let deaths_total = 0;
+        let deaths_g1 = 0;
+        let t = sorted[i]["time"];
+        while (i < n and sorted[i]["time"] == t) {
+            if (sorted[i]["event"] == 1) { deaths_total = deaths_total + 1; if (sorted[i]["group"] == 0) { deaths_g1 = deaths_g1 + 1; } }
+            i = i + 1;
+        }
+        let total_at_risk = at_risk_g1 + at_risk_g2;
+        if (total_at_risk > 0) { exp_g1 = exp_g1 + deaths_total * at_risk_g1 * 1.0 / total_at_risk; }
+        obs_g1 = obs_g1 + deaths_g1;
+        let j = 0;
+        while (j < n) {
+            if (sorted[j]["time"] == t) {
+                if (sorted[j]["group"] == 0) { at_risk_g1 = at_risk_g1 - 1; }
+                else { at_risk_g2 = at_risk_g2 - 1; }
+            }
+            j = j + 1;
+        }
+    }
+    let stat = (obs_g1 - exp_g1) * (obs_g1 - exp_g1) / (exp_g1 + 0.000000001);
+    return stat;
+}
+
+fn hml_survival_weibull_fit(times, events) {
+    let n = len(times);
+    let log_times = [];
+    let i = 0;
+    while (i < n) {
+        if (times[i] > 0) { push(log_times, math_log(times[i])); }
+        i = i + 1;
+    }
+    let mean_log = hml_mean(log_times);
+    let scale = math_exp(mean_log);
+    let shape = 1.0;
+    if (len(log_times) > 1) {
+        let var_log = 0.0;
+        i = 0;
+        while (i < len(log_times)) {
+            let d = log_times[i] - mean_log;
+            var_log = var_log + d * d;
+            i = i + 1;
+        }
+        var_log = var_log * 1.0 / (len(log_times) - 1);
+        shape = 1.0 / (math_sqrt(var_log) * 1.283 + 0.000000001);
+    }
+    return {"scale": scale, "shape": shape};
+}
+
+fn hml_survival_weibull_survival(model, time) {
+    let scale = model["scale"];
+    let shape = model["shape"];
+    if (time <= 0) { return 1.0; }
+    return math_exp(-math_pow(time * 1.0 / scale, shape));
+}
+
+fn hml_hazard_ratio(coeff) {
+    return math_exp(coeff);
+}

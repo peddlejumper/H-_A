@@ -5,6 +5,7 @@ These functions provide system-level capabilities needed by H# standard librarie
 
 import time
 import os
+import sys
 from datetime import datetime
 
 def builtin_time_now(args=None):
@@ -583,20 +584,20 @@ def builtin_net_json_stringify(args):
     """Convert H# data to JSON string: json_stringify(data)"""
     if len(args) < 1:
         raise Exception("json_stringify requires 1 argument")
-    
+
     data = args[0]
     try:
-        # Convert H# dict format (array of [key,value] pairs) to Python dict
+        # Convert H# data to Python: handle real dicts, list-of-pairs, and lists
         def convert_hsharp_to_python(obj):
+            if isinstance(obj, dict):
+                return {str(k): convert_hsharp_to_python(v) for k, v in obj.items()}
             if isinstance(obj, list):
-                # Check if it's a dict-like structure
+                # Check if it's a dict-like structure (list of [key, value] pairs)
                 if len(obj) > 0 and all(isinstance(item, list) and len(item) >= 2 for item in obj):
                     return {str(item[0]): convert_hsharp_to_python(item[1]) for item in obj}
-                else:
-                    return [convert_hsharp_to_python(item) for item in obj]
-            else:
-                return obj
-        
+                return [convert_hsharp_to_python(item) for item in obj]
+            return obj
+
         python_data = convert_hsharp_to_python(data)
         return json.dumps(python_data, ensure_ascii=False)
     except Exception as e:
@@ -606,20 +607,24 @@ def builtin_net_json_parse(args):
     """Parse JSON string: json_parse(json_string)"""
     if len(args) < 1:
         raise Exception("json_parse requires 1 argument")
-    
+
     json_str = str(args[0])
     try:
         python_data = json.loads(json_str)
-        
+
         # Convert Python dict/list to H# format
+        # H# supports obj["key"] on Python dicts, so keep dicts as dicts
         def convert_python_to_hsharp(obj):
             if isinstance(obj, dict):
-                return [[k, convert_python_to_hsharp(v)] for k, v in obj.items()]
+                d = {}
+                for k, v in obj.items():
+                    d[k] = convert_python_to_hsharp(v)
+                return d
             elif isinstance(obj, list):
                 return [convert_python_to_hsharp(item) for item in obj]
             else:
                 return obj
-        
+
         return convert_python_to_hsharp(python_data)
     except Exception as e:
         return []
@@ -1019,5 +1024,305 @@ def builtin_htable_values(args):
     if not isinstance(table, dict):
         raise Exception("htable_values: argument must be a hash table")
     return list(table.values())
+
+
+# ============= System process execution =============
+
+import subprocess as _subprocess
+import signal as _signal
+
+def builtin_sys_run(args):
+    """Run a shell command and return its exit code.
+
+    sys_run(command_string, timeout_ms) → exit_code
+    - command_string: a shell command line
+    - timeout_ms: max time in milliseconds (0 or absent = no timeout)
+
+    Uses bash -c to support shell redirects (< > 2>). Signals SIGKILL on timeout.
+    """
+    if len(args) < 1:
+        raise Exception("sys_run requires at least 1 argument (command)")
+    cmd = str(args[0])
+    timeout_ms = 0
+    if len(args) > 1 and args[1] is not None:
+        try:
+            timeout_ms = int(args[1])
+        except (TypeError, ValueError):
+            timeout_ms = 0
+    timeout_sec = (timeout_ms / 1000.0) if timeout_ms > 0 else None
+    try:
+        proc = _subprocess.Popen(
+            cmd,
+            shell=True,
+            executable="/bin/bash",
+            stdin=_subprocess.DEVNULL,
+            stdout=_subprocess.DEVNULL,
+            stderr=_subprocess.DEVNULL,
+            preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+        )
+        try:
+            rc = proc.wait(timeout=timeout_sec)
+            return int(rc)
+        except _subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, _signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            try:
+                proc.wait(timeout=1)
+            except Exception:
+                pass
+            return 124  # 124 = timeout
+    except FileNotFoundError:
+        return 127
+    except Exception:
+        return 1
+
+
+def builtin_read_line(args):
+    """Read a single line from stdin. read_line() → string"""
+    try:
+        line = sys.stdin.readline()
+        if not line:
+            return ""  # EOF — return empty string, not raise
+        return line.rstrip("\n").rstrip("\r")
+    except Exception:
+        return ""
+
+
+def builtin_rand_int(args):
+    """Random integer in [lo, hi]. rand_int(lo, hi) → int"""
+    import random as _random
+    if len(args) < 2:
+        raise Exception("rand_int requires 2 arguments (lo, hi)")
+    try:
+        lo = int(args[0])
+        hi = int(args[1])
+    except (TypeError, ValueError):
+        raise Exception("rand_int: arguments must be integers")
+    if hi < lo:
+        lo, hi = hi, lo
+    return _random.randint(lo, hi)
+
+
+# ============= Extended HTTP helpers (used by ZZW Code Teacher) =============
+
+def builtin_net_http_get_with_headers(args):
+    """HTTP GET with custom headers: http_get_with_headers(url, headers_array)"""
+    if len(args) < 2:
+        return builtin_net_http_get(args)
+    return builtin_net_http_get(args)
+
+def builtin_net_http_post_json(args):
+    """HTTP POST with JSON body: http_post_json(url, body_string, headers_array)"""
+    if len(args) < 2:
+        raise Exception("http_post_json requires at least 2 arguments (url, body)")
+    return builtin_net_http_post(args)
+
+def builtin_net_http_post_with_headers(args):
+    """HTTP POST with custom headers: http_post_with_headers(url, body, headers)"""
+    if len(args) < 3:
+        return builtin_net_http_post(args)
+    return builtin_net_http_post(args)
+
+def builtin_net_http_put_json(args):
+    """HTTP PUT with JSON body: http_put_json(url, body, headers_array)"""
+    if len(args) < 2:
+        raise Exception("http_put_json requires at least 2 arguments (url, body)")
+    url = str(args[0])
+    data = args[1]
+    headers = {"Content-Type": "application/json"}
+    if len(args) > 2 and args[2] is not None:
+        headers_array = args[2]
+        if isinstance(headers_array, list):
+            for pair in headers_array:
+                if isinstance(pair, list) and len(pair) >= 2:
+                    headers[str(pair[0])] = str(pair[1])
+    try:
+        if isinstance(data, dict):
+            data_bytes = json.dumps(data).encode('utf-8')
+        elif isinstance(data, list):
+            py_dict = {}
+            for pair in data:
+                if isinstance(pair, list) and len(pair) >= 2:
+                    py_dict[str(pair[0])] = pair[1]
+            data_bytes = json.dumps(py_dict).encode('utf-8')
+        else:
+            data_bytes = str(data).encode('utf-8')
+        req = urllib.request.Request(url, data=data_bytes, headers=headers, method='PUT')
+        response = urllib.request.urlopen(req, timeout=30)
+        return {
+            "status": response.getcode(),
+            "headers": dict(response.headers),
+            "body": response.read().decode('utf-8', errors='ignore'),
+            "success": True
+        }
+    except urllib.error.HTTPError as e:
+        return {"status": e.code, "headers": dict(e.headers), "body": str(e.reason), "success": False, "error": str(e)}
+    except Exception as e:
+        return {"status": 0, "headers": {}, "body": "", "success": False, "error": str(e)}
+
+def builtin_net_http_delete(args):
+    """HTTP DELETE: http_delete(url, headers_array)"""
+    if len(args) < 1:
+        raise Exception("http_delete requires at least 1 argument (url)")
+    url = str(args[0])
+    headers = {}
+    if len(args) > 1 and args[1] is not None:
+        headers_array = args[1]
+        if isinstance(headers_array, list):
+            for pair in headers_array:
+                if isinstance(pair, list) and len(pair) >= 2:
+                    headers[str(pair[0])] = str(pair[1])
+    try:
+        req = urllib.request.Request(url, headers=headers, method='DELETE')
+        response = urllib.request.urlopen(req, timeout=30)
+        return {
+            "status": response.getcode(),
+            "headers": dict(response.headers),
+            "body": response.read().decode('utf-8', errors='ignore'),
+            "success": True
+        }
+    except urllib.error.HTTPError as e:
+        return {"status": e.code, "headers": dict(e.headers), "body": str(e.reason), "success": False, "error": str(e)}
+    except Exception as e:
+        return {"status": 0, "headers": {}, "body": "", "success": False, "error": str(e)}
+
+def builtin_get_http_body(args):
+    """Extract body from HTTP response dict: http_get_body(response)"""
+    if len(args) < 1:
+        return ""
+    resp = args[0]
+    if isinstance(resp, dict):
+        return resp.get("body", "")
+    return str(resp)
+
+def builtin_get_http_status(args):
+    """Extract status from HTTP response dict: http_get_status(response)"""
+    if len(args) < 1:
+        return 0
+    resp = args[0]
+    if isinstance(resp, dict):
+        return int(resp.get("status", 0))
+    return 0
+
+def builtin_float(args):
+    """Convert to float: float(value)"""
+    if len(args) < 1:
+        raise Exception("float requires 1 argument")
+    try:
+        return float(args[0])
+    except (ValueError, TypeError):
+        return 0.0
+
+def builtin_notify_warning(args):
+    """Show warning notification: notify_warning(title, message)"""
+    if len(args) < 2:
+        raise Exception("notify_warning requires 2 arguments (title, message)")
+    _get_hwd_ui().notify_warning(args[0], args[1])
+    return None
+
+# Alias for json_utils.hto which calls net_json_stringify / net_json_parse
+# Both point to the same underlying implementations
+builtin_net_json_stringify_alias = builtin_net_json_stringify
+builtin_net_json_parse_alias = builtin_net_json_parse
+
+# ============= HwdUI host functions =============
+# These let H# code drive a Tk-backed GUI via a `new WidgetName()` DSL.
+# Implementation lives in python_host/hwd_ui.py (loaded lazily so the
+# interpreter doesn't require Tk on hosts that only run servers).
+
+_hwd_ui_mod = None
+
+# Module-level dict that the Interpreter can use to publish its "current"
+# instance to host functions. The Interpreter sets "current" on entry of
+# its main visit() loop. We use a dict (not a bare module global) so the
+# indirection is explicit and threadsafe-by-construction for the single
+# interpreter model that H# uses.
+_interp_ref = {"current": None}
+
+
+def _get_hwd_ui():
+    global _hwd_ui_mod
+    if _hwd_ui_mod is None:
+        # The host_functions module is imported by interpreter.py; the
+        # python_host/ directory is a sibling of the project root, so we
+        # add it to sys.path dynamically.
+        import os as _os
+        here = _os.path.dirname(_os.path.abspath(__file__))
+        # host_functions.py is at the H# v0.4 root; the project (with
+        # python_host/) is one level up under zzw-code-teacher.
+        project_root = _os.path.normpath(_os.path.join(here, "zzw-code-teacher"))
+        py_dir = _os.path.join(project_root, "python_host")
+        if py_dir not in sys.path:
+            sys.path.insert(0, py_dir)
+        import hwd_ui as _hwd
+        _hwd_ui_mod = _hwd
+    return _hwd_ui_mod
+
+
+def builtin_hwdui_init(args):
+    _get_hwd_ui().hwdui_init()
+    # Populate the host widget registry the first time the H# program calls
+    # hwdui_init, so the program only pays the import cost when needed.
+    interp = _interp_ref.get("current")
+    if interp is not None and not interp._hwdui_loaded:
+        mod = _get_hwd_ui()
+        for name, factory in mod.WIDGET_FACTORIES.items():
+            interp._host_widgets[name] = lambda args, f=factory: f(*args)
+        interp._hwdui_loaded = True
+    return True
+
+
+def builtin_hwdui_theme_dark(args):
+    _get_hwd_ui().hwdui_theme_dark()
+    return True
+
+
+def builtin_hwdui_create_window(args):
+    if len(args) < 3:
+        raise Exception("hwdui_create_window requires 3 arguments (title, w, h)")
+    title = args[0]
+    w = args[1]
+    h = args[2]
+    return _get_hwd_ui().hwdui_create_window(title, w, h)
+
+
+def builtin_ui_run(args):
+    _get_hwd_ui().ui_run()
+    return None
+
+
+def builtin_ui_quit(args):
+    _get_hwd_ui().ui_quit()
+    return None
+
+
+def builtin_notify_info(args):
+    if len(args) < 2:
+        raise Exception("notify_info requires 2 arguments (title, message)")
+    _get_hwd_ui().notify_info(args[0], args[1])
+    return None
+
+
+def builtin_notify_error(args):
+    if len(args) < 2:
+        raise Exception("notify_error requires 2 arguments (title, message)")
+    _get_hwd_ui().notify_error(args[0], args[1])
+    return None
+
+
+def builtin_new_widget(args):
+    """Generic `new ClassName(args...)` dispatch used by the interpreter when
+    a class isn't defined in H# but is registered as a host widget."""
+    if len(args) < 1:
+        raise Exception("new requires at least 1 argument (class name)")
+    cname = args[0]
+    remaining = list(args[1:])
+    return _get_hwd_ui().make_widget(cname, remaining)
+
 
 

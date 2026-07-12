@@ -1,0 +1,19 @@
+# test_escape2.hto
+fn f(s) {
+    let result = "\"";
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let c = s[i];
+        if (c == "\\") {
+            result = result + "\\\\";
+        } else {
+            result = result + c;
+        }
+        i = i + 1;
+    }
+    result = result + "\"";
+    return result;
+}
+
+print(f("hello"));

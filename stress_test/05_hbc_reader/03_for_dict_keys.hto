@@ -1,0 +1,12 @@
+# 03 - 单层 for 循环 (dict keys)
+# 目的: dict 键迭代触发 fixForLoopJumps
+let d = {"alpha": 1, "beta": 2, "gamma": 3};
+let kn = 0;
+let keystr = "";
+for k in d {
+    kn = kn + 1;
+    keystr = keystr + k + ",";
+}
+print("count=" + str(kn));
+print("expected_count=3");
+print("keys=" + keystr);

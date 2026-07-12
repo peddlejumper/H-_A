@@ -1,0 +1,64 @@
+# 10 — chan_close then chan_send raises
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Close empty channel, then send should raise
+let ch = chan_new(0);
+chan_close(ch);
+let caught = false;
+try {
+    chan_send(ch, 1);
+} catch (e) {
+    caught = true;
+}
+check("send_after_close_empty_raises", caught, "no exception");
+
+# Close channel with buffered items, then send should raise
+let ch2 = chan_new(0);
+chan_send(ch2, "x");
+chan_send(ch2, "y");
+chan_close(ch2);
+let caught2 = false;
+try {
+    chan_send(ch2, "z");
+} catch (e) {
+    caught2 = true;
+}
+check("send_after_close_buffered_raises", caught2, "no exception");
+# Buffered items still readable — capture into vars (no double-recv)
+let bx = chan_recv(ch2);
+let by = chan_recv(ch2);
+check("buffered_still_readable_x", bx == "x", "bx=" + str(bx));
+check("buffered_still_readable_y", by == "y", "by=" + str(by));
+
+# try_send on closed channel should also raise (per impl)
+let ch3 = chan_new(0);
+chan_close(ch3);
+let caught3 = false;
+try {
+    chan_try_send(ch3, 1);
+} catch (e) {
+    caught3 = true;
+}
+check("try_send_after_close_raises", caught3, "no exception");
+
+# Close twice — second close is a no-op (doesn't raise)
+let ch4 = chan_new(0);
+chan_close(ch4);
+let second_close_ok = true;
+try {
+    chan_close(ch4);
+} catch (e) {
+    second_close_ok = false;
+}
+check("double_close_no_raise", second_close_ok, "raised");
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

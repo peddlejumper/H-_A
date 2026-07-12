@@ -1,0 +1,10 @@
+# T21 - ? priority on the LEFT of * : `a? * b` is a SYNTAX ERROR
+# (counterpart to t11: `a * b?` parses as `(a * b)?`)
+fn throw7() { throw 7; return 0; }
+fn throw5() { throw 5; return 0; }
+
+# This line is expected to FAIL to compile: after `throw7()?` the `* 3`
+# cannot be consumed because `?` binds looser than `*` (it sits at the
+# additive-unit level, above factor).  Contrast with `a? + b` (t10) which
+# works because `?` binds tighter than `+`.
+print(throw7()? * 3);

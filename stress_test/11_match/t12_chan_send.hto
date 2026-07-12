@@ -1,0 +1,23 @@
+# t12 - chan send pattern: chan send(v)
+# chan send(_) matches when channel can accept a value (not full, not closed)
+fn ch_state(ch) {
+    return match ch {
+        chan send(_) => "sendable",
+        chan recv(v) => "recv:" + str(v),
+        chan close => "closed",
+        _ => "neither"
+    };
+}
+# unbuffered empty → sendable
+let ch1 = chan_new(0);
+print("t12_empty:" + ch_state(ch1));
+# after send → has item → recv
+chan_send(ch1, 7);
+print("t12_sent:" + ch_state(ch1));
+# bounded full → not sendable, is recv
+let ch2 = chan_new(1);
+chan_send(ch2, 100);
+print("t12_full_bounded:" + ch_state(ch2));
+# closed → closed
+chan_close(ch1);
+print("t12_closed:" + ch_state(ch1));

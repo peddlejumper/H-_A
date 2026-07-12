@@ -1,0 +1,406 @@
+# =============================================================
+# Round 3 / Test #109 — Unicode 深度与编码边界
+# 智能体 #109, Round 3
+# 背景: v0.4.1 刚修复 len() 返回码点数 和 chr() 支持补充平面
+# 目标: 验证修复是否彻底, 探测 Unicode 处理的一致性边界
+# 方法: 每个用例打印 [TAG 预期] 实际; 易错项 try/catch 包裹
+# 注意: 词法器不支持 \u / \x 转义, 改用 chr() 构造特殊字符
+# =============================================================
+
+print("===== R3-109 UNICODE DEEP =====");
+
+# =============================================================
+# Section 1: ASCII 基线 (应全部正确)
+# =============================================================
+print("[S1a ascii-len expect=5] " + str(len("hello")));
+print("[S1b ascii-idx0 expect=h] " + "hello"[0]);
+print("[S1c ascii-idx4 expect=o] " + "hello"[4]);
+print("[S1d ascii-slice expect=ell] " + "hello"[1:4]);
+print("[S1e ascii-negidx expect=o] " + "hello"[-1]);
+print("[S1f ascii-reverse expect=olleh] " + "hello"[::-1]);
+print("[S1g ascii-empty-len expect=0] " + str(len("")));
+print("[S1h ascii-one-len expect=1] " + str(len("a")));
+
+# =============================================================
+# Section 2: 中文 (BMP, 单 UTF-16 code unit)
+# =============================================================
+print("[S2a cn-len expect=4] " + str(len("你好世界")));
+print("[S2b cn-idx0 expect=你] " + "你好世界"[0]);
+print("[S2c cn-idx3 expect=界] " + "你好世界"[3]);
+print("[S2d cn-slice expect=好世] " + "你好世界"[1:3]);
+print("[S2e cn-negidx expect=界] " + "你好世界"[-1]);
+print("[S2f cn-reverse expect=界世好你] " + "你好世界"[::-1]);
+print("[S2g cn-ord0 expect=20320] " + str(ord("你")));
+print("[S2h cn-concat expect=你好世界] " + "你好" + "世界");
+print("[S2i cn-cmp expect=true] " + str("你" < "好"));
+print("[S2j cn-repeat expect=哈哈哈哈哈] " + "哈" * 5);
+
+# =============================================================
+# Section 3: Emoji (补充平面, UTF-16 代理对) — 修复核心区
+# len() 已修复返回码点数, 但索引/切片/迭代可能仍用 UTF-16 code unit
+# =============================================================
+print("[S3a emoji-len expect=1] " + str(len("😀")));            # 修复关键
+print("[S3b emoji-chr-len expect=1] " + str(len(chr(128512)))); # 修复关键
+print("[S3c emoji-ord expect=128512] " + str(ord("😀")));       # 修复关键
+print("[S3d chr-rt expect=128512] " + str(ord(chr(128512))));   # round-trip
+print("[S3e two-emoji-len expect=2] " + str(len("😀🎉")));
+
+# 索引 — 预期: s[0]="😀"; 若用 UTF-16 则返回高代理(乱码/单半字符)
+print("[S3f emoji-idx0 expect=😀] " + "😀"[0]);
+print("[S3g emoji-idx0-ord expect=128512] " + str(ord("😀"[0])));
+
+# 索引越界 — 预期: len=1 故 s[1] 应抛错; 若用 UTF-16 则返回低代理(不抛错)
+try {
+    print("[S3h emoji-idx1 expect=ERR] " + "😀"[1]);
+} catch (e) {
+    print("[S3h emoji-idx1 expect=ERR] got-ERR: " + e);
+}
+
+# 负索引 — 预期: s[-1]="😀"; 若用 UTF-16 则返回低代理
+print("[S3i emoji-negidx expect=😀] " + "😀"[-1]);
+print("[S3j emoji-negidx-ord expect=128512] " + str(ord("😀"[-1])));
+
+# 切片 — 预期: [0:1]="😀"; 若用 UTF-16 则只取高代理
+print("[S3k emoji-slice01 expect=😀] " + "😀"[0:1]);
+print("[S3l emoji-slice-full expect=😀] " + "😀"[0:1]);
+# 两个 emoji 切片
+print("[S3m twoemoji-slice01 expect=😀] " + "😀🎉"[0:1]);
+print("[S3n twoemoji-slice12 expect=🎉] " + "😀🎉"[1:2]);
+
+# 反向切片 — 预期: 🎉😀; 若用 UTF-16 则代理对被拆散
+print("[S3o emoji-reverse expect=🎉😀] " + "😀🎉"[::-1]);
+
+# =============================================================
+# Section 4: 混合 ASCII + 中文 + Emoji
+# "a你b😀c" 码点数 = 5
+# =============================================================
+let mixed = "a你b😀c";
+print("[S4a mixed-len expect=5] " + str(len(mixed)));
+print("[S4b mixed-0 expect=a] " + mixed[0]);
+print("[S4c mixed-1 expect=你] " + mixed[1]);
+print("[S4d mixed-2 expect=b] " + mixed[2]);
+print("[S4e mixed-3 expect=😀] " + mixed[3]);
+print("[S4f mixed-4 expect=c] " + mixed[4]);
+print("[S4g mixed-slice-1-4 expect=你b😀] " + mixed[1:4]);
+print("[S4h mixed-slice-3-4 expect=😀] " + mixed[3:4]);
+print("[S4i mixed-reverse expect=c😀b你a] " + mixed[::-1]);
+
+# =============================================================
+# Section 5: for 循环迭代字符串 — 预期按码点遍历
+# =============================================================
+let cnt = 0;
+for ch in "你好😀" {
+    cnt = cnt + 1;
+}
+print("[S5a iter-count expect=3] " + str(cnt));
+
+let acc = "";
+for ch in "ab😀" {
+    acc = acc + ch;
+}
+print("[S5b iter-concat expect=ab😀] " + acc);
+
+# 统计 emoji 出现次数
+let emcnt = 0;
+for ch in "😀🎉😀" {
+    if (ch == "😀") { emcnt = emcnt + 1; }
+}
+print("[S5c iter-emoji-count expect=2] " + str(emcnt));
+
+# =============================================================
+# Section 6: 组合字符 (precomposed vs decomposed)
+# "é" U+00E9 (1 码点) vs "e" + U+0301 combining acute (2 码点)
+# =============================================================
+let precomposed = chr(233);                 # "é" U+00E9, 1 码点
+let decomposed = "e" + chr(769);            # "e"+U+0301 组合重音, 2 码点
+print("[S6a pre-len expect=1] " + str(len(precomposed)));
+print("[S6b decomp-len expect=2] " + str(len(decomposed)));
+print("[S6c pre-eq-decomp expect=false] " + str(precomposed == decomposed));
+print("[S6d pre-ord expect=233] " + str(ord(precomposed)));
+print("[S6e decomp-ord0 expect=101] " + str(ord(decomposed[0])));
+print("[S6f decomp-ord1 expect=769] " + str(ord(decomposed[1])));
+print("[S6g pre-display expect=é] " + precomposed);
+
+# =============================================================
+# Section 7: 零宽字符 / BOM / 控制字符
+# =============================================================
+let zwsp = "a" + chr(8203) + "b";    # a + U+200B 零宽空格 + b
+print("[S7a zwsp-len expect=3] " + str(len(zwsp)));
+print("[S7b zwsp-idx1-ord expect=8203] " + str(ord(zwsp[1])));
+print("[S7c zwsp-display expect=ab] " + zwsp);
+
+let bomStr = chr(65279) + "hello";    # BOM U+FEFF + hello
+print("[S7d bom-len expect=6] " + str(len(bomStr)));
+print("[S7e bom-idx0-ord expect=65279] " + str(ord(bomStr[0])));
+
+let nulStr = chr(0) + "x";             # null char + x
+print("[S7f nul-len expect=2] " + str(len(nulStr)));
+print("[S7g nul-ord0 expect=0] " + str(ord(nulStr[0])));
+print("[S7h chr0-eq-nul expect=true] " + str(chr(0) == nulStr[0]));
+
+# =============================================================
+# Section 8: RTL 文字 (阿拉伯文/希伯来文)
+# =============================================================
+let ar = "مرحبا";   # 5 个阿拉伯字母
+print("[S8a ar-len expect=5] " + str(len(ar)));
+print("[S8b ar-ord0 expect=1605] " + str(ord(ar[0])));
+print("[S8c ar-reverse-len expect=5] " + str(len(ar[::-1])));
+
+# =============================================================
+# Section 9: CJK 扩展 B (U+20000, 4字节 UTF-8, 补充平面)
+# 𠀀 = U+20000 — 与 emoji 同样是补充平面, 测试代理对处理
+# =============================================================
+let cjkExt = "𠀀";
+print("[S9a cjkext-len expect=1] " + str(len(cjkExt)));
+print("[S9b cjkext-ord expect=131072] " + str(ord(cjkExt)));
+print("[S9c cjkext-chr-rt expect=131072] " + str(ord(chr(131072))));
+print("[S9d cjkext-idx0 expect=𠀀] " + cjkExt[0]);
+print("[S9e cjkext-idx0-ord expect=131072] " + str(ord(cjkExt[0])));
+try {
+    print("[S9f cjkext-idx1 expect=ERR] " + cjkExt[1]);
+} catch (e) {
+    print("[S9f cjkext-idx1 expect=ERR] got-ERR: " + e);
+}
+print("[S9g cjkext-reverse expect=𠀀] " + cjkExt[::-1]);
+
+# =============================================================
+# Section 10: chr() 边界
+# =============================================================
+print("[S10a chr-65 expect=A] " + chr(65));
+print("[S10b chr-97 expect=a] " + chr(97));
+print("[S10c chr-0 expect=NUL] ord=" + str(ord(chr(0))));
+print("[S10d chr-0x10FFFF expect=MAX] ord=" + str(ord(chr(1114111))));
+print("[S10e chr-128512 expect=😀] " + chr(128512));
+print("[S10f chr-20013 expect=中] " + chr(20013));
+
+# chr(-1) — 应报错 (刚修复)
+try {
+    let r = chr(-1);
+    print("[S10g chr-neg expect=ERR] got=" + r);
+} catch (e) {
+    print("[S10g chr-neg expect=ERR] got-ERR: " + e);
+}
+
+# chr(0x110000) — 超出 Unicode 范围, 应报错
+try {
+    let r = chr(1114112);
+    print("[S10h chr-over expect=ERR] got=" + r);
+} catch (e) {
+    print("[S10h chr-over expect=ERR] got-ERR: " + e);
+}
+
+# chr(0xD800) — 代理区码点, Character.toChars 会抛错
+try {
+    let r = chr(55296);
+    print("[S10i chr-surrogate expect=ERR] got=" + r);
+} catch (e) {
+    print("[S10i chr-surrogate expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# Section 11: ord() 边界
+# =============================================================
+print("[S11a ord-A expect=65] " + str(ord("A")));
+print("[S11b ord-emoji expect=128512] " + str(ord("😀")));
+print("[S11c ord-cn expect=20320] " + str(ord("你")));
+print("[S11d ord-cjkext expect=131072] " + str(ord("𠀀")));
+print("[S11e ord-space expect=32] " + str(ord(" ")));
+print("[S11f ord-rt expect=A] " + chr(ord("A")));
+
+# ord("") — 应报错 (刚修复)
+try {
+    let r = ord("");
+    print("[S11g ord-empty expect=ERR] got=" + str(r));
+} catch (e) {
+    print("[S11g ord-empty expect=ERR] got-ERR: " + e);
+}
+
+# ord("ab") — 应报错 (刚修复)
+try {
+    let r = ord("ab");
+    print("[S11h ord-multi expect=ERR] got=" + str(r));
+} catch (e) {
+    print("[S11h ord-multi expect=ERR] got-ERR: " + e);
+}
+
+# ord(emoji via chr) round-trip
+print("[S11i ord-chr-rt expect=128512] " + str(ord(chr(128512))));
+print("[S11j ord-chr-rt-max expect=1114111] " + str(ord(chr(1114111))));
+
+# =============================================================
+# Section 12: Unicode 切片深度
+# =============================================================
+print("[S12a cn-slice-1-3 expect=好世] " + "你好世界"[1:3]);
+print("[S12b cn-slice-0-2 expect=你好] " + "你好世界"[0:2]);
+print("[S12c cn-slice-2- expect=世界] " + "你好世界"[2:100]);
+print("[S12d cn-slice-0-0 expect=] [" + "你好世界"[0:0] + "]");
+print("[S12e cn-slice-step2 expect=你世] " + "你好世界"[::2]);
+print("[S12f cn-slice-neg-step expect=界世好你] " + "你好世界"[::-1]);
+print("[S12g cn-slice-neg-bounds expect=好世] " + "你好世界"[-3:-1]);
+
+# emoji 切片
+print("[S12h emoji-slice-0-1 expect=😀] " + "😀🎉"[0:1]);
+print("[S12i emoji-slice-1-2 expect=🎉] " + "😀🎉"[1:2]);
+print("[S12j emoji-slice-step2 expect=😀] " + "😀🎉😀"[::2]);
+
+# =============================================================
+# Section 13: Unicode 拼接 / 比较 / 重复
+# =============================================================
+print("[S13a concat expect=你好世界] " + "你好" + "世界");
+print("[S13b concat-emoji expect=😀🎉] " + "😀" + "🎉");
+print("[S13c cmp-lt expect=true] " + str("a" < "z"));
+print("[S13d cmp-cn-lt expect=true] " + str("你" < "好"));
+print("[S13e cmp-emoji-eq expect=true] " + str("😀" == "😀"));
+print("[S13f rep-unicode expect=あああ] " + "あ" * 3);
+print("[S13g rep-emoji expect=😀😀] " + "😀" * 2);
+print("[S13h rep-zero expect=] [" + "あ" * 0 + "]");
+
+# =============================================================
+# Section 14: Unicode 在 dict key 中
+# =============================================================
+let d = {"你好": 1, "世界": 2, "😀": 3};
+print("[S14a dict-cn expect=1] " + str(d["你好"]));
+print("[S14b dict-cn2 expect=2] " + str(d["世界"]));
+print("[S14c dict-emoji expect=3] " + str(d["😀"]));
+let d2 = {chr(128512): "emoji-key"};
+print("[S14d dict-chrkey expect=emoji-key] " + d2[chr(128512)]);
+
+# =============================================================
+# Section 15: Unicode 大小写
+# =============================================================
+print("[S15a upper-mix expect=HÉLLO] " + "héllo".upper());
+print("[S15b upper-german expect=STRASSE] " + "straße".upper());
+print("[S15c lower-german expect=strasse] " + "STRASSE".lower());
+print("[S15d upper-cn expect=你好] " + "你好".upper());
+print("[S15e upper-emoji expect=😀] " + "😀".upper());
+print("[S15f upper-ß-len expect=2] " + str(len("ß".upper())));
+
+# =============================================================
+# Section 16: Unicode split / contains / replace
+# =============================================================
+print("[S16a split-cn-comma expect=[a, b, c]] " + str("a，b，c".split("，")));
+print("[S16b contains-hit expect=true] " + str("你好世界".contains("好世")));
+print("[S16c contains-miss expect=false] " + str("你好世界".contains("地球")));
+print("[S16d contains-emoji expect=true] " + str("😀🎉".contains("🎉")));
+print("[S16e replace-cn expect=你坏世界] " + "你好世界".replace("好", "坏"));
+print("[S16f replace-emoji expect=🎉🎉] " + "😀😀".replace("😀", "🎉"));
+print("[S16g in-op expect=true] " + str("好世" in "你好世界"));
+print("[S16h in-op-emoji expect=true] " + str("🎉" in "😀🎉"));
+
+# =============================================================
+# Section 17: 索引越界
+# =============================================================
+try {
+    print("[S17a oob-5 expect=ERR] " + "ab"[5]);
+} catch (e) {
+    print("[S17a oob-5 expect=ERR] got-ERR: " + e);
+}
+try {
+    print("[S17b oob-neg3 expect=ERR] " + "ab"[-3]);
+} catch (e) {
+    print("[S17b oob-neg3 expect=ERR] got-ERR: " + e);
+}
+# emoji 越界 — len=1, 故 s[1] 应越界; 但若用 UTF-16 长度=2 则不报错
+try {
+    print("[S17c oob-emoji-idx1 expect=ERR] " + "😀"[1]);
+} catch (e) {
+    print("[S17c oob-emoji-idx1 expect=ERR] got-ERR: " + e);
+}
+try {
+    print("[S17d oob-emoji-idx2 expect=ERR] " + "😀"[2]);
+} catch (e) {
+    print("[S17d oob-emoji-idx2 expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# Section 18: str() 对 Unicode / 数字
+# =============================================================
+print("[S18a str-num expect=128512] " + str(128512));
+print("[S18b chr-emoji expect=😀] " + chr(128512));
+print("[S18c str-vs-chr expect=false] " + str(str(128512) == chr(128512)));
+print("[S18d str-cn expect=你好] " + str("你好"));
+print("[S18e str-emoji expect=😀] " + str("😀"));
+
+# =============================================================
+# Section 19: fmt() 与 Unicode
+# =============================================================
+print("[S19a fmt-unicode expect=Hello 世界] " + fmt("Hello {0}", "世界"));
+print("[S19b fmt-emoji expect=Emoji=😀] " + fmt("Emoji={0}", "😀"));
+print("[S19c fmt-mixed expect=你好 A 128512] " + fmt("{0} {1} {2}", "你好", "A", 128512));
+print("[S19d fmt-chr expect=Chr=😀] " + fmt("Chr={0}", chr(128512)));
+
+# =============================================================
+# Section 20: 编码一致性 — len 与字节数
+# "😀" 码点数=1, UTF-16 code unit=2, UTF-8 字节=4
+# 无内置字节长度函数, 仅验证 len 一致性
+# =============================================================
+print("[S20a len-emoji expect=1] " + str(len("😀")));
+print("[S20b len-emoji-chr expect=1] " + str(len(chr(128512))));
+print("[S20c len-cjkext expect=1] " + str(len("𠀀")));
+print("[S20d len-mixed expect=5] " + str(len("a你b😀c")));
+
+# =============================================================
+# Section 21: substring() 与 Unicode — 注意 substring 用 UTF-16 偏移
+# =============================================================
+print("[S21a sub-ascii expect=ell] " + substring("hello", 1, 3));
+print("[S21b sub-cn expect=好世] " + substring("你好世界", 1, 2));
+# emoji: substring 用 UTF-16 偏移, "😀" 长 2 code units
+# substring("😀", 0, 1) 取 1 个 code unit = 高代理(乱码)
+try {
+    print("[S21c sub-emoji-half expect=?] " + substring("😀", 0, 1));
+} catch (e) {
+    print("[S21c sub-emoji-half expect=?] got-ERR: " + e);
+}
+print("[S21d sub-emoji-full expect=😀] " + substring("😀", 0, 2));
+
+# =============================================================
+# Section 22: 比较与排序语义
+# =============================================================
+print("[S22a cmp-empty-lt expect=true] " + str("" < "a"));
+print("[S22b cmp-prefix expect=true] " + str("abc" < "abcd"));
+print("[S22c cmp-case expect=true] " + str("Z" < "a"));
+print("[S22d cmp-emoji-neq expect=true] " + str("😀" != "🎉"));
+print("[S22e cmp-emoji-lt expect=true] " + str("😀" < "🎉"));
+
+# =============================================================
+# Section 23: 边界 — 空字符串操作
+# =============================================================
+print("[S23a empty-len expect=0] " + str(len("")));
+print("[S23b empty-slice expect=] [" + ""[0:5] + "]");
+print("[S23c empty-reverse expect=] [" + ""[::-1] + "]");
+try {
+    print("[S23d empty-idx expect=ERR] " + ""[0]);
+} catch (e) {
+    print("[S23d empty-idx expect=ERR] got-ERR: " + e);
+}
+print("[S23e empty-contains expect=false] " + str("".contains("a")));
+print("[S23f empty-in-empty expect=true] " + str("" in ""));
+
+# =============================================================
+# Section 24: 多 emoji 序列迭代 (一致性)
+# =============================================================
+let collected = [];
+for ch in "😀🎉" {
+    push(collected, ch);
+}
+print("[S24a iter-2emoji-count expect=2] " + str(len(collected)));
+print("[S24b iter-2emoji-0 expect=😀] " + collected[0]);
+print("[S24c iter-2emoji-1 expect=🎉] " + collected[1]);
+
+# =============================================================
+# Section 25: starts_with / ends_with Unicode
+# =============================================================
+print("[S25a starts-cn expect=true] " + str("你好世界".starts_with("你好")));
+print("[S25b ends-cn expect=true] " + str("你好世界".ends_with("世界")));
+print("[S25c starts-emoji expect=true] " + str("😀🎉".starts_with("😀")));
+print("[S25d ends-emoji expect=true] " + str("😀🎉".ends_with("🎉")));
+
+# =============================================================
+# Section 26: find() 返回码点偏移还是 code unit 偏移?
+# =============================================================
+print("[S26a find-cn expect=2] " + str("你好世界".find("世界")));
+print("[S26b find-emoji expect=2] " + str("😀🎉".find("🎉")));
+# "a😀b" 中找 b: 码点偏移=2, UTF-16 code unit 偏移=3
+print("[S26c find-after-emoji expect=2] " + str("a😀b".find("b")));
+
+print("===== DONE R3-109 =====");

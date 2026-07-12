@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>下载 H# — 选版本 / 选启动器</title>
+  <meta name="description" content="下载 H#：选 .hps 语言包还是 .app 启动器？macOS / Windows / Linux 三平台 · 多架构支持。" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header" id="header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="H# home">
+        <span class="brand-mark">H<span class="sharp">#</span></span>
+        <span class="brand-tag"><span>v0.4</span></span>
+      </a>
+      <nav class="nav" aria-label="primary">
+        <a class="nav-item" href="index.html#features">特性 <span class="caret">▾</span></a>
+        <a class="nav-item" href="index.html#zzw">ZZW Code</a>
+        <a class="nav-item" href="pricing.html">定价</a>
+        <a class="nav-item" href="download.html" aria-current="page">下载</a>
+        <a class="nav-item nav-item-beta" href="beta.html">Beta <span class="nav-beta-tag">v0.5</span></a>
+        <a class="nav-item" href="guide.html">指南</a>
+        <a class="nav-item" href="index.html#privacy">隐私</a>
+      </nav>
+      <div class="header-right">
+        <a class="uiverse-btn" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">
+          <span>GitHub</span>
+          <span>查看仓库 ↗</span>
+        </a>
+        <a class="uiverse-btn uiverse-btn-brand" href="download.html">
+          <span>下载 H#</span>
+          <span>立即下载 ↓</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="download-main">
+    <!-- Hero -->
+    <section class="download-hero">
+      <div class="container">
+        <div class="download-hero-inner">
+          <div class="download-eyebrow fade-up">
+            <span class="zzw-eyebrow-dot"></span>
+            <span>download · v0.4.2 · 2026.06.13</span>
+          </div>
+          <h1 class="download-title fade-up">
+            把 H# 装上你的机器，<br />
+            <span class="accent">两种方式</span>
+          </h1>
+          <p class="download-sub fade-up">
+            v0.4 当前仅提供 <strong>macOS</strong> 版本 · 想要 CLI 工具链 + 解释器核心，选 <code class="inline-code">.hps</code> 语言包；<br />
+            想要图形化 IDE + AI Agent + 一键更新，选 <code class="inline-code">.app</code> 启动器。
+          </p>
+
+          <!-- Platform tabs -->
+          <div class="dl-tabs fade-up" role="tablist" aria-label="选择平台">
+            <button class="dl-tab is-active" data-platform="macos" role="tab" aria-selected="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+              macOS
+            </button>
+            <button class="dl-tab" data-platform="windows" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M3 5.5L10.5 4v8H3V5.5zM3 12.5h7.5v8L3 19.5v-7zM11.5 4L21 3v9h-9.5V4zM11.5 12.5H21V21l-9.5-1V12.5z"/></svg>
+              Windows
+              <span class="dl-tab-tag">敬请期待</span>
+            </button>
+            <button class="dl-tab" data-platform="linux" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12 2c-2.5 0-4 2-4 5 0 1.5.5 3 1 4-1.5 2-3 4-3 7 0 1 .5 2 1.5 2.5C9 21 10.5 21 12 21s3 0 4.5-.5C18 20 18.5 19 18.5 18c0-3-1.5-5-3-7 .5-1 1-2.5 1-4 0-3-1.5-5-4-5zm-2 4a1 1 0 110 2 1 1 0 010-2zm4 0a1 1 0 110 2 1 1 0 010-2z"/></svg>
+              Linux
+              <span class="dl-tab-tag">敬请期待</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Two-product selector -->
+    <section class="download-picker">
+      <div class="container">
+
+        <!-- Beta banner -->
+        <a class="dl-beta-banner fade-up" href="beta.html">
+          <span class="dl-beta-banner-icon">BETA</span>
+          <div class="dl-beta-banner-body">
+            <span class="dl-beta-banner-title">v0.5.0-beta.1 已经发布</span>
+            <span class="dl-beta-banner-desc">多线程 DZZW 调度器 · async/await 原生语法 · 标准库体积缩小 40% · 与 v0.4 可共存。</span>
+          </div>
+          <span class="dl-beta-banner-cta">去下载 →</span>
+        </a>
+
+        <div class="dl-picker-grid">
+
+          <!-- H# Language (.hps) -->
+          <article class="dl-product fade-up" data-dl-product>
+            <div class="dl-product-tag">recommended for CLI</div>
+            <div class="dl-product-head">
+              <div class="dl-product-icon dl-product-icon-hps">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                </svg>
+              </div>
+              <div>
+                <h2>H# 语言包 <span class="dl-product-ext">.hps</span></h2>
+                <p>单二进制 + 解释器 + 编译器 + 标准库。装到 <code class="inline-code">$PATH</code> 里就能用。</p>
+              </div>
+            </div>
+
+            <ul class="dl-product-feats">
+              <li><span class="check">✓</span> 解释器 / 编译器 / REPL 全套</li>
+              <li><span class="check">✓</span> 包含 DZZW 并发运行时 + HwdUI</li>
+              <li><span class="check">✓</span> 可作为其他应用的库依赖引入</li>
+              <li><span class="check">✓</span> ~32 MB · 自包含 · 无外部依赖</li>
+            </ul>
+
+            <!-- Per-platform download rows -->
+            <div class="dl-rows" data-platform-group="macos">
+              <a class="dl-row" href="verify.html?file=macos-arm64-hps" data-platform-row="macos" data-arch="arm64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Apple Silicon</span>
+                  <span class="dl-row-meta">.hps · arm64 · 32.4 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+              <a class="dl-row" href="verify.html?file=macos-x64-hps" data-platform-row="macos" data-arch="x64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Intel</span>
+                  <span class="dl-row-meta">.hps · x86_64 · 34.1 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+            </div>
+
+            <div class="dl-rows" data-platform-group="windows" hidden>
+              <div class="dl-row dl-row-soon" data-platform-row="windows">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">Windows · x64 / ARM64</span>
+                  <span class="dl-row-meta">.hps · 编译中</span>
+                </div>
+                <span class="dl-row-cta dl-row-cta-soon">敬请期待</span>
+              </div>
+            </div>
+
+            <div class="dl-rows" data-platform-group="linux" hidden>
+              <div class="dl-row dl-row-soon" data-platform-row="linux">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">Linux · x86_64 / ARM64</span>
+                  <span class="dl-row-meta">.hps · 编译中</span>
+                </div>
+                <span class="dl-row-cta dl-row-cta-soon">敬请期待</span>
+              </div>
+            </div>
+
+            <details class="dl-install">
+              <summary><span>安装指引</span><span class="faq-icon">+</span></summary>
+              <div class="dl-install-body">
+                <p class="dl-install-step"><strong>macOS · Homebrew</strong></p>
+                <pre class="dl-install-code mono"><code>brew install hsharp/tap/hsharp</code></pre>
+                <p class="dl-install-step"><strong>macOS · 手动</strong></p>
+                <pre class="dl-install-code mono"><code>chmod +x hsharp-0.4.2-macos-arm64.hps
+sudo mv hsharp-0.4.2-macos-arm64.hps /usr/local/bin/h#
+h# --version</code></pre>
+              </div>
+            </details>
+          </article>
+
+          <!-- H# Launcher (.app) -->
+          <article class="dl-product fade-up" data-dl-product>
+            <div class="dl-product-tag dl-product-tag-brand">recommended for IDE</div>
+            <div class="dl-product-head">
+              <div class="dl-product-icon dl-product-icon-app">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 4h16v4H4zM4 12h16v4H4zM4 20h10v0"/>
+                </svg>
+              </div>
+              <div>
+                <h2>H# 启动器 <span class="dl-product-ext">.app</span></h2>
+                <p>ZZW Code IDE + 内置 H# 工具链 + 自动更新。装上就能写 H# 并和 AI 协作。</p>
+              </div>
+            </div>
+
+            <ul class="dl-product-feats">
+              <li><span class="check">✓</span> ZZW Code 图形化 IDE（Monaco + AI）</li>
+              <li><span class="check">✓</span> 内置 H# 语言包，零配置开箱即用</li>
+              <li><span class="check">✓</span> 自动检测新版 · 增量更新 · Code-sign</li>
+              <li><span class="check">✓</span> 内置 Playground / 调试器 / Profiler</li>
+            </ul>
+
+            <div class="dl-rows" data-platform-group="macos">
+              <a class="dl-row" href="verify.html?file=macos-arm64-app" data-platform-row="macos" data-arch="arm64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Apple Silicon</span>
+                  <span class="dl-row-meta">.dmg → .app · arm64 · 142.6 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+              <a class="dl-row" href="verify.html?file=macos-x64-app" data-platform-row="macos" data-arch="x64">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">macOS · Intel</span>
+                  <span class="dl-row-meta">.dmg → .app · x86_64 · 148.2 MB</span>
+                </div>
+                <span class="dl-row-cta">Download <span class="dl-row-arrow">↓</span></span>
+              </a>
+            </div>
+
+            <div class="dl-rows" data-platform-group="windows" hidden>
+              <div class="dl-row dl-row-soon" data-platform-row="windows">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">Windows · x64 / ARM64 Installer</span>
+                  <span class="dl-row-meta">.exe · 移植中</span>
+                </div>
+                <span class="dl-row-cta dl-row-cta-soon">敬请期待</span>
+              </div>
+            </div>
+
+            <div class="dl-rows" data-platform-group="linux" hidden>
+              <div class="dl-row dl-row-soon" data-platform-row="linux">
+                <div class="dl-row-left">
+                  <span class="dl-row-name">Linux · AppImage</span>
+                  <span class="dl-row-meta">.AppImage · 移植中</span>
+                </div>
+                <span class="dl-row-cta dl-row-cta-soon">敬请期待</span>
+              </div>
+            </div>
+
+            <details class="dl-install">
+              <summary><span>安装指引</span><span class="faq-icon">+</span></summary>
+              <div class="dl-install-body">
+                <p class="dl-install-step"><strong>macOS</strong></p>
+                <p class="dl-install-text">打开 <code class="inline-code">.dmg</code> → 拖入「应用程序」文件夹 → 启动时若提示「未识别开发者」，到「系统设置 → 隐私与安全性」点击「仍要打开」。</p>
+                <p class="dl-install-step"><strong>Windows / Linux</strong></p>
+                <p class="dl-install-text">当前仅发布 macOS 版本 · Windows 与 Linux 移植正在路上，<a class="pricing-link" href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">订阅 GitHub Issue</a> 以便第一时间收到发布通知。</p>
+              </div>
+            </details>
+          </article>
+
+        </div>
+
+        <!-- Other channels -->
+        <div class="dl-other fade-up">
+          <div class="dl-other-item">
+            <span class="dl-other-label">macOS 包管理器</span>
+            <div class="dl-other-links">
+              <a href="https://github.com/peddlejumper/homebrew-hsharp" target="_blank" rel="noopener">brew install hsharp</a>
+            </div>
+          </div>
+          <div class="dl-other-item">
+            <span class="dl-other-label">从源码构建（任一平台）</span>
+            <pre class="dl-other-code mono"><code>git clone https://github.com/peddlejumper/HSharp &amp;&amp; cd HSharp
+h# build compiler/main.hto -o h#</code></pre>
+          </div>
+        </div>
+
+        <!-- Notify banner for non-mac users -->
+        <div class="dl-notify fade-up">
+          <div class="dl-notify-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+          </div>
+          <div class="dl-notify-body">
+            <h4>Windows / Linux 用户</h4>
+            <p>v0.4 当前仅提供 macOS 版本 · 跨平台移植正在路上。订阅 GitHub Releases 通知，发布时第一时间收到邮件。</p>
+          </div>
+          <a class="btn btn-secondary btn-md" href="https://github.com/peddlejumper/HSharp/subscription" target="_blank" rel="noopener">订阅发布通知</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Version history -->
+    <section class="dl-versions">
+      <div class="container">
+        <div class="section-head-center" style="text-align:left; margin-bottom: 56px;">
+          <h2 class="section-title fade-up">历史 <span class="accent">版本</span></h2>
+          <p class="section-desc fade-up">所有版本都公开发布 · MIT-style 协议 · 永久可下载。</p>
+        </div>
+
+        <div class="dl-version-table-wrap fade-up">
+          <table class="dl-version-table">
+            <thead>
+              <tr>
+                <th>版本</th>
+                <th>发布日期</th>
+                <th>macOS · 大小</th>
+                <th>SHA-256</th>
+                <th class="dl-version-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="dl-version-current">v0.4.2</span></td>
+                <td>2026.06.13</td>
+                <td>32.4 MB</td>
+                <td><code class="dl-version-hash">9f3c4d8a · · · 12b7</code></td>
+                <td class="dl-version-actions">
+                  <a href="verify.html?file=macos-arm64-hps" class="dl-version-link">.hps</a>
+                  <a href="verify.html?file=macos-arm64-app" class="dl-version-link">.dmg</a>
+                  <span class="dl-version-soon">Win/Linux · 敬请期待</span>
+                </td>
+              </tr>
+              <tr>
+                <td>v0.4.1</td>
+                <td>2026.05.28</td>
+                <td>31.8 MB</td>
+                <td><code class="dl-version-hash">7a2b1c9d · · · 8e4f</code></td>
+                <td class="dl-version-actions">
+                  <a href="#" class="dl-version-link">.hps</a>
+                  <a href="#" class="dl-version-link">.dmg</a>
+                  <span class="dl-version-soon">Win/Linux · 敬请期待</span>
+                </td>
+              </tr>
+              <tr>
+                <td>v0.4.0</td>
+                <td>2026.05.10</td>
+                <td>30.6 MB</td>
+                <td><code class="dl-version-hash">4e8a0c2b · · · 3d9a</code></td>
+                <td class="dl-version-actions">
+                  <a href="#" class="dl-version-link">.hps</a>
+                  <a href="#" class="dl-version-link">.dmg</a>
+                  <span class="dl-version-soon">Win/Linux · 敬请期待</span>
+                </td>
+              </tr>
+              <tr>
+                <td>v0.3.7</td>
+                <td>2026.04.02</td>
+                <td>28.2 MB</td>
+                <td><code class="dl-version-hash">2b1d8f5e · · · 6c7a</code></td>
+                <td class="dl-version-actions">
+                  <a href="#" class="dl-version-link">.hps</a>
+                  <a href="#" class="dl-version-link">.dmg</a>
+                  <span class="dl-version-soon">Win/Linux · 敬请期待</span>
+                </td>
+              </tr>
+              <tr>
+                <td>v0.3.6</td>
+                <td>2026.03.14</td>
+                <td>27.9 MB</td>
+                <td><code class="dl-version-hash">8c3a5b7d · · · 1f0e</code></td>
+                <td class="dl-version-actions">
+                  <a href="#" class="dl-version-link">.hps</a>
+                  <a href="#" class="dl-version-link">.dmg</a>
+                  <span class="dl-version-soon">Win/Linux · 敬请期待</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="dl-version-foot fade-up">
+          全部历史发布见 <a class="pricing-link" href="https://github.com/peddlejumper/HSharp/releases" target="_blank" rel="noopener">GitHub Releases</a> · Nightly 构建见 <a class="pricing-link" href="https://github.com/peddlejumper/HSharp/actions" target="_blank" rel="noopener">Actions</a>
+        </p>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="download-final">
+      <div class="container">
+        <div class="final-cta fade-up">
+          <h2>装好了？<br /><span class="accent">跑通 demo 试试</span></h2>
+          <p>把 <code class="inline-code">hello.hto</code> 跑起来，看一眼 AST，再看一眼字节码 —— 这是最快理解 H# 的方式。</p>
+          <div class="final-cta-actions">
+            <a class="btn btn-brand btn-lg" href="guide.html">阅读 H# 指南</a>
+            <a class="btn btn-secondary btn-lg" href="index.html#playground">在线 Playground</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <span class="brand-mark">H<span class="sharp">#</span></span>
+            <span class="brand-tag"><span>v0.4</span></span>
+          </div>
+          <p>A self-hosting language<br/>for the curious mind.</p>
+        </div>
+        <div class="footer-col">
+          <h5>产品</h5>
+          <a href="index.html#features">H# 特性</a>
+          <a href="index.html#zzw">ZZW Code</a>
+          <a href="pricing.html">订阅计划</a>
+          <a href="download.html">下载 stable</a>
+          <a href="beta.html">下载 beta</a>
+          <a href="guide.html">官方指南</a>
+        </div>
+        <div class="footer-col">
+          <h5>资源</h5>
+          <a href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/peddlejumper/HSharp/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
+          <a href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer-col">
+          <h5>联系</h5>
+          <a href="mailto:hi@hsharp.dev">hi@hsharp.dev</a>
+          <a href="https://github.com/peddlejumper" target="_blank" rel="noopener">peddlejumper</a>
+          <span>独立开发，2026</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 peddlejumper · H# Project</span>
+        <span id="build-time">build · 2026.06.13</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/download.js"></script>
+</body>
+</html>

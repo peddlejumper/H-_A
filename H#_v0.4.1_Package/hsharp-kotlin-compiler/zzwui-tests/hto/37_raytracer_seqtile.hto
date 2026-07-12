@@ -1,0 +1,57 @@
+# build: hwdui_min.hto, zzw_native.hto, zzw_render_min.hto, _libs/raytracer_math.hto, _libs/raytracer_scene.hto, _libs/raytracer_core.hto, _libs/raytracer_pipeline.hto
+fn render_tile_sequential(scene, camera, tile, img_w, img_h, samples, max_depth) {
+    let out = [];
+    let px = tile.x0;
+    let end_x = tile.x0 + tile.w;
+    let py = tile.y0;
+    let end_y = tile.y0 + tile.h;
+    while (py < end_y) {
+        let x = px;
+        while (x < end_x) {
+            let c = render_pixel(scene, camera, x, py, img_w, img_h, samples, max_depth, tile.seed + x * 73 + py * 131);
+            let rgb = to_rgb8(c);
+            push(out, rgb[0]);
+            push(out, rgb[1]);
+            push(out, rgb[2]);
+            x = x + 1;
+        }
+        py = py + 1;
+    }
+    return out;
+}
+
+fn main() {
+    let s = scene_three_spheres();
+    let cam = look_at(0, 1.5, 5, 0, 0.5, 0, 60);
+    let W = 96; let H = 64;
+    let samples = 1; let depth = 1;
+    let tiles = make_tiles(W, H, 6, 4);
+    print("=== sequential tile render of three_spheres ===");
+    print("total tiles: " + str(len(tiles)));
+    let img = [];
+    let i = 0;
+    while (i < len(tiles)) {
+        let tile = tiles[i];
+        let out = render_tile_sequential(s, cam, tile, W, H, samples, depth);
+        # Print first pixel of each tile to see what's happening
+        let first = out[0];
+        print("  tile " + str(tile.id) + " (x0=" + str(tile.x0) + ",y0=" + str(tile.y0) +
+              ",w=" + str(tile.w) + ",h=" + str(tile.h) + ") first pixel: " +
+              str(first) + "," + str(out[1]) + "," + str(out[2]));
+        let j = 0;
+        while (j < len(out)) {
+            push(img, out[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    print("");
+    print("=== image stats ===");
+    let stats = image_stats(img);
+    print("  max_lum=" + str(stats["max_lum"]) + "  min_lum=" + str(stats["min_lum"]));
+    # Sample a few pixels in the middle
+    print("  center pixel (48,32): rgb=" + str(img[(32*W+48)*3]) + "," + str(img[(32*W+48)*3+1]) + "," + str(img[(32*W+48)*3+2]));
+    print("  green sphere (36,32): rgb=" + str(img[(32*W+36)*3]) + "," + str(img[(32*W+36)*3+1]) + "," + str(img[(32*W+36)*3+2]));
+    print("  right sphere (60,32): rgb=" + str(img[(32*W+60)*3]) + "," + str(img[(32*W+60)*3+1]) + "," + str(img[(32*W+60)*3+2]));
+}
+main();

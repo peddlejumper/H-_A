@@ -1,0 +1,410 @@
+# round4_131_dictkeys.hto
+# 测试智能体 #131 — 字典键类型与相等性 (dict key types & equality)
+# 目标: 探测 H# v0.4.1 字典键的类型强制 (coerceKey) 与相等性 (HValueOps.equals) 边界
+#
+# 已知背景 (源码审查):
+#   - HDict 内部用 MutableMap<String, HValue> (LinkedHashMap 保序)
+#   - coerceKey(v): HString->value, HNumber->toDisplayString("1" for 1.0),
+#     HBool->"true"/"false", HNull->"null", else->toDisplayString()
+#   - HValueOps.equals: 跨类型比较返回 false (1 != true, 1 != "1")
+#   - HInstance == HInstance 用引用相等 (a === b)
+#   - dictKeyOf (用于 .get/.has_key/.contains/.remove) 与 coerceKey (用于 d[k], d[k]=v, in) 一致
+#
+# 方法: 每个用例打印 "S## TAG | observed | EXPECT=expected | PASS|FAIL"
+
+let stats = [0, 0];
+fn report(tag, observed, expected) {
+    let ok = observed == expected;
+    if (ok) {
+        stats[0] = stats[0] + 1;
+    } else {
+        stats[1] = stats[1] + 1;
+    }
+    let status = "FAIL";
+    if (ok) { status = "PASS"; }
+    print("S" + tag + " | " + str(observed) + " | EXPECT=" + str(expected) + " | " + status);
+}
+
+# ============================================================
+# S1: 整数键 — {1: "a", 2: "b"}
+# ============================================================
+print("=== S1: int keys ===");
+let s1 = {1: "a", 2: "b"};
+report("1.01-int-key-d1", s1[1], "a");
+report("1.02-int-key-d2", s1[2], "b");
+report("1.03-int-in-1", 1 in s1, true);
+report("1.04-int-in-2", 2 in s1, true);
+report("1.05-int-not-in-3", 3 in s1, false);
+report("1.06-int-len", len(s1), 2);
+report("1.07-int-get", s1.get(1), "a");
+report("1.08-int-has-key", s1.has_key(1), true);
+report("1.09-int-has-key-false", s1.has_key(3), false);
+report("1.10-int-contains", s1.contains(2), true);
+
+# 整数键赋值后访问
+let s1b = {};
+s1b[10] = "ten";
+s1b[20] = "twenty";
+report("1.11-int-assign-get", s1b[10], "ten");
+report("1.12-int-assign-in", 10 in s1b, true);
+report("1.13-int-assign-len", len(s1b), 2);
+
+# 负整数键
+let s1c = {};
+s1c[-1] = "neg";
+report("1.14-neg-int-key", s1c[-1], "neg");
+report("1.15-neg-int-in", -1 in s1c, true);
+
+# 大整数键
+let s1d = {};
+s1d[1000000] = "big";
+report("1.16-big-int-key", s1d[1000000], "big");
+
+# ============================================================
+# S2: 浮点键 — {1.5: "a"}, {1: "a", 1.0: "b"} 冲突?
+# ============================================================
+print("=== S2: float keys ===");
+let s2 = {1.5: "a"};
+report("2.01-float-key-access", s2[1.5], "a");
+report("2.02-float-in", 1.5 in s2, true);
+report("2.03-float-get", s2.get(1.5), "a");
+report("2.04-float-len", len(s2), 1);
+
+# 1 与 1.0 作为键: HNumber 存 Double, toDisplayString 都产生 "1" -> 冲突
+let s2b = {1: "a", 1.0: "b"};
+report("2.05-int-float-collision-d1", s2b[1], "b");
+report("2.06-int-float-collision-d1float", s2b[1.0], "b");
+report("2.07-int-float-collision-len", len(s2b), 1);
+report("2.08-int-float-collision-in-1", 1 in s2b, true);
+report("2.09-int-float-collision-in-1float", 1.0 in s2b, true);
+
+# 先 int 赋值, 再 float 赋值 -> 覆盖
+let s2c = {};
+s2c[1] = "from-int";
+s2c[1.0] = "from-float";
+report("2.10-assign-int-then-float", s2c[1], "from-float");
+report("2.11-assign-int-then-float-len", len(s2c), 1);
+
+# 先 float 赋值, 再 int 赋值 -> 覆盖
+let s2d = {};
+s2d[1.0] = "from-float";
+s2d[1] = "from-int";
+report("2.12-assign-float-then-int", s2d[1.0], "from-int");
+report("2.13-assign-float-then-int-len", len(s2d), 1);
+
+# 纯浮点不同值不冲突
+let s2e = {2.5: "a", 3.5: "b"};
+report("2.14-distinct-floats-len", len(s2e), 2);
+report("2.15-distinct-floats-get", s2e[3.5], "b");
+
+# ============================================================
+# S3: 字符串键 — {"a": 1, "b": 2}
+# ============================================================
+print("=== S3: string keys ===");
+let s3 = {"a": 1, "b": 2};
+report("3.01-str-key-a", s3["a"], 1);
+report("3.02-str-key-b", s3["b"], 2);
+report("3.03-str-in-a", "a" in s3, true);
+report("3.04-str-not-in-z", "z" in s3, false);
+report("3.05-str-get", s3.get("a"), 1);
+report("3.06-str-has-key", s3.has_key("b"), true);
+report("3.07-str-len", len(s3), 2);
+
+# 空字符串键
+let s3b = {"": "empty"};
+report("3.08-empty-str-key", s3b[""], "empty");
+report("3.09-empty-str-in", "" in s3b, true);
+
+# 长字符串键
+let s3c = {};
+s3c["a very long key with spaces"] = "val";
+report("3.10-long-str-key", s3c["a very long key with spaces"], "val");
+
+# 特殊字符键
+let s3d = {};
+s3d["key:with:colons"] = "v";
+report("3.11-special-char-key", s3d["key:with:colons"], "v");
+
+# ============================================================
+# S4: 布尔键 — {true: "yes", false: "no"}
+# ============================================================
+print("=== S4: bool keys ===");
+let s4 = {true: "yes", false: "no"};
+report("4.01-bool-key-true", s4[true], "yes");
+report("4.02-bool-key-false", s4[false], "no");
+report("4.03-bool-in-true", true in s4, true);
+report("4.04-bool-in-false", false in s4, true);
+report("4.05-bool-len", len(s4), 2);
+report("4.06-bool-get-true", s4.get(true), "yes");
+report("4.07-bool-has-key-false", s4.has_key(false), true);
+
+# true 与 "true" 字符串是否冲突? coerceKey: true->"true", "true"->"true" -> 冲突!
+let s4b = {};
+s4b[true] = "from-bool";
+s4b["true"] = "from-str";
+report("4.08-bool-str-collision", s4b[true], "from-str");
+report("4.09-bool-str-collision-len", len(s4b), 1);
+
+# false 与 "false" 冲突
+let s4c = {};
+s4c[false] = "from-bool";
+s4c["false"] = "from-str";
+report("4.10-bool-str-false-collision", s4c[false], "from-str");
+report("4.11-bool-str-false-len", len(s4c), 1);
+
+# ============================================================
+# S5: null键 — {null: "nothing"}
+# ============================================================
+print("=== S5: null keys ===");
+let s5 = {null: "nothing"};
+report("5.01-null-key-access", s5[null], "nothing");
+report("5.02-null-in", null in s5, true);
+report("5.03-null-len", len(s5), 1);
+report("5.04-null-get", s5.get(null), "nothing");
+report("5.05-null-has-key", s5.has_key(null), true);
+
+# null 与 "null" 字符串冲突? coerceKey: null->"null", "null"->"null" -> 冲突!
+let s5b = {};
+s5b[null] = "from-null";
+s5b["null"] = "from-str";
+report("5.06-null-str-collision", s5b[null], "from-str");
+report("5.07-null-str-collision-len", len(s5b), 1);
+
+# 字面量混合 null 和 "null"
+let s5c = "none";
+try {
+    let s5lit = {null: "a", "null": "b"};
+    s5c = str(len(s5lit)) + ":" + s5lit[null];
+} catch (e) {
+    s5c = "err";
+}
+report("5.08-literal-null-str-collision", s5c, "1:b");
+
+# ============================================================
+# S6: 混合键类型 — {1: "int", "1": "str", true: "bool"}
+# ============================================================
+print("=== S6: mixed key types ===");
+let s6 = {1: "int", "1": "str", true: "bool"};
+# 1 -> "1", "1" -> "1" (冲突, 覆盖), true -> "true"
+# 结果: 2 个键 ("1"->"str", "true"->"bool")
+report("6.01-mixed-d1", s6[1], "str");
+report("6.02-mixed-d1str", s6["1"], "str");
+report("6.03-mixed-dtrue", s6[true], "bool");
+report("6.04-mixed-len", len(s6), 2);
+report("6.05-mixed-in-1", 1 in s6, true);
+report("6.06-mixed-in-1str", "1" in s6, true);
+report("6.07-mixed-in-true", true in s6, true);
+
+# 1 == true ? HValueOps.equals: 跨类型 -> false
+report("6.08-eq-int-true", 1 == true, false);
+report("6.09-eq-0-false", 0 == false, false);
+report("6.10-eq-int-str", 1 == "1", false);
+
+# 1, true, "1", "true" 四个键放一起
+let s6b = {};
+s6b[1] = "int";
+s6b[true] = "bool";
+s6b["1"] = "str1";
+s6b["true"] = "strtrue";
+# 键: "1"(int+str1 冲突), "true"(bool+strtrue 冲突) -> 2 个键
+report("6.11-four-mixed-len", len(s6b), 2);
+report("6.12-four-mixed-d1", s6b[1], "str1");
+report("6.13-four-mixed-dtrue", s6b[true], "strtrue");
+
+# ============================================================
+# S7: 列表作为键 — {[1,2]: "list"}
+# ============================================================
+print("=== S7: list as key ===");
+let s7err = "none";
+let s7 = "none";
+try {
+    s7 = {[1, 2]: "list"};
+    s7err = "ok";
+} catch (e) {
+    s7err = "err";
+}
+report("7.01-list-key-literal-ok", s7err, "ok");
+
+if (s7err == "ok") {
+    # 键 = [1,2].toDisplayString() = "[1, 2]"
+    report("7.02-list-key-access", s7[[1, 2]], "list");
+    report("7.03-list-key-in", [1, 2] in s7, true);
+    report("7.04-list-key-len", len(s7), 1);
+    report("7.05-list-key-get", s7.get([1, 2]), "list");
+}
+
+# 两个相同内容的 list 键 -> 冲突 (toDisplayString 相同)
+let s7b = {};
+s7b[[1, 2]] = "first";
+s7b[[1, 2]] = "second";
+report("7.06-list-key-same-content-collision", s7b[[1, 2]], "second");
+report("7.07-list-key-same-content-len", len(s7b), 1);
+
+# 不同内容的 list -> 不冲突
+let s7c = {};
+s7c[[1, 2]] = "a";
+s7c[[3, 4]] = "b";
+report("7.08-list-key-diff-content-len", len(s7c), 2);
+report("7.09-list-key-diff-content-get", s7c[[3, 4]], "b");
+
+# 空列表作为键
+let s7d = {};
+s7d[[]] = "empty-list";
+report("7.10-empty-list-key", s7d[[]], "empty-list");
+report("7.11-empty-list-key-in", [] in s7d, true);
+
+# list 相等性: [1,2] == [1,2] -> true (deep equality)
+report("7.12-list-eq-same-content", [1, 2] == [1, 2], true);
+# 但作为 dict 键, 两个不同 list 对象但相同内容 -> 冲突
+let s7e = {};
+let l1 = [1, 2];
+let l2 = [1, 2];
+s7e[l1] = "from-l1";
+s7e[l2] = "from-l2";
+report("7.13-list-key-diff-obj-same-content", s7e[l1], "from-l2");
+report("7.14-list-key-diff-obj-len", len(s7e), 1);
+
+# ============================================================
+# S8: 字典作为键 — {{"k":1}: "dict"}
+# ============================================================
+print("=== S8: dict as key ===");
+let s8err = "none";
+let s8 = "none";
+try {
+    s8 = {{"k": 1}: "dict"};
+    s8err = "ok";
+} catch (e) {
+    s8err = "err";
+}
+report("8.01-dict-key-literal-ok", s8err, "ok");
+
+if (s8err == "ok") {
+    # 键 = {"k":1}.toDisplayString() = "{k: 1}"
+    report("8.02-dict-key-access", s8[{"k": 1}], "dict");
+    report("8.03-dict-key-in", {"k": 1} in s8, true);
+    report("8.04-dict-key-len", len(s8), 1);
+}
+
+# 两个相同内容的 dict 键 -> 冲突
+let s8b = {};
+s8b[{"k": 1}] = "first";
+s8b[{"k": 1}] = "second";
+report("8.05-dict-key-same-content-collision", s8b[{"k": 1}], "second");
+report("8.06-dict-key-same-content-len", len(s8b), 1);
+
+# 空字典作为键
+let s8c = {};
+s8c[{}] = "empty-dict";
+report("8.07-empty-dict-key", s8c[{}], "empty-dict");
+report("8.08-empty-dict-key-in", {} in s8c, true);
+
+# dict 相等性
+report("8.09-dict-eq-same-content", {"a": 1} == {"a": 1}, true);
+report("8.10-dict-eq-diff-content", {"a": 1} == {"a": 2}, false);
+
+# ============================================================
+# S9: 对象作为键 — class C {} let c = new C(); {c: "obj"}
+# ============================================================
+print("=== S9: object as key ===");
+class KeyObj {
+    let val = 0;
+    fn init(v) { val = v; }
+}
+let c1 = new KeyObj(1);
+let c2 = new KeyObj(2);
+let c1b = new KeyObj(1);  # 相同字段, 不同引用
+
+let s9err = "none";
+let s9 = "none";
+try {
+    s9 = {c1: "obj1"};
+    s9err = "ok";
+} catch (e) {
+    s9err = "err";
+}
+report("9.01-obj-key-literal-ok", s9err, "ok");
+
+if (s9err == "ok") {
+    report("9.02-obj-key-access", s9[c1], "obj1");
+    report("9.03-obj-key-in", c1 in s9, true);
+    report("9.04-obj-key-len", len(s9), 1);
+}
+
+# 不同对象作为不同键
+let s9b = {};
+s9b[c1] = "from-c1";
+s9b[c2] = "from-c2";
+# c1.toDisplayString() != c2.toDisplayString() (val=1 vs val=2)
+report("9.05-diff-obj-key-len", len(s9b), 2);
+report("9.06-diff-obj-key-get-c1", s9b[c1], "from-c1");
+report("9.07-diff-obj-key-get-c2", s9b[c2], "from-c2");
+
+# 相同字段不同引用 -> 冲突 (toDisplayString 相同)
+let s9c = {};
+s9c[c1] = "from-c1";
+s9c[c1b] = "from-c1b";
+# c1.val=1, c1b.val=1 -> toDisplayString 相同 -> 冲突
+report("9.08-same-field-obj-collision", s9c[c1], "from-c1b");
+report("9.09-same-field-obj-len", len(s9c), 1);
+
+# 对象相等性: 引用相等
+report("9.10-obj-eq-same-ref", c1 == c1, true);
+report("9.11-obj-eq-diff-ref-same-field", c1 == c1b, false);
+
+# ============================================================
+# S10: 迭代顺序 — 插入序, 删除后重新添加
+# ============================================================
+print("=== S10: iteration order ===");
+let s10 = {"a": 1, "b": 2, "c": 3};
+let s10order = "";
+for k in s10 { s10order = s10order + k; }
+report("10.01-iter-insertion-order", s10order, "abc");
+
+# 多次迭代顺序一致
+let s10order2 = "";
+for k in s10 { s10order2 = s10order2 + k; }
+report("10.02-iter-stable", s10order, s10order2);
+
+# 删除后重新添加 -> 末尾
+let s10b = {"a": 1, "b": 2, "c": 3};
+del s10b["b"];
+let s10border1 = "";
+for k in s10b { s10border1 = s10border1 + k; }
+report("10.03-del-then-order", s10border1, "ac");
+
+s10b["b"] = 99;
+let s10border2 = "";
+for k in s10b { s10border2 = s10border2 + k; }
+report("10.04-del-readd-at-end", s10border2, "acb");
+report("10.05-del-readd-value", s10b["b"], 99);
+
+# 覆盖已存在 key -> 位置不变 (Python 语义)
+let s10c = {"x": 1, "y": 2, "z": 3};
+s10c["y"] = 99;
+let s10corder = "";
+for k in s10c { s10corder = s10corder + k; }
+report("10.06-overwrite-keeps-position", s10corder, "xyz");
+report("10.07-overwrite-value", s10c["y"], 99);
+
+# 字面量重复 key -> 保留首次位置, 值为最后赋值
+let s10d = {"a": 1, "b": 2, "a": 3};
+let s10dorder = "";
+for k in s10d { s10dorder = s10dorder + k; }
+report("10.08-literal-dup-key-order", s10dorder, "ab");
+report("10.09-literal-dup-key-value", s10d["a"], 3);
+report("10.10-literal-dup-key-len", len(s10d), 2);
+
+# keys() / values() 顺序对应
+let s10e = {"p": 10, "q": 20, "r": 30};
+let s10ekeys = keys(s10e);
+let s10eorder = "";
+for k in s10ekeys { s10eorder = s10eorder + k; }
+report("10.11-keys-order", s10eorder, "pqr");
+report("10.12-keys-idx0", s10ekeys[0], "p");
+report("10.13-keys-idx2", s10ekeys[2], "r");
+
+# ============================================================
+# 总结
+# ============================================================
+print("==== SUMMARY ====");
+print("PASS=" + str(stats[0]) + " FAIL=" + str(stats[1]));

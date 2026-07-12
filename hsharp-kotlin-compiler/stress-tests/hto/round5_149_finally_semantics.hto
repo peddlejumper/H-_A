@@ -1,0 +1,1020 @@
+# round5_149_finally_semantics.hto — 测试工程师 Round 5 #149
+# 领域: try/finally 语义与错误传播 (try/finally Semantics & Error Propagation)
+# H# v0.4.1
+#
+# 已知背景 (来自 round4_136 / 源码审查):
+#   - H# v0.4.1 的 lexer (tokens.py/lexer.py) 没有 FINALLY 关键字
+#   - parser.try_statement() 要求 CATCH, 不解析 finally 块
+#   - AST TryStatement 无 finally 字段; compiler 无 finally 综合逻辑
+#   - HVM.kt 仅有 SETUP_EXCEPT/POP_EXCEPT/RAISE/SETUP_PROPAGATE/POP_PROPAGATE
+#   - 因此 try{}finally{} 和 try{}catch(e){}finally{} 均无法解析 (SyntaxError)
+#
+# 本测试聚焦 S1..S15 子领域, 用支持的 try/catch/throw 语法测试错误传播语义。
+# finally 相关子领域 (S1/S2/S4/S5/S6/S7/S11) 用 try/catch 等价物或文档化缺失。
+# 每个用例打印 "Sxx.y:" 前缀, 预期值在注释。最后放未捕获异常用例。
+
+# ============================================================
+# S1: finally 基本执行 — try 正常完成 / try 抛异常
+# (H# 无 finally; 用 try/catch 测试等价路径)
+# ============================================================
+print("=== S1 finally basic execution (simulated) ===");
+
+# S1.1: try 正常完成, "cleanup" 应执行 (用 try/catch 后显式 cleanup 模拟)
+try {
+    let s1log1 = "try-ok;";
+    print("S1.1: " + s1log1 + "cleanup;");   # try-ok;cleanup;
+} catch (e) {
+    print("S1.1-ERR: " + e);
+}
+
+# S1.2: try 抛异常, catch 捕获, "cleanup" 应执行
+try {
+    let s1log2 = "try-throw;";
+    throw "err-S1.2";
+    print("S1.2-unreachable");
+} catch (e) {
+    print("S1.2: " + s1log2 + "catch:" + e + ";cleanup;");   # try-throw;catch:err-S1.2;cleanup;
+}
+
+# S1.3: 无 finally 时, try 抛异常后 try 块内后续语句不可达
+try {
+    try {
+        throw "S1.3";
+        print("S1.3-unreachable");
+    } catch (e) {
+        print("S1.3: caught " + e);   # caught S1.3
+    }
+} catch (e) { print("S1.3-ERR: " + e); }
+
+# S1.4: try 正常完成, catch 不执行, 后续语句执行
+try {
+    let s1v4 = 1;
+} catch (e) {
+    print("S1.4-catch-should-not-run");
+}
+print("S1.4: after-try");   # after-try
+
+# S1.5: try 中表达式求值异常 (除零) 被 catch 捕获
+try {
+    let s1z = 0;
+    let s1r = 10 / s1z;
+    print("S1.5-unreachable: " + s1r);
+} catch (e) {
+    print("S1.5: caught div: " + e);   # caught div: <某错误信息>
+}
+
+# ============================================================
+# S2: finally 无 catch — try{throw}finally{cleanup}
+# (H# 无 finally; 此子领域无法测试, 仅验证 try{throw} 无 catch 时异常传播)
+# ============================================================
+print("=== S2 finally-no-catch (propagation only) ===");
+
+# S2.1: try 无 catch 不可能 (parser 强制 catch); 用嵌套模拟:
+#   内层 try{throw} 被 外层 try{catch} 包裹, 验证异常传播到外层
+try {
+    try {
+        throw "propagate-S2.1";
+    } catch (e) {
+        throw e;   # rethrow 模拟 "finally 无 catch" 时异常继续传播
+    }
+    print("S2.1-unreachable");
+} catch (e2) {
+    print("S2.1: outer-caught " + e2);   # outer-caught propagate-S2.1
+}
+
+# S2.2: 异常穿过函数调用传播 (无 catch 在中间函数)
+try {
+    fn s2thrower() { throw "from-fn-S2.2"; }
+    fn s2middle() { return s2thrower(); }   # 不 catch, 异常穿过
+    let s2r = "no-throw";
+    try {
+        s2middle();
+    } catch (e) {
+        s2r = "caught: " + e;
+    }
+    print("S2.2: " + s2r);   # caught: from-fn-S2.2
+} catch (e) { print("S2.2-ERR: " + e); }
+
+# ============================================================
+# S3: return 在 try — return 值是否正确, catch 是否不执行
+# (无 finally, 所以 "finally 是否执行" N/A)
+# ============================================================
+print("=== S3 return in try ===");
+
+# S3.1: try 中 return, catch 不执行, 返回 try 的值
+try {
+    fn s3f1() {
+        try {
+            return 42;
+        } catch (e) {
+            return -1;
+        }
+    }
+    print("S3.1: " + s3f1());   # 42
+} catch (e) { print("S3.1-ERR: " + e); }
+
+# S3.2: try 中 return 表达式含异常 — 异常时 catch return, 正常时 try return
+try {
+    fn s3f2(flag) {
+        try {
+            if (flag) { throw "boom-S3.2"; }
+            return 100;
+        } catch (e) {
+            return 200;
+        }
+    }
+    print("S3.2a: " + s3f2(false));   # 100
+    print("S3.2b: " + s3f2(true));    # 200
+} catch (e) { print("S3.2-ERR: " + e); }
+
+# S3.3: return 在 try 中, return 后有 throw (不可达)
+try {
+    fn s3f3() {
+        try {
+            return 7;
+            throw "unreachable-S3.3";
+        } catch (e) {
+            return -1;
+        }
+    }
+    print("S3.3: " + s3f3());   # 7
+} catch (e) { print("S3.3-ERR: " + e); }
+
+# S3.4: return 在 try 中, try 外语句不可达
+try {
+    fn s3f4() {
+        try {
+            return "from-try-S3.4";
+        } catch (e) {
+            return "from-catch";
+        }
+        print("S3.4-unreachable");
+        return "after";
+    }
+    print("S3.4: " + s3f4());   # from-try-S3.4
+} catch (e) { print("S3.4-ERR: " + e); }
+
+# S3.5: try 中 return 嵌套 — 内层 try return, 外层 catch 不执行
+try {
+    fn s3f5() {
+        try {
+            try {
+                return "inner-S3.5";
+            } catch (e) {
+                return "inner-catch";
+            }
+        } catch (e2) {
+            return "outer-catch";
+        }
+    }
+    print("S3.5: " + s3f5());   # inner-S3.5
+} catch (e) { print("S3.5-ERR: " + e); }
+
+# ============================================================
+# S4: return 在 finally — finally 中 return 覆盖 try 的 return/异常
+# (H# 无 finally; 此子领域无法直接测试)
+# 验证: catch 中 return 覆盖 try 的异常 (等价行为)
+# ============================================================
+print("=== S4 return in finally (simulated via catch) ===");
+
+# S4.1: catch 中 return 覆盖 try 的异常
+try {
+    fn s4f1() {
+        try {
+            throw "err-S4.1";
+        } catch (e) {
+            return "catch-return-S4.1";
+        }
+        return "after-S4.1";
+    }
+    print("S4.1: " + s4f1());   # catch-return-S4.1
+} catch (e) { print("S4.1-ERR: " + e); }
+
+# S4.2: try 正常 return, catch 不执行 (无 finally 覆盖)
+try {
+    fn s4f2() {
+        try {
+            return "try-return-S4.2";
+        } catch (e) {
+            return "catch-return-S4.2";
+        }
+    }
+    print("S4.2: " + s4f2());   # try-return-S4.2
+} catch (e) { print("S4.2-ERR: " + e); }
+
+# ============================================================
+# S5: throw 在 finally — finally 中 throw 新异常覆盖原异常
+# (H# 无 finally; 用 catch 中 throw 测试等价)
+# ============================================================
+print("=== S5 throw in finally (simulated via catch) ===");
+
+# S5.1: catch 中 throw 新异常, 覆盖原异常
+try {
+    let s5r1 = "no-throw";
+    try {
+        try {
+            throw "original-S5.1";
+        } catch (e) {
+            throw "replacement-S5.1";
+        }
+    } catch (e2) {
+        s5r1 = "caught: " + e2;
+    }
+    print("S5.1: " + s5r1);   # caught: replacement-S5.1
+} catch (e) { print("S5.1-ERR: " + e); }
+
+# S5.2: catch 中 throw 不同类型 (string -> number)
+try {
+    let s5r2 = "no-throw";
+    try {
+        try {
+            throw "str-S5.2";
+        } catch (e) {
+            throw 500;
+        }
+    } catch (e2) {
+        s5r2 = "caught: " + str(e2) + " type=" + type(e2);
+    }
+    print("S5.2: " + s5r2);   # caught: 500 type=number
+} catch (e) { print("S5.2-ERR: " + e); }
+
+# S5.3: catch 中 rethrow 原异常值
+try {
+    let s5r3 = "no-throw";
+    try {
+        try {
+            throw "rethrow-me-S5.3";
+        } catch (e) {
+            throw e;
+        }
+    } catch (e2) {
+        s5r3 = "caught: " + e2;
+    }
+    print("S5.3: " + s5r3);   # caught: rethrow-me-S5.3
+} catch (e) { print("S5.3-ERR: " + e); }
+
+# S5.4: catch 中 throw dict 异常
+try {
+    let s5r4 = "no-throw";
+    try {
+        try {
+            throw "plain-S5.4";
+        } catch (e) {
+            throw {"code": 42, "msg": "S5.4"};
+        }
+    } catch (e2) {
+        s5r4 = "code=" + e2["code"];
+    }
+    print("S5.4: " + s5r4);   # code=42
+} catch (e) { print("S5.4-ERR: " + e); }
+
+# ============================================================
+# S6: 嵌套 try/finally — 多层嵌套, 内层异常+外层
+# (H# 无 finally; 测试嵌套 try/catch)
+# ============================================================
+print("=== S6 nested try/catch ===");
+
+# S6.1: 3 层嵌套, 最内层 throw, 每层 catch
+try {
+    let s6log1 = "";
+    try {
+        try {
+            try {
+                throw "deep-S6.1";
+            } catch (e) {
+                s6log1 = s6log1 + "L1:" + e + ";";
+            }
+            s6log1 = s6log1 + "L1-done;";
+        } catch (e2) {
+            s6log1 = s6log1 + "L2:" + e2 + ";";
+        }
+        s6log1 = s6log1 + "L2-done;";
+    } catch (e3) {
+        s6log1 = s6log1 + "L3:" + e3 + ";";
+    }
+    print("S6.1: " + s6log1);   # L1:deep-S6.1;L1-done;L2-done;
+} catch (e) { print("S6.1-ERR: " + e); }
+
+# S6.2: 内层 catch 后 throw, 外层 catch 捕获
+try {
+    let s6log2 = "";
+    try {
+        try {
+            throw "L0-S6.2";
+        } catch (e) {
+            s6log2 = s6log2 + "inner:" + e + ";";
+            throw "L1-S6.2";
+        }
+    } catch (e2) {
+        s6log2 = s6log2 + "outer:" + e2 + ";";
+    }
+    print("S6.2: " + s6log2);   # inner:L0-S6.2;outer:L1-S6.2;
+} catch (e) { print("S6.2-ERR: " + e); }
+
+# S6.3: 内层不 catch (rethrow), 外层 catch
+try {
+    let s6log3 = "";
+    try {
+        try {
+            throw "inner-err-S6.3";
+        } catch (e) {
+            s6log3 = s6log3 + "inner-caught:" + e + ";";
+            throw e;
+        }
+    } catch (e2) {
+        s6log3 = s6log3 + "outer-caught:" + e2 + ";";
+    }
+    print("S6.3: " + s6log3);   # inner-caught:inner-err-S6.3;outer-caught:inner-err-S6.3;
+} catch (e) { print("S6.3-ERR: " + e); }
+
+# S6.4: catch 块内嵌套 try/catch
+try {
+    let s6log4 = "";
+    try {
+        throw "outer-err-S6.4";
+    } catch (e) {
+        s6log4 = s6log4 + "caught:" + e + ";";
+        try {
+            throw "inner-in-catch-S6.4";
+        } catch (e2) {
+            s6log4 = s6log4 + "inner-caught:" + e2 + ";";
+        }
+        s6log4 = s6log4 + "done;";
+    }
+    print("S6.4: " + s6log4);   # caught:outer-err-S6.4;inner-caught:inner-in-catch-S6.4;done;
+} catch (e) { print("S6.4-ERR: " + e); }
+
+# S6.5: 5 层深嵌套, 最内层 throw, 逐层 catch
+try {
+    let s6log5 = "";
+    try {
+        try {
+            try {
+                try {
+                    try {
+                        throw "5deep-S6.5";
+                    } catch (a) { s6log5 = s6log5 + "5:" + a + ";"; }
+                } catch (b) { s6log5 = s6log5 + "4:" + b + ";"; }
+            } catch (c) { s6log5 = s6log5 + "3:" + c + ";"; }
+        } catch (d) { s6log5 = s6log5 + "2:" + d + ";"; }
+    } catch (g) { s6log5 = s6log5 + "1:" + g + ";"; }
+    print("S6.5: " + s6log5);   # 5:5deep-S6.5;
+} catch (e) { print("S6.5-ERR: " + e); }
+
+# ============================================================
+# S7: try/catch/finally 顺序 — catch 和 finally 都存在时执行顺序
+# (H# 无 finally; 测试 try/catch 顺序: try body -> catch -> after)
+# ============================================================
+print("=== S7 try/catch order ===");
+
+# S7.1: try 正常 -> catch 跳过 -> after 执行
+try {
+    let s7log1 = "";
+    try {
+        s7log1 = s7log1 + "try;";
+    } catch (e) {
+        s7log1 = s7log1 + "catch;";
+    }
+    s7log1 = s7log1 + "after;";
+    print("S7.1: " + s7log1);   # try;after;
+} catch (e) { print("S7.1-ERR: " + e); }
+
+# S7.2: try throw -> catch 执行 -> after 执行
+try {
+    let s7log2 = "";
+    try {
+        s7log2 = s7log2 + "try;";
+        throw "err-S7.2";
+    } catch (e) {
+        s7log2 = s7log2 + "catch:" + e + ";";
+    }
+    s7log2 = s7log2 + "after;";
+    print("S7.2: " + s7log2);   # try;catch:err-S7.2;after;
+} catch (e) { print("S7.2-ERR: " + e); }
+
+# S7.3: try throw -> catch throw -> after 不可达 (异常传播)
+try {
+    let s7log3 = "";
+    try {
+        try {
+            throw "a-S7.3";
+        } catch (e) {
+            s7log3 = s7log3 + "catch:" + e + ";";
+            throw "b-S7.3";
+        }
+        s7log3 = s7log3 + "after-inner;";   # 不可达
+    } catch (e2) {
+        s7log3 = s7log3 + "outer:" + e2 + ";";
+    }
+    print("S7.3: " + s7log3);   # catch:a-S7.3;outer:b-S7.3;
+} catch (e) { print("S7.3-ERR: " + e); }
+
+# ============================================================
+# S8: catch 不匹配 — catch 捕获类型不匹配时异常继续传播
+# (H# 无类型化 catch; catch(e) 捕获所有异常。验证 catch-all 行为)
+# ============================================================
+print("=== S8 catch-all (no typed catch) ===");
+
+# S8.1: catch 捕获 string 异常
+try {
+    try { throw "str-err-S8.1"; } catch (e) { print("S8.1: caught " + type(e)); }   # caught string
+} catch (e) { print("S8.1-ERR: " + e); }
+
+# S8.2: catch 捕获 number 异常
+try {
+    try { throw 42; } catch (e) { print("S8.2: caught " + type(e)); }   # caught number
+} catch (e) { print("S8.2-ERR: " + e); }
+
+# S8.3: catch 捕获 dict 异常
+try {
+    try { throw {"k": 1}; } catch (e) { print("S8.3: caught " + type(e)); }   # caught dict
+} catch (e) { print("S8.3-ERR: " + e); }
+
+# S8.4: catch 捕获 list 异常
+try {
+    try { throw [1, 2]; } catch (e) { print("S8.4: caught " + type(e)); }   # caught list
+} catch (e) { print("S8.4-ERR: " + e); }
+
+# S8.5: catch 捕获 null 异常
+try {
+    try { throw null; } catch (e) { print("S8.5: caught " + type(e) + " isNull=" + str(e == null)); }   # caught null isNull=true
+} catch (e) { print("S8.5-ERR: " + e); }
+
+# S8.6: catch 捕获 bool 异常
+try {
+    try { throw false; } catch (e) { print("S8.6: caught " + type(e) + " val=" + str(e)); }   # caught bool val=false
+} catch (e) { print("S8.6-ERR: " + e); }
+
+# ============================================================
+# S9: 异常链 — catch 中 throw 新异常, 外层捕获
+# ============================================================
+print("=== S9 exception chain ===");
+
+# S9.1: 单层异常链
+try {
+    let s9r1 = "no-throw";
+    try {
+        try {
+            throw "orig-S9.1";
+        } catch (e) {
+            throw "wrapped[" + e + "]";
+        }
+    } catch (e2) {
+        s9r1 = "caught: " + e2;
+    }
+    print("S9.1: " + s9r1);   # caught: wrapped[orig-S9.1]
+} catch (e) { print("S9.1-ERR: " + e); }
+
+# S9.2: 多层异常链 (3 层)
+try {
+    let s9r2 = "no-throw";
+    try {
+        try {
+            try {
+                throw "L0-S9.2";
+            } catch (a) {
+                throw "L1(" + a + ")";
+            }
+        } catch (b) {
+            throw "L2(" + b + ")";
+        }
+    } catch (c) {
+        s9r2 = "final: " + c;
+    }
+    print("S9.2: " + s9r2);   # final: L2(L1(L0-S9.2))
+} catch (e) { print("S9.2-ERR: " + e); }
+
+# S9.3: catch 中 throw 后修改原异常变量再 throw
+try {
+    let s9r3 = "no-throw";
+    try {
+        try {
+            throw "orig-S9.3";
+        } catch (e) {
+            e = "modified-S9.3";
+            throw e;
+        }
+    } catch (e2) {
+        s9r3 = "caught: " + e2;
+    }
+    print("S9.3: " + s9r3);   # caught: modified-S9.3
+} catch (e) { print("S9.3-ERR: " + e); }
+
+# S9.4: catch 中修改 dict 异常对象再 rethrow
+try {
+    let s9r4 = "no-throw";
+    try {
+        try {
+            throw {"code": 1, "msg": "S9.4"};
+        } catch (e) {
+            e["code"] = 999;
+            throw e;
+        }
+    } catch (e2) {
+        s9r4 = "code=" + e2["code"] + " msg=" + e2["msg"];
+    }
+    print("S9.4: " + s9r4);   # code=999 msg=S9.4
+} catch (e) { print("S9.4-ERR: " + e); }
+
+# ============================================================
+# S10: break/continue 在 try — for 循环中 try/catch, break/continue 行为
+# ============================================================
+print("=== S10 break/continue in try ===");
+
+# S10.1: break 在 try 中, catch 不执行, 循环终止
+try {
+    let s10log1 = "";
+    for i in [1, 2, 3] {
+        try {
+            if (i == 2) { break; }
+            s10log1 = s10log1 + i;
+        } catch (e) {
+            s10log1 = s10log1 + "E";
+        }
+    }
+    print("S10.1: " + s10log1);   # 1
+} catch (e) { print("S10.1-ERR: " + e); }
+
+# S10.2: continue 在 try 中, catch 不执行, 跳过本次
+try {
+    let s10log2 = "";
+    for i in [1, 2, 3] {
+        try {
+            if (i == 2) { continue; }
+            s10log2 = s10log2 + i;
+        } catch (e) {
+            s10log2 = s10log2 + "E";
+        }
+    }
+    print("S10.2: " + s10log2);   # 13
+} catch (e) { print("S10.2-ERR: " + e); }
+
+# S10.3: break 在嵌套 try 内层 — 只跳出最内层循环
+try {
+    let s10log3 = "";
+    for i in [1, 2] {
+        for j in [1, 2, 3] {
+            try {
+                if (j == 2) { break; }
+                s10log3 = s10log3 + i + "," + j + ";";
+            } catch (e) {}
+        }
+    }
+    print("S10.3: " + s10log3);   # 1,1;2,1;
+} catch (e) { print("S10.3-ERR: " + e); }
+
+# S10.4: break 在 try 的 catch 块中
+try {
+    let s10log4 = "";
+    for i in range(5) {
+        try {
+            throw "iter-" + i;
+        } catch (e) {
+            s10log4 = s10log4 + e + ";";
+            if (i == 2) { break; }
+        }
+    }
+    print("S10.4: " + s10log4);   # iter-0;iter-1;iter-2;
+} catch (e) { print("S10.4-ERR: " + e); }
+
+# S10.5: continue 在 catch 块中
+try {
+    let s10sum5 = 0;
+    for i in [1, 2, 3, 4, 5] {
+        try {
+            if (i == 3) { throw "skip-S10.5"; }
+            s10sum5 = s10sum5 + i;
+        } catch (e) {
+            continue;
+        }
+    }
+    print("S10.5: sum=" + s10sum5);   # sum=12 (1+2+4+5)
+} catch (e) { print("S10.5-ERR: " + e); }
+
+# S10.6: break 跨越 2 层嵌套 try (同循环), 验证 handler 栈清理
+try {
+    let s10log6 = "";
+    for i in [1, 2, 3] {
+        try {
+            try {
+                if (i == 2) { break; }
+                s10log6 = s10log6 + i + ";";
+            } catch (a) {}
+        } catch (b) {}
+    }
+    print("S10.6: " + s10log6);   # 1;
+} catch (e) { print("S10.6-ERR: " + e); }
+
+# S10.7: break 后 handler 不泄漏 — 后续 throw 仍可捕获
+try {
+    let s10sum7 = 0;
+    for i in [1, 2, 3] {
+        try {
+            if (i == 2) { break; }
+            s10sum7 = s10sum7 + i;
+        } catch (e) {}
+    }
+    let s10r7 = "no-throw";
+    try {
+        throw "post-break-S10.7";
+    } catch (e) {
+        s10r7 = "caught: " + e;
+    }
+    print("S10.7: sum=" + s10sum7 + " " + s10r7);   # sum=1 caught: post-break-S10.7
+} catch (e) { print("S10.7-ERR: " + e); }
+
+# ============================================================
+# S11: finally 中修改变量 — finally 修改的变量是否影响外部
+# (H# 无 finally; 用 catch 修改变量测试)
+# ============================================================
+print("=== S11 catch modify variable ===");
+
+# S11.1: catch 修改外部变量, 影响后续
+try {
+    let s11v1 = 0;
+    try {
+        throw "err-S11.1";
+    } catch (e) {
+        s11v1 = 99;
+    }
+    print("S11.1: " + s11v1);   # 99
+} catch (e) { print("S11.1-ERR: " + e); }
+
+# S11.2: try 正常完成, catch 不执行, 变量不变
+try {
+    let s11v2 = 0;
+    try {
+        let s11tmp = 1;
+    } catch (e) {
+        s11v2 = 99;
+    }
+    print("S11.2: " + s11v2);   # 0
+} catch (e) { print("S11.2-ERR: " + e); }
+
+# S11.3: catch 修改 dict 字段, 影响外部
+try {
+    let s11d3 = {"count": 0};
+    try {
+        throw "err-S11.3";
+    } catch (e) {
+        s11d3["count"] = s11d3["count"] + 1;
+    }
+    print("S11.3: count=" + s11d3["count"]);   # count=1
+} catch (e) { print("S11.3-ERR: " + e); }
+
+# S11.4: try 块中定义的变量在 catch 中可见 (函数作用域)
+try {
+    let s11v4 = 0;
+    try {
+        let s11inner = 555;
+        throw "err-S11.4";
+    } catch (e) {
+        s11v4 = s11inner;   # s11inner 应可见 (H# 函数作用域)
+    }
+    print("S11.4: " + s11v4);   # 555
+} catch (e) { print("S11.4-ERR: " + e); }
+
+# ============================================================
+# S12: 空 catch — catch(e){} 吞掉异常, 后续继续
+# ============================================================
+print("=== S12 empty catch ===");
+
+# S12.1: 空 catch 吞掉异常, 后续执行
+try {
+    try {
+        throw "swallowed-S12.1";
+    } catch (e) {}
+    print("S12.1: after-try");   # after-try
+} catch (e) { print("S12.1-ERR: " + e); }
+
+# S12.2: 空 catch 吞掉异常, 循环继续
+try {
+    let s12log2 = "";
+    for i in [1, 2, 3] {
+        try {
+            throw "err-" + i;
+        } catch (e) {}
+        s12log2 = s12log2 + i + ";";
+    }
+    print("S12.2: " + s12log2);   # 1;2;3;
+} catch (e) { print("S12.2-ERR: " + e); }
+
+# S12.3: 空 catch 吞掉后, 后续 throw 仍可被外层捕获
+try {
+    try {
+        try {
+            throw "inner-S12.3";
+        } catch (e) {}
+        throw "outer-S12.3";
+    } catch (e2) {
+        print("S12.3: " + e2);   # outer-S12.3
+    }
+} catch (e) { print("S12.3-ERR: " + e); }
+
+# S12.4: 空 catch 100 次 — handler 栈不泄漏
+try {
+    let s12count4 = 0;
+    for i in range(100) {
+        try {
+            throw i;
+        } catch (e) {}
+        s12count4 = s12count4 + 1;
+    }
+    print("S12.4: count=" + s12count4);   # count=100
+} catch (e) { print("S12.4-ERR: " + e); }
+
+# ============================================================
+# S13: catch 变量作用域 — e 在 catch 块外是否可见
+# (Python/Java: e 仅在 catch 块内可见; H# 用 STORE_NAME 存入 env, 可能泄漏)
+# ============================================================
+print("=== S13 catch variable scope ===");
+
+# S13.1: catch 变量 e 在 catch 块外是否可见? (预期: 不可见; H# 可能泄漏)
+try {
+    let s13before = "before";
+    try {
+        throw "inner-value-S13.1";
+    } catch (e) {
+        print("S13.1-in-catch: " + e);   # inner-value-S13.1
+    }
+    # 预期 (Python/Java): e 不可见, 应报错或为 before
+    # H#: e 可能泄漏为 "inner-value-S13.1"
+    try {
+        print("S13.1-after: e=" + e);   # 预期: 错误/不可见; 实际?
+    } catch (e2) {
+        print("S13.1-after: e-not-visible: " + e2);   # 若 e 不可见则走这里
+    }
+} catch (e) { print("S13.1-ERR: " + e); }
+
+# S13.2: catch 变量 e 覆盖已有同名变量? (变量遮蔽)
+try {
+    let e = "outer-e-S13.2";
+    try {
+        throw "thrown-S13.2";
+    } catch (e) {
+        print("S13.2-in-catch: " + e);   # thrown-S13.2 (catch 的 e 覆盖外层)
+    }
+    print("S13.2-after: e=" + e);   # 预期 (Python): outer-e-S13.2; H# 可能: thrown-S13.2 (泄漏覆盖)
+} catch (e) { print("S13.2-ERR: " + e); }
+
+# S13.3: 多次 try/catch 用同名 e, 后续是否泄漏最后一个值
+try {
+    try { throw "first-S13.3"; } catch (e) {}
+    try { throw "second-S13.3"; } catch (e) {}
+    try {
+        print("S13.3-after: e=" + e);   # 预期: 不可见; H# 可能: second-S13.3
+    } catch (e2) {
+        print("S13.3-after: e-not-visible: " + e2);
+    }
+} catch (e) { print("S13.3-ERR: " + e); }
+
+# S13.4: catch 变量在不同函数中不共享
+try {
+    fn s13f4() {
+        try { throw "in-fn-S13.4"; } catch (e) { return e; }
+    }
+    let s13r4 = s13f4();
+    # 调用方不应有 e (不同函数作用域)
+    try {
+        print("S13.4-caller: e=" + e);   # 预期: 不可见
+    } catch (e2) {
+        print("S13.4-caller: e-not-visible (expected): " + s13r4);   # in-fn-S13.4
+    }
+} catch (e) { print("S13.4-ERR: " + e); }
+
+# ============================================================
+# S14: 多层 catch — 内层 catch 不匹配, 外层 catch 匹配
+# (H# 无类型化 catch, catch-all; 测试内层 rethrow -> 外层 catch)
+# ============================================================
+print("=== S14 multi-layer catch ===");
+
+# S14.1: 内层 catch rethrow, 外层 catch 捕获
+try {
+    let s14r1 = "no-throw";
+    try {
+        try {
+            throw "L0-S14.1";
+        } catch (e) {
+            throw "L1-S14.1";
+        }
+    } catch (e2) {
+        s14r1 = "caught: " + e2;
+    }
+    print("S14.1: " + s14r1);   # caught: L1-S14.1
+} catch (e) { print("S14.1-ERR: " + e); }
+
+# S14.2: 内层 catch 不 rethrow, 外层 catch 不执行
+try {
+    let s14log2 = "";
+    try {
+        try {
+            throw "inner-S14.2";
+        } catch (e) {
+            s14log2 = s14log2 + "inner-caught:" + e + ";";
+        }
+    } catch (e2) {
+        s14log2 = s14log2 + "outer-caught:" + e2 + ";";
+    }
+    print("S14.2: " + s14log2);   # inner-caught:inner-S14.2;
+} catch (e) { print("S14.2-ERR: " + e); }
+
+# S14.3: 3 层 — 内层 catch rethrow, 中层 catch rethrow, 外层 catch
+try {
+    let s14r3 = "no-throw";
+    try {
+        try {
+            try {
+                throw "L0-S14.3";
+            } catch (a) {
+                throw "L1-S14.3";
+            }
+        } catch (b) {
+            throw "L2-S14.3";
+        }
+    } catch (c) {
+        s14r3 = "final: " + c;
+    }
+    print("S14.3: " + s14r3);   # final: L2-S14.3
+} catch (e) { print("S14.3-ERR: " + e); }
+
+# S14.4: 内层 catch 不捕获 (无 try), 外层 catch 捕获
+try {
+    let s14r4 = "no-throw";
+    try {
+        fn s14inner4() { throw "from-inner-fn-S14.4"; }
+        s14inner4();   # 无内层 try, 异常直接到外层
+    } catch (e) {
+        s14r4 = "caught: " + e;
+    }
+    print("S14.4: " + s14r4);   # caught: from-inner-fn-S14.4
+} catch (e) { print("S14.4-ERR: " + e); }
+
+# ============================================================
+# S15: throw 非 string — throw 42, throw null, throw [1,2], throw {"k":"v"}
+# ============================================================
+print("=== S15 throw non-string ===");
+
+# S15.1: throw 整数
+try {
+    try { throw 42; } catch (e) { print("S15.1: " + str(e) + " type=" + type(e)); }   # 42 type=number
+} catch (e) { print("S15.1-ERR: " + e); }
+
+# S15.2: throw 负数
+try {
+    try { throw -7; } catch (e) { print("S15.2: " + str(e) + " type=" + type(e)); }   # -7 type=number
+} catch (e) { print("S15.2-ERR: " + e); }
+
+# S15.3: throw 浮点数
+try {
+    try { throw 3.14; } catch (e) { print("S15.3: " + str(e) + " type=" + type(e)); }   # 3.14 type=number
+} catch (e) { print("S15.3-ERR: " + e); }
+
+# S15.4: throw null
+try {
+    try { throw null; } catch (e) { print("S15.4: " + str(e) + " isNull=" + str(e == null) + " type=" + type(e)); }   # null isNull=true type=null
+} catch (e) { print("S15.4-ERR: " + e); }
+
+# S15.5: throw list
+try {
+    try { throw [1, 2, 3]; } catch (e) { print("S15.5: " + str(e) + " [0]=" + e[0] + " type=" + type(e)); }   # [1, 2, 3] [0]=1 type=list
+} catch (e) { print("S15.5-ERR: " + e); }
+
+# S15.6: throw dict
+try {
+    try { throw {"k": "v"}; } catch (e) { print("S15.6: " + str(e) + " k=" + e["k"] + " type=" + type(e)); }   # {k: v} k=v type=dict
+} catch (e) { print("S15.6-ERR: " + e); }
+
+# S15.7: throw bool true/false
+try {
+    try { throw true; } catch (e) { print("S15.7a: " + str(e) + " type=" + type(e)); }   # true type=bool
+    try { throw false; } catch (e) { print("S15.7b: " + str(e) + " type=" + type(e)); }   # false type=bool
+} catch (e) { print("S15.7-ERR: " + e); }
+
+# S15.8: throw 空字符串/空列表/空字典 (falsy 异常值)
+try {
+    try { throw ""; } catch (e) { print("S15.8a: [" + str(e) + "] type=" + type(e)); }   # [] type=string
+    try { throw []; } catch (e) { print("S15.8b: " + str(e) + " len=" + len(e) + " type=" + type(e)); }   #  len=0 type=list
+    try { throw {}; } catch (e) { print("S15.8c: " + str(e) + " type=" + type(e)); }   # {} type=dict
+} catch (e) { print("S15.8-ERR: " + e); }
+
+# S15.9: throw 0 / throw 0.0 (falsy number)
+try {
+    try { throw 0; } catch (e) { print("S15.9a: " + str(e) + " type=" + type(e)); }   # 0 type=number
+    try { throw 0.0; } catch (e) { print("S15.9b: " + str(e) + " type=" + type(e)); }   # 0 type=number
+} catch (e) { print("S15.9-ERR: " + e); }
+
+# S15.10: throw 变量 (引用已存在的值)
+try {
+    let s15payload = {"code": 404, "msg": "not-found-S15.10"};
+    try { throw s15payload; } catch (e) { print("S15.10: code=" + e["code"] + " msg=" + e["msg"]); }   # code=404 msg=not-found-S15.10
+} catch (e) { print("S15.10-ERR: " + e); }
+
+# ============================================================
+# S16: 异常穿过函数调用链 (额外覆盖)
+# ============================================================
+print("=== S16 exception through call chain ===");
+
+# S16.1: 3 层函数调用, 最内层 throw, 顶层 catch
+try {
+    fn s16c() { throw "bottom-S16.1"; }
+    fn s16b() { return s16c(); }
+    fn s16a() { return s16b(); }
+    let s16r = "no-throw";
+    try {
+        s16a();
+    } catch (e) {
+        s16r = "caught: " + e;
+    }
+    print("S16.1: " + s16r);   # caught: bottom-S16.1
+} catch (e) { print("S16.1-ERR: " + e); }
+
+# S16.2: 函数参数求值时 throw
+try {
+    fn s16boom() { throw "in-arg-S16.2"; }
+    fn s16consume(x) { return x + 1; }
+    let s16r2 = "no-throw";
+    try {
+        s16consume(s16boom());
+    } catch (e) {
+        s16r2 = "caught: " + e;
+    }
+    print("S16.2: " + s16r2);   # caught: in-arg-S16.2
+} catch (e) { print("S16.2-ERR: " + e); }
+
+# S16.3: 递归函数中 throw, 顶层 catch
+try {
+    fn s16rec(n) {
+        if (n <= 0) { throw "bottom-rec-S16.3"; }
+        return s16rec(n - 1);
+    }
+    let s16r3 = "no-throw";
+    try {
+        s16rec(5);
+    } catch (e) {
+        s16r3 = "caught: " + e;
+    }
+    print("S16.3: " + s16r3);   # caught: bottom-rec-S16.3
+} catch (e) { print("S16.3-ERR: " + e); }
+
+# ============================================================
+# S17: expr? (propagate 操作符) 与 try/catch 交互
+# ============================================================
+print("=== S17 propagate ? with try/catch ===");
+
+# S17.1: expr? 捕获异常, 返回异常值; 外层 catch 不执行
+try {
+    fn s17boom() { throw "fail-S17.1"; }
+    let s17r1 = "no-throw";
+    try {
+        let s17x = s17boom()?;
+        s17r1 = "got: " + str(s17x);   # expr? 捕获, x = "fail-S17.1"
+    } catch (e) {
+        s17r1 = "caught: " + e;   # 不应执行
+    }
+    print("S17.1: " + s17r1);   # got: fail-S17.1
+} catch (e) { print("S17.1-ERR: " + e); }
+
+# S17.2: expr? 不抛时返回正常值
+try {
+    fn s17ok() { return 42; }
+    let s17r2 = "no-throw";
+    try {
+        let s17x = s17ok()?;
+        s17r2 = "got: " + str(s17x);
+    } catch (e) {
+        s17r2 = "caught: " + e;
+    }
+    print("S17.2: " + s17r2);   # got: 42
+} catch (e) { print("S17.2-ERR: " + e); }
+
+# S17.3: expr? 在 try 内, 异常被 ? 捕获, try 的 catch 不执行, handler 栈清理
+try {
+    fn s17boom3() { throw "S17.3-payload"; }
+    let s17log3 = "";
+    try {
+        let s17x = s17boom3()?;
+        s17log3 = s17log3 + "got:" + str(s17x) + ";";
+    } catch (e) {
+        s17log3 = s17log3 + "caught:" + e + ";";
+    }
+    # 验证后续 throw 仍可捕获 (handler 栈未泄漏)
+    try {
+        throw "post-S17.3";
+    } catch (e2) {
+        s17log3 = s17log3 + "post-caught:" + e2 + ";";
+    }
+    print("S17.3: " + s17log3);   # got:S17.3-payload;post-caught:post-S17.3;
+} catch (e) { print("S17.3-ERR: " + e); }
+
+# ============================================================
+# S18: 未捕获异常 — 程序行为观察 (放最后, 终止程序)
+# ============================================================
+print("=== S18 uncaught exception ===");
+
+# S18.1: 未捕获异常终止程序
+print("S18.1: before-throw");
+fn s18uncaught() {
+    throw "uncaught-S18.1";
+}
+s18uncaught();
+print("S18.1-after: should NOT print");

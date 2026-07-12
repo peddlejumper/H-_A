@@ -1,0 +1,136 @@
+# shared/storage.hto
+# 基于 JSON 文件的存储抽象(每个表一个 JSON 文件)
+# 提供: 加载 / 保存 / 增 / 删 / 改 / 查(按 id)
+
+import "shared/json_utils.hto";
+
+# 存储根目录(data/)
+let _storage_root = "./data";
+
+fn storage_init(root_dir) {
+    if (root_dir != nullptr and root_dir != "") {
+        _storage_root = root_dir;
+    }
+    if (not fs_exists(_storage_root)) {
+        fs_mkdir(_storage_root);
+    }
+    return true;
+}
+
+fn storage_path(name) {
+    return fs_join_path(_storage_root, name + ".json");
+}
+
+# 加载表(返回 list)
+fn storage_load(name) {
+    let p = storage_path(name);
+    if (not fs_exists(p)) {
+        return [];
+    }
+    let raw = read_file(p);
+    if (raw == nullptr or raw == "") {
+        return [];
+    }
+    let data = json_parse(raw);
+    if (data == nullptr) {
+        return [];
+    }
+    return data;
+}
+
+# 保存表(整个覆盖)
+fn storage_save(name, data) {
+    let p = storage_path(name);
+    let text = json_stringify(data);
+    write_file(p, text);
+    return true;
+}
+
+# 查 by id
+fn storage_get_by_id(name, id) {
+    let rows = storage_load(name);
+    let i = 0;
+    while (i < len(rows)) {
+        if (rows[i]["id"] == id) {
+            return rows[i];
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# 查 by field
+fn storage_find(name, field, value) {
+    let rows = storage_load(name);
+    let result = [];
+    let i = 0;
+    while (i < len(rows)) {
+        if (rows[i][field] == value) {
+            result.append(rows[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# 查 by field,返回单条
+fn storage_find_one(name, field, value) {
+    let rows = storage_load(name);
+    let i = 0;
+    while (i < len(rows)) {
+        if (rows[i][field] == value) {
+            return rows[i];
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# 增(将 row 追加到表)
+fn storage_insert(name, row) {
+    let rows = storage_load(name);
+    rows.append(row);
+    storage_save(name, rows);
+    return row;
+}
+
+# 改(按 id): 用 dict_keys 取 patch 的所有 key,逐个合并到 rows[i]
+fn storage_update(name, id, patch) {
+    let rows = storage_load(name);
+    let i = 0;
+    while (i < len(rows)) {
+        if (rows[i]["id"] == id) {
+            let keys = dict_keys(patch);
+            let k = 0;
+            while (k < len(keys)) {
+                let key = keys[k];
+                rows[i][key] = patch[key];
+                k = k + 1;
+            }
+            storage_save(name, rows);
+            return rows[i];
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# 删(按 id)
+fn storage_delete(name, id) {
+    let rows = storage_load(name);
+    let new_rows = [];
+    let i = 0;
+    while (i < len(rows)) {
+        if (rows[i]["id"] != id) {
+            new_rows.append(rows[i]);
+        }
+        i = i + 1;
+    }
+    storage_save(name, new_rows);
+    return true;
+}
+
+# 全部
+fn storage_all(name) {
+    return storage_load(name);
+}

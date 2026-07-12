@@ -1,0 +1,278 @@
+# ============================================================
+# round4_120_variadic.hto — 测试智能体 #120 (Round 4)
+# H# v0.4.1 — 可变参数 (variadic parameters) 深度测试
+#
+# 覆盖 10 个子领域:
+#   S1  纯可变参数零参数
+#   S2  固定+可变参数零尾随
+#   S3  可变参数混合类型
+#   S4  可变参数转发
+#   S5  可变参数+默认参数组合
+#   S6  类方法中的可变参数
+#   S7  lambda 可变参数
+#   S8  可变参数作为集合元素
+#   S9  大量可变参数
+#   S10 可变参数+嵌套调用链
+#
+# 已知背景 (来自 round3_112 / parser.py / HVM.kt 源码分析):
+#   - spread 调用 f(...args): 解析错误 (Unexpected token ELLIPSIS)
+#     => 无法在 try/catch 中测试 (编译阶段失败, 中止整个文件)
+#     => S4 用显式索引转发代替, 另建探针文件验证 spread 调用
+#   - 当 func.isVariadic=true 时, 运行时 (HVM.kt:1240 / interpreter.py:2258)
+#     走早返回路径, 完全忽略 defaultArgs — 即使解析器允许 fn f(a, b=2, ...rest)
+#   - 闭包使用快照语义 (已知限制, 非 bug)
+#   - 函数级作用域, 无块级作用域 (已知限制)
+#
+# 输出格式: S<N>.<name>:<result>  或  S<N>.<name>:EXC[<error>]
+# 每个测试用 try/catch 包裹 (直接包裹, 避免 lambda 异常逃逸 bug)
+# ============================================================
+
+print("===== R4-120 START =====");
+
+# ============================================================
+# S1: 纯可变参数零参数
+# fn f(...args) { return len(args); } — f() 应返回 0
+# ============================================================
+print("== S1 pure variadic zero args ==");
+
+fn s1_count(...args) { return len(args); }
+fn s1_collect(...args) { return args; }
+
+try { print("S1.1 zero:" + str(s1_count())); } catch (e) { print("S1.1 zero:EXC[" + str(e) + "]"); }
+try { print("S1.2 one:" + str(s1_count(42))); } catch (e) { print("S1.2 one:EXC[" + str(e) + "]"); }
+try { print("S1.3 three:" + str(s1_count(1, 2, 3))); } catch (e) { print("S1.3 three:EXC[" + str(e) + "]"); }
+try { print("S1.4 type:" + str(type(s1_collect()))); } catch (e) { print("S1.4 type:EXC[" + str(e) + "]"); }
+try { print("S1.5 empty_list_eq:" + str(s1_collect() == [])); } catch (e) { print("S1.5 empty_list_eq:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S2: 固定+可变参数零尾随
+# fn f(a, ...rest) { return len(rest); } — f(1) 应返回 0
+# ============================================================
+print("== S2 fixed + variadic zero trailing ==");
+
+fn s2_one(a, ...rest) { return len(rest); }
+fn s2_two(a, b, ...rest) { return len(rest); }
+fn s2_return_first(a, ...rest) { return a; }
+
+try { print("S2.1 zero_trail:" + str(s2_one(1))); } catch (e) { print("S2.1 zero_trail:EXC[" + str(e) + "]"); }
+try { print("S2.2 one_trail:" + str(s2_one(1, 2))); } catch (e) { print("S2.2 one_trail:EXC[" + str(e) + "]"); }
+try { print("S2.3 three_trail:" + str(s2_one(1, 2, 3, 4))); } catch (e) { print("S2.3 three_trail:EXC[" + str(e) + "]"); }
+try { print("S2.4 two_fixed_zero_trail:" + str(s2_two(1, 2))); } catch (e) { print("S2.4 two_fixed_zero_trail:EXC[" + str(e) + "]"); }
+try { print("S2.5 first_val:" + str(s2_return_first(99, 1, 2))); } catch (e) { print("S2.5 first_val:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S3: 可变参数混合类型
+# fn f(...args) { return args; } 传入 int/str/list/dict/null/bool
+# ============================================================
+print("== S3 variadic mixed types ==");
+
+fn s3_collect(...args) { return args; }
+
+try {
+    let r = s3_collect(1, "hello", [1, 2], {"k": "v"}, null, true);
+    print("S3.1 len:" + str(len(r)));
+} catch (e) { print("S3.1 len:EXC[" + str(e) + "]"); }
+try {
+    let r = s3_collect(1, "hello", [1, 2], {"k": "v"}, null, true);
+    print("S3.2 idx0_type:" + str(type(r[0])));
+} catch (e) { print("S3.2 idx0_type:EXC[" + str(e) + "]"); }
+try {
+    let r = s3_collect(1, "hello", [1, 2], {"k": "v"}, null, true);
+    print("S3.3 idx1_val:" + str(r[1]));
+} catch (e) { print("S3.3 idx1_val:EXC[" + str(e) + "]"); }
+try {
+    let r = s3_collect(1, "hello", [1, 2], {"k": "v"}, null, true);
+    print("S3.4 idx3_key:" + str(r[3]["k"]));
+} catch (e) { print("S3.4 idx3_key:EXC[" + str(e) + "]"); }
+try {
+    let r = s3_collect(1, "hello", [1, 2], {"k": "v"}, null, true);
+    print("S3.5 idx4_null:" + str(r[4]));
+} catch (e) { print("S3.5 idx4_null:EXC[" + str(e) + "]"); }
+try {
+    let r = s3_collect(1, "hello", [1, 2], {"k": "v"}, null, true);
+    print("S3.6 idx5_type:" + str(type(r[5])));
+} catch (e) { print("S3.6 idx5_type:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S4: 可变参数转发
+# fn target(...args) { return len(args); }
+# fn wrapper(...args) { return target(...args); }  — spread 调用不支持
+# 用显式索引转发代替; 另建 _probe120_spread.hto 验证 spread 调用
+# ============================================================
+print("== S4 variadic forwarding ==");
+
+fn s4_target(...args) { return len(args); }
+fn s4_target_sum(...args) {
+    let t = 0;
+    for a in args { t = t + a; }
+    return t;
+}
+
+# 显式索引转发 (绕过 spread 调用不支持)
+fn s4_wrapper_idx(...args) {
+    if (len(args) == 0) { return s4_target(); }
+    if (len(args) == 1) { return s4_target(args[0]); }
+    if (len(args) == 2) { return s4_target(args[0], args[1]); }
+    if (len(args) == 3) { return s4_target(args[0], args[1], args[2]); }
+    return s4_target(args[0], args[1], args[2]);
+}
+
+try { print("S4.1 fwd_zero:" + str(s4_wrapper_idx())); } catch (e) { print("S4.1 fwd_zero:EXC[" + str(e) + "]"); }
+try { print("S4.2 fwd_one:" + str(s4_wrapper_idx(1))); } catch (e) { print("S4.2 fwd_one:EXC[" + str(e) + "]"); }
+try { print("S4.3 fwd_three:" + str(s4_wrapper_idx(1, 2, 3))); } catch (e) { print("S4.3 fwd_three:EXC[" + str(e) + "]"); }
+
+# 转发到带固定参数的可变参数函数
+fn s4_mixed(first, ...rest) { return [first, len(rest)]; }
+fn s4_mixed_wrapper(...args) {
+    if (len(args) == 0) { return s4_mixed(0); }
+    if (len(args) == 1) { return s4_mixed(args[0]); }
+    if (len(args) == 2) { return s4_mixed(args[0], args[1]); }
+    if (len(args) == 3) { return s4_mixed(args[0], args[1], args[2]); }
+    return s4_mixed(args[0], args[1], args[2]);
+}
+try { print("S4.4 fwd_mixed:" + str(s4_mixed_wrapper("x", 1, 2))); } catch (e) { print("S4.4 fwd_mixed:EXC[" + str(e) + "]"); }
+
+# 直接传递 args 列表作为单个参数 (非展开)
+fn s4_pass_list(...args) { return s4_target(args); }
+try { print("S4.5 pass_as_list:" + str(s4_pass_list(1, 2, 3))); } catch (e) { print("S4.5 pass_as_list:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S5: 可变参数+默认参数组合
+# fn f(a, b=2, ...rest) { return [a, b, len(rest)]; }
+# 预期 bug: 运行时 isVariadic=true 时忽略 defaultArgs
+#   => f(1) 应返回 [1,2,0] 但实际可能报错 "expects at least 2 args"
+# ============================================================
+print("== S5 variadic + default params ==");
+
+fn s5_combo(a, b=2, ...rest) { return [a, b, len(rest)]; }
+
+try { print("S5.1 default_used:" + str(s5_combo(1))); } catch (e) { print("S5.1 default_used:EXC[" + str(e) + "]"); }
+try { print("S5.2 default_override:" + str(s5_combo(1, 20))); } catch (e) { print("S5.2 default_override:EXC[" + str(e) + "]"); }
+try { print("S5.3 with_rest:" + str(s5_combo(1, 20, 30))); } catch (e) { print("S5.3 with_rest:EXC[" + str(e) + "]"); }
+try { print("S5.4 multi_rest:" + str(s5_combo(1, 20, 30, 40, 50))); } catch (e) { print("S5.4 multi_rest:EXC[" + str(e) + "]"); }
+
+# 对照: 纯默认参数 (无 variadic) — 应正常工作
+fn s5_pure_default(a, b=2, c=3) { return [a, b, c]; }
+try { print("S5.5 pure_default:" + str(s5_pure_default(1))); } catch (e) { print("S5.5 pure_default:EXC[" + str(e) + "]"); }
+
+# 默认参数在 variadic 之后 — 解析器应拒绝 (parameter cannot follow variadic)
+# 无法在 try/catch 中测试 (编译错误), 略过
+
+# ============================================================
+# S6: 类方法中的可变参数
+# class C { fn m(...args) { return len(args); } }
+# ============================================================
+print("== S6 variadic in class methods ==");
+
+class S6Class {
+    fn m(...args) { return len(args); }
+    fn mixed(first, ...rest) { return [first, len(rest)]; }
+    fn collect(...args) { return args; }
+}
+
+try { let o = new S6Class(); print("S6.1 zero:" + str(o.m())); } catch (e) { print("S6.1 zero:EXC[" + str(e) + "]"); }
+try { let o = new S6Class(); print("S6.2 three:" + str(o.m(1, 2, 3))); } catch (e) { print("S6.2 three:EXC[" + str(e) + "]"); }
+try { let o = new S6Class(); print("S6.3 mixed:" + str(o.mixed("head", 1, 2))); } catch (e) { print("S6.3 mixed:EXC[" + str(e) + "]"); }
+try { let o = new S6Class(); print("S6.4 mixed_zero:" + str(o.mixed("head"))); } catch (e) { print("S6.4 mixed_zero:EXC[" + str(e) + "]"); }
+try { let o = new S6Class(); print("S6.5 collect_type:" + str(type(o.collect(1, 2)))); } catch (e) { print("S6.5 collect_type:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S7: lambda 可变参数
+# let f = fn(...xs) { return len(xs); };
+# ============================================================
+print("== S7 variadic lambda ==");
+
+try {
+    let f = fn(...xs) { return len(xs); };
+    print("S7.1 zero:" + str(f()));
+} catch (e) { print("S7.1 zero:EXC[" + str(e) + "]"); }
+try {
+    let f = fn(...xs) { return len(xs); };
+    print("S7.2 two:" + str(f(1, 2)));
+} catch (e) { print("S7.2 two:EXC[" + str(e) + "]"); }
+try {
+    let f = fn(first, ...rest) { return [first, len(rest)]; };
+    print("S7.3 mixed:" + str(f("a", 1, 2)));
+} catch (e) { print("S7.3 mixed:EXC[" + str(e) + "]"); }
+try {
+    let f = fn(first, ...rest) { return [first, len(rest)]; };
+    print("S7.4 mixed_zero:" + str(f("a")));
+} catch (e) { print("S7.4 mixed_zero:EXC[" + str(e) + "]"); }
+try {
+    let f = fn(...xs) { return xs; };
+    print("S7.5 return_type:" + str(type(f(1, 2, 3))));
+} catch (e) { print("S7.5 return_type:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S8: 可变参数作为集合元素
+# fn f(...args) { return {"count": len(args), "first": args[0]}; }
+# 零参数时 first 应报错 (args[0] 越界)
+# ============================================================
+print("== S8 variadic as collection elements ==");
+
+fn s8_dict(...args) { return {"count": len(args), "first": args[0]}; }
+fn s8_list(...args) { return [len(args), args]; }
+
+try { let r = s8_dict(10, 20); print("S8.1 count:" + str(r["count"])); } catch (e) { print("S8.1 count:EXC[" + str(e) + "]"); }
+try { let r = s8_dict(10, 20); print("S8.2 first:" + str(r["first"])); } catch (e) { print("S8.2 first:EXC[" + str(e) + "]"); }
+try { let r = s8_dict(); print("S8.3 empty_first:" + str(r["first"])); } catch (e) { print("S8.3 empty_first:EXC[" + str(e) + "]"); }
+try { let r = s8_dict("x"); print("S8.4 single:" + str(r["first"])); } catch (e) { print("S8.4 single:EXC[" + str(e) + "]"); }
+try { let r = s8_list(1, 2, 3); print("S8.5 nested:" + str(len(r[1]))); } catch (e) { print("S8.5 nested:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S9: 大量可变参数
+# f(1, 2, ..., 100) 传入 100 个参数
+# ============================================================
+print("== S9 large variadic args ==");
+
+fn s9_count(...args) { return len(args); }
+fn s9_sum(...args) {
+    let t = 0;
+    for a in args { t = t + a; }
+    return t;
+}
+fn s9_last(...args) { return args[len(args) - 1]; }
+
+try { print("S9.1 count_100:" + str(s9_count(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100))); } catch (e) { print("S9.1 count_100:EXC[" + str(e) + "]"); }
+try { print("S9.2 sum_100:" + str(s9_sum(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100))); } catch (e) { print("S9.2 sum_100:EXC[" + str(e) + "]"); }
+try { print("S9.3 last_100:" + str(s9_last(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100))); } catch (e) { print("S9.3 last_100:EXC[" + str(e) + "]"); }
+try { print("S9.4 count_50:" + str(s9_count(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50))); } catch (e) { print("S9.4 count_50:EXC[" + str(e) + "]"); }
+try { print("S9.5 count_10:" + str(s9_count(1,2,3,4,5,6,7,8,9,10))); } catch (e) { print("S9.5 count_10:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# S10: 可变参数+嵌套调用链
+# fn base(...args) { return args; }
+# fn mid(...args) { return base(args); }  — args 作为单个 list 传入
+# 注意: mid(1,2,3) 时 args=[1,2,3], base(args) 收到 [[1,2,3]] → len=1
+# ============================================================
+print("== S10 variadic nested call chain ==");
+
+fn s10_base(...args) { return args; }
+fn s10_base_len(...args) { return len(args); }
+
+# mid 把 args (已收集的 list) 作为单个参数传给 base
+fn s10_mid(...args) { return s10_base(args); }
+fn s10_mid_len(...args) { return s10_base_len(args); }
+
+try { print("S10.1 mid_len:" + str(s10_mid_len(1, 2, 3))); } catch (e) { print("S10.1 mid_len:EXC[" + str(e) + "]"); }
+try { print("S10.2 mid_zero_len:" + str(s10_mid_len())); } catch (e) { print("S10.2 mid_zero_len:EXC[" + str(e) + "]"); }
+try {
+    let r = s10_mid("a", "b");
+    print("S10.3 mid_nested:" + str(len(r)) + ",first_type=" + str(type(r[0])));
+} catch (e) { print("S10.3 mid_nested:EXC[" + str(e) + "]"); }
+try {
+    let r = s10_mid(1, 2, 3);
+    print("S10.4 mid_inner_len:" + str(len(r[0])));
+} catch (e) { print("S10.4 mid_inner_len:EXC[" + str(e) + "]"); }
+
+# 显式展开转发 (用索引) — 对照组
+fn s10_mid_explicit(...args) {
+    if (len(args) == 0) { return s10_base(); }
+    if (len(args) == 1) { return s10_base(args[0]); }
+    if (len(args) == 2) { return s10_base(args[0], args[1]); }
+    if (len(args) == 3) { return s10_base(args[0], args[1], args[2]); }
+    return s10_base(args[0], args[1], args[2]);
+}
+try { print("S10.5 explicit_fwd:" + str(len(s10_mid_explicit(1, 2, 3)))); } catch (e) { print("S10.5 explicit_fwd:EXC[" + str(e) + "]"); }
+
+print("===== R4-120 DONE =====");

@@ -1,0 +1,11 @@
+# T03 - String operations
+let s = "Hello";
+let t = "World";
+print(s + " " + t);
+print(len(s));
+print(s[0]);
+print(s[1:3]);
+print(s + str(42));
+print(substring(s, 1, 3));
+print(ord("A"));
+print(chr(66));

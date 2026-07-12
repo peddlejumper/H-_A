@@ -331,9 +331,14 @@ fn arr_sort(arr, comparator) {
     # Sort array using comparison function
     # Simple bubble sort implementation
     if (comparator == nullptr) {
-        # Default numeric comparison
+        # Default comparator: handle both numeric and string elements.
+        # Using `<`/`>` works for numbers and strings; the old
+        # `a - b` form only worked for numbers and mis-compared
+        # strings (string subtraction is not a valid ordering).
         comparator = fn(a, b) {
-            return a - b;
+            if (a < b) { return -1; }
+            if (a > b) { return 1; }
+            return 0;
         };
     }
     
@@ -410,7 +415,9 @@ fn arr_average(arr) {
     if (len(arr) == 0) {
         return 0;
     }
-    return arr_sum(arr) / len(arr);
+    # Use fdiv() (true float division) — the `/` operator floors the
+    # result and would discard the decimal part of the average.
+    return fdiv(arr_sum(arr), len(arr));
 }
 
 fn arr_range(start, end, step) {
@@ -457,7 +464,12 @@ fn arr_fill(arr, value, start, end) {
 }
 
 fn is_array(value) {
-    # Check if value is an array
-    # This would need runtime support, for now use type checking
-    return value != nullptr and len(value) != nullptr;
+    # Check if value is an array/list
+    # The old `len(value) != nullptr` check was wrong because len()
+    # also succeeds on strings and dicts (returning a number), so
+    # those were misidentified as arrays. Use the runtime type instead.
+    if (value == nullptr) {
+        return false;
+    }
+    return type(value) == "list";
 }

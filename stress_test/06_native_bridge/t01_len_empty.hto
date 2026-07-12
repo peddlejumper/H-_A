@@ -1,0 +1,20 @@
+# t01 — len() on empty containers (string/list/dict) and non-supported types
+print("== t01 len empty ==");
+print(len([]));
+print(len({}));
+print(len(""));
+print(len([1, 2, 3]));
+print(len({"a": 1, "b": 2}));
+print(len("hello"));
+# len on a number — should error in both
+try {
+    print(len(42));
+} catch (e) {
+    print("len(42) ERR: " + str(e));
+}
+# len on nullptr
+try {
+    print(len(nullptr));
+} catch (e) {
+    print("len(nullptr) ERR: " + str(e));
+}

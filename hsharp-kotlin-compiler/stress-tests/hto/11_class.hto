@@ -1,0 +1,24 @@
+# T11 - Class, methods, constructor
+class Animal {
+    let name = "unknown";
+    fn speak() { return name + " makes a sound"; }
+}
+let a = new Animal();
+a.name = "Rex";
+print(a.name);
+print(a.speak());
+
+class Point {
+    let x = 0;
+    let y = 0;
+    fn init(px, py) {
+        x = px;
+        y = py;
+    }
+    fn sum() { return x + y; }
+}
+let p = new Point();
+p.init(3, 4);
+print(p.x);
+print(p.y);
+print(p.sum());

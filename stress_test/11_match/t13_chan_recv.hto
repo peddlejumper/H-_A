@@ -1,0 +1,19 @@
+# t13 - chan recv pattern: chan recv(v) binds peeked value
+fn ch_recv_test(ch) {
+    return match ch {
+        chan recv(v) => "peeked:" + str(v),
+        chan send(_) => "sendable",
+        chan close => "closed",
+        _ => "neither"
+    };
+}
+let ch = chan_new(2);
+# empty channel → not recv
+print("t13_empty:" + ch_recv_test(ch));
+chan_send(ch, "first");
+chan_send(ch, "second");
+# has items → recv peeks first (does NOT consume)
+print("t13_peek1:" + ch_recv_test(ch));
+# verify peek did not consume: still has items
+let still = chan_recv(ch);
+print("t13_after_peek_recv:" + str(still));

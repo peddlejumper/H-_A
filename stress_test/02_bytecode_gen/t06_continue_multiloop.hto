@@ -1,0 +1,16 @@
+# t06_continue_multiloop.hto - continue 在多层循环
+# continue 只跳过最内层当前迭代
+let log = [];
+for i in [1, 2] {
+    for j in [1, 2, 3] {
+        if (j == 2) {
+            continue;
+        }
+        push(log, str(i) + "-" + str(j));
+    }
+}
+print(len(log));
+for e in log {
+    print(e);
+}
+# 预期: 1-1,1-3,2-1,2-3 => 4 个

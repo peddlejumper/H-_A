@@ -1,0 +1,278 @@
+# ============================================================
+# round2_83_numeric.hto — 数字精度与边界测试 (Agent #83, Round 2)
+# 领域: 大整数/浮点/整数除法/模运算/位运算/类型转换/零除
+# 设计原则: 每个 case 独立编号; try/catch 包裹可能抛错或崩溃的项;
+#           先打印预期注释, 后打印实际结果。
+# ============================================================
+
+print("===== R2-83 NUMERIC PRECISION & BOUNDARY =====");
+
+# ---------- T1: 整数除法 (Python floor 语义) ----------
+# 期望: 7/2=3, -7/2=-4, 7/-2=-4, -7/-2=3 (Python 风格 floor)
+print("[T1.1 7/2]       expect=3");       print(7 / 2);
+print("[T1.2 -7/2]      expect=-4");      print(-7 / 2);
+print("[T1.3 7/-2]      expect=-4");      print(7 / -2);
+print("[T1.4 -7/-2]     expect=3");       print(-7 / -2);
+print("[T1.5 1/3]       expect=0");       print(1 / 3);
+print("[T1.6 -1/3]      expect=-1");      print(-1 / 3);
+print("[T1.7 0/5]       expect=0");       print(0 / 5);
+
+# ---------- T2: 浮点除法 (BUG 探测) ----------
+# 期望: 7.0/2.0=3.5, 1.0/3.0≈0.333..., 3.0/2.0=1.5
+# 预期BUG: BINARY_DIV 一律 Math.floor, 浮点除法返回整数
+print("[T2.1 7.0/2.0]   expect=3.5");     print(7.0 / 2.0);
+print("[T2.2 1.0/3.0]   expect=0.3333");  print(1.0 / 3.0);
+print("[T2.3 3.0/2.0]   expect=1.5");     print(3.0 / 2.0);
+print("[T2.4 10.0/4.0]  expect=2.5");     print(10.0 / 4.0);
+print("[T2.5 1.0/4.0]   expect=0.25");    print(1.0 / 4.0);
+print("[T2.6 5.0/2.0]   expect=2.5");     print(5.0 / 2.0);
+print("[T2.7 -7.0/2.0]  expect=-3.5");    print(-7.0 / 2.0);
+print("[T2.8 7.0/-2.0]  expect=-3.5");    print(7.0 / -2.0);
+
+# ---------- T3: 混合 int/float 除法 ----------
+# 期望: 7/2.0=3.5, 7.0/2=3.5 (提升为 float)
+print("[T3.1 7/2.0]     expect=3.5");     print(7 / 2.0);
+print("[T3.2 7.0/2]     expect=3.5");     print(7.0 / 2);
+
+# ---------- T4: 模运算 (Python floored 语义) ----------
+# 期望: -7%3=2, 7%-3=-2, -7%-3=-1, 7%3=1, 0%5=0
+print("[T4.1 -7%3]      expect=2");       print(-7 % 3);
+print("[T4.2 7%-3]      expect=-2");      print(7 % -3);
+print("[T4.3 -7%-3]     expect=-1");      print(-7 % -3);
+print("[T4.4 7%3]       expect=1");       print(7 % 3);
+print("[T4.5 0%5]       expect=0");       print(0 % 5);
+print("[T4.6 5.5%2]     expect=1.5");     print(5.5 % 2);
+print("[T4.7 -5.5%2]    expect=0.5");     print(-5.5 % 2);
+print("[T4.8 5.5%-2]    expect=-0.5");    print(5.5 % -2);
+
+# ---------- T5: 浮点精度 ----------
+# 期望: 0.1+0.2=0.30000000000000004 (IEEE-754)
+print("[T5.1 0.1+0.2]            expect=0.30000000000000004");
+print(0.1 + 0.2);
+print("[T5.2 0.1+0.2==0.3]       expect=false");
+print(0.1 + 0.2 == 0.3);
+print("[T5.3 1.0-0.9]            expect=0.09999999999999998]");
+print(1.0 - 0.9);
+print("[T5.4 0.5+0.25]           expect=0.75]");
+print(0.5 + 0.25);
+
+# ---------- T6: 大整数精度 (Double, >2^53 损失) ----------
+# 2^53 = 9007199254740992 (Double 精确最大整数)
+# 2^53+1 = 9007199254740993 — Double 会丢失精度变成 9007199254740992
+print("[T6.1 2^53+1 literal]     expect_loss=9007199254740992");
+print(9007199254740993);
+print("[T6.2 2^53 literal]       expect=9007199254740992");
+print(9007199254740992);
+print("[T6.3 2^60 literal]       expect=1152921504606846976 (may lose precision)]");
+print(1152921504606846976);
+print("[T6.4 2^62 literal]       expect=4611686018427387904]");
+print(4611686018427387904);
+print("[T6.5 Long.MAX literal]   expect_loss=9.223372036854776E18]");
+print(9223372036854775807);
+print("[T6.6 Long.MAX + 1]       expect_loss=9.223372036854776E18 (silent overflow)]");
+print(9223372036854775807 + 1);
+print("[T6.7 Long.MAX * 2]       expect_loss=1.8446744073709552E19]");
+print(9223372036854775807 * 2);
+# 19-digit int that fits Long
+print("[T6.8 1234567890123456789 expect_loss=1234567890123456768]");
+print(1234567890123456789);
+
+# ---------- T7: 负零 ----------
+# 期望: -0.0 显示为 -0 或 0; -0.0 == 0.0 为 true
+print("[T7.1 -0.0 literal]       expect=-0 or 0]");
+print(-0.0);
+print("[T7.2 0.0 literal]        expect=0]");
+print(0.0);
+print("[T7.3 -0.0 == 0.0]        expect=true]");
+print(-0.0 == 0.0);
+print("[T7.4 0.0 == -0.0]        expect=true]");
+print(0.0 == -0.0);
+print("[T7.5 -0.0 + 0.0]         expect=0]");
+print(-0.0 + 0.0);
+print("[T7.6 1.0 / -0.0 div?]");
+let dz1 = "no-err";
+try { let r = 1.0 / -0.0; dz1 = r; } catch (e) { dz1 = "caught: " + str(e); }
+print(dz1);
+
+# ---------- T8: 类型转换比较 ----------
+# 期望: 1.0 == 1 为 true (同 HNumber)
+# 期望: true == 1 为 false (跨类型不比较)
+# 期望: false == 0 为 false
+print("[T8.1 1.0 == 1]           expect=true]");
+print(1.0 == 1);
+print("[T8.2 1 == 1.0]           expect=true]");
+print(1 == 1.0);
+print("[T8.3 true == 1]          expect=false]");
+print(true == 1);
+print("[T8.4 false == 0]         expect=false]");
+print(false == 0);
+print("[T8.5 1 == true]          expect=false]");
+print(1 == true);
+print("[T8.6 0 == false]         expect=false]");
+print(0 == false);
+print("[T8.7 null == 0]          expect=false]");
+print(null == 0);
+
+# ---------- T9: 位运算对负数 ----------
+# -1 在 Long 中是全1, & 0xFF = 255
+# ~0 = -1
+print("[T9.1 -1 & 0xFF]          expect=255]");
+print(-1 & 255);
+print("[T9.2 -1 & 0xFFFFFFFF]    expect=4294967295]");
+print(-1 & 4294967295);
+print("[T9.3 -1 | 0]             expect=-1]");
+print(-1 | 0);
+print("[T9.4 -1 ^ 0]             expect=-1]");
+print(-1 ^ 0);
+print("[T9.5 ~0]                 expect=-1]");
+print(~0);
+print("[T9.6 ~5]                 expect=-6]");
+print(~5);
+print("[T9.7 ~(-1)]              expect=0]");
+print(~(-1));
+
+# ---------- T10: 移位运算边界 ----------
+# 1 << 31 = -2147483648 (Kotlin Int 溢出, 因为 shl 接收 Int)
+# 但 H# 用 Long. 1L << 31 = 2147483648
+# 1L << 63 = Long.MIN_VALUE/2 = -9223372036854775808
+# 1L << 64 = 1 (Long shift uses lower 6 bits: 64 mod 64 = 0)
+# 1L << 65 = 2 (65 mod 64 = 1)
+print("[T10.1 1 << 31]           expect=2147483648]");
+print(1 << 31);
+print("[T10.2 1 << 32]           expect=4294967296]");
+print(1 << 32);
+print("[T10.3 1 << 62]           expect=4611686018427387904]");
+print(1 << 62);
+print("[T10.4 1 << 63]           expect=-9223372036854775808]");
+print(1 << 63);
+print("[T10.5 1 << 64]           expect=1 (mask 6 bits = 0)]");
+print(1 << 64);
+print("[T10.6 1 << 65]           expect=2 (mask 6 bits = 1)]");
+print(1 << 65);
+print("[T10.7 256 >> 2]          expect=64]");
+print(256 >> 2);
+print("[T10.8 -1 >> 1]           expect=-1 (arithmetic shift)]");
+print(-1 >> 1);
+print("[T10.9 -1 << 1]           expect=-2]");
+print(-1 << 1);
+
+# ---------- T11: 零除与 NaN ----------
+# 期望: 整数 / 0 抛 ZeroDivisionError ("division by zero")
+# 期望: 浮点 / 0 也抛 (HVM 实现里只要 db==0.0 都抛)
+# 期望: 0 / 0 抛
+print("[T11.1 1/0]");
+let dz_int = "no-err";
+try { let r = 1 / 0; dz_int = r; } catch (e) { dz_int = "caught: " + str(e); }
+print(dz_int);
+print("[T11.2 0/0]");
+let dz_zero = "no-err";
+try { let r = 0 / 0; dz_zero = r; } catch (e) { dz_zero = "caught: " + str(e); }
+print(dz_zero);
+print("[T11.3 1.0/0.0]");
+let dz_flt = "no-err";
+try { let r = 1.0 / 0.0; dz_flt = r; } catch (e) { dz_flt = "caught: " + str(e); }
+print(dz_flt);
+print("[T11.4 0.0/0.0]");
+let dz_nan = "no-err";
+try { let r = 0.0 / 0.0; dz_nan = r; } catch (e) { dz_nan = "caught: " + str(e); }
+print(dz_nan);
+print("[T11.5 1%0]");
+let mz_int = "no-err";
+try { let r = 1 % 0; mz_int = r; } catch (e) { mz_int = "caught: " + str(e); }
+print(mz_int);
+print("[T11.6 0%0]");
+let mz_zero = "no-err";
+try { let r = 0 % 0; mz_zero = r; } catch (e) { mz_zero = "caught: " + str(e); }
+print(mz_zero);
+print("[T11.7 1.0%0.0]");
+let mz_flt = "no-err";
+try { let r = 1.0 % 0.0; mz_flt = r; } catch (e) { mz_flt = "caught: " + str(e); }
+print(mz_flt);
+
+# ---------- T12: 大数显示与科学计数 ----------
+# 1e9 字面量: lexer 可能不支持, 字面量形式无法测试 — 改用算术结果
+# 1000000000 (1B) — Long 内, 应显示为 1000000000
+# 10000000000 (10B) — Long 内, 应显示为 10000000000
+# 1000000000000000000 (1e18) — Long 内
+# 10000000000000000000 (1e19) — 超 Long.MAX? 实际 < Long.MAX
+print("[T12.1 1e9 = 1000000000]");
+print(1000000000);
+print("[T12.2 1e10 = 10000000000]");
+print(10000000000);
+print("[T12.3 1e18 = 1000000000000000000]");
+print(1000000000000000000);
+print("[T12.4 100000 * 100000]");
+print(100000 * 100000);
+print("[T12.5 1.5 display]");
+print(1.5);
+print("[T12.6 0.5 display]");
+print(0.5);
+print("[T12.7 1.0 display (auto-format)]");
+print(1.0);
+print("[T12.8 3.14159 display]");
+print(3.14159);
+print("[T12.9 1/3 then *3 (loss check)]");
+let onethird = 1 / 3;
+print(onethird * 3);
+print("[T12.10 1.0/3.0 then *3]");
+let onethirdf = 1.0 / 3.0;
+print(onethirdf * 3);
+
+# ---------- T13: ** 幂运算符 (parser bug 探测) ----------
+# H# 没有 ** ; `2 ** 3` 应被解析为 `2 * (*3)` 即 2 * deref(3) = 6
+# 期望: 6 (BUG: 不是 8)
+print("[T13.1 2 ** 3 (parser bug)]  expect=6 NOT 8]");
+print(2 ** 3);
+print("[T13.2 3 ** 2 (parser bug)]  expect=6 NOT 9]");
+print(3 ** 2);
+
+# ---------- T14: 一元负号链 ----------
+print("[T14.1 -5]                expect=-5]");
+print(-5);
+print("[T14.2 --5]               expect=5]");
+print(--5);
+print("[T14.3 ---5]              expect=-5]");
+print(---5);
+print("[T14.4 ----5]             expect=5]");
+print(----5);
+
+# ---------- T15: 运算符优先级 ----------
+# 1 + 2 * 3 = 7
+# 2 + 3 * 4 = 14
+# (2 + 3) * 4 = 20
+# 20 / 3 % 4 = 6 % 4 = 2
+# 1 + 2 * 3 - 4 / 2 = 1 + 6 - 2 = 5
+print("[T15.1 1 + 2 * 3]         expect=7]");
+print(1 + 2 * 3);
+print("[T15.2 2 + 3 * 4]         expect=14]");
+print(2 + 3 * 4);
+print("[T15.3 (2 + 3) * 4]       expect=20]");
+print((2 + 3) * 4);
+print("[T15.4 20 / 3 % 4]        expect=2]");
+print(20 / 3 % 4);
+print("[T15.5 1 + 2 * 3 - 4 / 2] expect=5]");
+print(1 + 2 * 3 - 4 / 2);
+
+# ---------- T16: bool 算术 ----------
+print("[T16.1 true + 1]          expect=2]");
+print(true + 1);
+print("[T16.2 false + 10]        expect=10]");
+print(false + 10);
+print("[T16.3 true * 5]          expect=5]");
+print(true * 5);
+print("[T16.4 true + true]       expect=2]");
+print(true + true);
+print("[T16.5 true - false]      expect=1]");
+print(true - false);
+
+# ---------- T17: 边界小数 ----------
+print("[T17.1 0.000001]");
+print(0.000001);
+print("[T17.2 1e-5 as 0.00001]");
+print(0.00001);
+print("[T17.3 1234567.89]");
+print(1234567.89);
+print("[T17.4 -0.5]");
+print(-0.5);
+
+print("===== R2-83 DONE =====");

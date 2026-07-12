@@ -1,0 +1,626 @@
+# round2_92_match.hto — match 模式匹配深边界 stress test
+# 测试智能体 #92。覆盖 task 列出的 17 个领域深边界。
+# 每个 probe 用 try/catch 包住，输出 r92_<name>:<result>，便于失败定位。
+# 注：H# lambda 须 fn(params) { body }，无 expr-body。
+
+# ============================================================
+# 工具：安全执行包装
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# 1. 整数字面量匹配 — 边界值
+# ============================================================
+fn int_lit(n) {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        -1 => "neg-one",
+        2147483648 => "big-int32-overflow",
+        9223372036854775807 => "max-i64",
+        _ => "other"
+    };
+}
+safe("r92_int_zero", fn() { return int_lit(0); });
+safe("r92_int_one", fn() { return int_lit(1); });
+safe("r92_int_neg", fn() { return int_lit(-1); });
+safe("r92_int_big32", fn() { return int_lit(2147483648); });
+safe("r92_int_maxi64", fn() { return int_lit(9223372036854775807); });
+safe("r92_int_other", fn() { return int_lit(42); });
+
+# ============================================================
+# 2. 字符串字面量匹配 — 含转义与空串
+# ============================================================
+fn str_lit(s) {
+    return match s {
+        "" => "empty",
+        "yes" => "affirm",
+        "\n" => "newline",
+        "中文" => "cjk",
+        _ => "other"
+    };
+}
+safe("r92_str_empty", fn() { return str_lit(""); });
+safe("r92_str_yes", fn() { return str_lit("yes"); });
+safe("r92_str_nl", fn() { return str_lit("\n"); });
+safe("r92_str_cjk", fn() { return str_lit("中文"); });
+safe("r92_str_other", fn() { return str_lit("nope"); });
+
+# ============================================================
+# 3. 布尔字面量匹配 — true vs 1, false vs 0 (回归)
+# ============================================================
+fn bool_lit(b) {
+    return match b {
+        true => "T",
+        false => "F",
+        1 => "one",
+        0 => "zero",
+        _ => "other"
+    };
+}
+safe("r92_bool_true", fn() { return bool_lit(true); });
+safe("r92_bool_false", fn() { return bool_lit(false); });
+safe("r92_bool_one", fn() { return bool_lit(1); });
+safe("r92_bool_zero", fn() { return bool_lit(0); });
+safe("r92_bool_two", fn() { return bool_lit(2); });
+
+# ============================================================
+# 4. 通配 _ 默认 + 5. 绑定模式（绑定整个值）
+# ============================================================
+fn wild_then_bind(x) {
+    return match x {
+        1 => "one",
+        _ => "wild:" + str(x)
+    };
+}
+safe("r92_wild_one", fn() { return wild_then_bind(1); });
+safe("r92_wild_str", fn() { return wild_then_bind("hi"); });
+safe("r92_wild_list", fn() { return wild_then_bind([1,2]); });
+
+fn bind_only(x) {
+    return match x {
+        v => v
+    };
+}
+safe("r92_bind_int", fn() { return bind_only(7); });
+safe("r92_bind_str", fn() { return bind_only("xy"); });
+safe("r92_bind_null", fn() { return bind_only(null); });
+
+# 绑定 + 算术
+fn inc(x) {
+    return match x {
+        n => n + 1
+    };
+}
+safe("r92_bind_inc", fn() { return inc(41); });
+
+# ============================================================
+# 6. 类型模式 Type(name) — 含 is int on float quirk
+# ============================================================
+fn typ(x) {
+    return match x {
+        is int as n => "int:" + str(n),
+        is float as f => "float:" + str(f),
+        is str as s => "str:" + s,
+        is bool as b => "bool:" + str(b),
+        is list as l => "list:" + str(len(l)),
+        is dict as d => "dict:" + str(len(d)),
+        is null => "null-type",
+        _ => "other"
+    };
+}
+safe("r92_typ_int", fn() { return typ(42); });
+safe("r92_typ_float", fn() { return typ(3.14); });
+# QUIRK: 3.0 is integer-valued → is int matches first
+safe("r92_typ_3.0", fn() { return typ(3.0); });
+safe("r92_typ_str", fn() { return typ("hi"); });
+safe("r92_typ_bool", fn() { return typ(true); });
+safe("r92_typ_list", fn() { return typ([1,2,3]); });
+safe("r92_typ_dict", fn() { return typ({"a":1,"b":2}); });
+safe("r92_typ_null", fn() { return typ(null); });
+
+# is int on 7 (integer-valued float) — should match is int
+fn only_is_int(x) {
+    return match x {
+        is int => "is-int",
+        is float => "is-float",
+        _ => "other"
+    };
+}
+safe("r92_isint_7.0", fn() { return only_is_int(7.0); });
+safe("r92_isint_7", fn() { return only_is_int(7); });
+safe("r92_isint_3.5", fn() { return only_is_int(3.5); });
+
+# ============================================================
+# 7. union variant 模式 — 含错误元数 / 非实例 / 零绑定
+# ============================================================
+union Opt {
+    Some: v;
+    None;
+}
+union Pair {
+    P: a, b;
+}
+fn unwrap_opt(x) {
+    return match x {
+        Some(v) => "some:" + str(v),
+        None => "none-binding",
+        _ => "other"
+    };
+}
+let some_v = Opt{Some: 5};
+let none_v = Opt{None};
+safe("r92_var_some", fn() { return unwrap_opt(some_v); });
+safe("r92_var_none", fn() { return unwrap_opt(none_v); });
+safe("r92_var_int", fn() { return unwrap_opt(42); });
+
+# 变体绑定按位置（非按字段名）— Pair{P: 3, 4} 字段名为 a,b
+fn sum_pair(p) {
+    return match p {
+        P(x, y) => x + y
+    };
+}
+let pr = Pair{P: 3, 4};
+safe("r92_var_pair_pos", fn() { return sum_pair(pr); });
+
+# 错误元数：Some(a, b) 对单字段 Some
+fn wrong_arity(x) {
+    return match x {
+        Some(a, b) => "two:" + str(a) + "," + str(b),
+        Some(v) => "one:" + str(v),
+        _ => "other"
+    };
+}
+safe("r92_var_wrong_arity", fn() { return wrong_arity(some_v); });
+
+# 零绑定：Some() 对 Some
+fn zero_bind(x) {
+    return match x {
+        Some() => "some-no-bind",
+        _ => "other"
+    };
+}
+safe("r92_var_zero_bind", fn() { return zero_bind(some_v); });
+
+# 多字段变体：5 字段
+union Five {
+    F: a, b, c, d, e;
+}
+fn sum5(x) {
+    return match x {
+        F(a, b, c, d, e) => a + b + c + d + e
+    };
+}
+let f5 = Five{F: 1, 2, 3, 4, 5};
+safe("r92_var_five", fn() { return sum5(f5); });
+
+# ============================================================
+# 8. 多模式合并 1 | 2 | 3 — 不支持，跳过（编译期错误无法运行时捕获）
+# ============================================================
+
+# ============================================================
+# 9. 守卫 x if cond — 含 always true/false、引用外层变量
+# ============================================================
+fn sign(x) {
+    return match x {
+        n if n > 0 => "pos",
+        n if n < 0 => "neg",
+        z if z == 0 => "zero",
+        _ => "impossible"
+    };
+}
+safe("r92_guard_pos", fn() { return sign(5); });
+safe("r92_guard_neg", fn() { return sign(-3); });
+safe("r92_guard_zero", fn() { return sign(0); });
+
+# always-true / always-false guard
+fn gf(x) {
+    return match x {
+        n if true => "always",
+        _ => "fallback"
+    };
+}
+safe("r92_guard_true", fn() { return gf(1); });
+
+fn gfalse(x) {
+    return match x {
+        n if false => "never",
+        _ => "fallback"
+    };
+}
+safe("r92_guard_false", fn() { return gfalse(1); });
+
+# 守卫引用外层变量
+let threshold = 10;
+fn big(x) {
+    return match x {
+        n if n > threshold => "big",
+        _ => "small"
+    };
+}
+safe("r92_guard_outer_big", fn() { return big(20); });
+safe("r92_guard_outer_small", fn() { return big(5); });
+
+# 类型模式 + 绑定 + 守卫：is int as n if n > 5
+fn typ_guard(x) {
+    return match x {
+        is int as n if n > 5 => "big-int:" + str(n),
+        is int as n => "small-int:" + str(n),
+        _ => "not-int"
+    };
+}
+safe("r92_typ_guard_big", fn() { return typ_guard(99); });
+safe("r92_typ_guard_small", fn() { return typ_guard(3); });
+safe("r92_typ_guard_str", fn() { return typ_guard("x"); });
+
+# ============================================================
+# 10. 嵌套 match — 3 层 + match 作 scrutinee
+# ============================================================
+fn nested3(x, y, z) {
+    return match x {
+        0 => match y {
+            0 => match z {
+                0 => "000",
+                _ => "00x"
+            },
+            _ => "0x"
+        },
+        _ => "x"
+    };
+}
+safe("r92_nest3_000", fn() { return nested3(0, 0, 0); });
+safe("r92_nest3_00x", fn() { return nested3(0, 0, 9); });
+safe("r92_nest3_0x", fn() { return nested3(0, 9, 9); });
+safe("r92_nest3_x", fn() { return nested3(9, 9, 9); });
+
+# match 作 scrutinee
+fn match_as_scrut(x) {
+    return match (match x { 1 => 2, _ => 0 }) {
+        2 => "two",
+        0 => "zero",
+        _ => "other"
+    };
+}
+safe("r92_scrut_match_1", fn() { return match_as_scrut(1); });
+safe("r92_scrut_match_9", fn() { return match_as_scrut(9); });
+
+# ============================================================
+# 11. match 表达式（返回值）vs match 语句（丢弃）
+# ============================================================
+fn as_expr(x) {
+    let base = match x {
+        1 => 10,
+        2 => 20,
+        _ => 0
+    };
+    return base + 1;
+}
+safe("r92_expr_1", fn() { return as_expr(1); });
+safe("r92_expr_2", fn() { return as_expr(2); });
+safe("r92_expr_9", fn() { return as_expr(9); });
+
+# match 作语句 — 值被丢弃，不应崩溃
+let stmt_ran = false;
+match 5 { _ => 99 };
+stmt_ran = true;
+print("r92_stmt_discard:" + str(stmt_ran));
+
+# ============================================================
+# 12. 无匹配（无 _）— 应抛 "non-exhaustive match"
+# ============================================================
+fn only_zero(x) {
+    return match x {
+        0 => "zero",
+        1 => "one"
+    };
+}
+safe("r92_nonex_zero", fn() { return only_zero(0); });
+safe("r92_nonex_one", fn() { return only_zero(1); });
+safe("r92_nonex_99", fn() { return only_zero(99); });
+
+# 类型模式不穷尽
+fn typed_nonex(x) {
+    return match x {
+        is int => "int",
+        is str => "str"
+    };
+}
+safe("r92_nonex_bool", fn() { return typed_nonex(true); });
+
+# ============================================================
+# 13. match dict / list 结构 — 无解构，仅类型匹配
+# ============================================================
+fn struct_match(x) {
+    return match x {
+        is list as l => "list-len:" + str(len(l)),
+        is dict as d => "dict-keys:" + str(len(d)),
+        _ => "other"
+    };
+}
+safe("r92_struct_list", fn() { return struct_match([1, 2, 3]); });
+safe("r92_struct_dict", fn() { return struct_match({"a": 1, "b": 2}); });
+safe("r92_struct_int", fn() { return struct_match(42); });
+
+# ============================================================
+# 14. match 内 throw — 通过调用抛异常函数实现
+# ============================================================
+fn thrower(msg) {
+    throw msg;
+}
+fn match_throw(x) {
+    return match x {
+        1 => thrower("from-arm-1"),
+        _ => "ok"
+    };
+}
+safe("r92_throw_arm1", fn() { return match_throw(1); });
+safe("r92_throw_ok", fn() { return match_throw(0); });
+
+# ============================================================
+# 15. match 内 break（外层循环）— 无法测试
+# ============================================================
+# 注：break/continue/throw 均为语句（需 SEMI），match arm body 须为表达式。
+# 故 `2 => break` 解析失败（Unexpected token BREAK）。这是设计限制。
+# 此处改测：match 体调用含 break 的外层 fn 不可达，跳过。
+
+# ============================================================
+# 16. match 值为 null — 字面量与类型模式
+# ============================================================
+fn match_null(x) {
+    return match x {
+        null => "lit-null",
+        is null => "type-null",
+        _ => "other"
+    };
+}
+safe("r92_null_lit", fn() { return match_null(null); });
+
+fn match_null_type_first(x) {
+    return match x {
+        is null => "type-null",
+        null => "lit-null",
+        _ => "other"
+    };
+}
+safe("r92_null_type_first", fn() { return match_null_type_first(null); });
+
+# ============================================================
+# 17. match 值为对象（用户类实例）— 含继承
+# ============================================================
+class Animal { }
+class Dog extends Animal { }
+class Cat extends Animal { }
+
+fn obj_match(x) {
+    return match x {
+        is Dog => "dog",
+        is Cat => "cat",
+        is Animal => "animal",
+        _ => "other"
+    };
+}
+let a = new Animal();
+let d = new Dog();
+let c = new Cat();
+safe("r92_obj_animal", fn() { return obj_match(a); });
+safe("r92_obj_dog", fn() { return obj_match(d); });
+safe("r92_obj_cat", fn() { return obj_match(c); });
+safe("r92_obj_int", fn() { return obj_match(42); });
+
+# ============================================================
+# 18. 副作用：scrutinee 仅求值一次
+# ============================================================
+let counter = 0;
+fn bump() {
+    counter = counter + 1;
+    return counter;
+}
+fn scrut_once() {
+    return match bump() {
+        1 => "first",
+        2 => "second",
+        _ => "later"
+    };
+}
+safe("r92_scrut_once_call1", fn() { return scrut_once(); });
+safe("r92_scrut_once_call2", fn() { return scrut_once(); });
+# 若 scrutinee 被多次求值，counter 会跳到 ≥3
+print("r92_scrut_counter_after:" + str(counter));
+
+# ============================================================
+# 19. 绑定泄漏：guard 失败后绑定是否残留
+# ============================================================
+fn leak_binding(x) {
+    return match x {
+        v if false => "never",
+        _ => "got:" + str(v)
+    };
+}
+safe("r92_leak_binding", fn() { return leak_binding(99); });
+
+# 类型绑定泄漏：is int as n 失败后 n 是否残留
+fn leak_type_binding(x) {
+    let n = "outer";
+    return match x {
+        is int as n if false => "never",
+        _ => "n=" + str(n)
+    };
+}
+safe("r92_leak_type_binding", fn() { return leak_type_binding("not-int"); });
+
+# ============================================================
+# 20. 绑定遮蔽外层变量
+# ============================================================
+fn shadow(x) {
+    let v = 100;
+    return match x {
+        v => v + 1
+    };
+}
+safe("r92_shadow_outer", fn() { return shadow(7); });
+
+# ============================================================
+# 21. 首匹配优先 — wildcard / binding 在前
+# ============================================================
+fn first_wins(x) {
+    return match x {
+        _ => "wild-first",
+        5 => "five"
+    };
+}
+safe("r92_first_wild_5", fn() { return first_wins(5); });
+safe("r92_first_wild_99", fn() { return first_wins(99); });
+
+fn bind_first(x) {
+    return match x {
+        v => "bind:" + str(v),
+        5 => "five"
+    };
+}
+safe("r92_first_bind_5", fn() { return bind_first(5); });
+
+# ============================================================
+# 22. is chan 模式（曾为 parser bug，现应支持）
+# ============================================================
+fn chan_match(x) {
+    return match x {
+        is chan => "chan",
+        _ => "other"
+    };
+}
+safe("r92_is_chan", fn() { return chan_match(chan_new(0)); });
+safe("r92_is_chan_int", fn() { return chan_match(42); });
+
+# ============================================================
+# 23. match 返回 null 作值
+# ============================================================
+fn ret_null(x) {
+    return match x {
+        1 => null,
+        _ => "x"
+    };
+}
+safe("r92_ret_null_1", fn() { return ret_null(1); });
+safe("r92_ret_null_9", fn() { return ret_null(9); });
+
+# ============================================================
+# 24. 大整数 / 浮点字面量边界
+# ============================================================
+fn big_lit(x) {
+    return match x {
+        1000000 => "million",
+        0.5 => "half",
+        _ => "other"
+    };
+}
+safe("r92_big_million", fn() { return big_lit(1000000); });
+safe("r92_big_half", fn() { return big_lit(0.5); });
+safe("r92_big_other", fn() { return big_lit(7); });
+
+# 0.0 vs 0 字面量
+fn zero_float(x) {
+    return match x {
+        0.0 => "float-zero",
+        0 => "int-zero",
+        _ => "other"
+    };
+}
+safe("r92_zero_float_0.0", fn() { return zero_float(0.0); });
+safe("r92_zero_float_0", fn() { return zero_float(0); });
+
+# ============================================================
+# 25. 类型模式次序：is int 在 is float 前 — 3.0 命中谁
+# ============================================================
+fn order_int_float(x) {
+    return match x {
+        is int => "int",
+        is float => "float",
+        _ => "other"
+    };
+}
+safe("r92_order_3.0", fn() { return order_int_float(3.0); });
+safe("r92_order_3", fn() { return order_int_float(3); });
+safe("r92_order_3.14", fn() { return order_int_float(3.14); });
+
+# ============================================================
+# 26. match 值为函数对象 — 无 is fn，走 _
+# ============================================================
+fn func_val() {
+    return match (fn(x) { return x + 1; }) {
+        is int => "int",
+        _ => "other"
+    };
+}
+safe("r92_func_value", fn() { return func_val(); });
+
+# ============================================================
+# 27. 变体模式匹配非变体 HInstance — 应不命中
+# ============================================================
+class Plain { }
+fn variant_on_plain(x) {
+    return match x {
+        Some(v) => "some",
+        _ => "other"
+    };
+}
+let p = new Plain();
+safe("r92_variant_on_plain", fn() { return variant_on_plain(p); });
+
+# ============================================================
+# 28. 复杂 scrutinee：函数调用 + 算术
+# ============================================================
+fn double(x) { return x * 2; }
+fn complex_scrut(x) {
+    return match double(x) + 1 {
+        5 => "five",
+        11 => "eleven",
+        _ => "other"
+    };
+}
+safe("r92_complex_5", fn() { return complex_scrut(2); });
+safe("r92_complex_11", fn() { return complex_scrut(5); });
+safe("r92_complex_oth", fn() { return complex_scrut(0); });
+
+# ============================================================
+# 29. 重复字面量 arm — 第一个命中
+# ============================================================
+fn dup_lit(x) {
+    return match x {
+        5 => "first-five",
+        5 => "second-five",
+        _ => "other"
+    };
+}
+safe("r92_dup_lit_5", fn() { return dup_lit(5); });
+
+# ============================================================
+# 30. chan send/recv/close 模式
+# ============================================================
+fn chan_ops_closed() {
+    let ch = chan_new(0);
+    chan_close(ch);
+    return match ch {
+        chan close => "closed",
+        _ => "other"
+    };
+}
+safe("r92_chan_close", fn() { return chan_ops_closed(); });
+
+fn chan_ops_recv() {
+    let ch = chan_new(2);
+    chan_send(ch, "v1");
+    return match ch {
+        chan recv(v) => "recv:" + str(v),
+        _ => "other"
+    };
+}
+safe("r92_chan_recv", fn() { return chan_ops_recv(); });
+
+print("=== r92 done ===");

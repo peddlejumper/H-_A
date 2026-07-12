@@ -1,0 +1,6 @@
+# t08_dict.hto - dict operations
+let d = {"name": "H#", "version": 4};
+print(d["name"]);
+d["version"] = 5;
+print(d["version"]);
+print(len(d));

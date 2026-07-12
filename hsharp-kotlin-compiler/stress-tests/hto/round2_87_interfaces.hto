@@ -1,0 +1,265 @@
+# Round 2 / #87 — Interface Implementation & Polymorphic Dispatch
+# H# v0.4.1 supports interface/implements.
+#
+# NOTE on `is` / `as`:
+#   The H# PARSER only recognises `is`/`as` inside `match` patterns
+#   (`is T`, `is T as x`).  The binary forms `x is T` and `x as T`
+#   are tokenised as keywords but NEVER consumed by any expression
+#   production, so any use of them is a SyntaxError at parse time.
+#   See the separate probe files for that confirmation.  All type
+#   checks below therefore use `match`.
+
+# ============ T1: interface definition + class implements (signature-only) ============
+interface Drawable {
+    fn draw();
+}
+class Circle implements Drawable {
+    let r = 1;
+    fn draw() { return "Circle(r=" + r + ")"; }
+}
+let c1 = new Circle();
+c1.r = 5;
+print("T1: " + c1.draw());
+
+# ============ T2: interface as parameter type (duck typing) ============
+# H# has no static type enforcement on parameters, so passing any
+# object with the right method works regardless of `implements`.
+interface Greeter {
+    fn greet();
+}
+class English implements Greeter {
+    fn greet() { return "Hello"; }
+}
+class Robot {   # NOTE: does NOT implement Greeter
+    fn greet() { return "BEEP BOOP"; }
+}
+fn sayHi(g) { return g.greet(); }
+print("T2a: " + sayHi(new English()));
+print("T2b: " + sayHi(new Robot()));
+
+# ============ T3: `is` check on interface type via match ============
+class Dog implements Greeter {
+    fn greet() { return "Woof"; }
+}
+let g3 = new Dog();
+let r3 = match g3 {
+    is Greeter => "is-Greeter",
+    _ => "not-Greeter",
+};
+print("T3: " + r3);
+
+# ============ T4: `is` check on class type via match ============
+let r4 = match c1 {
+    is Circle => "is-Circle",
+    is Drawable => "is-Drawable",
+    _ => "?",
+};
+print("T4: " + r4);
+
+# ============ T5: polymorphic dispatch — list of mixed impls ============
+interface Shape {
+    fn area();
+}
+class Square implements Shape {
+    let s = 2;
+    fn area() { return s * s; }
+}
+class Tri implements Shape {
+    let b = 3;
+    let h = 4;
+    fn area() { return (b * h) / 2; }
+}
+class Disc implements Shape {
+    let r = 1;
+    fn area() { return 3 * r * r; }
+}
+let shapes = [new Square(), new Tri(), new Disc()];
+let total = 0;
+for sh in shapes { total = total + sh.area(); }
+print("T5: " + total);
+
+# ============ T6: interface inheritance (interface extends interface) ============
+interface BaseI {
+    fn baseM();
+}
+interface SubI extends BaseI {
+    fn subM();
+}
+class Impl6 implements SubI {
+    fn baseM() { return "base"; }
+    fn subM() { return "sub"; }
+}
+let i6 = new Impl6();
+print("T6: " + i6.baseM() + "/" + i6.subM());
+
+# ============ T7: class extends parent AND implements interface ============
+class Animal7 {
+    let name = "?";
+    fn kind() { return "animal"; }
+}
+class Cat7 extends Animal7 implements Drawable {
+    fn draw() { return "Cat:" + name; }
+}
+let cat7 = new Cat7();
+cat7.name = "Tom";
+print("T7a: " + cat7.kind());
+print("T7b: " + cat7.draw());
+let r7 = match cat7 {
+    is Drawable => "is-Drawable",
+    is Animal7 => "is-Animal7",
+    _ => "?",
+};
+print("T7c: " + r7);
+
+# ============ T8: interface default method — class does NOT override ============
+interface Logger {
+    fn tag();
+    fn log(msg) {
+        return "[" + self.tag() + "] " + msg;
+    }
+}
+class ConsoleL implements Logger {
+    fn tag() { return "CONSOLE"; }
+}
+let cl = new ConsoleL();
+print("T8: " + cl.log("hello"));
+
+# ============ T9: interface default method — class DOES override ============
+class FileL implements Logger {
+    fn tag() { return "FILE"; }
+    fn log(msg) { return "FILE<" + msg + ">"; }
+}
+let fl = new FileL();
+print("T9: " + fl.log("hello"));
+
+# ============ T10: multiple interfaces on one class ============
+interface A10 { fn aM(); }
+interface B10 { fn bM(); }
+class Multi implements A10, B10 {
+    fn aM() { return "a"; }
+    fn bM() { return "b"; }
+}
+let m10 = new Multi();
+print("T10a: " + m10.aM() + m10.bM());
+let r10 = match m10 {
+    is A10 => "is-A10",
+    _ => "?",
+};
+print("T10b: " + r10);
+let r10b = match m10 {
+    is B10 => "is-B10",
+    _ => "?",
+};
+print("T10c: " + r10b);
+
+# ============ T11: duck typing — call interface method on non-implementing class ============
+class Quacker {
+    fn quack() { return "quack!"; }
+}
+interface IQuack {
+    fn quack();
+}
+let q11 = new Quacker();
+print("T11a: " + q11.quack());
+# `is IQuack` should be FALSE because Quacker does not declare `implements IQuack`
+let r11 = match q11 {
+    is IQuack => "is-IQuack",
+    _ => "not-IQuack",
+};
+print("T11b: " + r11);
+
+# ============ T12: transitive interface inheritance — B extends A, C implements B ============
+# Question: is a C instance also an A (via B extends A)?
+interface IA12 {
+    fn aM();
+}
+interface IB12 extends IA12 {
+    fn bM();
+}
+class C12 implements IB12 {
+    fn aM() { return "a"; }
+    fn bM() { return "b"; }
+}
+let x12 = new C12();
+let r12 = match x12 {
+    is IA12 => "is-IA12",
+    _ => "NOT-IA12",
+};
+print("T12: " + r12);
+
+# ============ T13: `is T as x` binding in match (the only `as` form that parses) ============
+let r13 = match c1 {
+    is Drawable as d => d.draw(),
+    _ => "no-match",
+};
+print("T13: " + r13);
+
+# ============ T14: instanceof opcode via INSTANCEOF — reachability ============
+# The compiler emits INSTANCEOF for InstanceOfExpression AST nodes, but
+# the parser never produces them.  We confirm `instanceof` is not a
+# keyword by using it as an identifier.
+let instanceof = "used-as-identifier";
+print("T14: " + instanceof);
+
+# ============ T15: interface default method calling another interface method ============
+interface Counter15 {
+    fn base();
+    fn inc();
+    fn describe() {
+        return self.base() + "+" + self.inc();
+    }
+}
+class C15 implements Counter15 {
+    fn base() { return 10; }
+    fn inc() { return 5; }
+}
+let c15 = new C15();
+print("T15: " + c15.describe());
+
+# ============ T16: empty interface ============
+interface Marker {}
+class Tagged implements Marker {
+    let v = 1;
+}
+let t16 = new Tagged();
+let r16 = match t16 {
+    is Marker => "is-Marker",
+    _ => "not-Marker",
+};
+print("T16: " + r16);
+
+# ============ T17: implement interface with parameters / return values ============
+interface Adder17 {
+    fn add(a, b);
+}
+class IntAdder implements Adder17 {
+    fn add(a, b) { return a + b; }
+}
+class StrAdder implements Adder17 {
+    fn add(a, b) { return a + b; }
+}
+let adders = [new IntAdder(), new StrAdder()];
+print("T17a: " + adders[0].add(2, 3));
+print("T17b: " + adders[1].add("x", "y"));
+
+# ============ T18: sibling classes, match dispatches to correct interface impl ============
+interface Renderer {
+    fn render();
+}
+class HTMLR implements Renderer {
+    fn render() { return "<p>"; }
+}
+class PlainR implements Renderer {
+    fn render() { return "[p]"; }
+}
+fn renderOne(r) {
+    return match r {
+        is HTMLR as h => "H:" + h.render(),
+        is PlainR as p => "P:" + p.render(),
+        _ => "?",
+    };
+}
+print("T18a: " + renderOne(new HTMLR()));
+print("T18b: " + renderOne(new PlainR()));
+
+print("ROUND2_87_DONE");

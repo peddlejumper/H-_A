@@ -1,0 +1,5 @@
+# t9
+fn f() {
+    return;
+}
+print("ok");

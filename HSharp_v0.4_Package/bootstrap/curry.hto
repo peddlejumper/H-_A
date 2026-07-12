@@ -1,0 +1,89 @@
+# H# Currying Helpers (bootstrap/curry.hto)
+# Higher-level utilities built on top of the curry/uncurry builtins.
+#
+# Concepts:
+# - A "partial" is a function with some args pre-bound.
+# - A "pipeline" chains a list of functions, threading value through.
+# - A "composer" chains two functions: compose(f, g)(x) = f(g(x)).
+
+# ---- Basic helpers (delegating to builtins) ----
+
+# Bind the first arg of a 2-arg function.
+fn bind1(f, x) {
+    return curry(f, x);
+}
+
+# Bind both args of a 2-arg function.
+fn bind2(f, x, y) {
+    return curry(f, x, y);
+}
+
+# Identity function.
+fn identity(x) {
+    return x;
+}
+
+# Constant function: returns a 0-arg function that always yields x.
+fn const(x) {
+    fn k(_) { return x; }
+    return k;
+}
+
+# Flip a 2-arg function's argument order.
+fn flip(f) {
+    fn flipped(a, b) { return f(b, a); }
+    return flipped;
+}
+
+# Function composition: compose(f, g)(x) = f(g(x))
+fn compose(f, g) {
+    fn composed(x) { return f(g(x)); }
+    return composed;
+}
+
+# Pipe: pipe(f, g, h)(x) = h(g(f(x))) - left-to-right
+fn pipe2(f, g) {
+    fn piped(x) { return g(f(x)); }
+    return piped;
+}
+
+fn pipe3(f, g, h) {
+    fn piped(x) { return h(g(f(x))); }
+    return piped;
+}
+
+# Map a function over a list (manual implementation since list iteration in hsvm is tricky).
+fn map_list(f, lst) {
+    let out = [];
+    let i = 0;
+    let n = len(lst);
+    while (i < n) {
+        out = out + [f(lst[i])];
+        i = i + 1;
+    }
+    return out;
+}
+
+# Fold-left (reduce).
+fn fold(op, init, lst) {
+    let acc = init;
+    let i = 0;
+    let n = len(lst);
+    while (i < n) {
+        acc = op(acc, lst[i]);
+        i = i + 1;
+    }
+    return acc;
+}
+
+# Curry a 2-arg function (named for clarity; same as `curry` for 2-arg).
+fn curry2(f) {
+    return f;  # implicit partial application makes all functions curried
+}
+
+# Curry a 3-arg function: returns fn(a)(b)(c).
+fn curry3(f) {
+    return f;  # implicit partial application
+}
+
+print("curry.hto loaded");

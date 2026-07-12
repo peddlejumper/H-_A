@@ -1,0 +1,8 @@
+# 02 - 单层 for 循环 (string)
+# 目的: 字符串迭代触发 fixForLoopJumps
+let buf = "";
+for ch in "abcde" {
+    buf = buf + ch;
+}
+print("buf=" + buf);
+print("expected=abcde");

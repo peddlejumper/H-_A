@@ -1,0 +1,11 @@
+# _probe144_s7_self_shadow.hto — 验证 self.x 是否被局部变量遮蔽
+class C {
+    let x = 1;
+    fn get_self_x() { let x = 100; return self.x; }
+    fn get_bare_x() { let x = 100; return x; }
+    fn get_self_x_no_local() { return self.x; }
+}
+let o = new C();
+print("self.x with local x=100: " + o.get_self_x());   # 预期: 1
+print("bare x with local x=100: " + o.get_bare_x());   # 预期: 100
+print("self.x no local: " + o.get_self_x_no_local());   # 预期: 1

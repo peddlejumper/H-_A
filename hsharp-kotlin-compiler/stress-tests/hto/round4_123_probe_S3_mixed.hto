@@ -1,0 +1,11 @@
+# Probe S3 — Mixed nesting pattern.
+# `let [a, [b, c]] = [1, [2, 3]];`
+# The parser's `_destructure_slot` only accepts IDENTIFIER or `_`,
+# so an inner `[` should raise a compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.  This probe exists to confirm that.
+
+let [a, [b, c]] = [1, [2, 3]];
+print(a);
+print(b);
+print(c);

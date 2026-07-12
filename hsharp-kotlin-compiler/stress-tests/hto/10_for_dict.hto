@@ -1,0 +1,5 @@
+# T10 - For-in over dict (keys)
+let d = {"a": 1, "b": 2, "c": 3};
+let count = 0;
+for k in d { count = count + 1; }
+print(count);

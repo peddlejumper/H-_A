@@ -1,7 +1,109 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
+.venv/
+.venv-1/
+.pytest_cache/
+
+# macOS
 .DS_Store
-*.dSYM/
-.idea/
+*.app/
+
+# Binaries / compiled
+*.hbc
+*.dmg
+*.zip
+*.exe
+*.dll
+*.pdb
+*.class
+*.o
+*.so
+*.dylib
+*.jar
+*.tar.gz
+*.vsix
+
+# Compiled C/C++ executables (no extension)
+bench_c
+bench_cpp
+bookshelf
+ascii_code
+ascii_to_char
+coin_problem
+corner_pattern
+corner_pattern_fill
+corner_v
+corner_v_fill
+corner_v_final
+corner_vi
+corner_vi_fill
+corner_vi_final
+flower_matrix
+flower_matrix_pure
+godzilla_kong
+horse_racing
+lcs
+maze_problem
+prime_factorization
+prime_factorization_countif
+prime_factorization_fastio
+prime_factorization_lambda
+prime_factorization_range
+prime_factorization_stl
+reverse_string
+sliding_window
+sliding_window_fastio
+sliding_window_final
+sliding_window_lambda
+sliding_window_simple
+swap_case
+
+# Large binary executables (no extension, >1MB)
+hsvm
+hsharp-vm
+hsharp_vm
+hsharp_bundle.hbc
+
+# Generated documents (regenerable from source scripts)
+*.docx
+
+# Images / media
+*.png
+*.gif
+*.ppm
+*.jpg
+*.jpeg
+*.icns
+
+# Logs
+*.log
+debug_stderr.log
+debug_stdout.log
+test_output.txt
+
+# Build artifacts
+dist/
+*.mf
+build/
+build_old/
+.kotlin/
+**/obj/
+**/artifacts/
+**/out/
+**/bin/Release/
+**/bin/Debug/
+
+# IDE / editor
 .vscode/
+.trae/
+.workbuddy/
+.project_context/
+
+# Node
+node_modules/
+
+# Misc
+--css-path
+-o

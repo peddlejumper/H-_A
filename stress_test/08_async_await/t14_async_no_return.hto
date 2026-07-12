@@ -1,0 +1,8 @@
+# t14: async fn with no explicit return.
+# Compiler emits a trailing RETURN_VALUE; with nothing pushed the
+# value should be null (HNull).  After await, result should be null.
+async fn f() {
+    let x = 1;
+}
+let r = await f();
+print(r);

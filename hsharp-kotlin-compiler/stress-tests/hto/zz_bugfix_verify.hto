@@ -1,0 +1,48 @@
+# Verification for HVM.kt bug fixes (Bug 1, 2, 7, 9).
+# Bugs 3 & 4 (binary `x is T` / `x as T`) are not reachable from the
+# main parser — verified separately by inspection.
+
+# ---------- Bug 1: Unicode code-point indexing/slicing/iteration ----------
+# Each emoji below is a supplementary code point (2 UTF-16 chars), so a
+# UTF-16-based implementation would report length 10 and split pairs.
+let s = "😀😁😂🤣😃";
+print("--- Bug 1: Unicode ---");
+print(s.len());            # expect 5
+print(s[0]);               # expect 😀
+print(s[4]);               # expect 😃
+print(s[0:2]);             # expect 😀😁
+print(s[-1]);              # expect 😃
+print(s.find("😂"));       # expect 2
+let count = 0;
+for ch in s { count = count + 1; }
+print(count);              # expect 5
+
+# ---------- Bug 2: lookup() — field must win over same-named global ----------
+let x = 999;               # global x
+class Holder {
+    let x = 1;
+    fn read_x() { return x; }   # bare `x` should be the field, not 999
+}
+let h = new Holder();
+print("--- Bug 2: field shadows global ---");
+print(h.read_x());         # expect 1
+h.x = 42;
+print(h.read_x());         # expect 42
+
+# ---------- Bug 7: static method inherited from base class ----------
+class Base {
+    static fn helper() { return 42; }
+}
+class Derived extends Base {}
+print("--- Bug 7: static inherit ---");
+print(Derived.helper());   # expect 42
+
+# ---------- Bug 9: list + string is a type error ----------
+print("--- Bug 9: list + string ---");
+print([1, 2] + [3, 4]);    # expect [1, 2, 3, 4]
+try {
+    let bad = [1, 2] + "x";
+    print("ERROR: should have thrown");
+} catch (e) {
+    print("caught: " + e);  # expect "caught: cannot add list and str" (or similar)
+}

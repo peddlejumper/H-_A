@@ -1,0 +1,20 @@
+# t22 - Parser bugs in match patterns (negative literal + is chan)
+# BUG 1: negative number literal in pattern → SyntaxError: unexpected token in match pattern: MINUS
+fn neg_lit(x) {
+    return match x {
+        -1 => "neg",
+        _ => "other"
+    };
+}
+# This won't compile; test by catching the compile error
+print("t22_neg_lit:" + neg_lit(-1));
+
+# BUG 2: `is chan` → SyntaxError: expected type name after 'is', got CHAN
+# HVM.typeMatch supports "chan" but parse_pattern rejects the CHAN token
+fn is_chan(x) {
+    return match x {
+        is chan => "chan",
+        _ => "other"
+    };
+}
+print("t22_is_chan:" + is_chan(chan_new(0)));

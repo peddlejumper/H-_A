@@ -1,0 +1,291 @@
+# H# Library Test 02 — String Library
+# Self-contained string library tests using only H# v0.4 features.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# str_length / str_is_empty / str_repeat
+# =====================================================
+fn str_length(s) {
+    let n = 0;
+    let i = 0;
+    while (i < len(s)) { n = n + 1; i = i + 1; }
+    return n;
+}
+fn str_is_empty(s) { return str_length(s) == 0; }
+fn str_repeat(s, n) {
+    let r = "";
+    let i = 0;
+    while (i < n) { r = r + s; i = i + 1; }
+    return r;
+}
+
+check("len/empty",      str_length("") == 0);
+check("len/single",     str_length("x") == 1);
+check("len/word",       str_length("hello") == 5);
+check("len/space",      str_length("hi there") == 8);
+check("is_empty/1",     str_is_empty("") == true);
+check("is_empty/2",     str_is_empty("x") == false);
+check("repeat/0",       str_repeat("ab", 0) == "");
+check("repeat/3",       str_repeat("ab", 3) == "ababab");
+check("repeat/once",    str_repeat("x", 1) == "x");
+
+# =====================================================
+# str_contains / str_starts_with / str_ends_with
+# =====================================================
+fn str_contains(s, sub) {
+    if (len(sub) == 0) { return true; }
+    if (len(sub) > len(s)) { return false; }
+    let i = 0;
+    while (i <= len(s) - len(sub)) {
+        let j = 0;
+        let ok = true;
+        while (j < len(sub)) {
+            if (s[i + j] != sub[j]) { ok = false; break; }
+            j = j + 1;
+        }
+        if (ok) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn str_starts_with(s, p) {
+    if (len(p) > len(s)) { return false; }
+    let i = 0;
+    while (i < len(p)) {
+        if (s[i] != p[i]) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+fn str_ends_with(s, p) {
+    if (len(p) > len(s)) { return false; }
+    let off = len(s) - len(p);
+    let i = 0;
+    while (i < len(p)) {
+        if (s[off + i] != p[i]) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+check("contains/yes",   str_contains("hello world", "world") == true);
+check("contains/no",    str_contains("hello world", "xyz") == false);
+check("contains/empty", str_contains("hello", "") == true);
+check("contains/exact", str_contains("hello", "hello") == true);
+check("starts/yes",     str_starts_with("hello", "he") == true);
+check("starts/no",      str_starts_with("hello", "lo") == false);
+check("starts/empty",   str_starts_with("hello", "") == true);
+check("ends/yes",       str_ends_with("hello", "lo") == true);
+check("ends/no",        str_ends_with("hello", "he") == false);
+check("ends/empty",     str_ends_with("hello", "") == true);
+
+# =====================================================
+# str_uppercase / str_lowercase
+# =====================================================
+fn str_uppercase(s) {
+    let r = "";
+    let i = 0;
+    while (i < len(s)) {
+        let c = s[i];
+        if (c >= "a" and c <= "z") {
+            # convert to uppercase by ASCII offset
+            let code = ord(c) - 32;
+            c = chr(code);
+        }
+        r = r + c;
+        i = i + 1;
+    }
+    return r;
+}
+fn str_lowercase(s) {
+    let r = "";
+    let i = 0;
+    while (i < len(s)) {
+        let c = s[i];
+        if (c >= "A" and c <= "Z") {
+            let code = ord(c) + 32;
+            c = chr(code);
+        }
+        r = r + c;
+        i = i + 1;
+    }
+    return r;
+}
+
+check("upper/basic",    str_uppercase("hello") == "HELLO");
+check("upper/mixed",    str_uppercase("Hello World") == "HELLO WORLD");
+check("upper/empty",    str_uppercase("") == "");
+check("upper/already",  str_uppercase("ABC") == "ABC");
+check("lower/basic",    str_lowercase("HELLO") == "hello");
+check("lower/mixed",    str_lowercase("Hello World") == "hello world");
+check("lower/empty",    str_lowercase("") == "");
+
+# =====================================================
+# str_trim / str_ltrim / str_rtrim
+# =====================================================
+fn str_trim(s) {
+    # trim leading whitespace
+    let start = 0;
+    while (start < len(s) and (s[start] == " " or s[start] == "\t" or s[start] == "\n")) {
+        start = start + 1;
+    }
+    let end = len(s);
+    while (end > start and (s[end - 1] == " " or s[end - 1] == "\t" or s[end - 1] == "\n")) {
+        end = end - 1;
+    }
+    let r = "";
+    let i = start;
+    while (i < end) { r = r + s[i]; i = i + 1; }
+    return r;
+}
+
+check("trim/both",      str_trim("  hello  ") == "hello");
+check("trim/left",      str_trim("hello  ") == "hello");
+check("trim/right",     str_trim("  hello") == "hello");
+check("trim/none",      str_trim("hello") == "hello");
+check("trim/empty",     str_trim("   ") == "");
+check("trim/all",       str_trim("") == "");
+
+# =====================================================
+# str_reverse
+# =====================================================
+fn str_reverse(s) {
+    let r = "";
+    let i = len(s) - 1;
+    while (i >= 0) { r = r + s[i]; i = i - 1; }
+    return r;
+}
+
+check("reverse/abc",    str_reverse("abc") == "cba");
+check("reverse/hello",  str_reverse("hello") == "olleh");
+check("reverse/empty",  str_reverse("") == "");
+check("reverse/single", str_reverse("x") == "x");
+
+# =====================================================
+# str_index_of
+# =====================================================
+fn str_index_of(s, sub) {
+    if (len(sub) == 0) { return 0; }
+    if (len(sub) > len(s)) { return -1; }
+    let i = 0;
+    while (i <= len(s) - len(sub)) {
+        let j = 0;
+        let ok = true;
+        while (j < len(sub)) {
+            if (s[i + j] != sub[j]) { ok = false; break; }
+            j = j + 1;
+        }
+        if (ok) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+check("index/yes",      str_index_of("hello world", "world") == 6);
+check("index/begin",    str_index_of("hello", "he") == 0);
+check("index/end",      str_index_of("hello", "lo") == 3);
+check("index/no",       str_index_of("hello", "xyz") == -1);
+check("index/empty",    str_index_of("hello", "") == 0);
+
+# =====================================================
+# str_split / str_join
+# =====================================================
+fn str_split(s, sep) {
+    if (len(sep) == 0) { return [s]; }
+    let parts = [];
+    let start = 0;
+    let i = 0;
+    while (i <= len(s) - len(sep)) {
+        let j = 0;
+        let ok = true;
+        while (j < len(sep)) {
+            if (s[i + j] != sep[j]) { ok = false; break; }
+            j = j + 1;
+        }
+        if (ok) {
+            let part = "";
+            let k = start;
+            while (k < i) { part = part + s[k]; k = k + 1; }
+            push(parts, part);
+            start = i + len(sep);
+            i = start;
+        } else {
+            i = i + 1;
+        }
+    }
+    let tail = "";
+    let k = start;
+    while (k < len(s)) { tail = tail + s[k]; k = k + 1; }
+    push(parts, tail);
+    return parts;
+}
+fn str_join(parts, sep) {
+    let r = "";
+    let i = 0;
+    while (i < len(parts)) {
+        if (i > 0) { r = r + sep; }
+        r = r + parts[i];
+        i = i + 1;
+    }
+    return r;
+}
+
+check("split/basic",    len(str_split("a,b,c", ",")) == 3);
+check("split/abc",      str_split("a,b,c", ",")[0] == "a" and str_split("a,b,c", ",")[1] == "b" and str_split("a,b,c", ",")[2] == "c");
+check("split/no-sep",   len(str_split("hello", ",")) == 1);
+check("join/basic",     str_join(["a", "b", "c"], ",") == "a,b,c");
+check("join/single",    str_join(["hello"], ",") == "hello");
+check("join/empty",     str_join([], ",") == "");
+
+# =====================================================
+# str_replace
+# =====================================================
+fn str_replace(s, old, replacement) {
+    if (len(old) == 0) { return s; }
+    let r = "";
+    let i = 0;
+    while (i < len(s)) {
+        let j = 0;
+        let ok = true;
+        while (j < len(old) and i + j < len(s)) {
+            if (s[i + j] != old[j]) { ok = false; break; }
+            j = j + 1;
+        }
+        if (ok and j == len(old)) {
+            r = r + replacement;
+            i = i + len(old);
+        } else {
+            r = r + s[i];
+            i = i + 1;
+        }
+    }
+    return r;
+}
+
+check("replace/once",   str_replace("hello", "l", "L") == "heLLo");
+check("replace/all",    str_replace("aaa", "a", "b") == "bbb");
+check("replace/no",     str_replace("hello", "z", "Y") == "hello");
+check("replace/word",   str_replace("Hello World", "World", "H#") == "Hello H#");
+
+# =====================================================
+# Report
+# =====================================================
+print("STR_LIB   : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

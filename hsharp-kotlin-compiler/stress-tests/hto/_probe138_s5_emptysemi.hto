@@ -1,0 +1,7 @@
+# _probe138_s5_emptysemi.hto — 空语句 (仅分号)
+# 测试: 单独的 ; 是否被解析器接受
+# 预期: 语法错误 (parser primary() 遇到 SEMI 时无匹配)
+
+let a = 1;
+;
+return a;

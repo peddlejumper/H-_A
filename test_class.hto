@@ -1,0 +1,36 @@
+# Test class creation patterns
+class Animal {
+    let name = "";
+    let sound = "";
+    
+    fn init(n, s) {
+        self.name = n;
+        self.sound = s;
+    }
+    
+    fn speak() {
+        return self.name + " says " + self.sound;
+    }
+}
+
+# Pattern 1: new with args (auto-calls init)
+let a = new Animal("Cat", "Meow");
+print(a.speak());
+
+# Test without self (method params don't contain self per task description)
+class Point {
+    let x = 0;
+    let y = 0;
+    
+    fn init(px, py) {
+        x = px;
+        y = py;
+    }
+    
+    fn to_string() {
+        return "(" + str(x) + ", " + str(y) + ")";
+    }
+}
+
+let p = new Point(3, 4);
+print(p.to_string());

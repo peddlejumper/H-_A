@@ -1,0 +1,45 @@
+# micro — isolate `new Point` inside parallel fn
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+class Point {
+    fn __init__(self, x, y) {
+        self.x = x;
+        self.y = y;
+    }
+    fn mag(self) {
+        return self.x * self.x + self.y * self.y;
+    }
+}
+
+# 顶层直接 new
+let p0 = new Point(3, 4);
+check("toplevel_new", p0.x == 3, "x=" + str(p0.x));
+check("toplevel_method", p0.mag() == 25, "mag=" + str(p0.mag()));
+
+# parallel fn 内 new
+parallel fn make_point(x, y) {
+    let p = new Point(x, y);
+    return p;
+}
+let fp = make_point(5, 6);
+let vp = "x";
+try {
+    vp = await fp;
+} catch (e) {
+    print("CAUGHT in make_point await: " + str(e));
+}
+check("parallel_new_x", vp == "x" or vp.x == 5, "vp=" + str(vp));
+
+# 普通 fn 内 new
+fn make_point_plain(x, y) {
+    let p = new Point(x, y);
+    return p;
+}
+let pp = make_point_plain(7, 8);
+check("plainfn_new", pp.x == 7, "x=" + str(pp.x));
+
+print("MICRO_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

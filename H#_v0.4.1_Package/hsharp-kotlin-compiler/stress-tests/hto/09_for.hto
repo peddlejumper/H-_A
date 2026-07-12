@@ -1,0 +1,14 @@
+# T09 - For-in over list
+let nums = [1, 2, 3, 4, 5];
+let total = 0;
+for n in nums { total = total + n; }
+print(total);
+
+# for over range
+let s = 0;
+for i in range(10) { s = s + i; }
+print(s);
+
+let sq = [];
+for i in range(5) { push(sq, i * i); }
+print(sq);

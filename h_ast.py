@@ -10,6 +10,16 @@ class LetStatement(AST):
         self.name = name
         self.value = value
 
+class DestructureLet(AST):
+    """`let [a, b, c] = expr;` — list/tuple destructuring.
+
+    `names` is the list of identifiers (None entries indicate a skipped
+    slot, e.g. `let [a, _, c] = ...`).  `value` is the RHS expression
+    that must evaluate to an indexable collection."""
+    def __init__(self, names, value):
+        self.names = names
+        self.value = value
+
 class PrintStatement(AST):
     def __init__(self, expr):
         self.expr = expr
@@ -19,11 +29,21 @@ class ImportStatement(AST):
         self.path = path
 
 class Function(AST):
-    def __init__(self, name, params, body, is_static=False):
+    def __init__(self, name, params, body, is_static=False, defaults=None,
+                 is_variadic=False):
         self.name = name
         self.params = params
         self.body = body
         self.is_static = is_static
+        # Default values for trailing parameters (Python convention:
+        # aligned with the tail of `params`).  Currently the compiler
+        # only supports literal defaults.
+        self.defaults = defaults or []
+        # `fn f(...args)` or `fn f(a, b, ...rest)` — when True, the LAST
+        # entry of `params` is the variadic capture name and collects all
+        # trailing positional args into a list.  Mutually exclusive with
+        # `defaults` (enforced by the parser).
+        self.is_variadic = is_variadic
 
 class CallExpression(AST):
     def __init__(self, func, args):
@@ -87,9 +107,15 @@ class NullLiteral(AST):
         pass
 
 class Lambda(AST):
-    def __init__(self, params, body):
+    def __init__(self, params, body, defaults=None, is_variadic=False):
         self.params = params
         self.body = body
+        # Default values for trailing parameters (same convention as
+        # Function: aligned with the tail of `params`).
+        self.defaults = defaults or []
+        # `fn(a, b, ...rest) => ...` — when True, the LAST entry of
+        # `params` collects all trailing positional args into a list.
+        self.is_variadic = is_variadic
 
 class UnaryOp(AST):
     def __init__(self, op, operand):

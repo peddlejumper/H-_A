@@ -1,0 +1,640 @@
+# round2_90_channels.hto — 测试智能体 #90
+# 领域: channel 缓冲 / close / select 语义（match channel 模式）
+# H# v0.4.1 已知事实（来自源码 HValue.kt / HVM.kt）：
+#   - chan_new(N): N=0 → 无界 (LinkedBlockingQueue); N>0 → 有界 (ArrayBlockingQueue)
+#     !! 这与 Go 的 make(chan T) (无缓冲) 语义不同 — H# 无法表达真正的无缓冲 channel
+#   - chan_send(ch, v): 阻塞；closed channel 上 send 抛 HSharpException("send on closed channel")
+#   - chan_recv(ch): 阻塞；closed 且 drained 后 recv 抛 HSharpException("recv on closed channel")
+#     !! 不返回零值/逗号ok，与 Go 不同
+#   - chan_try_send(ch, v): closed 时抛异常 (非返回 false); 满时返回 false
+#   - chan_try_recv(ch, v): 空返回 null; closed+drained 也返回 null (不抛)
+#   - chan_close(ch): 幂等 (不抛) — 与 Go 双 close panic 不同
+#   - match: chan send(_) / chan recv(v) / chan close 三种模式
+#   - 无 select / 无 timeout 关键字
+#
+# 本测试自检: 用 check() 累计 PASS/FAIL，最后汇总。
+
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK   " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + "  " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# ============================================================
+# T01: 有缓冲 channel FIFO 顺序
+# ============================================================
+let ch1 = chan_new(3);
+chan_send(ch1, 10);
+chan_send(ch1, 20);
+chan_send(ch1, 30);
+check("T01a_size3", chan_size(ch1) == 3, "size=" + str(chan_size(ch1)));
+let r1a = chan_recv(ch1);
+check("T01b_fifo_a", r1a == 10, "got=" + str(r1a));
+let r1c = chan_recv(ch1);
+check("T01c_fifo_b", r1c == 20, "got=" + str(r1c));
+let r1d = chan_recv(ch1);
+check("T01d_fifo_c", r1d == 30, "got=" + str(r1d));
+check("T01e_empty", chan_size(ch1) == 0, "size=" + str(chan_size(ch1)));
+
+# ============================================================
+# T02: try_send 在满的有界 channel 上返回 false
+# ============================================================
+let ch2 = chan_new(2);
+check("T02a_try_send_1", chan_try_send(ch2, "a") == true, "first");
+check("T02b_try_send_2", chan_try_send(ch2, "b") == true, "second");
+check("T02c_try_send_full", chan_try_send(ch2, "c") == false, "should be full");
+
+# ============================================================
+# T03: try_send 在无界 channel 上总是成功
+# ============================================================
+let ch3 = chan_new(0);
+check("T03a_unbounded_try_1", chan_try_send(ch3, 1) == true, "1");
+check("T03b_unbounded_try_2", chan_try_send(ch3, 2) == true, "2");
+check("T03c_unbounded_try_3", chan_try_send(ch3, 3) == true, "3");
+check("T03d_unbounded_size3", chan_size(ch3) == 3, "size=" + str(chan_size(ch3)));
+
+# ============================================================
+# T04: try_recv 在空 channel 上返回 null
+# ============================================================
+let ch4 = chan_new(2);
+let r4a = chan_try_recv(ch4);
+check("T04a_try_recv_empty_null", r4a == null, "got=" + str(r4a));
+chan_send(ch4, 99);
+let r4b = chan_try_recv(ch4);
+check("T04b_try_recv_value", r4b == 99, "got=" + str(r4b));
+let r4c = chan_try_recv(ch4);
+check("T04c_try_recv_empty_again_null", r4c == null, "got=" + str(r4c));
+
+# ============================================================
+# T05: chan_new(0) 是无界而非无缓冲 — 连续 send 多个不阻塞
+#     （Go 语义: make(chan T) 无缓冲应同步握手，send 无人 recv 时阻塞）
+# ============================================================
+let ch5 = chan_new(0);
+chan_send(ch5, 1);
+chan_send(ch5, 2);
+chan_send(ch5, 3);
+chan_send(ch5, 4);
+chan_send(ch5, 5);
+check("T05_unbounded_holds_5", chan_size(ch5) == 5, "size=" + str(chan_size(ch5)));
+
+# ============================================================
+# T06: send 后 close，recv 拿完缓冲后抛异常
+# ============================================================
+let ch6 = chan_new(5);
+chan_send(ch6, "x");
+chan_send(ch6, "y");
+chan_close(ch6);
+check("T06a_size_after_close", chan_size(ch6) == 2, "size=" + str(chan_size(ch6)));
+let r6a = chan_recv(ch6);
+check("T06b_recv_after_close_1", r6a == "x", "got=" + str(r6a));
+let r6b = chan_recv(ch6);
+check("T06c_recv_after_close_2", r6b == "y", "got=" + str(r6b));
+let r6c = "no-throw";
+try {
+    chan_recv(ch6);
+} catch (e) {
+    r6c = "caught";
+}
+check("T06d_recv_drained_closed_throws", r6c == "caught", "got=" + str(r6c));
+
+# ============================================================
+# T07: 已 close 的 channel send 抛异常
+# ============================================================
+let ch7 = chan_new(2);
+chan_close(ch7);
+let r7 = "no-throw";
+try {
+    chan_send(ch7, 1);
+} catch (e) {
+    r7 = "caught";
+}
+check("T07_send_on_closed_throws", r7 == "caught", "got=" + str(r7));
+
+# ============================================================
+# T08: 已 close 且 drained 的 channel recv 抛异常
+# ============================================================
+let ch8 = chan_new(2);
+chan_send(ch8, 1);
+chan_close(ch8);
+chan_recv(ch8);  # 拿走 1，现在 drained
+let r8 = "no-throw";
+try {
+    chan_recv(ch8);
+} catch (e) {
+    r8 = "caught";
+}
+check("T08_recv_drained_closed_throws", r8 == "caught", "got=" + str(r8));
+
+# ============================================================
+# T09: close 后再 close — 应 panic (Go 语义) 还是幂等?
+#     源码 close() 只设 closed=true，不抛。预期: 幂等 no-throw
+# ============================================================
+let ch9 = chan_new(2);
+chan_close(ch9);
+let r9 = "no-throw";
+try {
+    chan_close(ch9);
+} catch (e) {
+    r9 = "caught";
+}
+check("T09_double_close_idempotent", r9 == "no-throw", "got=" + str(r9));
+
+# ============================================================
+# T10: try_send 在 closed channel 上抛异常 (而非返回 false)
+# ============================================================
+let ch10 = chan_new(2);
+chan_close(ch10);
+let r10 = "no-throw";
+try {
+    chan_try_send(ch10, 1);
+} catch (e) {
+    r10 = "caught";
+}
+check("T10_try_send_on_closed_throws", r10 == "caught", "got=" + str(r10));
+
+# ============================================================
+# T11: try_recv 在 closed+drained channel 上返回 null (不抛)
+# ============================================================
+let ch11 = chan_new(2);
+chan_send(ch11, 1);
+chan_close(ch11);
+chan_recv(ch11);  # drained
+let r11 = chan_try_recv(ch11);
+check("T11_try_recv_closed_drained_null", r11 == null, "got=" + str(r11));
+
+# ============================================================
+# T12: channel 传递 channel (嵌套 channel)
+# ============================================================
+let inner = chan_new(2);
+chan_send(inner, 42);
+let outer = chan_new(1);
+chan_send(outer, inner);
+let got_inner = chan_recv(outer);
+check("T12a_outer_type_is_chan", type(got_inner) == "channel", "type=" + type(got_inner));
+let got_val = chan_recv(got_inner);
+check("T12b_inner_value", got_val == 42, "got=" + str(got_val));
+
+# ============================================================
+# T13: channel 传递 list
+# ============================================================
+let ch13 = chan_new(1);
+let lst = [1, 2, 3, 4, 5];
+chan_send(ch13, lst);
+let r13 = chan_recv(ch13);
+check("T13a_list_len", len(r13) == 5, "len=" + str(len(r13)));
+check("T13b_list_sum", r13[0] + r13[1] + r13[2] + r13[3] + r13[4] == 15, "sum");
+
+# ============================================================
+# T14: channel 传递 dict
+# ============================================================
+let ch14 = chan_new(1);
+let d = {"a": 1, "b": 2};
+chan_send(ch14, d);
+let r14 = chan_recv(ch14);
+check("T14a_dict_a", r14["a"] == 1, "a=" + str(r14["a"]));
+check("T14b_dict_b", r14["b"] == 2, "b=" + str(r14["b"]));
+
+# ============================================================
+# T15: channel 传递 class 实例
+# ============================================================
+class Box {
+    fn __init__(self, v) {
+        self.v = v;
+    }
+    fn get(self) {
+        return self.v;
+    }
+}
+let ch15 = chan_new(1);
+let bx = new Box(123);
+chan_send(ch15, bx);
+let r15 = chan_recv(ch15);
+check("T15_instance_through_chan", r15.get() == 123, "got=" + str(r15.get()));
+
+# ============================================================
+# T16: 多生产者单消费者 (parallel fn)
+# ============================================================
+parallel fn producer_n(ch, start, count) {
+    let i = 0;
+    while (i < count) {
+        chan_send(ch, start + i);
+        i = i + 1;
+    }
+    return "done";
+}
+let ch16 = chan_new(0);
+let f16a = producer_n(ch16, 100, 3);
+let f16b = producer_n(ch16, 200, 3);
+let f16c = producer_n(ch16, 300, 3);
+let got16 = [];
+let k16 = 0;
+while (k16 < 9) {
+    got16.append(chan_recv(ch16));
+    k16 = k16 + 1;
+}
+let await16a = await f16a;
+let await16b = await f16b;
+let await16c = await f16c;
+check("T16a_mp_count", len(got16) == 9, "len=" + str(len(got16)));
+let sum16 = 0;
+for v in got16 { sum16 = sum16 + v; }
+# 100+101+102 + 200+201+202 + 300+301+302 = 303+603+903 = 1809
+check("T16b_mp_sum", sum16 == 1809, "sum=" + str(sum16));
+
+# ============================================================
+# T17: 单生产者多消费者 (parallel fn 消费)
+# ============================================================
+let ch17 = chan_new(0);
+parallel fn consumer_sum(ch, count) {
+    let s = 0;
+    let i = 0;
+    while (i < count) {
+        s = s + chan_recv(ch);
+        i = i + 1;
+    }
+    return s;
+}
+let fc17a = consumer_sum(ch17, 5);
+let fc17b = consumer_sum(ch17, 5);
+for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
+    chan_send(ch17, v);
+}
+let s17a = await fc17a;
+let s17b = await fc17b;
+check("T17a_spmc_total", s17a + s17b == 55, "sum=" + str(s17a + s17b));
+check("T17b_spmc_each_positive", s17a > 0 and s17b > 0, "a=" + str(s17a) + " b=" + str(s17b));
+
+# ============================================================
+# T18: parallel fn 写 channel，main 读 (基本并发)
+# ============================================================
+parallel fn gen_squares(ch, n) {
+    let i = 1;
+    while (i <= n) {
+        chan_send(ch, i * i);
+        i = i + 1;
+    }
+    return "ok";
+}
+let ch18 = chan_new(0);
+let f18 = gen_squares(ch18, 4);
+let r18 = [];
+let i18 = 0;
+while (i18 < 4) {
+    r18.append(chan_recv(ch18));
+    i18 = i18 + 1;
+}
+let ar18 = await f18;
+check("T18a_squares", r18[0] == 1 and r18[1] == 4 and r18[2] == 9 and r18[3] == 16, "vals=" + str(r18));
+check("T18b_status", ar18 == "ok", "status=" + str(ar18));
+
+# ============================================================
+# T19: match chan send(_) — 空无界 channel 应 sendable
+# ============================================================
+fn state_send(ch) {
+    return match ch {
+        chan send(_) => "sendable",
+        chan recv(v) => "recv:" + str(v),
+        chan close => "closed",
+        _ => "neither"
+    };
+}
+let ch19 = chan_new(0);
+check("T19a_empty_unbounded_sendable", state_send(ch19) == "sendable", "got=" + state_send(ch19));
+chan_send(ch19, 7);
+# 无界但 size=1 ≥ 1 → 不 sendable (按 HVM 注释逻辑)
+check("T19b_unbounded_with_item", state_send(ch19) == "recv:7", "got=" + state_send(ch19));
+
+# ============================================================
+# T20: match chan send(_) — 满的有界 channel 不应 sendable
+# ============================================================
+let ch20 = chan_new(1);
+chan_send(ch20, 100);
+check("T20_full_bounded_not_sendable", state_send(ch20) == "recv:100", "got=" + state_send(ch20));
+
+# ============================================================
+# T21: match chan send(_) — closed channel 不应 sendable
+# ============================================================
+let ch21 = chan_new(0);
+chan_close(ch21);
+check("T21_closed_not_sendable", state_send(ch21) == "closed", "got=" + state_send(ch21));
+
+# ============================================================
+# T22: match chan recv(v) — peek 不消费
+# ============================================================
+fn state_recv(ch) {
+    return match ch {
+        chan recv(v) => "peek:" + str(v),
+        chan send(_) => "sendable",
+        chan close => "closed",
+        _ => "neither"
+    };
+}
+let ch22 = chan_new(2);
+chan_send(ch22, "first");
+chan_send(ch22, "second");
+check("T22a_peek_first", state_recv(ch22) == "peek:first", "got=" + state_recv(ch22));
+# 再 peek 应仍是 first (未消费)
+check("T22b_peek_again_first", state_recv(ch22) == "peek:first", "got=" + state_recv(ch22));
+# 实际 recv 拿走 first
+let r22 = chan_recv(ch22);
+check("T22c_recv_after_peek", r22 == "first", "got=" + str(r22));
+check("T22d_peek_now_second", state_recv(ch22) == "peek:second", "got=" + state_recv(ch22));
+
+# ============================================================
+# T23: match chan recv(v) — 空 channel 不应 match recv
+# ============================================================
+let ch23 = chan_new(2);
+check("T23_empty_not_recv", state_recv(ch23) == "sendable", "got=" + state_recv(ch23));
+
+# ============================================================
+# T24: match chan close — open channel 不应 match close
+# ============================================================
+fn state_close(ch) {
+    return match ch {
+        chan close => "closed",
+        chan send(_) => "sendable",
+        chan recv(v) => "recv:" + str(v),
+        _ => "neither"
+    };
+}
+let ch24 = chan_new(0);
+check("T24_open_not_closed", state_close(ch24) == "sendable", "got=" + state_close(ch24));
+chan_close(ch24);
+check("T24b_closed_matches", state_close(ch24) == "closed", "got=" + state_close(ch24));
+
+# ============================================================
+# T25: closed 但仍有 buffered item — close 模式优先级测试
+#     模式按顺序匹配，close 在前 → "closed"
+# ============================================================
+let ch25 = chan_new(2);
+chan_send(ch25, 99);
+chan_close(ch25);
+check("T25_closed_with_item_close_first", state_close(ch25) == "closed", "got=" + state_close(ch25));
+
+# ============================================================
+# T26: closed 但仍有 buffered item — recv 模式优先级测试
+#     recv 在前 → 应 "recv:99" 还是 "closed"? (源码 chan_recv 先判 size>0)
+# ============================================================
+fn state_recv_first(ch) {
+    return match ch {
+        chan recv(v) => "recv:" + str(v),
+        chan close => "closed",
+        chan send(_) => "sendable",
+        _ => "neither"
+    };
+}
+let ch26 = chan_new(2);
+chan_send(ch26, 99);
+chan_close(ch26);
+check("T26_closed_with_item_recv_first", state_recv_first(ch26) == "recv:99", "got=" + state_recv_first(ch26));
+
+# ============================================================
+# T27: match chan send(v) 的 v 绑定值 (源码: 绑定 HBool(true) 占位)
+# ============================================================
+fn send_bind(ch) {
+    return match ch {
+        chan send(v) => "v=" + str(v) + "_type=" + type(v),
+        chan recv(x) => "recv",
+        chan close => "closed",
+        _ => "neither"
+    };
+}
+let ch27 = chan_new(0);
+let r27 = send_bind(ch27);
+check("T27_send_bind_is_bool_true", r27 == "v=true_type=bool", "got=" + r27);
+
+# ============================================================
+# T28: match chan send(_) 用 _ 占位 (无绑定名)
+# ============================================================
+fn send_wild(ch) {
+    return match ch {
+        chan send(_) => "sendable",
+        _ => "other"
+    };
+}
+let ch28 = chan_new(0);
+check("T28_send_wildcard", send_wild(ch28) == "sendable", "got=" + send_wild(ch28));
+
+# ============================================================
+# T29: 阻塞 recv — 用 parallel fn 先 send 再 recv (避免 main 阻塞)
+# ============================================================
+parallel fn blocking_recv_test(ch) {
+    # ch 起始为空，recv 应阻塞直到 main 发送
+    let v = chan_recv(ch);
+    return "got:" + str(v);
+}
+let ch29 = chan_new(0);
+let f29 = blocking_recv_test(ch29);
+# 给 worker 时间进入阻塞 recv
+let spin29 = 0;
+while (spin29 < 100000) {
+    spin29 = spin29 + 1;
+}
+chan_send(ch29, "hello-from-main");
+let r29 = await f29;
+check("T29_blocking_recv_gets_value", r29 == "got:hello-from-main", "got=" + str(r29));
+
+# ============================================================
+# T30: 阻塞 send on full bounded — parallel fn 应阻塞直到 main recv
+# ============================================================
+parallel fn blocking_send_test(ch) {
+    chan_send(ch, "first");   # 进入缓冲
+    chan_send(ch, "second");  # 缓冲满，阻塞
+    return "sent-both";
+}
+let ch30 = chan_new(1);
+let f30 = blocking_send_test(ch30);
+let spin30 = 0;
+while (spin30 < 100000) {
+    spin30 = spin30 + 1;
+}
+let r30a = chan_recv(ch30);   # 释放 "first"，唤醒 worker 发 "second"
+let r30b = chan_recv(ch30);   # 拿走 "second"
+let ar30 = await f30;
+check("T30a_blocking_send_first", r30a == "first", "got=" + str(r30a));
+check("T30b_blocking_send_second", r30b == "second", "got=" + str(r30b));
+check("T30c_blocking_send_status", ar30 == "sent-both", "got=" + str(ar30));
+
+# ============================================================
+# T31: close 唤醒阻塞的 recv (Go 语义: close 后阻塞 recv 应返回零值/抛)
+# ============================================================
+parallel fn blocked_recv_then_close(ch) {
+    let v = "init";
+    try {
+        v = chan_recv(ch);
+    } catch (e) {
+        v = "closed-while-blocked";
+    }
+    return v;
+}
+let ch31 = chan_new(0);
+let f31 = blocked_recv_then_close(ch31);
+let spin31 = 0;
+while (spin31 < 100000) {
+    spin31 = spin31 + 1;
+}
+chan_close(ch31);
+let r31 = await f31;
+check("T31_close_wakes_blocked_recv", r31 == "closed-while-blocked", "got=" + str(r31));
+
+# ============================================================
+# T32: 大批量无界 channel 吞吐 (chan_new(0) 无界, 不阻塞)
+# ============================================================
+let ch32 = chan_new(0);
+let i32 = 0;
+while (i32 < 1000) {
+    chan_send(ch32, i32);
+    i32 = i32 + 1;
+}
+check("T32a_unbounded_1000_size", chan_size(ch32) == 1000, "size=" + str(chan_size(ch32)));
+let sum32 = 0;
+let j32 = 0;
+while (j32 < 1000) {
+    sum32 = sum32 + chan_recv(ch32);
+    j32 = j32 + 1;
+}
+check("T32b_unbounded_1000_sum", sum32 == 499500, "sum=" + str(sum32));
+
+# ============================================================
+# T33: 容量 1 的有界 channel 边界
+# ============================================================
+let ch33 = chan_new(1);
+chan_send(ch33, "only");
+check("T33a_cap1_full", chan_try_send(ch33, "second") == false, "should be full");
+check("T33b_cap1_recv", chan_recv(ch33) == "only", "got");
+check("T33c_cap1_empty_after_recv", chan_size(ch33) == 0, "size=" + str(chan_size(ch33)));
+chan_send(ch33, "again");
+check("T33d_cap1_refill", chan_size(ch33) == 1, "size=" + str(chan_size(ch33)));
+
+# ============================================================
+# T34: close 后 chan_size 仍反映 buffered 数量
+# ============================================================
+let ch34 = chan_new(5);
+chan_send(ch34, 1);
+chan_send(ch34, 2);
+chan_send(ch34, 3);
+chan_close(ch34);
+check("T34_size_after_close_3", chan_size(ch34) == 3, "size=" + str(chan_size(ch34)));
+
+# ============================================================
+# T35: 非法参数 — chan_new 负数 (源码: cap<0 → 0 即无界)
+# ============================================================
+let ch35 = chan_new(-1);
+chan_send(ch35, 1);
+chan_send(ch35, 2);
+check("T35_neg_cap_is_unbounded", chan_size(ch35) == 2, "size=" + str(chan_size(ch35)));
+
+# ============================================================
+# T36: match channel 模式不消费 — 多次 match 同一 channel
+# ============================================================
+let ch36 = chan_new(1);
+chan_send(ch36, "val");
+let m36a = state_recv(ch36);
+let m36b = state_recv(ch36);
+let m36c = state_recv(ch36);
+check("T36_repeated_match_stable", m36a == m36b and m36b == m36c, "a=" + m36a + " b=" + m36b + " c=" + m36c);
+
+# ============================================================
+# T37: concurrent { } 内使用 channel
+# ============================================================
+let ch37 = chan_new(0);
+parallel fn gen(ch, n) {
+    let i = 0;
+    while (i < n) {
+        chan_send(ch, i);
+        i = i + 1;
+    }
+    return n;
+}
+concurrent {
+    let f37 = gen(ch37, 3);
+    let a = chan_recv(ch37);
+    let b = chan_recv(ch37);
+    let c = chan_recv(ch37);
+    check("T37_concurrent_chan", a + b + c == 3, "sum=" + str(a + b + c));
+    let nf = await f37;
+}
+
+# ============================================================
+# T38: parallel fn 内 close channel
+# ============================================================
+parallel fn closer(ch) {
+    let spin = 0;
+    while (spin < 50000) {
+        spin = spin + 1;
+    }
+    chan_close(ch);
+    return "closed-by-worker";
+}
+let ch38 = chan_new(0);
+let f38 = closer(ch38);
+let r38 = "no-throw";
+try {
+    # 主线程也尝试 close — 应幂等
+    let spin2 = 0;
+    while (spin2 < 100000) {
+        spin2 = spin2 + 1;
+    }
+    chan_close(ch38);
+} catch (e) {
+    r38 = "caught:" + str(e);
+}
+let ar38 = await f38;
+check("T38_close_from_worker_no_panic", r38 == "no-throw", "got=" + r38);
+check("T38b_worker_status", ar38 == "closed-by-worker", "got=" + str(ar38));
+
+# ============================================================
+# T39: 单 channel 串行 ping-pong (无缓冲语义缺失的替代验证)
+# ============================================================
+let ch39 = chan_new(1);
+chan_send(ch39, "ping");
+let p39 = chan_recv(ch39);
+chan_send(ch39, "pong");
+let q39 = chan_recv(ch39);
+check("T39_ping_pong", p39 == "ping" and q39 == "pong", "p=" + str(p39) + " q=" + str(q39));
+
+# ============================================================
+# T40: chan_recv 顺序在多生产者下保持各自 FIFO (跨生产者顺序非确定, 但单生产者内有序)
+# ============================================================
+parallel fn seq_prod(ch, base) {
+    chan_send(ch, base);
+    chan_send(ch, base + 1);
+    chan_send(ch, base + 2);
+    return "ok";
+}
+let ch40 = chan_new(0);
+let f40a = seq_prod(ch40, 10);
+let f40b = seq_prod(ch40, 20);
+# 收集 6 个值
+let vals40 = [];
+let i40 = 0;
+while (i40 < 6) {
+    vals40.append(chan_recv(ch40));
+    i40 = i40 + 1;
+}
+let _ = await f40a;
+let _ = await f40b;
+# 检查 10,11,12 在结果中按相对顺序出现; 20,21,22 同理
+fn idx_of(lst, v) {
+    let i = 0;
+    while (i < len(lst)) {
+        if (lst[i] == v) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+let i10 = idx_of(vals40, 10);
+let i11 = idx_of(vals40, 11);
+let i12 = idx_of(vals40, 12);
+check("T40_fifo_per_producer", i10 < i11 and i11 < i12, "idx=" + str(i10) + "," + str(i11) + "," + str(i12));
+
+# ============================================================
+# 汇总
+# ============================================================
+print("=========================================");
+print("CHANNEL_STRESS_SUMMARY: PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

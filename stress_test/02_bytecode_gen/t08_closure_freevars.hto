@@ -1,0 +1,21 @@
+# t08_closure_freevars.hto - 闭包 freevars 捕获
+fn make_adder(n) {
+    let add = fn(x) { return x + n; };
+    return add;
+}
+let add5 = make_adder(5);
+let add10 = make_adder(10);
+print(add5(3));
+print(add10(3));
+print(add5(100));
+
+# 计数器闭包，捕获可变外部变量
+fn make_counter() {
+    let count = 0;
+    let inc = fn() { count = count + 1; return count; };
+    return inc;
+}
+let c = make_counter();
+print(c());
+print(c());
+print(c());

@@ -1,0 +1,23 @@
+# test_ai_step.hto
+let _ai_cfg = {
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "api_key": "",
+    "model": "gpt-4o-mini",
+    "max_tokens": 1024,
+    "temperature": 0.3,
+    "system_prompt": ""
+};
+
+fn ai_configure(cfg) {
+    if (cfg == nullptr) {
+        return;
+    }
+    if ("endpoint" in cfg) {
+        _ai_cfg["endpoint"] = cfg["endpoint"];
+    }
+    if ("api_key" in cfg) {
+        _ai_cfg["api_key"] = cfg["api_key"];
+    }
+}
+
+print("ok");

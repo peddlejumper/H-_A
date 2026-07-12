@@ -1,0 +1,9 @@
+# 01_load_const.hto — LOAD_CONST 边界: nullptr / 0 / 空字符串 + POP_TOP
+let a = nullptr;
+let b = 0;
+let c = "";
+print(a);
+print(b);
+print(c);
+"pop_me";  # 表达式语句 -> POP_TOP
+print("done");

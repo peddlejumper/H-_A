@@ -1,0 +1,5 @@
+# test_or.hto
+let a = nullptr;
+if (a == nullptr or a == "") {
+    print("yes");
+}

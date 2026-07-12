@@ -1,0 +1,32 @@
+# t13_static_generic.hto — 静态方法泛型：static fn identity<T>(x)
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class MathU {
+    static fn identity<T>(x) { return x; }
+    static fn first<T>(arr) { return arr[0]; }
+}
+
+try {
+    let r1 = MathU.identity<int>(42);
+    print("13/static_int=" + str(r1));
+    check("13/static_int", r1 == 42);
+} catch (err) {
+    print("13/static_int_err=" + str(err));
+}
+
+try {
+    let r2 = MathU.identity<string>("x");
+    check("13/static_str", r2 == "x");
+} catch (err) {
+    print("13/static_str_err=" + str(err));
+}
+
+try {
+    let r3 = MathU.first<int>([7, 8, 9]);
+    check("13/static_first", r3 == 7);
+} catch (err) {
+    print("13/static_first_err=" + str(err));
+}

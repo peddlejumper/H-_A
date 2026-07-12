@@ -1,0 +1,12 @@
+# Phase A3: field-as-callable `obj.handler(args)`
+class Button {
+    let label = "btn";
+    let onClick = 0;
+}
+let btn = new Button();
+btn.onClick = fn(x) { return "clicked " + x; };
+print(btn.onClick("OK"));
+
+# Multi-arg field callable
+btn.onClick = fn(a, b) { return a + b; };
+print(btn.onClick(3, 4));

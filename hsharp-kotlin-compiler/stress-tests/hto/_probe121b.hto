@@ -1,0 +1,29 @@
+# probe - variadic + default interaction
+fn f4(a, b=2, ...rest) { return [a, b, rest]; }
+try { print("f4(1)=" + f4(1)); } catch (e) { print("f4(1) ERR: " + e); }
+try { print("f4(1,20)=" + f4(1, 20)); } catch (e) { print("f4(1,20) ERR: " + e); }
+try { print("f4(1,20,30,40)=" + f4(1, 20, 30, 40)); } catch (e) { print("f4(1,20,30,40) ERR: " + e); }
+
+# default BEFORE variadic, only default+variadic
+fn f4b(a=1, ...rest) { return [a, rest]; }
+try { print("f4b()=" + f4b()); } catch (e) { print("f4b() ERR: " + e); }
+try { print("f4b(99)=" + f4b(99)); } catch (e) { print("f4b(99) ERR: " + e); }
+try { print("f4b(99,100)=" + f4b(99, 100)); } catch (e) { print("f4b(99,100) ERR: " + e); }
+
+# class method default
+class C {
+    fn init(v) { self.v = v; }
+    fn m(a, b=10) { return self.v + a + b; }
+}
+try {
+    let c = new C(100);
+    print("c.m(5)=" + c.m(5));
+    print("c.m(5,20)=" + c.m(5, 20));
+} catch (e) { print("class ERR: " + e); }
+
+# partial override - cannot skip middle positionally
+fn f2(a=1, b=2, c=3) { return [a, b, c]; }
+try { print("f2()=" + f2()); } catch (e) { print("f2() ERR: " + e); }
+try { print("f2(10)=" + f2(10)); } catch (e) { print("f2(10) ERR: " + e); }
+try { print("f2(10,20)=" + f2(10, 20)); } catch (e) { print("f2(10,20) ERR: " + e); }
+try { print("f2(10,20,30)=" + f2(10, 20, 30)); } catch (e) { print("f2(10,20,30) ERR: " + e); }

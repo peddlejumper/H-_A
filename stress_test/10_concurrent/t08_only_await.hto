@@ -1,0 +1,14 @@
+# t08_only_await.hto
+# concurrent 内只有 await（无 parallel spawn 在块内）。
+# future 在块外创建（不注册到任何 scope），块内仅 await。
+# 预期：await 正常解包；CONCURRENT_EXIT 时 scope 无子任务，正常退出。
+parallel fn producer() {
+    return 7;
+}
+let f = producer();
+concurrent {
+    let r = await f;
+    print("awaited:");
+    print(r);
+}
+print("done");

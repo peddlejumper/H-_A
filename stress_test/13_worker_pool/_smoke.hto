@@ -1,0 +1,22 @@
+# smoke - verify parallel fn compiles + runs on Kotlin HVM
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+parallel fn add(x, y) {
+    return x + y;
+}
+
+let f = add(3, 4);
+check("type_future", type(f) == "future", "type=" + type(f));
+check("await_add", await f == 7, "got " + str(await f));
+check("parallelism_positive", parallelism() >= 1, "p=" + str(parallelism()));
+
+print("SMOKE_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

@@ -1,0 +1,15 @@
+# T10 - ? priority with + : a + b?  should parse as a + (b?)
+fn boom() { throw 100; return 1; }
+
+# boom()? captures 100; 10 + 100 = 110
+let x = 10 + boom()?;
+print(x);
+
+# left-side ? : (boom()?) + 10 = 100 + 10 = 110
+let y = boom()? + 10;
+print(y);
+
+# both sides
+fn boom2() { throw 5; return 1; }
+let z = boom()? + boom2()?;
+print(z);

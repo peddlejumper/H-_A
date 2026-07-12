@@ -1,0 +1,95 @@
+# 12 — parallel fn calls plain fn
+# Covers: parallel fn 内调普通 fn（非 parallel / 非 async）
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# 普通递归 fn
+fn gcd(a, b) {
+    if (b == 0) { return a; }
+    return gcd(b, a - (a / b) * b);
+}
+fn is_prime(n) {
+    if (n < 2) { return false; }
+    let i = 2;
+    while (i * i <= n) {
+        if (n % i == 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+fn sum_range(lo, hi) {
+    let s = 0;
+    let i = lo;
+    while (i < hi) { s = s + i; i = i + 1; }
+    return s;
+}
+
+# parallel fn 调用上面这些普通 fn
+parallel fn par_gcd(a, b) {
+    return gcd(a, b);
+}
+parallel fn par_is_prime(n) {
+    return is_prime(n);
+}
+parallel fn par_sum_range(lo, hi) {
+    return sum_range(lo, hi);
+}
+
+check("par_gcd", await par_gcd(48, 36) == 12, "got " + str(await par_gcd(48, 36)));
+check("par_prime_97", await par_is_prime(97) == true, "got " + str(await par_is_prime(97)));
+check("par_prime_100", await par_is_prime(100) == false, "got " + str(await par_is_prime(100)));
+check("par_sum", await par_sum_range(1, 100) == 4950, "got " + str(await par_sum_range(1, 100)));
+
+# parallel fn 内调普通 fn，普通 fn 内部又调普通 fn（深调用栈）
+fn ackermann(m, n) {
+    if (m == 0) { return n + 1; }
+    if (n == 0) { return ackermann(m - 1, 1); }
+    return ackermann(m - 1, ackermann(m, n - 1));
+}
+parallel fn par_ack(m, n) {
+    return ackermann(m, n);
+}
+check("par_ackermann", await par_ack(2, 3) == 9, "got " + str(await par_ack(2, 3)));
+
+# 100 个 worker 调普通 fn
+parallel fn par_prime_worker(n) {
+    return is_prime(n);
+}
+let futs = [];
+let i = 0;
+while (i < 100) {
+    push(futs, par_prime_worker(i + 2));
+    i = i + 1;
+}
+let prime_count = 0;
+let j = 0;
+while (j < 100) {
+    if (await futs[j] == true) { prime_count = prime_count + 1; }
+    j = j + 1;
+}
+# 2..101 的素数个数 = 26（含 2 和 101）
+check("prime_count_2_to_101", prime_count == 26, "count=" + str(prime_count));
+
+# parallel fn 内调普通 fn 抛异常（异常应穿过普通 fn 传到 worker）
+fn always_throw() {
+    throw "from-plain-fn";
+}
+parallel fn par_call_throw() {
+    let v = always_throw();
+    return v;
+}
+let caught = false;
+let msg = "";
+try {
+    let _ = await par_call_throw();
+} catch (e) {
+    caught = true;
+    msg = str(e);
+}
+check("plain_fn_exception_propagates", caught and msg == "from-plain-fn",
+      "caught=" + str(caught) + " msg=" + msg);
+
+print("T12_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

@@ -1,0 +1,10 @@
+# t07: nested async — an async fn awaits another async fn.
+async fn inner() {
+    return 100;
+}
+async fn outer() {
+    let v = await inner();
+    return v + 1;
+}
+let r = await outer();
+print(r);

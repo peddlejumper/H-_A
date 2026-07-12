@@ -1,0 +1,37 @@
+# t08 — sqrt() of negative / zero / positive; pow of fractional / negative base
+print("== t08 sqrt / pow ==");
+try {
+    print("sqrt(-1)=" + str(sqrt(-1)));
+} catch (e) {
+    print("sqrt(-1) ERR: " + str(e));
+}
+try {
+    print("sqrt(0)=" + str(sqrt(0)));
+} catch (e) {
+    print("sqrt(0) ERR: " + str(e));
+}
+try {
+    print("sqrt(4)=" + str(sqrt(4)));
+} catch (e) {
+    print("sqrt(4) ERR: " + str(e));
+}
+try {
+    print("sqrt(2)=" + str(sqrt(2)));
+} catch (e) {
+    print("sqrt(2) ERR: " + str(e));
+}
+try {
+    print("pow(2,0.5)=" + str(pow(2, 0.5)));
+} catch (e) {
+    print("pow(2,0.5) ERR: " + str(e));
+}
+try {
+    print("pow(0,0)=" + str(pow(0, 0)));
+} catch (e) {
+    print("pow(0,0) ERR: " + str(e));
+}
+try {
+    print("pow(-1,0.5)=" + str(pow(-1, 0.5)));
+} catch (e) {
+    print("pow(-1,0.5) ERR: " + str(e));
+}

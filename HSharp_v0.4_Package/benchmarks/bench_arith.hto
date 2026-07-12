@@ -1,0 +1,11 @@
+# H# Benchmark 1: Arithmetic Operations
+# Compute sum of squares 1..N
+
+let n = 1000000;
+let total = 0;
+let i = 1;
+while (i <= n) {
+    total = total + i * i;
+    i = i + 1;
+}
+print("sum_of_squares=" + str(total));

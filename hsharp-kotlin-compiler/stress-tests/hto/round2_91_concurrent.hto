@@ -1,0 +1,525 @@
+# round2_91_concurrent.hto
+# H# v0.4.1 测试智能体 #91 —— concurrent{} 块异常取消、父子任务语义
+#
+# 测试方法：每个 Sxx 段独立，try/catch 包裹避免整体中止；打印 === Sxx === 标记。
+# 观察点在注释中给出。预期 vs 实际的差异即 bug。
+
+# ============================================================
+# S01: 简单 concurrent 块，2 个任务（baseline，应通过）
+# ============================================================
+parallel fn s01_a() { return 10; }
+parallel fn s01_b() { return 20; }
+print("=== S01 simple 2-task ===");
+try {
+    concurrent {
+        let fa = s01_a();
+        let fb = s01_b();
+        let ra = await fa;
+        let rb = await fb;
+        print("sum:");
+        print(ra + rb);
+    }
+    print("S01-ok");
+} catch (e) {
+    print("S01-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S02: 块内任务用 channel 通信
+# 预期：producer 写 42 到 channel，consumer 读并打印。
+# ============================================================
+parallel fn s02_producer(ch) {
+    chan_send(ch, 42);
+    return 0;
+}
+parallel fn s02_consumer(ch) {
+    let v = chan_recv(ch);
+    print("consumed:");
+    print(v);
+    return v;
+}
+print("=== S02 channel comm ===");
+try {
+    let ch = chan_new(0);
+    concurrent {
+        let fp = s02_producer(ch);
+        let fc = s02_consumer(ch);
+        let rp = await fp;
+        let rc = await fc;
+        print("rc=");
+        print(rc);
+    }
+    print("S02-ok");
+} catch (e) {
+    print("S02-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S03: 块内一个任务 throw，其他任务是否取消
+# 关键观察：main 线程 catch 后保持存活，观察 slow 是否继续打印。
+# parent-wins 预期：slow 被取消，"slow-progress"/"slow-done" 不再出现。
+# ============================================================
+let s03_slow_ran = 0;
+parallel fn s03_fastFail() {
+    throw "S03-boom";
+}
+parallel fn s03_slow() {
+    let i = 0;
+    while (i < 500000) {
+        if (i % 100000 == 0) {
+            print("slow-progress:");
+            print(i);
+        }
+        i = i + 1;
+        s03_slow_ran = s03_slow_ran + 1;
+    }
+    print("slow-done");
+    return i;
+}
+print("=== S03 throw cancels sibling ===");
+try {
+    concurrent {
+        let fa = s03_fastFail();
+        let fb = s03_slow();
+        let ra = await fa;
+        print("unreachable");
+    }
+} catch (e) {
+    print("caught:");
+    print(e);
+}
+# 给 slow 一点时间在 worker 上继续跑（如果未被取消）
+let wait = 0;
+while (wait < 200000) {
+    wait = wait + 1;
+}
+print("s03_slow_ran-after-catch:");
+print(s03_slow_ran);
+print("S03-end");
+
+# ============================================================
+# S04: 块内任务 return 值如何收集？
+# concurrent{} 是语句不是表达式，块本身无返回值。
+# 探测：let x = concurrent {...} 是否合法？预期编译错误或语法错误。
+# 这里改成：块内显式 await 收集到外层 let。
+# ============================================================
+parallel fn s04_work(n) { return n * n; }
+print("=== S04 return value collection ===");
+try {
+    let collected = 0;
+    concurrent {
+        let f1 = s04_work(3);
+        let f2 = s04_work(4);
+        let r1 = await f1;
+        let r2 = await f2;
+        collected = r1 + r2;
+    }
+    print("collected:");
+    print(collected);
+    print("S04-ok");
+} catch (e) {
+    print("S04-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S05: 嵌套 concurrent（外层 + 内层）
+# 预期：内层先 join，外层后 join，结果 100/200。
+# ============================================================
+parallel fn s05_inner() { return 100; }
+parallel fn s05_outer() { return 200; }
+print("=== S05 nested concurrent ===");
+try {
+    concurrent {
+        let fo = s05_outer();
+        concurrent {
+            let fi = s05_inner();
+            let ri = await fi;
+            print("inner:");
+            print(ri);
+        }
+        let ro = await fo;
+        print("outer:");
+        print(ro);
+    }
+    print("S05-ok");
+} catch (e) {
+    print("S05-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S06: concurrent 内调用 async fn（非 parallel）
+# async fn 返回已 resolve 的 HFuture，不注册到 scope。
+# 预期：await 正常解包；scope 不跟踪它（不影响 join）。
+# ============================================================
+async fn s06_async() { return 7; }
+parallel fn s06_par() { return 9; }
+print("=== S06 async fn in concurrent ===");
+try {
+    concurrent {
+        let fa = s06_async();
+        let fp = s06_par();
+        let ra = await fa;
+        let rp = await fp;
+        print("async-r:");
+        print(ra);
+        print("par-r:");
+        print(rp);
+    }
+    print("S06-ok");
+} catch (e) {
+    print("S06-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S07: concurrent 块抛异常，块外 catch
+# 预期：异常透传被外层 catch。但 CONCURRENT_EXIT 不在 finally 中，
+# 若 await 抛出则 EXIT 被跳过 —— scope 泄漏（见 P-LEAK）。
+# ============================================================
+parallel fn s07_fail() { throw "S07-x"; }
+print("=== S07 block throws, outer catch ===");
+try {
+    try {
+        concurrent {
+            let f = s07_fail();
+            let r = await f;
+            print("unreachable");
+        }
+        print("also-unreachable");
+    } catch (e) {
+        print("caught:");
+        print(e);
+    }
+    print("S07-after");
+} catch (e) {
+    print("S07-OUTER-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S08: concurrent 块正常结束，外层继续
+# 预期：done 后 after。
+# ============================================================
+parallel fn s08_work() { return 1; }
+print("=== S08 normal finish ===");
+try {
+    concurrent {
+        let f = s08_work();
+        let r = await f;
+        print("done:");
+        print(r);
+    }
+    print("S08-after");
+} catch (e) {
+    print("S08-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S09: concurrent 内修改共享变量（数据竞争探测）
+# 文档约定 parallel 任务应纯，但运行时不阻止写。
+# 观察最终 counter 值：串行应为 2000，有竞争则偏差。
+# ============================================================
+let s09_counter = 0;
+parallel fn s09_bump() {
+    let i = 0;
+    while (i < 1000) {
+        s09_counter = s09_counter + 1;
+        i = i + 1;
+    }
+    return s09_counter;
+}
+print("=== S09 shared var race ===");
+try {
+    concurrent {
+        let f1 = s09_bump();
+        let f2 = s09_bump();
+        let r1 = await f1;
+        let r2 = await f2;
+        print("r1:");
+        print(r1);
+        print("r2:");
+        print(r2);
+    }
+    print("counter:");
+    print(s09_counter);
+    print("S09-end");
+} catch (e) {
+    print("S09-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S10: concurrent 内创建子任务，块结束是否等待
+# 块内 spawn 多个 parallel 不 await，依赖 CONCURRENT_EXIT 隐式 join。
+# 预期：所有 done-N 在 after 之前。
+# ============================================================
+parallel fn s10_task(n) {
+    let s = 0;
+    let i = 0;
+    while (i < 50000) {
+        s = s + i;
+        i = i + 1;
+    }
+    print("done-");
+    print(n);
+    return s;
+}
+print("=== S10 implicit join ===");
+try {
+    concurrent {
+        let f1 = s10_task(1);
+        let f2 = s10_task(2);
+        let f3 = s10_task(3);
+        let ignore = f1;
+    }
+    print("S10-after");
+} catch (e) {
+    print("S10-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S11: concurrent 内 parallel fn 调用（已在 S01 覆盖，此处加多任务）
+# ============================================================
+parallel fn s11_work(n) { return n; }
+print("=== S11 many parallel in concurrent ===");
+try {
+    concurrent {
+        let i = 0;
+        let total = 0;
+        while (i < 10) {
+            let f = s11_work(i);
+            let v = await f;
+            total = total + v;
+            i = i + 1;
+        }
+        print("total:");
+        print(total);
+    }
+    print("S11-ok");
+} catch (e) {
+    print("S11-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S12: concurrent 块超时（如支持）
+# 探测：无 with_timeout / concurrent timeout 语法。仅记录不支持。
+# 这里尝试用一个长任务 + 外层 time_now 观察是否会无限等待。
+# ============================================================
+parallel fn s12_slow() {
+    let i = 0;
+    while (i < 500000) {
+        i = i + 1;
+    }
+    return i;
+}
+print("=== S12 timeout support ===");
+try {
+    let t0 = time_now();
+    concurrent {
+        let f = s12_slow();
+        let r = await f;
+        print("r:");
+        print(r);
+    }
+    let t1 = time_now();
+    print("elapsed-ms:");
+    print(t1 - t0);
+    print("S12-note: no timeout syntax, block waits full duration");
+} catch (e) {
+    print("S12-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S13: concurrent 内 break/continue 是否影响外层循环
+# 预期：break 应跳出 while；但 CONCURRENT_EXIT 被跳过 -> scope 泄漏。
+# 观察点：是否打印 "after-loop"，以及 "iter-N" 出现几次。
+# ============================================================
+parallel fn s13_work(n) { return n; }
+print("=== S13 break inside concurrent inside loop ===");
+try {
+    let i = 0;
+    while (i < 5) {
+        print("iter-");
+        print(i);
+        concurrent {
+            let f = s13_work(i);
+            let r = await f;
+            print("in-block:");
+            print(r);
+        }
+        if (i == 1) {
+            break;
+        }
+        i = i + 1;
+    }
+    print("S13-after-loop");
+} catch (e) {
+    print("S13-ERR:");
+    print(e);
+}
+
+# ============================================================
+# S14: concurrent 内 return 是否从外层函数返回
+# 预期：return 退出函数；但 CONCURRENT_EXIT 被跳过 -> scope 泄漏，
+# 且块内已 spawn 的 parallel 任务成为孤儿。
+# ============================================================
+parallel fn s14_slow() {
+    let i = 0;
+    while (i < 300000) {
+        i = i + 1;
+    }
+    print("s14-slow-done");
+    return i;
+}
+fn s14_runner() {
+    concurrent {
+        let f = s14_slow();
+        return 99;
+    }
+    print("s14-unreachable");
+    return 0;
+}
+print("=== S14 return inside concurrent ===");
+try {
+    let r = s14_runner();
+    print("runner-returned:");
+    print(r);
+    # 给 slow 任务时间在 worker 上继续（若成为孤儿）
+    let w = 0;
+    while (w < 200000) {
+        w = w + 1;
+    }
+    print("S14-end");
+} catch (e) {
+    print("S14-ERR:");
+    print(e);
+}
+
+# ============================================================
+# P-LEAK: scope 泄漏探测 —— throw 逃逸后再次进入 concurrent
+# 第一次 concurrent 内 await 抛出（CONCURRENT_EXIT 跳过 -> currentScope 泄漏）。
+# 第二次 concurrent 进入：CONCURRENT_ENTER 把泄漏的 scope 作为 parent 压栈。
+# 观察：第二次 concurrent 是否仍正常工作？是否出现串扰/异常？
+# ============================================================
+parallel fn p_leak_fail() { throw "leak-boom"; }
+parallel fn p_leak_ok() { return 123; }
+print("=== P-LEAK scope leak after throw ===");
+try {
+    try {
+        concurrent {
+            let f = p_leak_fail();
+            let r = await f;
+            print("unreachable");
+        }
+    } catch (e) {
+        print("first-caught:");
+        print(e);
+    }
+    # 第二次进入 concurrent —— 若 scope 泄漏，parent 链被污染
+    concurrent {
+        let f = p_leak_ok();
+        let r = await f;
+        print("second-r:");
+        print(r);
+    }
+    print("P-LEAK-ok");
+} catch (e) {
+    print("P-LEAK-ERR:");
+    print(e);
+}
+
+# ============================================================
+# P-SEQAWAIT: join() 顺序 await 导致 fail-fast 失效
+# slowFail 先注册（长循环后抛 SLOW），quickFail 后注册（立即抛 FAST）。
+# 不在块内 await，纯依赖 CONCURRENT_EXIT 的 join。
+# parent-wins 预期：FAST 重抛，elapsed 小。
+# 实际（顺序 await bug）：join 阻塞在 slowFail 上，SLOW 重抛，elapsed 大。
+# ============================================================
+parallel fn p_seq_slowFail() {
+    let i = 0;
+    while (i < 1000000) {
+        i = i + 1;
+    }
+    throw "SLOW";
+}
+parallel fn p_seq_quickFail() {
+    throw "FAST";
+}
+print("=== P-SEQAWAIT join order vs fail-fast ===");
+try {
+    let t0 = time_now();
+    try {
+        concurrent {
+            let fa = p_seq_slowFail();
+            let fb = p_seq_quickFail();
+        }
+    } catch (e) {
+        let t1 = time_now();
+        print("rethrown:");
+        print(e);
+        print("elapsed-ms:");
+        print(t1 - t0);
+    }
+    print("P-SEQAWAIT-end");
+} catch (e) {
+    print("P-SEQAWAIT-ERR:");
+    print(e);
+}
+
+# ============================================================
+# P-CANCEL-REAL: cancel 是否真正中断 worker 线程
+# cancel() 只标记 cell 状态，不中断线程。worker 会继续跑到完成。
+# main 线程保持存活，观察 side-effect counter 是否持续增长。
+# ============================================================
+let p_cancel_counter = 0;
+parallel fn p_cancel_longRun() {
+    let i = 0;
+    while (i < 1000000) {
+        p_cancel_counter = p_cancel_counter + 1;
+        i = i + 1;
+    }
+    print("p-cancel-long-done");
+    return i;
+}
+parallel fn p_cancel_fail() {
+    throw "trigger";
+}
+print("=== P-CANCEL-REAL cancel interrupts worker? ===");
+try {
+    let t0 = time_now();
+    try {
+        concurrent {
+            let fa = p_cancel_fail();
+            let fb = p_cancel_longRun();
+        }
+    } catch (e) {
+        let t1 = time_now();
+        print("caught:");
+        print(e);
+        print("elapsed-ms:");
+        print(t1 - t0);
+        print("counter-at-catch:");
+        print(p_cancel_counter);
+    }
+    # 等待，观察 counter 是否继续增长（若 worker 未被中断）
+    let w = 0;
+    while (w < 500000) {
+        w = w + 1;
+    }
+    print("counter-after-wait:");
+    print(p_cancel_counter);
+    print("P-CANCEL-REAL-end");
+} catch (e) {
+    print("P-CANCEL-REAL-ERR:");
+    print(e);
+}
+
+print("=== ALL DONE ===");

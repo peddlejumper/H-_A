@@ -1,0 +1,12 @@
+# 11 - for + break
+# 目的: break 跳出，验证 fixForLoopJumps 不影响 break 的 backpatch
+let hit = -1;
+let iters = 0;
+for i in [11, 22, 33, 44, 55] {
+    iters = iters + 1;
+    if (i == 33) { hit = i; break; }
+}
+print("hit=" + str(hit));
+print("expected_hit=33");
+print("iters=" + str(iters));
+print("expected_iters=3");

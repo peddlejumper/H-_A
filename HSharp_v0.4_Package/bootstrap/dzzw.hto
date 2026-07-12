@@ -1,0 +1,63 @@
+// ═══════════════════════════════════════════════════════════════
+//  dzzw.hto — DZZW Parallel Multi-Tasking Runtime (H# facade)
+//  Wraps the host builtins dzzw_* as plain top-level functions.
+// ═══════════════════════════════════════════════════════════════
+
+// ── Future / task spawning ─────────────────────────────────
+
+// Spawn a task running `fn([args])`. Returns an int handle.
+fn dzzw_spawn_fn(fn, args) {
+    return dzzw_spawn(fn, args);
+}
+
+// Block until the future finishes, return its result.
+fn dzzw_await_fut(handle) {
+    return dzzw_await(handle);
+}
+
+// Non-blocking: return the result if done, otherwise nullptr.
+fn dzzw_try(handle) {
+    return dzzw_try_await(handle);
+}
+
+// Wait for any future in a list, return its index.
+fn dzzw_await_any_of(handles) {
+    return dzzw_await_any(handles);
+}
+
+// Wait for all futures in a list.
+fn dzzw_await_all_of(handles) {
+    return dzzw_await_all(handles);
+}
+
+// Apply `fn` to every item in `items` in parallel, return results.
+fn dzzw_pmap(fn, items) {
+    return dzzw_parallel_map(fn, items);
+}
+
+// ── Pool info ──────────────────────────────────────────────
+
+fn dzzw_workers() { return dzzw_worker_count(); }
+fn dzzw_pending() { return dzzw_pending_count(); }
+fn dzzw_submitted() { return dzzw_total_submitted(); }
+fn dzzw_completed() { return dzzw_total_completed(); }
+fn dzzw_stats() { dzzw_dump_stats(); }
+
+// ── Channels ───────────────────────────────────────────────
+
+fn dzzw_chan_new(capacity) { return dzzw_channel_create(capacity); }
+fn dzzw_chan_send(handle, value) { return dzzw_channel_send(handle, value); }
+fn dzzw_chan_recv(handle) { return dzzw_channel_recv(handle); }
+fn dzzw_chan_try_send(handle, value) { return dzzw_channel_try_send(handle, value); }
+fn dzzw_chan_try_recv(handle) { return dzzw_channel_try_recv(handle); }
+fn dzzw_chan_close(handle) { return dzzw_channel_close(handle); }
+fn dzzw_chan_free(handle) { return dzzw_channel_free(handle); }
+fn dzzw_chan_size(handle) { return dzzw_channel_size(handle); }
+
+// ── Mutexes ────────────────────────────────────────────────
+
+fn dzzw_mutex_new() { return dzzw_mutex_create(); }
+fn dzzw_lock(m) { return dzzw_mutex_lock(m); }
+fn dzzw_unlock(m) { return dzzw_mutex_unlock(m); }
+fn dzzw_try_lock(m) { return dzzw_mutex_try_lock(m); }
+fn dzzw_mutex_free(m) { return dzzw_mutex_free(m); }

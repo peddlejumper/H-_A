@@ -1,0 +1,44 @@
+# t21 — misc math/native: pi, sgn, clamp, lerp, fdiv sanity, parallelism, time_ms
+print("== t21 misc math ==");
+try {
+    print("pi=" + str(pi()));
+} catch (e) {
+    print("pi ERR: " + str(e));
+}
+try {
+    print("sgn(-5)=" + str(sgn(-5)));
+    print("sgn(0)=" + str(sgn(0)));
+    print("sgn(7)=" + str(sgn(7)));
+} catch (e) {
+    print("sgn ERR: " + str(e));
+}
+try {
+    print("clamp(15,0,10)=" + str(clamp(15, 0, 10)));
+    print("clamp(-3,0,10)=" + str(clamp(-3, 0, 10)));
+    print("clamp(5,0,10)=" + str(clamp(5, 0, 10)));
+} catch (e) {
+    print("clamp ERR: " + str(e));
+}
+try {
+    print("lerp(0,10,0.5)=" + str(lerp(0, 10, 0.5)));
+    print("lerp(0,10,2)=" + str(lerp(0, 10, 2)));
+} catch (e) {
+    print("lerp ERR: " + str(e));
+}
+try {
+    print("parallelism=" + str(parallelism()));
+} catch (e) {
+    print("parallelism ERR: " + str(e));
+}
+try {
+    let t = time_ms();
+    print("time_ms>0=" + str(t > 0));
+} catch (e) {
+    print("time_ms ERR: " + str(e));
+}
+try {
+    print("min_num(3,7)=" + str(min_num(3, 7)));
+    print("max_num(3,7)=" + str(max_num(3, 7)));
+} catch (e) {
+    print("min_num/max_num ERR: " + str(e));
+}

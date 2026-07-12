@@ -1,0 +1,37 @@
+# 9.1 print 详解
+print("Hello");
+print(42);
+print(3.14);
+print(true);
+print([1, 2, 3]);
+let x = 10;
+print(x);
+print(x + 5);
+# 9.2 字符串拼接输出
+let name = "Alice";
+let age = 25;
+print("姓名: " + name);
+print("年龄: " + str(age));
+print(name + " 今年 " + str(age) + " 岁");
+# 9.3 格式化技巧
+let price = 19.99;
+let qty = 3;
+let total = price * qty;
+print("单价: " + str(price));
+print("数量: " + str(qty));
+print("总价: " + str(total));
+print("================");
+print("商品: 苹果");
+print("单价: " + str(price) + " 元");
+print("数量: " + str(qty) + " 个");
+print("合计: " + str(total) + " 元");
+# 9.4 文件读写
+write_file("/tmp/hs_book_test.txt", "第一行内容\n第二行内容\n第三行内容\n");
+let content = read_file("/tmp/hs_book_test.txt");
+print(content);
+print("文件长度: " + str(len(content)));
+# 写入数字并读回
+write_file("/tmp/hs_num.txt", str(42));
+let num = read_file("/tmp/hs_num.txt");
+print("读回的数字: " + num);
+print("转成整数: " + str(int(num) + 8));

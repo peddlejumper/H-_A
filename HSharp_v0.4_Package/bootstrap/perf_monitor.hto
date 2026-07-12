@@ -1,0 +1,154 @@
+# H# Performance Monitoring Module
+# Provides timing and profiling capabilities for H# programs
+
+let __perf_start_time = 0;
+let __perf_timers = [];
+let __perf_counters = [];
+
+fn perf_start_timer(name) {
+    # Start a named timer
+    let start = time_now();
+    # Store as [name, time] pair
+    push(__perf_timers, [name, start]);
+    return start;
+}
+
+fn perf_stop_timer(name) {
+    # Stop a named timer and return elapsed time in milliseconds
+    # Find and remove the timer
+    let i = 0;
+    while (i < len(__perf_timers)) {
+        if (__perf_timers[i][0] == name) {
+            let start_time = __perf_timers[i][1];
+            # Remove from list
+            let end = len(__perf_timers) - 1;
+            __perf_timers[i] = __perf_timers[end];
+            pop(__perf_timers);
+            
+            let end_time = time_now();
+            let elapsed = end_time - start_time;
+            return elapsed;
+        }
+        i = i + 1;
+    }
+    print("Timer not started: " + name);
+    return -1;
+}
+
+fn perf_elapsed(name) {
+    # Get elapsed time for a running timer without stopping it
+    let i = 0;
+    while (i < len(__perf_timers)) {
+        if (__perf_timers[i][0] == name) {
+            let start_time = __perf_timers[i][1];
+            let now = time_now();
+            return now - start_time;
+        }
+        i = i + 1;
+    }
+    print("Timer not started: " + name);
+    return -1;
+}
+
+fn perf_reset_timer(name) {
+    # Reset a timer to current time
+    let i = 0;
+    while (i < len(__perf_timers)) {
+        if (__perf_timers[i][0] == name) {
+            __perf_timers[i][1] = time_now();
+            return nullptr;
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn perf_increment_counter(name, amount) {
+    # Increment a performance counter
+    if (amount == nullptr) {
+        amount = 1;
+    }
+    # Find or create counter
+    let i = 0;
+    while (i < len(__perf_counters)) {
+        if (__perf_counters[i][0] == name) {
+            __perf_counters[i][1] = __perf_counters[i][1] + amount;
+            return __perf_counters[i][1];
+        }
+        i = i + 1;
+    }
+    # Not found, create new
+    push(__perf_counters, [name, amount]);
+    return amount;
+}
+
+fn perf_get_counter(name) {
+    # Get the value of a performance counter
+    let i = 0;
+    while (i < len(__perf_counters)) {
+        if (__perf_counters[i][0] == name) {
+            return __perf_counters[i][1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn perf_reset_counter(name) {
+    # Reset a performance counter to zero
+    let i = 0;
+    while (i < len(__perf_counters)) {
+        if (__perf_counters[i][0] == name) {
+            __perf_counters[i][1] = 0;
+            return nullptr;
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn perf_report() {
+    # Print a performance report
+    print("=== Performance Report ===");
+    
+    # Report active timers - simplified version
+    print("Active Timers: (iteration requires host support)");
+    
+    # Report counters - simplified version  
+    print("Counters: (iteration requires host support)");
+    
+    print("=========================");
+    return nullptr;
+}
+
+fn perf_benchmark(fn_to_test, iterations) {
+    # Benchmark a function by running it multiple times
+    if (iterations == nullptr) {
+        iterations = 1000;
+    }
+    
+    perf_start_timer("benchmark");
+    
+    let i = 0;
+    while (i < iterations) {
+        fn_to_test();
+        i = i + 1;
+    }
+    
+    let elapsed = perf_stop_timer("benchmark");
+    let avg_time = elapsed / iterations;
+    
+    print("Benchmark Results:");
+    print("  Function calls: " + str(iterations));
+    print("  Total time: " + str(elapsed) + " ms");
+    print("  Average time: " + str(avg_time) + " ms per call");
+    
+    return {"total": elapsed, "average": avg_time, "iterations": iterations};
+}
+
+# Helper function to get current time in milliseconds
+fn time_now() {
+    # This would need to be provided by the host system
+    # For now, return a placeholder
+    return 0;
+}

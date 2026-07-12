@@ -1,0 +1,330 @@
+# ============================================================
+# round2_fixes4.hto — 内建函数修复验证 (智能体 #fixes4)
+# 目标: 验证 HNativeBridge.kt 中新增/修复的内建函数
+#   Bug1: assert / sum / hex / bin / oct / bool / list / dict
+#   Bug2: range(a,b,step) 三参数
+#   Bug3: min / max 多参数
+# 方法: 每个用例打印 [TAG 预期] 实际; 易错项 try/catch 包裹
+# ============================================================
+
+print("===== R2-FIXES4 BUILTINS =====");
+
+# ---------- T1: assert ----------
+# assert(true) — 不抛
+let t1a = "no-err";
+try { assert(true); t1a = "passed"; } catch (e) { t1a = "caught:" + str(e); }
+print("[T1.1 assert(true)] expect=passed]");
+print(t1a);
+
+# assert(false) — 抛 HSharpException, 默认消息
+let t1b = "no-err";
+try { assert(false); } catch (e) { t1b = "caught:" + str(e); }
+print("[T1.2 assert(false) default msg] expect=caught:assertion failed]");
+print(t1b);
+
+# assert(false, "msg") — 抛带消息
+let t1c = "no-err";
+try { assert(false, "boom"); } catch (e) { t1c = "caught:" + str(e); }
+print("[T1.3 assert(false,'boom')] expect=caught:boom]");
+print(t1c);
+
+# assert(1) — truthy number 不抛
+let t1d = "no-err";
+try { assert(1); t1d = "passed"; } catch (e) { t1d = "caught:" + str(e); }
+print("[T1.4 assert(1) truthy] expect=passed]");
+print(t1d);
+
+# assert(0) — falsy number 抛
+let t1e = "no-err";
+try { assert(0); } catch (e) { t1e = "caught:" + str(e); }
+print("[T1.5 assert(0) falsy] expect=caught:assertion failed]");
+print(t1e);
+
+# assert("") — falsy string 抛
+let t1f = "no-err";
+try { assert(""); } catch (e) { t1f = "caught:" + str(e); }
+print("[T1.6 assert('') falsy] expect=caught:assertion failed]");
+print(t1f);
+
+# assert([], "empty list") — falsy list 抛带消息
+let t1g = "no-err";
+try { assert([], "empty list"); } catch (e) { t1g = "caught:" + str(e); }
+print("[T1.7 assert([],'empty list')] expect=caught:empty list]");
+print(t1g);
+
+# ---------- T2: sum ----------
+print("[T2.1 sum([1,2,3])] expect=6]");
+print(sum([1, 2, 3]));
+
+print("[T2.2 sum([])] expect=0]");
+print(sum([]));
+
+print("[T2.3 sum([1.5, 2.5])] expect=4]");
+print(sum([1.5, 2.5]));
+
+print("[T2.4 sum([-1, 1])] expect=0]");
+print(sum([-1, 1]));
+
+# sum 非 list — 应报错
+let t2a = "no-err";
+try { t2a = "got:" + str(sum(5)); } catch (e) { t2a = "caught:" + str(e); }
+print("[T2.5 sum(5) non-list] expect=caught err]");
+print(t2a);
+
+# ---------- T3: hex / bin / oct ----------
+print("[T3.1 hex(255)] expect=ff]");
+print(hex(255));
+
+print("[T3.2 hex(0)] expect=0]");
+print(hex(0));
+
+print("[T3.3 hex(16)] expect=10]");
+print(hex(16));
+
+print("[T3.4 bin(5)] expect=101]");
+print(bin(5));
+
+print("[T3.5 bin(0)] expect=0]");
+print(bin(0));
+
+print("[T3.6 bin(15)] expect=1111]");
+print(bin(15));
+
+print("[T3.7 oct(8)] expect=10]");
+print(oct(8));
+
+print("[T3.8 oct(0)] expect=0]");
+print(oct(0));
+
+print("[T3.9 oct(64)] expect=100]");
+print(oct(64));
+
+# type 检查 — 应返回 string
+print("[T3.10 type(hex(255))] expect=string]");
+print(type(hex(255)));
+
+# ---------- T4: bool ----------
+print("[T4.1 bool(1)] expect=true]");
+print(bool(1));
+
+print("[T4.2 bool(0)] expect=false]");
+print(bool(0));
+
+print("[T4.3 bool('hello')] expect=true]");
+print(bool("hello"));
+
+print("[T4.4 bool('')] expect=false]");
+print(bool(""));
+
+print("[T4.5 bool([])] expect=false]");
+print(bool([]));
+
+print("[T4.6 bool([0])] expect=true]");
+print(bool([0]));
+
+print("[T4.7 bool({})] expect=false]");
+print(bool({}));
+
+print("[T4.8 bool(null)] expect=false]");
+print(bool(null));
+
+print("[T4.9 bool(true)] expect=true]");
+print(bool(true));
+
+print("[T4.10 bool(false)] expect=false]");
+print(bool(false));
+
+# ---------- T5: list() ----------
+print("[T5.1 list([1,2,3])] expect=[1, 2, 3]]");
+print(list([1, 2, 3]));
+
+# list 复制 (修改副本不影响原)
+let orig = [1, 2, 3];
+let copy = list(orig);
+copy[0] = 99;
+print("[T5.2 list copy independent] expect=[1, 2, 3] | [99, 2, 3]]");
+print(orig);
+print(copy);
+
+# list(string) -> 字符列表
+print("[T5.3 list('abc')] expect=[a, b, c]]");
+print(list("abc"));
+
+print("[T5.4 list('')] expect=[]]");
+print(list(""));
+
+# list(dict) -> keys 列表
+let d5 = {"x": 1, "y": 2};
+print("[T5.5 list(dict)] expect=[x, y]]");
+print(list(d5));
+
+# list(数字) — 应报错
+let t5a = "no-err";
+try { t5a = "got:" + str(list(5)); } catch (e) { t5a = "caught:" + str(e); }
+print("[T5.6 list(5) unsupported] expect=caught err]");
+print(t5a);
+
+# ---------- T6: dict() ----------
+# dict() 空
+print("[T6.1 dict()] expect={}]");
+print(dict());
+
+# dict([["a",1],["b",2]]) 从 pair 列表构造
+print("[T6.2 dict([['a',1],['b',2]])] expect={a: 1, b: 2}]");
+print(dict([["a", 1], ["b", 2]]));
+
+# dict 复制
+let orig_d = {"k": 1};
+let copy_d = dict(orig_d);
+print("[T6.3 dict(copy)] expect={k: 1}]");
+print(copy_d);
+
+# dict 非 pair 列表 — 应报错
+let t6a = "no-err";
+try { t6a = "got:" + str(dict([1, 2, 3])); } catch (e) { t6a = "caught:" + str(e); }
+print("[T6.4 dict([1,2,3]) non-pairs] expect=caught err]");
+print(t6a);
+
+# dict pair 长度错 — 应报错
+let t6b = "no-err";
+try { t6b = "got:" + str(dict([["a", 1, 2]])); } catch (e) { t6b = "caught:" + str(e); }
+print("[T6.5 dict([['a',1,2]]) bad pair] expect=caught err]");
+print(t6b);
+
+# dict(数字) — 应报错
+let t6c = "no-err";
+try { t6c = "got:" + str(dict(5)); } catch (e) { t6c = "caught:" + str(e); }
+print("[T6.6 dict(5) unsupported] expect=caught err]");
+print(t6c);
+
+# ---------- T7: range 三参数 ----------
+print("[T7.1 range(1,10,2)] expect=[1, 3, 5, 7, 9]]");
+print(range(1, 10, 2));
+
+print("[T7.2 range(0,10,3)] expect=[0, 3, 6, 9]]");
+print(range(0, 10, 3));
+
+print("[T7.3 range(10,1,-1)] expect=[10, 9, 8, 7, 6, 5, 4, 3, 2]]");
+print(range(10, 1, -1));
+
+print("[T7.4 range(10,0,-2)] expect=[10, 8, 6, 4, 2]]");
+print(range(10, 0, -2));
+
+print("[T7.5 range(5,5,1)] expect=[]]");
+print(range(5, 5, 1));
+
+# range step 0 — 应报错
+let t7a = "no-err";
+try { t7a = "got:" + str(range(0, 10, 0)); } catch (e) { t7a = "caught:" + str(e); }
+print("[T7.6 range(0,10,0) zero step] expect=caught err]");
+print(t7a);
+
+# range 负步长超过边界
+print("[T7.7 range(5,5,-1)] expect=[]]");
+print(range(5, 5, -1));
+
+# range 单/双参数仍可用
+print("[T7.8 range(3) backward-compat] expect=[0, 1, 2]]");
+print(range(3));
+
+print("[T7.9 range(1,4) backward-compat] expect=[1, 2, 3]]");
+print(range(1, 4));
+
+# range 4 参数 — 应报错
+let t7b = "no-err";
+try { t7b = "got:" + str(range(1, 10, 2, 3)); } catch (e) { t7b = "caught:" + str(e); }
+print("[T7.10 range(1,10,2,3) too many] expect=caught err]");
+print(t7b);
+
+# ---------- T8: min / max 多参数 ----------
+# min 单 list (兼容旧行为)
+print("[T8.1 min([3,1,2])] expect=1]");
+print(min([3, 1, 2]));
+
+# min 多参数
+print("[T8.2 min(3,1,2)] expect=1]");
+print(min(3, 1, 2));
+
+# min 单参数 (非 list)
+print("[T8.3 min(5)] expect=5]");
+print(min(5));
+
+# min 负数多参数
+print("[T8.4 min(-3,-1,-2)] expect=-3]");
+print(min(-3, -1, -2));
+
+# min 混合 int/float
+print("[T8.5 min(1.5,1,2)] expect=1]");
+print(min(1.5, 1, 2));
+
+# min 空 — 应报错
+let t8a = "no-err";
+try { t8a = "got:" + str(min()); } catch (e) { t8a = "caught:" + str(e); }
+print("[T8.6 min() empty] expect=caught err]");
+print(t8a);
+
+# min 空列表 — 应报错
+let t8b = "no-err";
+try { t8b = "got:" + str(min([])); } catch (e) { t8b = "caught:" + str(e); }
+print("[T8.7 min([]) empty] expect=caught err]");
+print(t8b);
+
+# max 单 list
+print("[T8.8 max([3,1,2])] expect=3]");
+print(max([3, 1, 2]));
+
+# max 多参数
+print("[T8.9 max(3,1,2)] expect=3]");
+print(max(3, 1, 2));
+
+# max 负数多参数
+print("[T8.10 max(-3,-1,-2)] expect=-1]");
+print(max(-3, -1, -2));
+
+# max 单参数
+print("[T8.11 max(5)] expect=5]");
+print(max(5));
+
+# max 空 — 应报错
+let t8c = "no-err";
+try { t8c = "got:" + str(max()); } catch (e) { t8c = "caught:" + str(e); }
+print("[T8.12 max() empty] expect=caught err]");
+print(t8c);
+
+# max 空列表 — 应报错
+let t8d = "no-err";
+try { t8d = "got:" + str(max([])); } catch (e) { t8d = "caught:" + str(e); }
+print("[T8.13 max([]) empty] expect=caught err]");
+print(t8d);
+
+# ---------- T9: 综合用法 ----------
+# 用 range + sum 计算 1..100 之和
+let s9 = sum(range(1, 101));
+print("[T9.1 sum(range(1,101))] expect=5050]");
+print(s9);
+
+# 用 range 三参数 + sum 计算偶数和
+let s9b = sum(range(0, 11, 2));
+print("[T9.2 sum(range(0,11,2))] expect=30]");
+print(s9b);
+
+# bool(range(5)) truthy
+print("[T9.3 bool(range(5))] expect=true]");
+print(bool(range(5)));
+
+# bool(range(0)) falsy
+print("[T9.4 bool(range(0))] expect=false]");
+print(bool(range(0)));
+
+# list(dict) + len
+let d9 = {"a": 1, "b": 2, "c": 3};
+print("[T9.5 len(list(d9))] expect=3]");
+print(len(list(d9)));
+
+# dict + list 往返
+let pairs = [["x", 10], ["y", 20]];
+let d9b = dict(pairs);
+print("[T9.6 dict then keys] expect=[x, y]]");
+print(keys(d9b));
+
+print("===== R2-FIXES4 DONE =====");

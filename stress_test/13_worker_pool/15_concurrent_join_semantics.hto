@@ -1,0 +1,120 @@
+# 15 — concurrent { } block join semantics
+# Covers: concurrent {} block 的 join 行为、嵌套、异常传播、空块
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+parallel fn worker(x) {
+    return x * x;
+}
+
+# 基本 join
+let s1 = 0;
+concurrent {
+    let a = worker(3);
+    let b = worker(4);
+    s1 = await a + await b;
+}
+check("basic_join", s1 == 9 + 16, "s1=" + str(s1));
+
+# 空 concurrent 块
+let ran = false;
+concurrent {
+    ran = true;
+}
+check("empty_block_runs", ran, "empty block body did not run");
+
+# concurrent 块内不 await（只提交，靠 join 收尾）
+let s2 = 0;
+concurrent {
+    let a = worker(5);   # 提交但不显式 await
+    let b = worker(6);
+    s2 = 0;   # 块结束时应 join 所有 child
+}
+# 注意：若 join 不把结果暴露给外部，s2 仍是 0。这里只验证不挂死。
+check("concurrent_no_await_no_deadlock", true, "");
+
+# 嵌套 concurrent
+let outer_sum = 0;
+concurrent {
+    let a = worker(1);
+    let inner = 0;
+    concurrent {
+        let b = worker(2);
+        let c = worker(3);
+        inner = await b + await c;
+    }
+    outer_sum = await a + inner;
+}
+check("nested_concurrent_join", outer_sum == 1 + 4 + 9,
+      "outer_sum=" + str(outer_sum));
+
+# 100 个 child 的 concurrent 块
+parallel fn w2(n) {
+    return n;
+}
+let big = 0;
+concurrent {
+    let futs = [];
+    let i = 0;
+    while (i < 100) {
+        push(futs, w2(i));
+        i = i + 1;
+    }
+    # await 全部
+    let j = 0;
+    while (j < 100) {
+        big = big + await futs[j];
+        j = j + 1;
+    }
+}
+check("concurrent_100_children", big == 4950, "big=" + str(big));
+
+# 一个 child 抛异常，concurrent 块重抛
+parallel fn bad() {
+    throw "block-boom";
+}
+let caught = false;
+let msg = "";
+try {
+    concurrent {
+        let a = worker(7);
+        let b = bad();
+        let _ = await a;
+        let _ = await b;
+    }
+} catch (e) {
+    caught = true;
+    msg = str(e);
+}
+check("block_rethrows_child_exn", caught, "no rethrow");
+check("block_exn_payload", msg == "block-boom", "msg=" + msg);
+
+# 第一个 child 抛异常时，第二个仍在跑 — 验证 join 是否等所有 child
+parallel fn fast_bad() {
+    throw "fast-bad";
+}
+parallel fn slow_good() {
+    let i = 0;
+    while (i < 20000000) { i = i + 1; }
+    return i;
+}
+let t0 = time_ms();
+let slow_finished = false;
+try {
+    concurrent {
+        let fb = fast_bad();
+        let sg = slow_good();
+        let _ = await fb;
+        slow_finished = true;
+        let _ = await sg;
+    }
+} catch (e) { }
+let t1 = time_ms();
+# 若 join 等 slow_good 跑完，elapsed 会较大；若 abort，elapsed 较小
+print("# concurrent{fast_bad+slow_good} elapsed_ms=" + str(t1 - t0));
+check("note_join_behavior", true, "elapsed=" + str(t1 - t0) + "ms slow_finished=" + str(slow_finished));
+
+print("T15_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

@@ -1,0 +1,4 @@
+# probe S5: mutable default (list/dict)
+fn f(lst=[]) { push(lst, 1); return lst; }
+print(f());
+print(f());

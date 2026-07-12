@@ -1,0 +1,163 @@
+# Round-5 #150 — Import & Namespace comprehensive tests
+# Tests: basic import, alias (as), paths, nonexistent, circular, namespace
+#        isolation, re-import caching, exports, mutation, module-level code,
+#        nested imports, name conflicts, .hto vs .hbc, module classes.
+#
+# Helper modules (pre-compiled to .hbc in same dir):
+#   r5_150_helper.hto  — fn r5_150_double, _private_val, public_val,
+#                        class r5_150_Point, side-effect print
+#   r5_150_mod_b.hto   — imports r5_150_mod_c, fn r5_150_b
+#   r5_150_mod_c.hto   — fn r5_150_c
+#   r5_150_circ_a.hto  — imports r5_150_circ_b (circular)
+#   r5_150_circ_b.hto  — imports r5_150_circ_a (circular)
+#
+# Parser supports:  import "path";   import name;
+# Parser does NOT:  import X as Y;   from X import Y;
+
+# ── T1: basic import .hbc — call function via namespace ──
+print("=== T1: basic import .hbc ===");
+import "r5_150_helper.hbc";
+print("T1 r5_150_helper.r5_150_double(5)=");
+print(r5_150_helper.r5_150_double(5));
+
+# ── T2: name leakage — module vars leak into host globals (BUG) ──
+print("=== T2: name leakage ===");
+print("T2 direct r5_150_double(5)=");
+print(r5_150_double(5));
+print("T2 direct public_val=");
+print(public_val);
+
+# ── T3: private name — _private_val exported? (no privacy, BUG) ──
+print("=== T3: private name ===");
+print("T3 _private_val=");
+print(_private_val);
+print("T3 r5_150_get_private()=");
+print(r5_150_get_private());
+
+# ── T4: re-import — side effect runs AGAIN (no caching, BUG) ──
+print("=== T4: re-import ===");
+import "r5_150_helper.hbc";
+print("T4 done");
+
+# ── T5: import .hto — NOT executed, stored as HString (BUG) ──
+print("=== T5: import .hto ===");
+import "r5_150_mod_c.hto";
+print("T5 len(r5_150_mod_c)=");
+print(len(r5_150_mod_c));
+
+# ── T6: nonexistent file — should raise error ──
+print("=== T6: nonexistent file ===");
+try {
+    import "r5_150_nonexistent.hto";
+    print("T6 BUG_NO_ERROR");
+} catch (e) {
+    print("T6 CAUGHT");
+}
+
+# ── T7: nonexistent name — should raise but returns available=false (BUG) ──
+print("=== T7: nonexistent name ===");
+import r5_150_nonexistent_mod;
+print("T7 available flag=");
+print(r5_150_nonexistent_mod.available);
+
+# ── T8: module declaration — namespace via `module M { ... }` ──
+print("=== T8: module declaration ===");
+module M {
+    fn m_add(a, b) { return a + b; }
+    let m_val = 7;
+}
+print("T8 M.m_add(3,4)=");
+print(M.m_add(3, 4));
+print("T8 M.m_val=");
+print(M.m_val);
+
+# ── T9: nested imports — B imports C; can main access C? ──
+print("=== T9: nested imports ===");
+try {
+    import "r5_150_mod_b.hbc";
+    print("T9 import done");
+} catch (e) {
+    print("T9 import FAILED");
+}
+try {
+    print("T9 r5_150_c()=");
+    print(r5_150_c());
+} catch (e) {
+    print("T9 r5_150_c FAILED");
+}
+try {
+    print("T9 r5_150_b()=");
+    print(r5_150_b());
+} catch (e) {
+    print("T9 r5_150_b FAILED");
+}
+print("T9 type of r5_150_mod_b=");
+print(type(r5_150_mod_b));
+try {
+    print("T9 r5_150_mod_b has r5_150_c? ");
+    print(has_key(r5_150_mod_b, "r5_150_c"));
+} catch (e) {
+    print("T9 has_key on string FAILED");
+}
+
+# ── T10: module dict pollution — module dict contains ALL globals ──
+print("=== T10: module dict pollution ===");
+print("T10 r5_150_helper has m_add? ");
+print(has_key(r5_150_helper, "m_add"));
+print("T10 r5_150_helper has r5_150_c? ");
+print(has_key(r5_150_helper, "r5_150_c"));
+print("T10 r5_150_helper has r5_150_double? ");
+print(has_key(r5_150_helper, "r5_150_double"));
+
+# ── T11: circular import — A imports B, B imports A ──
+print("=== T11: circular import ===");
+try {
+    import "r5_150_circ_a.hbc";
+    print("T11 NO_ERROR");
+} catch (e) {
+    print("T11 CAUGHT");
+}
+print("T11 type of r5_150_circ_a=");
+print(type(r5_150_circ_a));
+
+# ── T12: import name same as function — conflict ──
+print("=== T12: name conflict ===");
+print("T12 r5_150_helper type=");
+print(type(r5_150_helper));
+print("T12 call r5_150_helper.r5_150_double(3)=");
+print(r5_150_helper.r5_150_double(3));
+
+# ── T13: import with bare module name (no extension) ──
+print("=== T13: import bare name ===");
+try {
+    import "r5_150_mod_c";
+    print("T13 bare import OK");
+} catch (e) {
+    print("T13 bare import FAILED");
+}
+
+# ── T14: module class — instantiate via leaked global (BUG-dependent) ──
+print("=== T14: module class ===");
+print("T14 r5_150_helper has r5_150_Point? ");
+print(has_key(r5_150_helper, "r5_150_Point"));
+try {
+    let p = new r5_150_Point(3, 4);
+    print("T14 p.magnitude()=");
+    print(p.magnitude());
+} catch (e) {
+    print("T14 new FAILED");
+}
+
+# ── T15: modify imported var — does it affect module namespace? ──
+print("=== T15: modify imported var ===");
+print("T15 before: r5_150_helper.public_val=");
+print(r5_150_helper.public_val);
+try {
+    public_val = 999;
+    print("T15 after local assign: r5_150_helper.public_val=");
+    print(r5_150_helper.public_val);
+} catch (e) {
+    print("T15 assign FAILED");
+}
+
+print("=== R5_150 DONE ===");

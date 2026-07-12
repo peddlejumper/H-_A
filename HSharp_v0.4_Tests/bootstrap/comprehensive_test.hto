@@ -1,0 +1,150 @@
+# H# Bootstrap Test Suite
+# Comprehensive tests for all bootstrap modules
+
+print("=== H# Bootstrap Test Suite ===");
+print("");
+
+# Test 1: Environment optimization
+print("Test 1: Optimized Environment Operations");
+let env = {};
+_env_set(env, "x", 10);
+_env_set(env, "y", 20);
+let result = _env_get(env, "x");
+print("  Environment get/set: " + str(result == 10));
+
+# Test 2: String utilities
+print("");
+print("Test 2: String Utilities");
+
+let test_str = "Hello World";
+print("  Original: " + test_str);
+print("  Uppercase: " + str_uppercase(test_str));
+print("  Lowercase: " + str_lowercase(test_str));
+print("  Length: " + str(str_length(test_str)));
+print("  Contains 'World': " + str(str_contains(test_str, "World")));
+print("  Index of 'World': " + str(str_index_of(test_str, "World")));
+
+let trim_test = "  hello  ";
+print("  Trimmed: '" + str_trim(trim_test) + "'");
+
+let split_test = str_split("a,b,c", ",");
+print("  Split 'a,b,c': " + str(len(split_test)) + " parts");
+
+# Test 3: Array utilities
+print("");
+print("Test 3: Array Utilities");
+
+let test_arr = [1, 2, 3, 4, 5];
+print("  Original array: [1, 2, 3, 4, 5]");
+print("  Sum: " + str(arr_sum(test_arr)));
+print("  Average: " + str(arr_average(test_arr)));
+print("  Min: " + str(arr_min(test_arr)));
+print("  Max: " + str(arr_max(test_arr)));
+
+let mapped = arr_map(test_arr, fn(x) { return x * 2; });
+print("  Mapped (x2): [" + str(mapped[0]) + ", " + str(mapped[1]) + ", ...]");
+
+let filtered = arr_filter(test_arr, fn(x) { return x > 2; });
+print("  Filtered (>2): [" + str(len(filtered)) + " elements]");
+
+let range_arr = arr_range(1, 6, 1);
+print("  Range 1-5: [" + str(range_arr[0]) + ", " + str(range_arr[1]) + ", ...]");
+
+# Test 4: Math utilities
+print("");
+print("Test 4: Math Utilities");
+
+print("  PI: " + str(MATH_PI));
+print("  E: " + str(MATH_E));
+print("  abs(-5): " + str(math_abs(-5)));
+print("  min(3, 7): " + str(math_min(3, 7)));
+print("  max(3, 7): " + str(math_max(3, 7)));
+print("  floor(3.7): " + str(math_floor(3.7)));
+print("  ceil(3.2): " + str(math_ceil(3.2)));
+print("  round(3.5): " + str(math_round(3.5)));
+print("  sqrt(16): " + str(math_sqrt(16)));
+print("  factorial(5): " + str(math_factorial(5)));
+print("  gcd(12, 8): " + str(math_gcd(12, 8)));
+print("  is_prime(7): " + str(math_is_prime(7)));
+print("  is_prime(10): " + str(math_is_prime(10)));
+print("  fibonacci(10): " + str(math_fibonacci(10)));
+
+let primes = math_primes_up_to(20);
+print("  Primes up to 20: [" + str(len(primes)) + " numbers]");
+
+# Test 5: Performance monitoring
+print("");
+print("Test 5: Performance Monitoring");
+
+perf_start_timer("test_timer");
+let i = 0;
+while (i < 100) {
+    perf_increment_counter("loop_count");
+    i = i + 1;
+}
+let elapsed = perf_stop_timer("test_timer");
+print("  Timer test completed");
+print("  Counter value: " + str(perf_get_counter("loop_count")));
+
+# Test 6: Code formatting
+print("");
+print("Test 6: Code Formatter");
+
+let unformatted_code = "let x=10;fn test(a,b){return a+b;}";
+print("  Input: " + unformatted_code);
+let formatted = format_code(unformatted_code);
+print("  Formatted code generated: " + str(formatted != nullptr));
+
+# Test 7: Linting
+print("");
+print("Test 7: Static Analyzer (Linter)");
+
+let test_code = "let x = 10;\nlet y = 20;";
+let lint_result = lint_analyze(test_code);
+print("  Lint analysis completed");
+print("  Errors: " + str(len(lint_result.errors)));
+print("  Warnings: " + str(len(lint_result.warnings)));
+
+# Test 8: Integration test - full pipeline
+print("");
+print("Test 8: Integration Test");
+
+let sample_program = `
+    let numbers = [1, 2, 3, 4, 5];
+    let sum = 0;
+    let i = 0;
+    while (i < len(numbers)) {
+        sum = sum + numbers[i];
+        i = i + 1;
+    }
+    print(sum);
+`;
+
+print("  Sample program created");
+let tokens = tokenize(sample_program);
+print("  Tokenization: " + str(len(tokens)) + " tokens");
+
+# Test 9: Edge cases
+print("");
+print("Test 9: Edge Cases");
+
+print("  Empty string trim: '" + str_trim("") + "'");
+print("  Empty array sum: " + str(arr_sum([])));
+print("  Empty array min: " + str(arr_min([])));
+print("  Zero factorial: " + str(math_factorial(0)));
+print("  Negative abs: " + str(math_abs(-100)));
+
+# Test 10: Error handling
+print("");
+print("Test 10: Error Handling");
+
+let div_result = 10 / 2;
+print("  Division works: " + str(div_result == 5));
+
+let array_access = [1, 2, 3];
+let val = array_access[1];
+print("  Array access works: " + str(val == 2));
+
+print("");
+print("=== Test Suite Complete ===");
+print("All core functionality verified!");

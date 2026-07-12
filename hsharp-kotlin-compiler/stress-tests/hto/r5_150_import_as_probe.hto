@@ -1,0 +1,8 @@
+# r5_150_import_as_probe.hto — probe: does parser support `import "mod" as m`?
+# Expected: SyntaxError at compile time (parser does not handle `as` keyword
+# in import statements).
+
+import "r5_150_helper.hbc" as h;
+
+print("PROBE h.r5_150_double(5)=");
+print(h.r5_150_double(5));

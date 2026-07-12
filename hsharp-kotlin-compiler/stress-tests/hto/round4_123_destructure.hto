@@ -1,0 +1,248 @@
+# Round-4 / #123 — Nested destructuring: deep probe
+#
+# Goal: test the full destructuring surface area, including features
+# that may have been added since round2_98.  The parser historically
+# only accepted flat `let [a, b, c] = expr;` patterns (IDENTIFIER or
+# `_` inside the brackets).  This file holds every case the parser
+# SUPPORTS; parser-rejected forms (nested patterns, for-destructure,
+# fn-destructure-param, default values in destructure) live in
+# sibling probe files (round4_123_probe_*.hto) because a SyntaxError
+# aborts compilation of the whole file.
+#
+# All error-prone ops are wrapped in try/catch so the test runs to
+# completion; the printed text reveals the actual behaviour.
+
+print("=== R4.123 START ===");
+
+# ============================================================
+# S1 — Basic list destructure (3 cases)
+# ============================================================
+print("S1-basic");
+let [a1, b1, c1] = [1, 2, 3];
+print(a1);                 # 1
+print(b1);                 # 2
+print(c1);                 # 3
+# Two-element
+let [a1b, b1b] = [10, 20];
+print(a1b + b1b);          # 30
+# Mixed types
+let [s1, n1, bo1] = ["hi", 42, true];
+print(s1);                 # hi
+print(n1);                 # 42
+print(bo1);                # true
+
+# ============================================================
+# S2 — Nested list destructure (parser-rejected; see probe file)
+# Workaround: destructure outer, then inner separately.
+# ============================================================
+print("S2-nested-workaround");
+let outer2 = [[1, 2], [3, 4]];
+let [p2a, p2b] = outer2;
+print(p2a);                # [1, 2]
+print(p2b);                # [3, 4]
+let [i2a, i2b] = p2a;
+let [i2c, i2d] = p2b;
+print(i2a + i2b);          # 3
+print(i2c + i2d);          # 7
+print(i2a + i2b + i2c + i2d);  # 10
+# Direct nested pattern `let [[a,b],[c,d]] = ...` is in probe_S2.
+
+# ============================================================
+# S3 — Mixed nesting (parser-rejected; see probe file)
+# Workaround: destructure outer, inner manually.
+# ============================================================
+print("S3-mixed-workaround");
+let outer3 = [1, [2, 3]];
+let [h3, tail3] = outer3;
+print(h3);                 # 1
+let [i3a, i3b] = tail3;
+print(i3a + i3b);          # 5
+print(h3 + i3a + i3b);     # 6
+# Direct `let [a, [b, c]] = ...` is in probe_S3.
+
+# ============================================================
+# S4 — for-loop destructure (parser-rejected for `[a,b]`; see probe)
+# Workaround A: for-each then destructure inside body.
+# Workaround B: `for k, v in list` — but NOTE the two-var-over-list
+#   semantics: var1 = INDEX, var2 = ELEMENT (not unpacked).  This is
+#   a deliberate fix documented in HVM.forIterFirst; verify it here.
+# ============================================================
+print("S4-for-workaround");
+let pairs4 = [[1, 2], [3, 4], [5, 6]];
+let sum4 = 0;
+for pr in pairs4 {
+    let [x4, y4] = pr;
+    sum4 = sum4 + x4 + y4;
+}
+print(sum4);               # 21  (3 + 7 + 11)
+# Two-var-over-list: var1=index, var2=element
+let acc4i = 0;
+let acc4e = 0;
+for idx4, el4 in pairs4 {
+    acc4i = acc4i + idx4;
+    acc4e = acc4e + el4[0];
+}
+print(acc4i);              # 0+1+2 = 3   (indices)
+print(acc4e);              # 1+3+5 = 9   (first slot of each pair)
+# `for [a, b] in pairs4 { ... }` is in probe_S4.
+
+# ============================================================
+# S5 — for k, v over dict (supported) + items() method variants
+# ============================================================
+print("S5-for-dict-kv");
+let d5 = {"x": 10, "y": 20, "z": 30};
+let ksum5 = "";
+let vsum5 = 0;
+for k5, v5 in d5 {
+    ksum5 = ksum5 + k5;
+    vsum5 = vsum5 + v5;
+}
+print(ksum5);              # xyz  (insertion order)
+print(vsum5);              # 60
+# Single-var over dict yields keys
+let konly5 = "";
+for kk5 in d5 {
+    konly5 = konly5 + kk5;
+}
+print(konly5);             # xyz
+# d.items() returns a list of [k, v] pairs.  Two-var-over-LIST gives
+# index + element, so k=index, v=pair.  This is surprising but
+# consistent with the documented fix.
+let cnt5 = 0;
+for ix5, pair5 in d5.items() {
+    cnt5 = cnt5 + ix5;
+    print(pair5);          # [x, 10]  [y, 20]  [z, 30]
+}
+print(cnt5);               # 0+1+2 = 3
+# To actually unpack items(), destructure inside the body
+let kvsum5 = 0;
+for pp5 in d5.items() {
+    let [kk5b, vv5b] = pp5;
+    kvsum5 = kvsum5 + vv5b;
+}
+print(kvsum5);             # 60
+# `for k, v in items(d)` (items as a GLOBAL function) is in probe_S5.
+
+# ============================================================
+# S6 — Fewer vars than elements (extras ignored)
+# ============================================================
+print("S6-fewer-vars");
+let [m6a, m6b] = [1, 2, 3, 4];
+print(m6a);                # 1
+print(m6b);                # 2
+let [m6c] = [11, 22, 33, 44];
+print(m6c);                # 11
+let [m6d, m6e] = [1, 2, 3, 4, 5, 6, 7, 8];
+print(m6d + m6e);          # 3
+# Fewer vars with `_` placeholders
+let [_, m6f] = [100, 200, 300];
+print(m6f);                # 200
+# Empty pattern with non-empty list (extras ignored)
+let [] = [1, 2, 3];
+print("empty-pattern-ok");
+
+# ============================================================
+# S7 — More vars than elements (runtime error expected)
+# ============================================================
+print("S7-more-vars");
+let r7a = "no-err";
+try {
+    let [s7a, s7b, s7c] = [1, 2];
+    print("got:" + s7a + "," + s7b + "," + s7c);
+    r7a = "ok";
+} catch (e) { r7a = "caught:" + e; }
+print(r7a);                # expected: caught (index 2 out of range)
+# Single missing
+let r7b = "no-err";
+try {
+    let [s7d, s7e] = [10];
+    print(s7d);
+    print(s7e);
+    r7b = "ok";
+} catch (e) { r7b = "caught:" + e; }
+print(r7b);                # expected: caught
+# All missing (vars > 0, list empty)
+let r7c = "no-err";
+try {
+    let [s7f, s7g] = [];
+    r7c = "ok";
+} catch (e) { r7c = "caught:" + e; }
+print(r7c);                # expected: caught
+# More vars than elements with `_` placeholders (still errors)
+let r7d = "no-err";
+try {
+    let [_, s7h] = [1];
+    r7d = "ok";
+} catch (e) { r7d = "caught:" + e; }
+print(r7d);                # expected: caught
+
+# ============================================================
+# S8 — Destructure function parameter (parser-rejected; see probe)
+# Workaround: accept a list, destructure inside body.
+# ============================================================
+print("S8-fn-param-workaround");
+fn sum_pair8(pr) {
+    let [a8, b8] = pr;
+    return a8 + b8;
+}
+print(sum_pair8([7, 8]));  # 15
+fn first_last8(xs) {
+    let [h8, t8] = xs;
+    return [h8, t8];
+}
+print(first_last8([1, 2, 3]));  # [1, 2]
+# `fn f([a, b]) { ... }` is in probe_S8.
+
+# ============================================================
+# S9 — Deep nesting 3+ (parser-rejected; see probe)
+# Workaround: three levels of manual destructure.
+# ============================================================
+print("S9-deep-workaround");
+let deep9 = [[[1], 2], 3];
+let [outer9, c9] = deep9;
+print(c9);                 # 3
+let [inner9, b9] = outer9;
+print(b9);                 # 2
+let [a9] = inner9;
+print(a9);                 # 1
+print(a9 + b9 + c9);       # 6
+# Direct `let [[[a], b], c] = ...` is in probe_S9.
+
+# ============================================================
+# S10 — Default value in destructure (parser-rejected; see probe)
+# Workaround: destructure then conditionally fill via if/null-check.
+# ============================================================
+print("S10-default-workaround");
+let src10 = [1];
+let [v10a] = src10;
+let v10b = 10;
+print(v10a + v10b);        # 11
+# Full-list version
+let [w10a] = [5];
+let w10b = 10;
+print(w10a + w10b);        # 15
+# `let [a, b = 10] = [1];` is in probe_S10.
+
+# ============================================================
+# Bonus — destructure of function return, with nested manual unwrap
+# ============================================================
+print("S11-fn-return-nested");
+fn nested_pair() {
+    return [[1, 2], [3, 4]];
+}
+let [npa, npb] = nested_pair();
+let [npa1, npa2] = npa;
+let [npb1, npb2] = npb;
+print(npa1 + npa2 + npb1 + npb2);   # 10
+
+# ============================================================
+# Bonus — destructure with `_` skips and mixed nesting workaround
+# ============================================================
+print("S12-underscore-mixed");
+let mixed12 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+let [_, mid12, _] = mixed12;
+let [m12a, _, m12c] = mid12;
+print(m12a);               # 4
+print(m12c);               # 6
+
+print("=== R4.123 DONE ===");

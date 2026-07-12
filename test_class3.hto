@@ -1,0 +1,39 @@
+# Test new + manual init pattern (no init method, use setup)
+class Counter {
+    let count = 0;
+    
+    fn setup(start) {
+        self.count = start;
+    }
+    
+    fn increment() {
+        self.count = self.count + 1;
+    }
+    
+    fn get() {
+        return self.count;
+    }
+}
+
+# new doesn't auto-call since no init method
+let c = new Counter();
+c.setup(10);
+c.increment();
+c.increment();
+print(c.get());
+
+# Test new with args (auto init)
+class Greeter {
+    let name = "";
+    
+    fn init(n) {
+        self.name = n;
+    }
+    
+    fn greet() {
+        return "Hello, " + self.name + "!";
+    }
+}
+
+let g = new Greeter("World");
+print(g.greet());

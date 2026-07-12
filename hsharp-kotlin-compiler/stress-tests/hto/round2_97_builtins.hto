@@ -1,0 +1,578 @@
+# ============================================================
+# round2_97_builtins.hto — 内建函数边界测试
+# 智能体 #97, Round 2
+# 目标: 测试 print/len/range/assert/abs/min/max/sum/fmt/hex/bin/oct/chr/ord
+#       等内建函数的边界行为, 找出与文档/常识不符的 bug
+# 方法: 每个用例打印 [TAG 预期] 实际; 易错项 try/catch 包裹
+# ============================================================
+
+print("===== R2-97 BUILTINS BOUNDARY =====");
+
+# ---------- T1: print 行为 ----------
+# T1.1 print 自动换行 (PRINT opcode 用 println)
+print("[T1.1 newline] expect=auto-newline]");
+print("line1");
+print("line2");
+
+# T1.2 print 空字符串
+print("[T1.2 empty] expect=blank-line-below]");
+print("");
+
+# T1.3 print null
+print("[T1.3 null] expect=null]");
+print(null);
+
+# T1.4 print 数字
+print("[T1.4 num] expect=42]");
+print(42);
+
+# T1.5 print 布尔
+print("[T1.5 bool] expect=true]");
+print(true);
+
+# T1.6 print 列表
+print("[T1.6 list] expect=[1, 2, 3]]");
+print([1, 2, 3]);
+
+# T1.7 print 字典
+print("[T1.7 dict] expect={a: 1}]");
+print({"a": 1});
+
+# NOTE: print(a, b, c) 是语法错误 — print 是语句只接受一个表达式
+# 无法在运行时测试 (编译期失败)
+
+# ---------- T2: len() 对各种类型 ----------
+print("[T2.1 len('hello')] expect=5]");
+print(len("hello"));
+
+print("[T2.2 len([1,2,3])] expect=3]");
+print(len([1, 2, 3]));
+
+print("[T2.3 len({'a':1,'b':2})] expect=2]");
+print(len({"a": 1, "b": 2}));
+
+print("[T2.4 len('')] expect=0]");
+print(len(""));
+
+print("[T2.5 len([])] expect=0]");
+print(len([]));
+
+print("[T2.6 len({})] expect=0]");
+print(len({}));
+
+# len 对 null — 应该报错
+let t2a = "no-err";
+try { t2a = "got:" + str(len(null)); } catch (e) { t2a = "caught:" + str(e); }
+print("[T2.7 len(null)] expect=caught err]");
+print(t2a);
+
+# len 对 int — 应该报错
+let t2b = "no-err";
+try { t2b = "got:" + str(len(42)); } catch (e) { t2b = "caught:" + str(e); }
+print("[T2.8 len(42)] expect=caught err]");
+print(t2b);
+
+# len 对 bool — 应该报错
+let t2c = "no-err";
+try { t2c = "got:" + str(len(true)); } catch (e) { t2c = "caught:" + str(e); }
+print("[T2.9 len(true)] expect=caught err]");
+print(t2c);
+
+# ---------- T3: range 边界 ----------
+print("[T3.1 range(0)] expect=[]]");
+print(range(0));
+
+print("[T3.2 range(1)] expect=[0]]");
+print(range(1));
+
+print("[T3.3 range(5)] expect=[0,1,2,3,4]]");
+print(range(5));
+
+print("[T3.4 range(-5)] expect=[] (negative)]");
+print(range(-5));
+
+print("[T3.5 range(1,1)] expect=[]]");
+print(range(1, 1));
+
+print("[T3.6 range(1,5)] expect=[1,2,3,4]]");
+print(range(1, 5));
+
+print("[T3.7 range(10,1)] expect=[] (start>end)]");
+print(range(10, 1));
+
+print("[T3.8 range(5,5)] expect=[]]");
+print(range(5, 5));
+
+# range 三参数 — 文档说支持 range(a,b,step)
+let t3a = "no-err";
+try { t3a = "got:" + str(range(1, 10, 2)); } catch (e) { t3a = "caught:" + str(e); }
+print("[T3.9 range(1,10,2)] expect=[1,3,5,7,9]]");
+print(t3a);
+
+# range 负步长
+let t3b = "no-err";
+try { t3b = "got:" + str(range(10, 1, -1)); } catch (e) { t3b = "caught:" + str(e); }
+print("[T3.10 range(10,1,-1)] expect=[10..1]]");
+print(t3b);
+
+# range 步长 0
+let t3c = "no-err";
+try { t3c = "got:" + str(range(0, 10, 0)); } catch (e) { t3c = "caught:" + str(e); }
+print("[T3.11 range(0,10,0)] expect=caught div0/err]");
+print(t3c);
+
+# range 返回类型
+let t3d = "no-err";
+try { t3d = type(range(3)); } catch (e) { t3d = "caught:" + str(e); }
+print("[T3.12 type(range(3))] expect=list]");
+print(t3d);
+
+# range 可迭代
+let t3sum = 0;
+for i in range(4) { t3sum = t3sum + i; }
+print("[T3.13 sum(range(4))] expect=6]");
+print(t3sum);
+
+# ---------- T4: assert ----------
+# assert 不是内建函数 — 应该报 Undefined name
+let t4a = "no-err";
+try { assert(true); } catch (e) { t4a = "caught:" + str(e); }
+print("[T4.1 assert(true) bare] expect=caught Undefined]");
+print(t4a);
+
+let t4b = "no-err";
+try { assert(false, "msg"); } catch (e) { t4b = "caught:" + str(e); }
+print("[T4.2 assert(false,msg) bare] expect=caught Undefined]");
+print(t4b);
+
+# 用户自定义 assert
+fn my_assert(cond, msg) {
+    if (not cond) {
+        if (msg == null) { throw "assertion failed"; }
+        throw "assertion failed: " + msg;
+    }
+}
+let t4c = "no-err";
+try { my_assert(true, null); t4c = "passed"; } catch (e) { t4c = "caught:" + str(e); }
+print("[T4.3 my_assert(true)] expect=passed]");
+print(t4c);
+
+let t4d = "no-err";
+try { my_assert(false, "boom"); } catch (e) { t4d = "caught:" + str(e); }
+print("[T4.4 my_assert(false,'boom')] expect=caught boom]");
+print(t4d);
+
+let t4e = "no-err";
+try { my_assert(false, null); } catch (e) { t4e = "caught:" + str(e); }
+print("[T4.5 my_assert(false,null)] expect=caught generic]");
+print(t4e);
+
+# ---------- T5: abs ----------
+print("[T5.1 abs(-5)] expect=5]");
+print(abs(-5));
+
+print("[T5.2 abs(-5.5)] expect=5.5]");
+print(abs(-5.5));
+
+print("[T5.3 abs(5)] expect=5]");
+print(abs(5));
+
+print("[T5.4 abs(0)] expect=0]");
+print(abs(0));
+
+# abs(null) — toDouble(HNull)=0.0, 所以返回 0 而非报错 (潜在 bug)
+let t5a = "no-err";
+try { t5a = "got:" + str(abs(null)); } catch (e) { t5a = "caught:" + str(e); }
+print("[T5.5 abs(null)] expect=caught err OR got:0]");
+print(t5a);
+
+# abs(true) — toDouble(HBool)=1.0/0.0
+let t5b = "no-err";
+try { t5b = "got:" + str(abs(true)); } catch (e) { t5b = "caught:" + str(e); }
+print("[T5.6 abs(true)] expect=caught err OR got:1]");
+print(t5b);
+
+# abs("abc") — 字符串不能转数字
+let t5c = "no-err";
+try { t5c = "got:" + str(abs("abc")); } catch (e) { t5c = "caught:" + str(e); }
+print("[T5.7 abs('abc')] expect=caught err]");
+print(t5c);
+
+# abs("12") — 数字字符串可转
+let t5d = "no-err";
+try { t5d = "got:" + str(abs(-12)); } catch (e) { t5d = "caught:" + str(e); }
+print("[T5.8 abs(-12) string-coerce] expect=12]");
+print(t5d);
+
+# ---------- T6: min / max ----------
+# min 多参数 — 文档说 min(3,1,2), 但实现只接受 list
+let t6a = "no-err";
+try { t6a = "got:" + str(min(3, 1, 2)); } catch (e) { t6a = "caught:" + str(e); }
+print("[T6.1 min(3,1,2) multiarg] expect=1 OR caught]");
+print(t6a);
+
+# min 列表参数
+print("[T6.2 min([3,1,2])] expect=1]");
+print(min([3, 1, 2]));
+
+# min 空列表
+let t6b = "no-err";
+try { t6b = "got:" + str(min([])); } catch (e) { t6b = "caught:" + str(e); }
+print("[T6.3 min([])] expect=caught err]");
+print(t6b);
+
+# min 单元素
+print("[T6.4 min([5])] expect=5]");
+print(min([5]));
+
+# max 多参数
+let t6c = "no-err";
+try { t6c = "got:" + str(max(3, 1, 2)); } catch (e) { t6c = "caught:" + str(e); }
+print("[T6.5 max(3,1,2) multiarg] expect=3 OR caught]");
+print(t6c);
+
+# max 列表
+print("[T6.6 max([3,1,2])] expect=3]");
+print(max([3, 1, 2]));
+
+# max 空参数 — arity 1, args 为空
+let t6d = "no-err";
+try { t6d = "got:" + str(max()); } catch (e) { t6d = "caught:" + str(e); }
+print("[T6.7 max()] expect=caught err]");
+print(t6d);
+
+# max 空列表
+let t6e = "no-err";
+try { t6e = "got:" + str(max([])); } catch (e) { t6e = "caught:" + str(e); }
+print("[T6.8 max([])] expect=caught err]");
+print(t6e);
+
+# min 负数
+print("[T6.9 min([-3,-1,-2])] expect=-3]");
+print(min([-3, -1, -2]));
+
+# min 混合 int/float
+print("[T6.10 min([1.5,1,2])] expect=1]");
+print(min([1.5, 1, 2]));
+
+# ---------- T7: sum ----------
+# sum 不是内建函数 — 应该报 Undefined
+let t7a = "no-err";
+try { t7a = "got:" + str(sum([1, 2, 3])); } catch (e) { t7a = "caught:" + str(e); }
+print("[T7.1 sum([1,2,3])] expect=6 OR caught Undefined]");
+print(t7a);
+
+let t7b = "no-err";
+try { t7b = "got:" + str(sum([])); } catch (e) { t7b = "caught:" + str(e); }
+print("[T7.2 sum([])] expect=0 OR caught]");
+print(t7b);
+
+let t7c = "no-err";
+try { t7c = "got:" + str(sum([1, "a"])); } catch (e) { t7c = "caught:" + str(e); }
+print("[T7.3 sum([1,'a'])] expect=caught OR mixed]");
+print(t7c);
+
+# ---------- T8: fmt 基础 ----------
+print("[T8.1 fmt('{0}',1)] expect=1]");
+print(fmt("{0}", 1));
+
+print("[T8.2 fmt('{0} {1}','a','b')] expect=a b]");
+print(fmt("{0} {1}", "a", "b"));
+
+print("[T8.3 fmt('{0}+{1}={2}',1,2,3)] expect=1+2=3]");
+print(fmt("{0}+{1}={2}", 1, 2, 3));
+
+print("[T8.4 fmt('{0}-{0}-{1}','a','b')] expect=a-a-b]");
+print(fmt("{0}-{0}-{1}", "a", "b"));
+
+print("[T8.5 fmt('no placeholders')] expect=no placeholders]");
+print(fmt("no placeholders"));
+
+print("[T8.6 fmt('{0}',true)] expect=true]");
+print(fmt("{0}", true));
+
+print("[T8.7 fmt('{0}',[1,2])] expect=[1, 2]]");
+print(fmt("{0}", [1, 2]));
+
+print("[T8.8 fmt('{0}',null)] expect=null]");
+print(fmt("{0}", null));
+
+# ---------- T9: fmt 边界 ----------
+# fmt 格式说明符 {0:.2f}
+print("[T9.1 fmt('{0:.2f}',3.14159)] expect=3.14 OR literal]");
+print(fmt("{0:.2f}", 3.14159));
+
+# fmt 自动索引 {}
+print("[T9.2 fmt('{} {}','a','b')] expect='a b' OR literal]");
+print(fmt("{} {}", "a", "b"));
+
+# fmt 参数不足 — {9} 但只给 1 个
+print("[T9.3 fmt('missing {9}',1)] expect=literal {9}]");
+print(fmt("missing {9}", 1));
+
+# fmt 参数过多 — 多余参数应被忽略
+print("[T9.4 fmt('{0}',1,2,3) extra] expect=1]");
+print(fmt("{0}", 1, 2, 3));
+
+# fmt 空参数
+print("[T9.5 fmt()] expect=empty string]");
+print(fmt());
+
+# fmt 无参数只有格式串
+print("[T9.6 fmt('hello')] expect=hello]");
+print(fmt("hello"));
+
+# fmt {0} 后跟非 }
+let t9a = "no-err";
+try { t9a = fmt("{0 test}", "a"); } catch (e) { t9a = "caught:" + str(e); }
+print("[T9.7 fmt('{0 test}','a')] expect=literal {0 test}]");
+print(t9a);
+
+# fmt 嵌套大括号
+print("[T9.8 fmt('{{0}}','a')] expect={{0}} OR substituted]");
+print(fmt("{{0}}", "a"));
+
+# fmt {01} 前导零索引
+print("[T9.9 fmt('{01}',1,2)] expect=1 OR 2]");
+print(fmt("{01}", 1, 2));
+
+# ---------- T10: hex / bin / oct ----------
+# hex/bin/oct 不是内建函数 — 应该报 Undefined
+let t10a = "no-err";
+try { t10a = "got:" + str(hex(255)); } catch (e) { t10a = "caught:" + str(e); }
+print("[T10.1 hex(255)] expect=ff OR caught Undefined]");
+print(t10a);
+
+let t10b = "no-err";
+try { t10b = "got:" + str(bin(5)); } catch (e) { t10b = "caught:" + str(e); }
+print("[T10.2 bin(5)] expect=101 OR caught Undefined]");
+print(t10b);
+
+let t10c = "no-err";
+try { t10c = "got:" + str(oct(8)); } catch (e) { t10c = "caught:" + str(e); }
+print("[T10.3 oct(8)] expect=10 OR caught Undefined]");
+print(t10c);
+
+let t10d = "no-err";
+try { t10d = "got:" + str(hex(0)); } catch (e) { t10d = "caught:" + str(e); }
+print("[T10.4 hex(0)] expect=0 OR caught]");
+print(t10d);
+
+# ---------- T11: chr / ord ----------
+print("[T11.1 chr(65)] expect=A]");
+print(chr(65));
+
+print("[T11.2 chr(97)] expect=a]");
+print(chr(97));
+
+print("[T11.3 chr(48)] expect=0]");
+print(chr(48));
+
+print("[T11.4 ord('A')] expect=65]");
+print(ord("A"));
+
+print("[T11.5 ord('a')] expect=97]");
+print(ord("a"));
+
+# chr 往返
+print("[T11.6 chr(ord('A'))] expect=A]");
+print(chr(ord("A")));
+
+# ord 空字符串 — 实现返回 0
+print("[T11.7 ord('')] expect=0 OR err]");
+print(ord(""));
+
+# ord 多字符字符串 — 只取第一个
+print("[T11.8 ord('AB')] expect=65]");
+print(ord("AB"));
+
+# chr 负数
+let t11a = "no-err";
+try { t11a = "got:" + str(chr(-1)); } catch (e) { t11a = "caught:" + str(e); }
+print("[T11.9 chr(-1)] expect=caught OR char]");
+print(t11a);
+
+# chr 大数
+let t11b = "no-err";
+try { t11b = "got:" + str(chr(200)); } catch (e) { t11b = "caught:" + str(e); }
+print("[T11.10 chr(200)] expect=char OR caught]");
+print(t11b);
+
+# ---------- T12: type / int / float / str / bool 内建 ----------
+print("[T12.1 type(1)] expect=number]");
+print(type(1));
+
+print("[T12.2 type('a')] expect=string]");
+print(type("a"));
+
+print("[T12.3 type([])] expect=list]");
+print(type([]));
+
+print("[T12.4 type({})] expect=dict]");
+print(type({}));
+
+print("[T12.5 type(null)] expect=null]");
+print(type(null));
+
+print("[T12.6 type(true)] expect=bool]");
+print(type(true));
+
+print("[T12.7 int(3.7)] expect=3]");
+print(int(3.7));
+
+print("[T12.8 int('42')] expect=42 OR err]");
+print(int("42"));
+
+print("[T12.9 float(5)] expect=5]");
+print(float(5));
+
+print("[T12.10 str(42)] expect=42]");
+print(str(42));
+
+print("[T12.11 str(null)] expect=null]");
+print(str(null));
+
+print("[T12.12 str([1,2])] expect=[1, 2]]");
+print(str([1, 2]));
+
+# bool / list / dict 不是内建函数
+let t12a = "no-err";
+try { t12a = "got:" + str(bool(1)); } catch (e) { t12a = "caught:" + str(e); }
+print("[T12.13 bool(1)] expect=true OR caught Undefined]");
+print(t12a);
+
+let t12b = "no-err";
+try { t12b = "got:" + str(list(1)); } catch (e) { t12b = "caught:" + str(e); }
+print("[T12.14 list(1)] expect=[1] OR caught Undefined]");
+print(t12b);
+
+let t12c = "no-err";
+try { t12c = "got:" + str(dict([["a", 1]])); } catch (e) { t12c = "caught:" + str(e); }
+print("[T12.15 dict(...)] expect={a:1} OR caught Undefined]");
+print(t12c);
+
+# ---------- T13: has_key / keys / values / items ----------
+let d13 = {"a": 1, "b": 2, "c": 3};
+
+# has_key 参数顺序 — 第二个定义是 has_key(dict, key)
+let t13a = "no-err";
+try { t13a = "got:" + str(has_key(d13, "a")); } catch (e) { t13a = "caught:" + str(e); }
+print("[T13.1 has_key(d,'a') dict-first] expect=true OR caught]");
+print(t13a);
+
+# has_key 反序 (key, dict) — 第一个定义的顺序
+let t13b = "no-err";
+try { t13b = "got:" + str(has_key("a", d13)); } catch (e) { t13b = "caught:" + str(e); }
+print("[T13.2 has_key('a',d) key-first] expect=true OR caught]");
+print(t13b);
+
+# has_key 不存在的键
+let t13c = "no-err";
+try { t13c = "got:" + str(has_key(d13, "z")); } catch (e) { t13c = "caught:" + str(e); }
+print("[T13.3 has_key(d,'z')] expect=false]");
+print(t13c);
+
+print("[T13.4 keys(d)] expect=[a,b,c]]");
+print(keys(d13));
+
+print("[T13.5 values(d)] expect=[1,2,3]]");
+print(values(d13));
+
+print("[T13.6 items(d)] expect=[[a,1],...]]");
+print(items(d13));
+
+# has_key 非字典参数
+let t13d = "no-err";
+try { t13d = "got:" + str(has_key(5, "a")); } catch (e) { t13d = "caught:" + str(e); }
+print("[T13.7 has_key(5,'a')] expect=caught err]");
+print(t13d);
+
+# keys 非字典
+let t13e = "no-err";
+try { t13e = "got:" + str(keys(5)); } catch (e) { t13e = "caught:" + str(e); }
+print("[T13.8 keys(5)] expect=caught err]");
+print(t13e);
+
+# ---------- T14: 内建函数参数数量错误 ----------
+# len 0 参数
+let t14a = "no-err";
+try { t14a = "got:" + str(len()); } catch (e) { t14a = "caught:" + str(e); }
+print("[T14.1 len()] expect=caught err]");
+print(t14a);
+
+# len 2 参数
+let t14b = "no-err";
+try { t14b = "got:" + str(len([1], [2])); } catch (e) { t14b = "caught:" + str(e); }
+print("[T14.2 len([1],[2])] expect=caught err]");
+print(t14b);
+
+# abs 0 参数
+let t14c = "no-err";
+try { t14c = "got:" + str(abs()); } catch (e) { t14c = "caught:" + str(e); }
+print("[T14.3 abs()] expect=caught err]");
+print(t14c);
+
+# abs 2 参数
+let t14d = "no-err";
+try { t14d = "got:" + str(abs(-5, 3)); } catch (e) { t14d = "caught:" + str(e); }
+print("[T14.4 abs(-5,3)] expect=caught err]");
+print(t14d);
+
+# chr 0 参数
+let t14e = "no-err";
+try { t14e = "got:" + str(chr()); } catch (e) { t14e = "caught:" + str(e); }
+print("[T14.5 chr()] expect=caught err]");
+print(t14e);
+
+# type 0 参数
+let t14f = "no-err";
+try { t14f = "got:" + str(type()); } catch (e) { t14f = "caught:" + str(e); }
+print("[T14.6 type()] expect=caught err]");
+print(t14f);
+
+# ---------- T15: fmt 参数类型混合 ----------
+print("[T15.1 fmt('{0} {1}',1,'a')] expect=1 a]");
+print(fmt("{0} {1}", 1, "a"));
+
+print("[T15.2 fmt('{0} {1}','a',1)] expect=a 1]");
+print(fmt("{0} {1}", "a", 1));
+
+print("[T15.3 fmt('{0} {1} {2}',1,true,null)] expect=1 true null]");
+print(fmt("{0} {1} {2}", 1, true, null));
+
+# fmt 嵌套列表
+print("[T15.4 fmt('{0}',[[1,2],[3,4]])] expect=[[1, 2], [3, 4]]]");
+print(fmt("{0}", [[1, 2], [3, 4]]));
+
+# ---------- T16: range 边界补充 ----------
+# range 大数
+print("[T16.1 len(range(1000))] expect=1000]");
+print(len(range(1000)));
+
+# range 用浮点数 (应被截断)
+print("[T16.2 range(3.7)] expect=[0,1,2]]");
+print(range(3.7));
+
+# range 用浮点边界
+print("[T16.3 range(1.9,4.9)] expect=[1,2,3,4]]");
+print(range(1.9, 4.9));
+
+# range 用 bool (true=1)
+let t16a = "no-err";
+try { t16a = "got:" + str(range(true)); } catch (e) { t16a = "caught:" + str(e); }
+print("[T16.4 range(true)] expect=[0] OR caught]");
+print(t16a);
+
+# range 用 null
+let t16b = "no-err";
+try { t16b = "got:" + str(range(null)); } catch (e) { t16b = "caught:" + str(e); }
+print("[T16.5 range(null)] expect=[] OR caught]");
+print(t16b);
+
+# range 用字符串
+let t16c = "no-err";
+try { t16c = "got:" + str(range("5")); } catch (e) { t16c = "caught:" + str(e); }
+print("[T16.6 range('5')] expect=[0..4] OR caught]");
+print(t16c);
+
+print("===== R2-97 DONE =====");

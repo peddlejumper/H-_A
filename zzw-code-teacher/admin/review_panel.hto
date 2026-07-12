@@ -1,0 +1,143 @@
+# admin/review_panel.hto
+# 提交审核: 查看最近 N 条提交 + 错误聚合 + AI 提示词配置
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "shared/json_utils.hto";
+
+let _rp_widgets = nullptr;
+
+fn build(parent, x, y, w, h) {
+    let t = ide_theme();
+    let panel = new Panel();
+    panel.init_panel("review");
+    panel.set_pos(x, y);
+    panel.set_size(w, h);
+    ide_paint_panel(panel, "soft");
+    parent.add_child(panel);
+    let title = new Label();
+    title.init_label("📋 提交审核");
+    title.set_pos(20, 10);
+    title.set_size(w - 40, 26);
+    title.set_color(t["accent"]);
+    title.set_font_size(15);
+    panel.add_child(title);
+    # 过滤
+    let f_status = new Label(); f_status.init_label("状态:"); f_status.set_pos(20, 46); f_status.set_size(50, 20);
+    let status_lb = new ListBox(); status_lb.init_listbox(); status_lb.set_pos(70, 44); status_lb.set_size(180, 22);
+    status_lb.add_item("全部");
+    status_lb.add_item("accepted");
+    status_lb.add_item("wrong_answer");
+    status_lb.add_item("runtime_error");
+    status_lb.add_item("time_limit");
+    panel.add_child(f_status);
+    panel.add_child(status_lb);
+    let btn_refresh = new Button();
+    btn_refresh.init_button("🔄 刷新");
+    btn_refresh.set_pos(260, 44);
+    btn_refresh.set_size(80, 24);
+    panel.add_child(btn_refresh);
+    # 列表
+    let list = new ListBox();
+    list.init_listbox();
+    list.set_pos(20, 78);
+    list.set_size(380, h - 90);
+    panel.add_child(list);
+    # 详情
+    let detail = new Label();
+    detail.init_label("(选择提交查看详情)");
+    detail.set_pos(420, 78);
+    detail.set_size(w - 440, h - 90);
+    detail.set_color(t["fg"]);
+    detail.set_word_wrap(true);
+    detail.set_font_size(11);
+    detail.set_font_family("Menlo, Monaco, monospace");
+    detail.set_bg_color(t["bg_alt"]);
+    panel.add_child(detail);
+    _rp_widgets = {
+        "panel": panel,
+        "status_lb": status_lb,
+        "list": list,
+        "detail": detail,
+        "btn": btn_refresh
+    };
+    btn_refresh.onClick = fn() { refresh(); };
+    status_lb.onChange = fn() { refresh(); };
+    list.onChange = fn() { _show_detail(); };
+    refresh();
+    return _rp_widgets;
+}
+
+let _rp_cache = [];
+
+fn refresh() {
+    if (_rp_widgets != nullptr) {
+        let resp = admin_get("/api/submissions");
+        let data = admin_parse(resp);
+        if (data != nullptr and data["ok"]) {
+            let all = data["data"];
+            let f = _rp_widgets["status_lb"].get_selected();
+            let status_filter = "";
+            if (f > 0) { status_filter = _rp_widgets["status_lb"].get_item(f); }
+            let out = [];
+            let i = 0;
+            while (i < len(all)) {
+                let s = all[i];
+                if (status_filter == "" or s["status"] == status_filter) {
+                    out.append(s);
+                }
+                i = i + 1;
+            }
+            _rp_cache = out;
+            let lb = _rp_widgets["list"];
+            lb.clear();
+            i = 0;
+            while (i < len(out)) {
+                let s = out[i];
+                let icon = "❓";
+                if (s["status"] == "accepted") { icon = "✅"; }
+                if (s["status"] == "wrong_answer") { icon = "❌"; }
+                if (s["status"] == "runtime_error") { icon = "💥"; }
+                if (s["status"] == "time_limit") { icon = "⏰"; }
+                lb.add_item(icon + " " + s["user_id"] + "  " + s["problem_id"] + "  " + str(s["score"]) + "分");
+                i = i + 1;
+            }
+            if (len(out) == 0) { lb.add_item("(无提交)"); }
+        }
+    }
+}
+
+fn _show_detail() {
+    let idx = _rp_widgets["list"].get_selected();
+    if (idx >= 0 and idx < len(_rp_cache)) {
+        let sid = _rp_cache[idx]["id"];
+        let resp = admin_get("/api/submissions/" + sid);
+        let data = admin_parse(resp);
+        if (data != nullptr and data["ok"]) {
+            let s = data["data"];
+            let t = "== 提交详情 ==\n";
+            t = t + "ID: " + s["id"] + "\n";
+            t = t + "用户: " + s["user_id"] + "\n";
+            t = t + "题目: " + s["problem_id"] + "\n";
+            t = t + "状态: " + s["status"] + " (分数:" + str(s["score"]) + ")\n";
+            t = t + "通过: " + str(s["passed"]) + "/" + str(s["total"]) + " 用时:" + str(s["time_ms"]) + "ms\n\n";
+            if (s["stderr"] != nullptr and s["stderr"] != "") {
+                t = t + "--- Stderr ---\n" + s["stderr"] + "\n\n";
+            }
+            if (s["stdout"] != nullptr and s["stdout"] != "") {
+                t = t + "--- Stdout ---\n" + s["stdout"] + "\n\n";
+            }
+            if (len(s["ai_hints"]) > 0) {
+                t = t + "--- AI 提示历史 ---\n";
+                let i = 0;
+                while (i < len(s["ai_hints"])) {
+                    let h = s["ai_hints"][i];
+                    t = t + "[" + h["role"] + "] " + h["content"] + "\n\n";
+                    i = i + 1;
+                }
+            }
+            t = t + "--- Code ---\n" + s["code"];
+            _rp_widgets["detail"].set_text(t);
+        }
+    }
+}

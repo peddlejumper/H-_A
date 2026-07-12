@@ -1,0 +1,14 @@
+# 11_mod_zero.hto — BINARY_MOD 除零
+try {
+    let z = 5 % 0;
+    print("no crash: " + str(z));
+} catch (e) {
+    print("caught: " + str(e));
+}
+try {
+    let z = 5.5 % 0.0;
+    print("float mod: " + str(z));
+} catch (e) {
+    print("caught2: " + str(e));
+}
+print("after");

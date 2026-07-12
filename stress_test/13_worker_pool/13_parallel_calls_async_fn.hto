@@ -1,0 +1,158 @@
+# 13 — parallel fn / async fn interplay
+# Covers: parallel fn 内调 async fn；async fn 内调 parallel fn。
+#
+# ★ 约束（同 t05）：编译器禁止 parallel fn 体内 await，所以
+#   「parallel fn 调 async fn 并 await 其 future」无法表达。
+#   只能 fire-and-forget（async fn 在调用线程同步跑完，返回已 resolve
+#   的 future，parallel fn 丢弃它）。
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# async fn：调用时立即在调用线程执行完，返回已 resolve 的 Future
+async fn async_add(a, b) {
+    return a + b;
+}
+async fn async_fib(n) {
+    if (n < 2) { return n; }
+    return await async_fib(n - 1) + await async_fib(n - 2);
+}
+async fn async_make_list(n) {
+    let r = [];
+    let i = 0;
+    while (i < n) { push(r, i); i = i + 1; }
+    return r;
+}
+
+# ── A: async fn 内调 parallel fn 并 await（合法）──
+parallel fn par_sq(x) {
+    return x * x;
+}
+async fn async_uses_par(n) {
+    let f = par_sq(n);
+    return await f;
+}
+check("async_calls_parallel", await async_uses_par(7) == 49,
+      "got " + str(await async_uses_par(7)));
+
+async fn async_uses_par_fib(n) {
+    let f = par_sq(n);
+    let v = await f;
+    return v + 1;
+}
+check("async_calls_parallel_chain", await async_uses_par_fib(6) == 37,
+      "got " + str(await async_uses_par_fib(6)));
+
+# ── B: parallel fn 内 fire-and-forget 调 async fn ──
+# async fn 在 worker 线程同步执行完毕，返回 resolved future，被丢弃。
+# 通过 channel 副作用验证 async fn 确实在 worker 上跑过。
+let af_ch = chan_new(0);
+async fn async_side_effect(tag) {
+    let k = 0;
+    while (k < 5000) { k = k + 1; }
+    chan_send(af_ch, tag);
+    return tag;
+}
+parallel fn par_fires_async(tag) {
+    let _f = async_side_effect(tag);   # 同步跑完，future 丢弃
+    return tag * 10;
+}
+let pf = [];
+let i = 0;
+while (i < 5) {
+    push(pf, par_fires_async(i));
+    i = i + 1;
+}
+let psum = 0;
+let j = 0;
+while (j < 5) {
+    psum = psum + await pf[j];
+    j = j + 1;
+}
+check("par_fires_async_result", psum == (0 + 1 + 2 + 3 + 4) * 10,
+      "psum=" + str(psum));
+# 收集 async 副作用
+let af_count = 0;
+let k = 0;
+while (k < 5) {
+    let tag = chan_recv(af_ch);
+    if (tag >= 0 and tag < 5) { af_count = af_count + 1; }
+    k = k + 1;
+}
+check("par_fires_async_side_effect_ran", af_count == 5,
+      "af_count=" + str(af_count));
+
+# ── C: async fn 内抛异常，外层 parallel/async 捕获 ──
+# 注意：async fn 在调用时同步执行（eager），异常在「调用点」抛出，
+# 而非在 await 点。所以 try 必须包住 async fn 的调用本身。
+async fn async_throws() {
+    throw "async-boom";
+}
+async fn async_catches_async() {
+    try {
+        let f = async_throws();   # 异常在此抛出（调用时）
+        let _ = await f;
+        return "no-throw";
+    } catch (e) {
+        return "caught:" + str(e);
+    }
+}
+check("async_catches_async_throw",
+      await async_catches_async() == "caught:async-boom",
+      "got " + str(await async_catches_async()));
+
+# parallel fn 调 async fn（fire-and-forget），async fn 抛异常会怎样？
+# async fn 抛异常会在 worker 线程同步抛出，parallel fn body 内未捕获
+# -> 该异常进入 parallel fn 的 frame，被 runFrame 捕获 dispatch，
+#    最终 cell.fail。观察是否真的传播到 await。
+async fn async_throws_sync() {
+    throw "sync-boom";
+}
+parallel fn par_calls_throwing_async() {
+    let _f = async_throws_sync();   # 这里会同步抛出
+    return "unreachable";
+}
+let caught_msg = "";
+try {
+    let _ = await par_calls_throwing_async();
+} catch (e) {
+    caught_msg = str(e);
+}
+check("par_propagates_async_throw", caught_msg == "sync-boom",
+      "got [" + caught_msg + "]");
+
+# ── D: 100 个 async 任务，每个调 parallel fn ──
+async fn async_par_worker(n) {
+    let f = par_sq(n);
+    return await f;
+}
+let futs = [];
+let m = 0;
+while (m < 100) {
+    push(futs, async_par_worker(m));
+    m = m + 1;
+}
+let all_ok = true;
+let n = 0;
+while (n < 100) {
+    if (await futs[n] != n * n) { all_ok = false; }
+    n = n + 1;
+}
+check("100_async_call_parallel", all_ok, "some result wrong");
+
+# 混合：顶层 concurrent{} 内同时 await parallel future + async future
+parallel fn par_inner(x) {
+    return x + 1;
+}
+let mixed = 0;
+concurrent {
+    let pf2 = par_inner(5);            # parallel future
+    let af2 = async_add(5, 100);       # async future (resolved)
+    mixed = await pf2 + await af2;
+}
+check("mixed_parallel_and_async", mixed == 6 + 105,
+      "mixed=" + str(mixed));
+
+print("T13_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

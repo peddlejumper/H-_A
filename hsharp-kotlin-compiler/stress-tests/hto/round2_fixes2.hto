@@ -1,0 +1,123 @@
+# round2_fixes2.hto — Parser/Lexer bug-fix verification (round 2)
+#
+# Verifies fixes for:
+#   Bug 1: `x is T` / `x as T` in expression position
+#          (previously: SyntaxError: Expected SEMI, got IS)
+#   Bug 2: `null.foo` postfix parsing
+#          (previously: SyntaxError: Expected RPAREN, got DOT)
+#   Bug 4: `new C().method()` chained call parsing
+#          (previously: SyntaxError: Expected RPAREN, got DOT)
+#   Bug 3: slice assignment `L[1:3] = [...]` now raises a clear
+#          CompileError instead of an internal crash
+#          (verified separately — cannot appear in a file that must
+#          compile; see /tmp/test_slice_assign.hto)
+#   Bug 5: `**` exponentiation now raises a SyntaxError instead of
+#          silently parsing as `2 * (*3)` = 6
+#          (verified separately — see /tmp/test_power.hto)
+#
+# All runtime-risky ops are wrapped in try/catch so the suite runs
+# to completion regardless of VM behaviour.
+
+print("=== R2.FIXES2 START ===");
+
+# ============================================================
+# Bug 1: `x is T` / `x as T` in expression position
+# ============================================================
+print("B1-is-as");
+
+class Animal { }
+class Dog { }
+
+fn test_is_as() {
+    let a = new Animal();
+    # `is` in let position
+    let r1 = a is Animal;
+    print("is-let:" + str(r1));        # true
+    # `as` in let position (parses & compiles; do not print object)
+    let r2 = a as Animal;
+    print("as-let:ok");
+    # `is` in if condition
+    if (a is Animal) {
+        print("is-if:yes");
+    }
+    # `is` combined with logical and
+    let r3 = a is Animal && a is Dog;
+    print("is-and:" + str(r3));        # false
+    # `is` with equality (precedence check)
+    let r4 = (a is Animal) == true;
+    print("is-eq:" + str(r4));         # true
+    # `as` in return position
+    return a as Animal;
+}
+try {
+    let out = test_is_as();
+    print("as-ret:ok");
+} catch (e) {
+    print("B1-EXC:" + str(e));
+}
+
+# ============================================================
+# Bug 2: `null.foo` postfix parsing
+# ============================================================
+print("B2-null-postfix");
+
+# null.foo parses now; runtime will error (null has no field foo),
+# so wrap in try/catch.
+let b2r1 = "no-err";
+try { let v = null.foo; b2r1 = "got:" + str(v); } catch (e) { b2r1 = "caught:" + str(e); }
+print("null.foo=" + b2r1);             # caught (runtime)
+
+# null chained with a call also parses
+let b2r2 = "no-err";
+try { let v = null.bar(); b2r2 = "got:" + str(v); } catch (e) { b2r2 = "caught:" + str(e); }
+print("null.bar()=" + b2r2);           # caught (runtime)
+
+# Indexing on null also parses
+let b2r3 = "no-err";
+try { let v = null[0]; b2r3 = "got:" + str(v); } catch (e) { b2r3 = "caught:" + str(e); }
+print("null[0]=" + b2r3);              # caught (runtime)
+
+# ============================================================
+# Bug 4: `new C().method()` chained call
+# ============================================================
+print("B4-new-chain");
+
+class Greeter {
+    fn greet() { return "hi"; }
+}
+
+fn test_new_chain() {
+    # Direct chained call on new expression
+    let g = new Greeter().greet();
+    return g;
+}
+try {
+    let v = test_new_chain();
+    print("new-chain:" + str(v));      # hi
+} catch (e) {
+    print("B4-EXC:" + str(e));
+}
+
+# new C().method() as a statement-level expression
+let b4r2 = "no-err";
+try { b4r2 = "got:" + str(new Greeter().greet()); } catch (e) { b4r2 = "caught:" + str(e); }
+print("new-chain-expr=" + b4r2);       # got:hi
+
+# new C().method() chained with index: new Box().items()[1]
+class Box {
+    fn items() { return [1, 2, 3]; }
+}
+let b4r3 = "no-err";
+try { b4r3 = "got:" + str(new Box().items()[1]); } catch (e) { b4r3 = "caught:" + str(e); }
+print("new-chain-index=" + b4r3);      # got:2
+
+# ============================================================
+# Bug 3 & Bug 5 are verified in separate files because they
+# intentionally raise compile/parse errors:
+#   Bug 3: L[1:3] = [...]  -> CompileError "slice assignment not yet supported"
+#   Bug 5: 2 ** 3          -> SyntaxError "unknown operator '**'"
+# ============================================================
+print("B3-slice-assign: verified-separately (raises CompileError)");
+print("B5-power: verified-separately (raises SyntaxError)");
+
+print("=== R2.FIXES2 DONE ===");

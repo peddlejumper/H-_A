@@ -1,0 +1,46 @@
+# 21 — chan_try_recv on closed channel (spec deviation check)
+# Per HNativeBridge.kt:91 comment: "chan_try_recv(ch) — non-blocking receive.
+# Returns the next value or HNull if the queue is empty (and the channel
+# isn't closed)."  This implies try_recv on a closed+empty channel should
+# perhaps raise, but the impl just returns HNull.  We document the actual
+# behaviour.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Closed + empty: try_recv returns null (does NOT raise)
+let ch = chan_new(0);
+chan_close(ch);
+let r = chan_try_recv(ch);
+check("try_recv_closed_empty_returns_null", r == nullptr, "r=" + str(r));
+
+# Closed + buffered: try_recv returns buffered value
+let ch2 = chan_new(0);
+chan_send(ch2, 42);
+chan_close(ch2);
+let r2 = chan_try_recv(ch2);
+check("try_recv_closed_buffered_returns_value", r2 == 42, "r2=" + str(r2));
+# After draining, try_recv returns null
+let r3 = chan_try_recv(ch2);
+check("try_recv_closed_drained_returns_null", r3 == nullptr, "r3=" + str(r3));
+
+# Closed bounded channel: same behaviour
+let ch3 = chan_new(3);
+chan_send(ch3, "a");
+chan_send(ch3, "b");
+chan_close(ch3);
+let a = chan_try_recv(ch3);
+let b = chan_try_recv(ch3);
+let none = chan_try_recv(ch3);
+check("bounded_try_recv_a",    a == "a",     "a=" + str(a));
+check("bounded_try_recv_b",    b == "b",     "b=" + str(b));
+check("bounded_try_recv_none", none == nullptr, "none=" + str(none));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

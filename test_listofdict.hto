@@ -1,0 +1,7 @@
+# test_listofdict.hto
+let headers = [
+    ["Content-Type", "application/json"],
+    ["Authorization", "Bearer xxx"]
+];
+print(headers[0][0]);
+print(headers[0][1]);

@@ -1,0 +1,10 @@
+# 14_compare_diff.hto — COMPARE_OP 不同类型比较
+print(1 == "1");
+print(0 == false);
+print(nullptr == 0);
+print(nullptr == nullptr);
+print([] == []);
+print(1 == 1.0);
+print("a" == "a");
+print(true == 1);
+print("done");

@@ -1,0 +1,27 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/interpreter.hto";
+
+# A: basic closure variable read
+let sA = "fn fA(input) { let p = 0; fn g() { return input[p]; } return g(); } let rA = fA([42]);";
+let tA = tokenize(sA); let aA = parse(tA); let eA = [];
+eval_node(aA, eA);
+print("A: " + _env_get(eA, "rA") + " (expect 42)");
+
+# B: closure write
+let sB = "fn fB() { let p = 0; fn g() { p = p + 1; } g(); return p; } let rB = fB();";
+let tB = tokenize(sB); let aB = parse(tB); let eB = [];
+eval_node(aB, eB);
+print("B: " + _env_get(eB, "rB") + " (expect 1)");
+
+# C: read+write in same scope
+let sC = "fn fC() { let p = 0; fn g() { p = p + 1; } g(); fn h() { return p; } return h(); } let rC = fC();";
+let tC = tokenize(sC); let aC = parse(tC); let eC = [];
+eval_node(aC, eC);
+print("C: " + _env_get(eC, "rC") + " (expect 1)");
+
+# D: two fns sharing mutable state
+let sD = "fn fD() { let p = 0; fn inc() { p = p + 1; } inc(); inc(); inc(); return p; } let rD = fD();";
+let tD = tokenize(sD); let aD = parse(tD); let eD = [];
+eval_node(aD, eD);
+print("D: " + _env_get(eD, "rD") + " (expect 3)");

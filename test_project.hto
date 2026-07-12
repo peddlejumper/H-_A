@@ -1,0 +1,101 @@
+# Complete H# project example - a simple task manager
+
+# Helper: generate a simple ID
+let next_id = 1;
+fn gen_id() {
+    let id = next_id;
+    next_id = next_id + 1;
+    return id;
+}
+
+# Task class
+class Task {
+    let id = 0;
+    let title = "";
+    let done = false;
+    
+    fn init(t) {
+        self.id = gen_id();
+        self.title = t;
+        self.done = false;
+    }
+    
+    fn complete() {
+        self.done = true;
+    }
+    
+    fn to_string() {
+        let status = "[ ]";
+        if (self.done) {
+            status = "[x]";
+        }
+        return "#" + str(self.id) + " " + status + " " + self.title;
+    }
+}
+
+# TaskManager class
+class TaskManager {
+    let tasks = [];
+    
+    fn init() {
+        self.tasks = [];
+    }
+    
+    fn add(title) {
+        let t = new Task(title);
+        push(self.tasks, t);
+        return t.id;
+    }
+    
+    fn complete(id) {
+        let i = 0;
+        while (i < len(self.tasks)) {
+            if (self.tasks[i].id == id) {
+                self.tasks[i].complete();
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+    
+    fn list_all() {
+        let i = 0;
+        while (i < len(self.tasks)) {
+            print(self.tasks[i].to_string());
+            i = i + 1;
+        }
+    }
+    
+    fn count_pending() {
+        let count = 0;
+        let i = 0;
+        while (i < len(self.tasks)) {
+            if (self.tasks[i].done == false) {
+                count = count + 1;
+            }
+            i = i + 1;
+        }
+        return count;
+    }
+}
+
+# Usage
+let mgr = new TaskManager();
+let id1 = mgr.add("Learn H# standard library");
+let id2 = mgr.add("Write bytecode compiler");
+let id3 = mgr.add("Deploy to HVM");
+
+print("=== All Tasks ===");
+mgr.list_all();
+
+print("");
+print("Completing task " + str(id1) + "...");
+mgr.complete(id1);
+
+print("");
+print("=== Updated Tasks ===");
+mgr.list_all();
+
+print("");
+print("Pending: " + str(mgr.count_pending()));

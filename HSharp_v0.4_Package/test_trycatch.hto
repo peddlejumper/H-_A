@@ -1,0 +1,15 @@
+let d = {"a": 1, "b": 2};
+try {
+    let v = d["c"];
+    print("found c");
+} catch (e) {
+    print("c not found");
+}
+try {
+    let v = d["a"];
+    print("found a: ");
+    print(v);
+} catch (e) {
+    print("a not found");
+}
+print("done");

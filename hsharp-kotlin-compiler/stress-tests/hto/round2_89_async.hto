@@ -1,0 +1,523 @@
+# Round-2 #89 — async/await 与 coro 取消/超时语义压力测试
+# H# v0.4.1: async fn = eagerly-resolved HFuture; await = sync unwrap;
+#   coro fn (without is_async) = NO generator semantics (no yield opcode);
+#   parallel fn = worker-pool HFuture (lazy); concurrent { } = structured scope.
+# 预期输出写在每条 print 注释里。
+
+# =====================================================================
+# T01: 简单 async fn 调用 + await (返回数字)
+# =====================================================================
+async fn fetch(n) {
+    return n + 1;
+}
+print(fmt("T01: {0}", await fetch(41)));              # T01: 42
+
+# =====================================================================
+# T02: async fn 返回各类型值
+# =====================================================================
+async fn retNum()    { return 3.14; }
+async fn retStr()    { return "hi"; }
+async fn retList()   { return [1, 2, 3]; }
+async fn retDict()   { return {"a": 1, "b": 2}; }
+async fn retNull()   { let x = 1; }
+async fn retBool()   { return true; }
+print(fmt("T02a: {0}", await retNum()));              # T02a: 3.14
+print(fmt("T02b: {0}", await retStr()));              # T02b: hi
+print(fmt("T02c: {0}", await retList()));             # T02c: [1, 2, 3]
+print(fmt("T02d: {0}", await retDict()));             # T02d: {a: 1, b: 2}
+print(fmt("T02e: {0}", await retNull()));             # T02e: null
+print(fmt("T02f: {0}", await retBool()));             # T02f: true
+
+# =====================================================================
+# T03: 多个 async 并行(实际是 eager) + 逐个 await
+# =====================================================================
+async fn mk(x) { return x * x; }
+let fA = mk(2);
+let fB = mk(3);
+let fC = mk(4);
+print(fmt("T03: {0}", await fA + await fB + await fC));   # T03: 29
+
+# =====================================================================
+# T04: async fn 内 throw，外层 await 处 catch (拿到原始 payload)
+# =====================================================================
+async fn asyncThrower(msg) {
+    if (msg != "") { throw "E:" + msg; }
+    return "ok";
+}
+let r4a = "no-throw";
+try {
+    r4a = await asyncThrower("boom");
+} catch (e) {
+    r4a = "caught:" + e;
+}
+print(fmt("T04a: {0}", r4a));                          # T04a: caught:E:boom
+print(fmt("T04b: {0}", await asyncThrower("")));      # T04b: ok
+
+# =====================================================================
+# T05: await 非 async 值 (运行期类型错误)
+# =====================================================================
+let r5 = "no-err";
+try {
+    r5 = await 42;
+} catch (e) {
+    r5 = "caught:" + e;
+}
+print(fmt("T05: {0}", r5));                            # T05: caught:AWAIT: expected Future<T>, got HNumber (42)
+
+# =====================================================================
+# T06: 忘记 await — async fn 返回 HFuture 对象
+# =====================================================================
+async fn six() { return 6; }
+let fut6 = six();
+print(fmt("T06a: {0}", fut6));                         # T06a: <future>
+print(fmt("T06b: {0}", type(fut6)));                   # T06b: future
+print(fmt("T06c: {0}", await fut6));                   # T06c: 6
+
+# =====================================================================
+# T07: async fn 内调用普通 fn
+# =====================================================================
+fn plainDouble(x) { return x * 2; }
+async fn usePlain() {
+    let y = plainDouble(21);
+    return y + 0;
+}
+print(fmt("T07: {0}", await usePlain()));              # T07: 42
+
+# =====================================================================
+# T08: 普通函数内调用 async fn (调用本身应允许；只是不能 await)
+# =====================================================================
+async fn seven() { return 7; }
+fn callAsync() {
+    let f = seven();        # 返回 HFuture, 不 await
+    return f;
+}
+let f8 = callAsync();
+print(fmt("T08a: {0}", type(f8)));                     # T08a: future
+print(fmt("T08b: {0}", await f8));                     # T08b: 7
+
+# =====================================================================
+# T09: async 递归 (fib)
+# =====================================================================
+async fn afib(n) {
+    if (n < 2) { return n; }
+    return await afib(n - 1) + await afib(n - 2);
+}
+print(fmt("T09: {0}", await afib(10)));                # T09: 55
+
+# =====================================================================
+# T10: coro fn 基本行为 — 无 is_async 时返回 raw 值 (非 HFuture)
+# =====================================================================
+coro fn coroAdd(a, b) {
+    return a + b;
+}
+let r10 = coroAdd(3, 4);
+print(fmt("T10a: {0}", r10));                          # T10a: 7
+print(fmt("T10b: {0}", type(r10)));                    # T10b: number
+print(fmt("T10c: {0}", coroAdd.is_coro));              # T10c: true
+print(fmt("T10d: {0}", coroAdd.is_async));             # T10d: false
+
+# =====================================================================
+# T11: coro.send(v) 双向通信 — 预期不支持 (无 yield 语义)
+#   coro fn 返回的是 raw 值而非 generator 对象, .send 应属性查找失败
+# =====================================================================
+coro fn coroId(x) { return x; }
+let r11 = "no-err";
+try {
+    let g = coroId(5);
+    r11 = g.send(99);
+} catch (e) {
+    r11 = "caught:" + e;
+}
+print(fmt("T11: {0}", r11));                           # T11: caught:CALL_METHOD on non-instance (send)
+
+# =====================================================================
+# T12: coro.close() 显式关闭 — 预期不支持 (同上)
+# =====================================================================
+let r12 = "no-err";
+try {
+    let g = coroId(7);
+    g.close();
+} catch (e) {
+    r12 = "caught:" + e;
+}
+print(fmt("T12: {0}", r12));                           # T12: caught:CALL_METHOD on non-instance (close)
+
+# =====================================================================
+# T13: coro fn 内 throw, 外层 catch (直接传播, 不经 HFuture)
+# =====================================================================
+coro fn coroThrow(msg) {
+    throw "CT:" + msg;
+    return 0;
+}
+let r13 = "no-err";
+try {
+    r13 = coroThrow("bad");
+} catch (e) {
+    r13 = "caught:" + e;
+}
+print(fmt("T13: {0}", r13));                           # T13: caught:CT:bad
+
+# =====================================================================
+# T14: async + channel 组合 (async fn 内 chan_send, 外层 chan_recv)
+# =====================================================================
+async fn asyncProducer(ch, start, count) {
+    let i = 0;
+    while (i < count) {
+        chan_send(ch, start + i);
+        i = i + 1;
+    }
+    return "sent-" + count;
+}
+let ch14 = chan_new(8);
+let f14 = asyncProducer(ch14, 100, 3);
+print(fmt("T14a: {0}", chan_recv(ch14)));              # T14a: 100
+print(fmt("T14b: {0}", chan_recv(ch14)));              # T14b: 101
+print(fmt("T14c: {0}", chan_recv(ch14)));              # T14c: 102
+print(fmt("T14d: {0}", await f14));                    # T14d: sent-3
+
+# =====================================================================
+# T15: async + parallel 组合 (async fn 内 await parallel fn)
+# =====================================================================
+parallel fn pSquare(n) { return n * n; }
+async fn useParallel(n) {
+    let v = await pSquare(n);
+    return v + 1;
+}
+print(fmt("T15: {0}", await useParallel(5)));          # T15: 26
+
+# =====================================================================
+# T16: await 链式 — await (await f())
+# =====================================================================
+async fn inner16()  { return "inner-val"; }
+async fn outer16()  { return inner16(); }   # 返回 HFuture (async 自动包)
+print(fmt("T16: {0}", await await outer16()));         # T16: inner-val
+
+# =====================================================================
+# T17: concurrent { } 基本结构化并发
+# =====================================================================
+parallel fn dbl(n) { return n * 2; }
+concurrent {
+    let a = await dbl(10);
+    let b = await dbl(20);
+    print(fmt("T17: {0}", a + b));                     # T17: 60
+}
+
+# =====================================================================
+# T18: concurrent { } 子任务抛异常 — 异常传播到外层 catch
+# =====================================================================
+parallel fn boom18() { throw "boom18"; }
+let r18 = "no-throw";
+try {
+    concurrent {
+        let r = await boom18();
+    }
+} catch (e) {
+    r18 = "caught:" + e;
+}
+print(fmt("T18: {0}", r18));                           # T18: caught:boom18
+
+# =====================================================================
+# T19: concurrent { } 内已 await 捕获异常 — CONCURRENT_EXIT 是否重复抛?
+#   预期: 用户 catch 后 scope.join() 仍会 re-throw 失败 child (潜在 bug)
+# =====================================================================
+parallel fn boom19() { throw "boom19"; }
+let r19a = "no-throw";
+let r19b = "no-exit-throw";
+try {
+    concurrent {
+        let f = boom19();
+        try {
+            let r = await f;
+        } catch (e) {
+            r19a = "inner-caught:" + e;
+        }
+    }
+} catch (e2) {
+    r19b = "exit-caught:" + e2;
+}
+print(fmt("T19a: {0}", r19a));                         # T19a: inner-caught:boom19
+print(fmt("T19b: {0}", r19b));                         # T19b: exit-caught:boom19  (BUG: 内层已 catch, CONCURRENT_EXIT 仍 re-throw)
+
+# =====================================================================
+# T20: concurrent { } 无 parallel 子任务 — 应为 no-op
+# =====================================================================
+concurrent {
+    let x = 1 + 1;
+}
+print(fmt("T20: {0}", "concurrent-empty-ok"));         # T20: concurrent-empty-ok
+
+# =====================================================================
+# T21: concurrent { } 嵌套
+# =====================================================================
+parallel fn inc(n) { return n + 1; }
+concurrent {
+    let a = await inc(5);
+    concurrent {
+        let b = await inc(10);
+        print(fmt("T21: {0}", a + b));                 # T21: 17
+    }
+}
+
+# =====================================================================
+# T22: await 在 for 循环 + 闭包捕获
+# =====================================================================
+async fn tag(s) { return "[" + s + "]"; }
+let items = ["x", "y", "z"];
+let acc22 = "";
+for it in items {
+    acc22 = acc22 + await tag(it);
+}
+print(fmt("T22: {0}", acc22));                         # T22: [x][y][z]
+
+# =====================================================================
+# T23: parallel fn 返回 HFuture (PENDING) — await 阻塞直到 worker 完成
+# =====================================================================
+parallel fn slowSum(a, b) {
+    let s = 0;
+    let i = a;
+    while (i <= b) { s = s + i; i = i + 1; }
+    return s;
+}
+let f23 = slowSum(1, 100);
+print(fmt("T23a: {0}", type(f23)));                    # T23a: future
+print(fmt("T23b: {0}", await f23));                    # T23b: 5050
+
+# =====================================================================
+# T24: coro fn / async fn / parallel fn 内省 (is_coro/is_async/is_parallel)
+# =====================================================================
+fn      plainFn()  { return 0; }
+async   fn asyncFn() { return 0; }
+coro    fn coroFn()   { return 0; }
+parallel fn parFn()   { return 0; }
+print(fmt("T24a: {0}", plainFn.is_coro));              # T24a: false
+print(fmt("T24b: {0}", asyncFn.is_coro));              # T24b: true
+print(fmt("T24c: {0}", asyncFn.is_async));             # T24c: true
+print(fmt("T24d: {0}", coroFn.is_coro));               # T24d: true
+print(fmt("T24e: {0}", coroFn.is_async));              # T24e: false
+print(fmt("T24f: {0}", parFn.is_parallel));            # T24f: true
+print(fmt("T24g: {0}", parFn.is_coro));                # T24g: true
+
+# =====================================================================
+# T25: await 已 resolved 的 future (幂等 — 多次 await 同一 future)
+# =====================================================================
+async fn mk25() { return 25; }
+let f25 = mk25();
+print(fmt("T25a: {0}", await f25));                    # T25a: 25
+print(fmt("T25b: {0}", await f25));                    # T25b: 25
+print(fmt("T25c: {0}", await f25));                    # T25c: 25
+
+# =====================================================================
+# T26: 顶层 await (模块入口即隐式 async 上下境)
+# =====================================================================
+async fn topLevel26() { return "top"; }
+print(fmt("T26: {0}", await topLevel26()));            # T26: top
+
+# =====================================================================
+# T27: parallel fn 抛异常 — await 重新抛出, catch 拿原始 payload
+# =====================================================================
+parallel fn parThrow(msg) { throw "P:" + msg; }
+let r27 = "no-throw";
+try {
+    r27 = await parThrow("x");
+} catch (e) {
+    r27 = "caught:" + e;
+}
+print(fmt("T27: {0}", r27));                           # T27: caught:P:x
+
+# =====================================================================
+# T28: concurrent { } 多个 parallel child, 一个失败 — cancel 传播给其它
+#   这里两个 child 都很快完成, 重点验证 join 行为与第一个失败 re-throw
+# =====================================================================
+parallel fn ok28(n)  { return n; }
+parallel fn bad28()  { throw "bad28"; }
+let r28 = "no-throw";
+try {
+    concurrent {
+        let f1 = ok28(1);
+        let f2 = bad28();
+        let r1 = await f1;
+        let r2 = await f2;
+    }
+} catch (e) {
+    r28 = "caught:" + e;
+}
+print(fmt("T28: {0}", r28));                           # T28: caught:bad28
+
+# =====================================================================
+# T29: coro fn 内调用 async fn (coro fn 不是 async, 不能 await)
+#   只能拿到 HFuture 对象, 不能 unwrap
+# =====================================================================
+async fn afn29() { return 29; }
+coro fn coroUseAsync() {
+    let f = afn29();      # HFuture
+    return f;             # 返回 future, 不能 await
+}
+let f29 = coroUseAsync();
+print(fmt("T29a: {0}", type(f29)));                    # T29a: future
+print(fmt("T29b: {0}", await f29));                    # T29b: 29
+
+# =====================================================================
+# T30: parallel fn 内调用 async fn (worker 线程内)
+#   注意: parallel fn 未设 is_async, 静态检查禁止 await (设计限制)
+#   只能取 HFuture, 不能 unwrap — 验证 parallel fn 不可 await
+# =====================================================================
+async fn afn30(x) { return x * 10; }
+parallel fn parUseAsync(x) {
+    let f = afn30(x);      # HFuture, parallel 内不能 await
+    return f;              # 返回 HFuture (worker 内无法 unwrap)
+}
+let f30 = parUseAsync(4);
+print(fmt("T30a: {0}", type(f30)));                    # T30a: future
+print(fmt("T30b: {0}", await await f30));              # T30b: 40  (外层 await 解 parallel future, 内层 await 解 async future)
+
+# =====================================================================
+# T30c: parallel fn 内 await 应被静态拒绝 (此段不参与编译 — 仅文档说明)
+#   parallel fn p(x) { let v = await afn30(x); return v; }
+#   => CompileError: `await` is only allowed inside an `async fn` body
+#   根因: parser 为 parallel fn 设 is_coro+is_parallel 但不设 is_async;
+#         compiler.in_async = is_async; 故 in_async=False, await 被拒。
+# =====================================================================
+
+print(fmt("DONE: {0}", "round2_89"));                  # DONE: round2_89
+
+# =====================================================================
+# T31: async fn 抛异常是 *同步* 的 (调用即抛, 不延迟到 HFuture)
+#   HVM.invokeHFunction: val raw = runFrame(frame) 先执行; 若抛,
+#   HFuture(raw, resolved=true) 永不构造. 故 `let f = athrow()` 即抛.
+# =====================================================================
+async fn athrow31() { throw "SYNC31"; return 0; }
+let stage31 = "before";
+try {
+    let f = athrow31();          # 期望在此抛出, 不返回 failed future
+    stage31 = "after-call";      # 不应到达
+} catch (e) {
+    stage31 = "caught:" + e;
+}
+print(fmt("T31: {0}", stage31));                      # T31: caught:SYNC31
+
+# =====================================================================
+# T32: parallel fn 抛异常是 *延迟* 的 (返回 PENDING future, await 时抛)
+#   与 T31 形成对照: parallel fn 的异常进 cell.fail, 调用本身不抛.
+# =====================================================================
+parallel fn pthrow32() { throw "ASYNC32"; return 0; }
+let stage32 = "before";
+let fp32 = "no-fut";
+try {
+    fp32 = pthrow32();            # 不抛 (返回 PENDING future)
+    stage32 = "after-call";
+} catch (e) {
+    stage32 = "call-caught:" + e;
+}
+print(fmt("T32a: {0}", stage32));                     # T32a: after-call
+print(fmt("T32b: {0}", type(fp32)));                  # T32b: future
+let r32c = "no-await-err";
+try {
+    r32c = await fp32;
+} catch (e) {
+    r32c = "await-caught:" + e;
+}
+print(fmt("T32c: {0}", r32c));                        # T32c: await-caught:ASYNC32
+
+# =====================================================================
+# T33: parallel future 多次 await (lazy future 幂等)
+# =====================================================================
+parallel fn pval33() { return 33; }
+let fp33 = pval33();
+print(fmt("T33a: {0}", await fp33));                  # T33a: 33
+print(fmt("T33b: {0}", await fp33));                  # T33b: 33
+
+# =====================================================================
+# T34: concurrent { } 内 spawn parallel child 但不 await — EXIT 应 join
+#   结构化并发要求: 退出时等待所有 child, 即使用户未显式 await.
+# =====================================================================
+parallel fn make34(n) { return n * 100; }
+let r34 = "no-join";
+try {
+    concurrent {
+        let f1 = make34(1);
+        let f2 = make34(2);
+        # 故意不 await — CONCURRENT_EXIT 应 join 两者
+        print(fmt("T34-inner: {0}", "spawned"));
+    }
+    r34 = "exited-ok";
+} catch (e) {
+    r34 = "exit-err:" + e;
+}
+print(fmt("T34: {0}", r34));                          # T34: exited-ok
+
+# =====================================================================
+# T35: concurrent { } 内 spawn 成功 child 但不 await — EXIT 不应抛
+#   (与 T19 失败 child 形成对照: 成功 child 的 join 是良性的)
+# =====================================================================
+parallel fn ok35(n) { return n; }
+let r35 = "no-err";
+try {
+    concurrent {
+        let f1 = ok35(1);
+        let f2 = ok35(2);
+        let r1 = await f1;     # 只 await 一个
+        print(fmt("T35-inner: {0}", r1));             # T35-inner: 1
+        # f2 不 await, EXIT 隐式 join
+    }
+    r35 = "ok";
+} catch (e) {
+    r35 = "err:" + e;
+}
+print(fmt("T35: {0}", r35));                          # T35: ok
+
+# =====================================================================
+# T36: await await await 三层链 (async fn 返回 async fn 的 future)
+# =====================================================================
+async fn L1() { return 1; }
+async fn L2() { return L1(); }       # async 自动包 → HFuture
+async fn L3() { return L2(); }       # 再包一层
+print(fmt("T36: {0}", await await await L3()));       # T36: 1
+
+# =====================================================================
+# T37: concurrent { } 内 nested concurrent 中 child 失败 (await 抛, 未在内层 catch)
+#   验证 CONCURRENT_EXIT 是否被 try/finally 保护.
+#   预期: 内层 throw 被外层 catch(ei) 捕获; 外层 child fo 仍可 await; 外层 EXIT 不应再抛.
+#   实际 (BUG): 内层 body 抛 → 内层 CONCURRENT_EXIT 被跳过 → currentScope 仍为内层
+#               → 外层 CONCURRENT_EXIT join 到内层 scope → re-throw inner-bad.
+# =====================================================================
+parallel fn okOuter() { return 100; }
+parallel fn badInner() { throw "inner-bad"; }
+let r37 = "no-throw";
+try {
+    concurrent {
+        let fo = okOuter();
+        try {
+            concurrent {
+                let bi = badInner();
+                let ri = await bi;     # 此处抛 inner-bad, 内层无 catch
+            }
+        } catch (ei) {
+            r37 = "inner-caught:" + ei;
+        }
+        # 外层 child fo 仍应可 await
+        let ro = await fo;
+        r37 = r37 + ";outer=" + ro;
+    }
+} catch (e) {
+    r37 = r37 + ";outer-err:" + e;
+}
+print(fmt("T37: {0}", r37));                          # T37: inner-caught:inner-bad;outer=100  (实际多出 ";outer-err:inner-bad" = BUG)
+
+# =====================================================================
+# T38: concurrent { } body 直接 throw (非 parallel child) — EXIT 应仍清理 scope
+#   预期: throw 被 catch 捕获; 后续 parallel 调用不受残留 scope 影响.
+#   实际 (BUG, 同 T37): CONCURRENT_EXIT 跳过, currentScope 泄漏.
+# =====================================================================
+parallel fn probe38() { return 38; }
+let r38 = "no-throw";
+try {
+    concurrent {
+        throw "direct38";     # body 直接抛, 无 parallel child
+    }
+} catch (e) {
+    r38 = "caught:" + e;
+}
+print(fmt("T38a: {0}", r38));                         # T38a: caught:direct38
+# 若 currentScope 泄漏, 此处 probe38() 会被注册到已"死"的 scope; 但因后续无
+# CONCURRENT_EXIT, 不会立即崩. 主要危害见 T37 (嵌套时 join 错 scope).
+print(fmt("T38b: {0}", await probe38()));             # T38b: 38

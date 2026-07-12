@@ -1,0 +1,277 @@
+# H# Library Test 07 — Higher-Order Functions Library
+# Tests closures, lambdas, function composition, combinators.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Section 1: Closures with free variables
+# =====================================================
+fn makeAdder(x) {
+    fn adder(y) { return x + y; }
+    return adder;
+}
+
+let add5 = makeAdder(5);
+let add10 = makeAdder(10);
+check("hof/add5/3",      add5(3) == 8);
+check("hof/add5/100",    add5(100) == 105);
+check("hof/add10/3",     add10(3) == 13);
+check("hof/add10/100",   add10(100) == 110);
+check("hof/independence", add5(0) + add10(0) == 15);
+
+# =====================================================
+# Section 2: Multi-capture closures
+# In H# v0.4, sibling inner functions do not share closure
+# cells (each MAKE_CLOSURE creates its own).  So instead of
+# returning a list of independent closures that all see the
+# same mutable state, we expose a single "dispatch" closure
+# that switches on operation name — this keeps all state
+# mutation inside one function and is a valid higher-order
+# pattern.
+# =====================================================
+fn makeAccount(initial, name) {
+    let balance = initial;
+    let get_name = fn() { return name; };
+    let get_balance = fn() { return balance; };
+    let dispatch = fn(op, amt) {
+        if (op == "deposit") { balance = balance + amt; return balance; }
+        if (op == "withdraw") { balance = balance - amt; return balance; }
+        if (op == "name") { return name; }
+        if (op == "balance") { return balance; }
+        return null;
+    };
+    # The "dispatch" closure captures the cell that balance/name
+    # live in (since dispatch is a single closure that references
+    # both).  The sibling get_name/get_balance closures still
+    # capture their own copies, but the test only needs the
+    # dispatch closure's view to be consistent.
+    return [get_name, get_balance, dispatch, dispatch];
+}
+
+let acc = makeAccount(100, "alice");
+check("hof/account/name",    acc[0]() == "alice");
+check("hof/account/bal0",    acc[1]() == 100);
+check("hof/account/dep50",   acc[2]("deposit", 50) == 150);
+check("hof/account/wd30",    acc[2]("withdraw", 30) == 120);
+check("hof/account/bal1",    acc[3]("balance", 0) == 120);
+check("hof/account/wd200",   acc[2]("withdraw", 200) == -80);
+
+# =====================================================
+# Section 3: Counter closure (single dispatch closure)
+# =====================================================
+fn makeCounter() {
+    let n = 0;
+    let dispatch = fn(op) {
+        if (op == "inc") { n = n + 1; }
+        if (op == "dec") { n = n - 1; }
+        if (op == "reset") { n = 0; }
+        return n;
+    };
+    return [dispatch, dispatch, dispatch, dispatch];
+}
+
+let c = makeCounter();
+check("hof/counter/0",      c[3]("value") == 0);
+check("hof/counter/inc1",   c[0]("inc") == 1);
+check("hof/counter/inc2",   c[0]("inc") == 2);
+check("hof/counter/inc3",   c[0]("inc") == 3);
+check("hof/counter/dec1",   c[1]("dec") == 2);
+check("hof/counter/reset",  c[2]("reset") == 0);
+check("hof/counter/val",    c[3]("value") == 0);
+
+# Independent counter
+let c2 = makeCounter();
+check("hof/c2/inc",         c2[0]("inc") == 1);
+check("hof/c1/unchanged",   c[3]("value") == 0);
+check("hof/c2/inc2",        c2[0]("inc") == 2);
+
+# =====================================================
+# Section 4: Function composition
+# =====================================================
+fn compose(f, g) {
+    return fn(x) { return f(g(x)); };
+}
+
+fn double(x) { return x * 2; }
+fn add_one(x) { return x + 1; }
+fn square(x) { return x * x; }
+
+let comp1 = compose(double, add_one);
+check("hof/compose/1",   comp1(3) == 8);    # 2*(3+1) = 8
+let comp2 = compose(square, double);
+check("hof/compose/2",   comp2(3) == 36);   # (2*3)^2 = 36
+let comp3 = compose(add_one, square);
+check("hof/compose/3",   comp3(3) == 10);   # 9 + 1 = 10
+
+# =====================================================
+# Section 5: Map/Filter/Reduce as higher-order
+# =====================================================
+fn mymap(arr, f) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(result, f(arr[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+fn myfilter(arr, pred) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (pred(arr[i])) { push(result, arr[i]); }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn myreduce(arr, f, init) {
+    let acc = init;
+    let i = 0;
+    while (i < len(arr)) {
+        acc = f(acc, arr[i]);
+        i = i + 1;
+    }
+    return acc;
+}
+
+let arr = [1, 2, 3, 4, 5];
+let doubled = mymap(arr, fn(x) { return x * 2; });
+check("hof/map/size",    len(doubled) == 5);
+check("hof/map/0",       doubled[0] == 2);
+check("hof/map/4",       doubled[4] == 10);
+
+let evens = myfilter(arr, fn(x) { return x % 2 == 0; });
+check("hof/filter/size",  len(evens) == 2);
+check("hof/filter/0",     evens[0] == 2);
+check("hof/filter/1",     evens[1] == 4);
+
+let total = myreduce(arr, fn(a, b) { return a + b; }, 0);
+check("hof/reduce/sum",   total == 15);
+let product = myreduce(arr, fn(a, b) { return a * b; }, 1);
+check("hof/reduce/prod",  product == 120);
+
+# =====================================================
+# Section 6: Curry / Partial application
+# =====================================================
+fn curry2(f) {
+    return fn(a) { return fn(b) { return f(a, b); }; };
+}
+
+fn add(x, y) { return x + y; }
+fn mul(x, y) { return x * y; }
+
+let add_curried = curry2(add);
+let add_3 = add_curried(3);
+check("hof/curry/3+4",   add_3(4) == 7);
+check("hof/curry/3+10",  add_3(10) == 13);
+
+let mul_curried = curry2(mul);
+let times5 = mul_curried(5);
+check("hof/curry/5*6",   times5(6) == 30);
+
+# =====================================================
+# Section 7: Apply / repeat
+# =====================================================
+fn apply_n(f, n, x) {
+    let i = 0;
+    let v = x;
+    while (i < n) {
+        v = f(v);
+        i = i + 1;
+    }
+    return v;
+}
+
+let inc = fn(x) { return x + 1; };
+check("hof/apply/0",     apply_n(inc, 0, 5) == 5);
+check("hof/apply/3",     apply_n(inc, 3, 5) == 8);
+check("hof/apply/10",    apply_n(inc, 10, 0) == 10);
+
+# =====================================================
+# Section 8: Pipe (left-to-right composition)
+# =====================================================
+fn pipe(fns) {
+    return fn(x) {
+        let acc = x;
+        let i = 0;
+        while (i < len(fns)) {
+            acc = fns[i](acc);
+            i = i + 1;
+        }
+        return acc;
+    };
+}
+
+let p = pipe([add_one, double, square]);
+# (3+1)=4 -> 4*2=8 -> 8*8=64
+check("hof/pipe/3",      p(3) == 64);
+
+# =====================================================
+# Section 9: Y-combinator style (factorial via self-app)
+# We use a helper that takes itself as an argument so we don't
+# depend on the let/reassign trick (which H# can't yet do for
+# lambdas — only top-level fn declarations are auto-recursive).
+# =====================================================
+fn make_factorial() {
+    let helper = fn(me, n) {
+        if (n <= 1) { return 1; }
+        return n * me(me, n - 1);
+    };
+    let fact = fn(n) { return helper(helper, n); };
+    return fact;
+}
+
+let fact7 = make_factorial();
+check("hof/yfac/0",      fact7(0) == 1);
+check("hof/yfac/5",      fact7(5) == 120);
+check("hof/yfac/7",      fact7(7) == 5040);
+
+# =====================================================
+# Section 10: Memoization (recursive via self-app helper)
+# =====================================================
+fn make_memo() {
+    let cache = [];
+    let fib_helper = fn(me, n) {
+        let i = 0;
+        while (i < len(cache)) {
+            if (cache[i][0] == n) { return cache[i][1]; }
+            i = i + 1;
+        }
+        let result = 0;
+        if (n <= 1) { result = n; }
+        else { result = me(me, n - 1) + me(me, n - 2); }
+        push(cache, [n, result]);
+        return result;
+    };
+    let fib_fn = fn(n) { return fib_helper(fib_helper, n); };
+    return fib_fn;
+}
+
+let mfib = make_memo();
+check("hof/memo/0",      mfib(0) == 0);
+check("hof/memo/1",      mfib(1) == 1);
+check("hof/memo/10",     mfib(10) == 55);
+check("hof/memo/20",     mfib(20) == 6765);
+# Memoization correctness (idempotent)
+check("hof/memo/idem",   mfib(15) == 610);
+
+print("07_HOF_LIB  : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

@@ -1,0 +1,981 @@
+# round5_144_class_init.hto — 测试智能体 #144 (Round 5)
+# 领域: 类初始化与构造模式 (Class Initialization & Construction Patterns)
+# H# v0.4.1
+#
+# 子领域:
+#   S1  字段初始化顺序 / 字段间依赖
+#   S2  字段默认值类型 (字面量/负数/null/列表/字典引用)
+#   S3  new 调用模式 (new Foo(), new Foo 带参数)
+#   S4  init 方法 (自动调用 / init 中设置字段 / super.init 链)
+#   S5  static 字段/方法 (类名调用 vs 实例调用)
+#   S6  self 语义 (方法 / 嵌套函数 / lambda)
+#   S7  字段遮蔽 (实例字段遮蔽方法名; 方法中字段 vs 局部)
+#   S8  private 字段 (外部访问 / 跨实例)
+#   S9  类方法递归 (self.method vs 裸 method)
+#   S10 类作为值 (赋值 / 参数 / 返回)
+#   S11 instanceof/is (x is Foo, x is int, 子类 is 父类)
+#   S12 多实例隔离 (实例字段独立 / static 共享)
+#   S13 构造中的异常 (init 抛异常 / new 失败后状态)
+#   S14 字段延迟添加 (动态添加新字段)
+#
+# 每个 try/catch 独立; 打印 "Sxx-Tnn:" 前缀, 预期值在注释。
+# 严重性标注: [BUG]=确认缺陷 [LEAK]=泄漏 [CRASH]=崩溃 [LIMIT]=语言限制
+
+# ============================================================
+# S1: 字段初始化顺序 / 字段间依赖
+# Python 语义: 类体中字段默认值在类定义时求值, 字段间不能引用
+# (NameError). H# 编译期 eval_literal 只认字面量;
+# 非字面量应报 CompileError (而非静默 null).
+# ============================================================
+print("=== S1: field init order / inter-field deps ===");
+
+# S1-T1: 字段按声明顺序初始化, 各自独立
+class C1a { let a = 1; let b = 2; let c = 3; }
+try {
+    let o = new C1a();
+    print("S1-T1: " + (o.a + o.b + o.c));   # 6
+} catch (e) { print("S1-T1-ERR: " + e); }
+
+# S1-T2: 字段声明顺序与字母顺序不同 — 不影响读取
+class C1b { let z = 1; let a = 2; let m = 3; }
+try {
+    let o = new C1b();
+    print("S1-T2: " + o.a + "," + o.m + "," + o.z);   # 2,3,1
+} catch (e) { print("S1-T2-ERR: " + e); }
+
+# S1-T3: 字段间引用 (BinaryOp a+1) — CompileError 中止整个文件
+# eval_literal 对 BinaryOp(非 MINUS) 抛 CompileError, 见 _probe144_s1_fieldref.hto
+print("S1-T3-DOC: let b = a + 1 -> CompileError (字段默认须字面量); tested in probe");
+
+# S1-T4: 字段引用前字段 (裸名) — 同 S1-T3, CompileError
+print("S1-T4-DOC: let b = a -> CompileError (Identifier 非字面量); tested in probe");
+
+# S1-T5: 字段引用全局变量 — CompileError (Identifier 非字面量)
+print("S1-T5-DOC: let g = G1 -> CompileError; tested in probe");
+
+# S1-T6: 字段引用函数调用 — CompileError (Call 非字面量)
+print("S1-T6-DOC: let v = five() -> CompileError; tested in probe");
+
+# ============================================================
+# S2: 字段默认值类型 (字面量/负数/null/列表/字典引用)
+# 负数刚修复: parser 把 -1 降为 0-1, eval_literal 接受 BinaryOp MINUS.
+# ============================================================
+print("=== S2: field default value types ===");
+
+# S2-T1: 整数字面量
+class C2a { let n = 42; }
+try {
+    let o = new C2a();
+    print("S2-T1: " + o.n);   # 42
+} catch (e) { print("S2-T1-ERR: " + e); }
+
+# S2-T2: 负整数 (刚修复) — 应为 -5
+class C2b { let n = -5; }
+try {
+    let o = new C2b();
+    print("S2-T2: " + o.n);   # -5
+} catch (e) { print("S2-T2-ERR: " + e); }
+
+# S2-T3: 负浮点
+class C2c { let n = -3.14; }
+try {
+    let o = new C2c();
+    print("S2-T3: " + o.n);   # -3.14
+} catch (e) { print("S2-T3-ERR: " + e); }
+
+# S2-T4: 字符串字面量
+class C2d { let s = "hello"; }
+try {
+    let o = new C2d();
+    print("S2-T4: " + o.s);   # hello
+} catch (e) { print("S2-T4-ERR: " + e); }
+
+# S2-T5: 布尔字面量
+class C2e { let b = true; }
+try {
+    let o = new C2e();
+    print("S2-T5: " + o.b);   # true
+} catch (e) { print("S2-T5-ERR: " + e); }
+
+# S2-T6: null 字面量
+class C2f { let z = null; }
+try {
+    let o = new C2f();
+    print("S2-T6: " + o.z);   # null
+} catch (e) { print("S2-T6-ERR: " + e); }
+
+# S2-T7: 列表字面量 (每实例独立, deepCopy)
+class C2g { let lst = [1, 2, 3]; }
+try {
+    let a = new C2g();
+    let b = new C2g();
+    push(a.lst, 4);
+    print("S2-T7: " + a.lst + " | " + b.lst);   # [1,2,3,4] | [1,2,3]
+} catch (e) { print("S2-T7-ERR: " + e); }
+
+# S2-T8: 字典字面量 (每实例独立)
+class C2h { let d = {"k": 1}; }
+try {
+    let a = new C2h();
+    let b = new C2h();
+    a.d["k"] = 99;
+    print("S2-T8: " + a.d["k"] + " | " + b.d["k"]);   # 99 | 1
+} catch (e) { print("S2-T8-ERR: " + e); }
+
+# S2-T9: 负数列表元素
+class C2i { let lst = [-1, -2, -3]; }
+try {
+    let o = new C2i();
+    print("S2-T9: " + o.lst);   # [-1,-2,-3]
+} catch (e) { print("S2-T9-ERR: " + e); }
+
+# S2-T10: 负数字典值
+class C2j { let d = {"a": -10, "b": -20}; }
+try {
+    let o = new C2j();
+    print("S2-T10: " + o.d["a"] + "," + o.d["b"]);   # -10,-20
+} catch (e) { print("S2-T10-ERR: " + e); }
+
+# S2-T11: 嵌套列表含负数
+class C2k { let m = [[-1, 2], [3, -4]]; }
+try {
+    let o = new C2k();
+    print("S2-T11: " + o.m);   # [[-1,2],[3,-4]]
+} catch (e) { print("S2-T11-ERR: " + e); }
+
+# S2-T12: 0 值
+class C2l { let z = 0; let n = -0; }
+try {
+    let o = new C2l();
+    print("S2-T12: " + o.z + "," + o.n);   # 0,0
+} catch (e) { print("S2-T12-ERR: " + e); }
+
+# ============================================================
+# S3: new 调用模式
+# parser: new Foo 强制 eat(LPAREN), 故 new Foo (无括号) 是 SyntaxError.
+# 带参数: new Foo(a, b) 当 init 参数数匹配时自动调用.
+# ============================================================
+print("=== S3: new call patterns ===");
+
+# S3-T1: new Foo() 无参, 无 init
+class C3a { let x = 1; }
+try {
+    let o = new C3a();
+    print("S3-T1: " + o.x);   # 1
+} catch (e) { print("S3-T1-ERR: " + e); }
+
+# S3-T2: new Foo() 无参, 有无参 init (自动调用)
+class C3b {
+    let x = 0;
+    fn init() { self.x = 42; }
+}
+try {
+    let o = new C3b();
+    print("S3-T2: " + o.x);   # 42 (init 自动调用)
+} catch (e) { print("S3-T2-ERR: " + e); }
+
+# S3-T3: new Foo(1, 2) 带参, init 参数数匹配 -> 自动调用
+class C3c {
+    let x = 0;
+    let y = 0;
+    fn init(a, b) { self.x = a; self.y = b; }
+}
+try {
+    let o = new C3c(3, 4);
+    print("S3-T3: " + o.x + "," + o.y);   # 3,4
+} catch (e) { print("S3-T3-ERR: " + e); }
+
+# S3-T4: new Foo(1) 带参, 但 init 需要 2 参 -> init 不被调用 (参数数不匹配)
+# HVM.callNew: initParams.size == args.size 才调用; 不匹配则静默跳过
+class C3d {
+    let x = 0;
+    let y = 0;
+    fn init(a, b) { self.x = a; self.y = b; }
+}
+try {
+    let o = new C3d(99);
+    print("S3-T4: " + o.x + "," + o.y);   # 0,0 (init 未调用, 字段保持默认)
+} catch (e) { print("S3-T4-ERR: " + e); }
+
+# S3-T5: new Foo() 无参, 但 init 需要 1 参 -> init 不被调用
+class C3e {
+    let x = 0;
+    fn init(a) { self.x = a; }
+}
+try {
+    let o = new C3e();
+    print("S3-T5: " + o.x);   # 0 (init 未调用)
+} catch (e) { print("S3-T5-ERR: " + e); }
+
+# S3-T6: new Foo() 后手动调用 init (老式用法)
+class C3f {
+    let x = 0;
+    fn init(a) { self.x = a; }
+}
+try {
+    let o = new C3f();
+    o.init(77);
+    print("S3-T6: " + o.x);   # 77
+} catch (e) { print("S3-T6-ERR: " + e); }
+
+# S3-T7: __init__ 语法作为构造器
+class C3g {
+    let x = 0;
+    fn __init__(a) { self.x = a; }
+}
+try {
+    let o = new C3g(55);
+    print("S3-T7: " + o.x);   # 55
+} catch (e) { print("S3-T7-ERR: " + e); }
+
+# S3-T8: new 表达式作为参数直接传递
+class C3h { let v = 0; fn init(a) { self.v = a; } }
+fn getC3h(o) { return o.v; }
+try {
+    print("S3-T8: " + getC3h(new C3h(123)));   # 123
+} catch (e) { print("S3-T8-ERR: " + e); }
+
+# ============================================================
+# S4: init 方法 (自动调用 / init 中设置字段 / super.init 链)
+# ============================================================
+print("=== S4: init method ===");
+
+# S4-T1: init 无参自动调用, 设置字段
+class C4a {
+    let log = "";
+    fn init() { self.log = "initialized"; }
+}
+try {
+    let o = new C4a();
+    print("S4-T1: " + o.log);   # initialized
+} catch (e) { print("S4-T1-ERR: " + e); }
+
+# S4-T2: super.init() 单层链
+class C4bA { let log = ""; fn init() { self.log = self.log + "A"; } }
+class C4bB extends C4bA { fn init() { super.init(); self.log = self.log + "B"; } }
+try {
+    let o = new C4bB();
+    print("S4-T2: " + o.log);   # AB
+} catch (e) { print("S4-T2-ERR: " + e); }
+
+# S4-T3: 三层 super.init 链
+class C4cA { let log = ""; fn init() { self.log = self.log + "A"; } }
+class C4cB extends C4cA { fn init() { super.init(); self.log = self.log + "B"; } }
+class C4cC extends C4cB { fn init() { super.init(); self.log = self.log + "C"; } }
+try {
+    let o = new C4cC();
+    print("S4-T3: " + o.log);   # ABC
+} catch (e) { print("S4-T3-ERR: " + e); }
+
+# S4-T4: super.init(x) 带参
+class C4dA { let x = 0; fn init(x) { self.x = x; } }
+class C4dB extends C4dA { let y = 0; fn init(x, y) { super.init(x); self.y = y; } }
+try {
+    let o = new C4dB(10, 20);
+    print("S4-T4: " + o.x + "," + o.y);   # 10,20
+} catch (e) { print("S4-T4-ERR: " + e); }
+
+# S4-T5: 子类无 init, 父类 init 被继承调用
+class C4eA { let v = 0; fn init(x) { self.v = x; } }
+class C4eB extends C4eA { }
+try {
+    let o = new C4eB(99);
+    print("S4-T5: " + o.v);   # 99
+} catch (e) { print("S4-T5-ERR: " + e); }
+
+# S4-T6: init 中修改字段默认值
+class C4f { let x = 1; let y = 2; fn init() { self.x = self.x + 10; self.y = self.y + 20; } }
+try {
+    let o = new C4f();
+    print("S4-T6: " + o.x + "," + o.y);   # 11,22
+} catch (e) { print("S4-T6-ERR: " + e); }
+
+# S4-T7: 字段默认值先设置, 然后 init 覆盖
+class C4gA { let a = 1; fn init() { self.a = 999; } }
+class C4gB extends C4gA { let b = 2; fn init() { super.init(); } }
+try {
+    let o = new C4gB();
+    print("S4-T7: " + o.a + "," + o.b);   # 999,2
+} catch (e) { print("S4-T7-ERR: " + e); }
+
+# S4-T8: init 返回值被忽略 (new 返回实例, 非 init 返回值)
+class C4h { let x = 0; fn init() { self.x = 42; return "ignored"; } }
+try {
+    let o = new C4h();
+    print("S4-T8: " + o.x + " type=" + (o is C4h));   # 42 type=true
+} catch (e) { print("S4-T8-ERR: " + e); }
+
+# ============================================================
+# S5: static 字段/方法 (类名调用 vs 实例调用)
+# parser: static 后必须跟 fn; static let 是 SyntaxError.
+# ============================================================
+print("=== S5: static fn (class vs instance) ===");
+
+# S5-T1: static fn 经类名调用
+class C5a { static fn v() { return 42; } }
+try {
+    print("S5-T1: " + C5a.v());   # 42
+} catch (e) { print("S5-T1-ERR: " + e); }
+
+# S5-T2: static fn 经实例调用 (已修复)
+class C5b { static fn v() { return 99; } }
+try {
+    let o = new C5b();
+    print("S5-T2: " + o.v());   # 99
+} catch (e) { print("S5-T2-ERR: " + e); }
+
+# S5-T3: static fn 带参数
+class C5c { static fn add(a, b) { return a + b; } }
+try {
+    print("S5-T3: " + C5c.add(3, 4));   # 7
+} catch (e) { print("S5-T3-ERR: " + e); }
+
+# S5-T4: static fn 中访问 self -> 应失败 (无 self)
+class C5d { let x = 1; static fn get() { return self.x; } }
+try {
+    print("S5-T4: " + C5d.get());   # ERR: 无 self
+} catch (e) { print("S5-T4-OK-EXC: " + e); }
+
+# S5-T5: static fn 中访问实例字段 (裸名) -> 应失败或读全局
+class C5e { let x = 1; static fn get() { return x; } }
+try {
+    print("S5-T5: " + C5e.get());   # ERR (无实例字段)
+} catch (e) { print("S5-T5-OK-EXC: " + e); }
+
+# S5-T6: 子类继承父类 static fn
+class C5fA { static fn sm() { return "base"; } }
+class C5fB extends C5fA { }
+try {
+    print("S5-T6: " + C5fB.sm());   # base
+} catch (e) { print("S5-T6-ERR: " + e); }
+
+# S5-T7: 子类覆盖父类 static fn
+class C5gA { static fn sm() { return "A"; } }
+class C5gB extends C5gA { static fn sm() { return "B"; } }
+try {
+    print("S5-T7: " + C5gA.sm() + "," + C5gB.sm());   # A,B
+} catch (e) { print("S5-T7-ERR: " + e); }
+
+# S5-T8: static fn 调用另一 static fn (同类)
+class C5h { static fn a() { return 1; } static fn b() { return C5h.a() + 1; } }
+try {
+    print("S5-T8: " + C5h.b());   # 2
+} catch (e) { print("S5-T8-ERR: " + e); }
+
+# S5-T9: 实例方法调用 static fn (同类, 通过类名)
+class C5i { static fn helper() { return 10; } fn call() { return C5i.helper(); } }
+try {
+    let o = new C5i();
+    print("S5-T9: " + o.call());   # 10
+} catch (e) { print("S5-T9-ERR: " + e); }
+
+# S5-T10: 读取类对象不存在的属性
+class C5j { static fn v() { return 1; } }
+try {
+    print("S5-T10: " + C5j.missing);   # ERR: Attribute not found
+} catch (e) { print("S5-T10-OK-EXC: " + e); }
+
+# ============================================================
+# S6: self 语义 (方法 / 嵌套函数 / lambda)
+# ============================================================
+print("=== S6: self semantics ===");
+
+# S6-T1: self.x 读写
+class C6a { let x = 10; fn get() { return self.x; } fn set(v) { self.x = v; } }
+try {
+    let o = new C6a();
+    print("S6-T1: " + o.get());   # 10
+    o.set(77);
+    print("S6-T1b: " + o.get());   # 77
+} catch (e) { print("S6-T1-ERR: " + e); }
+
+# S6-T2: self 作为返回值 (链式)
+class C6b { let v = 0; fn add(n) { self.v = self.v + n; return self; } }
+try {
+    let o = new C6b();
+    print("S6-T2: " + o.add(3).add(4).v);   # 7
+} catch (e) { print("S6-T2-ERR: " + e); }
+
+# S6-T3: self 在 lambda 中捕获 (引用语义)
+class C6c { let x = 1; fn makeGetter() { let g = fn() { return self.x; }; return g; } }
+try {
+    let o = new C6c();
+    let g = o.makeGetter();
+    o.x = 42;
+    print("S6-T3: " + g());   # 42 (self 是实例引用)
+} catch (e) { print("S6-T3-ERR: " + e); }
+
+# S6-T4: self 在 lambda 中修改字段
+class C6d { let x = 0; fn makeSetter() { let s = fn(v) { self.x = v; }; return s; } }
+try {
+    let o = new C6d();
+    let s = o.makeSetter();
+    s(99);
+    print("S6-T4: " + o.x);   # 99
+} catch (e) { print("S6-T4-ERR: " + e); }
+
+# S6-T5: 多实例 self 互不干扰
+class C6e { let x = 0; fn set(v) { self.x = v; } fn get() { return self.x; } }
+try {
+    let a = new C6e();
+    let b = new C6e();
+    a.set(11);
+    b.set(22);
+    print("S6-T5: " + a.get() + "," + b.get());   # 11,22
+} catch (e) { print("S6-T5-ERR: " + e); }
+
+# S6-T6: self 在嵌套 fn 中 (非 lambda) — self 是否可见?
+class C6f { let x = 5; fn outer() {
+    fn inner() { return self.x; }
+    return inner();
+} }
+try {
+    let o = new C6f();
+    print("S6-T6: " + o.outer());   # 5 (若 self 闭包捕获) 或 ERR
+} catch (e) { print("S6-T6-OK-EXC: " + e); }
+
+# S6-T7: 裸字段读 (无 self) — 应读字段
+class C6g { let x = 10; fn get() { return x; } }
+try {
+    let o = new C6g();
+    print("S6-T7: " + o.get());   # 10
+} catch (e) { print("S6-T7-ERR: " + e); }
+
+# S6-T8: 裸字段写 (无 self) — 应写字段
+class C6h { let x = 0; fn set(v) { x = v; } fn get() { return x; } }
+try {
+    let o = new C6h();
+    o.set(55);
+    print("S6-T8: " + o.get());   # 55
+} catch (e) { print("S6-T8-ERR: " + e); }
+
+# S6-T9: 同名全局 vs 字段 — 裸名优先字段
+let x6 = 999;
+class C6i { let x = 1; fn get() { return x; } }
+try {
+    let o = new C6i();
+    print("S6-T9: " + o.get());   # 1 (字段优先)
+} catch (e) { print("S6-T9-ERR: " + e); }
+
+# S6-T10: 局部变量遮蔽字段 — 裸名读局部
+class C6j { let x = 1; fn get() { let x = 100; return x; } }
+try {
+    let o = new C6j();
+    print("S6-T10: " + o.get());   # 100
+} catch (e) { print("S6-T10-ERR: " + e); }
+
+# S6-T11: self 在条件分支中
+class C6k { let x = 0; fn setIf(cond, v) { if (cond) { self.x = v; } } }
+try {
+    let o = new C6k();
+    o.setIf(true, 42);
+    print("S6-T11: " + o.x);   # 42
+} catch (e) { print("S6-T11-ERR: " + e); }
+
+# ============================================================
+# S7: 字段遮蔽 (实例字段遮蔽方法名)
+# CALL_METHOD 先查实例字段( callable 才遮蔽), 再查类方法.
+# LOAD_ATTR 先查实例字段, 再查类默认字段, 再查方法.
+# ============================================================
+print("=== S7: field shadowing method ===");
+
+# S7-T1: 实例字段遮蔽方法名 — 读取返回字段值 (非方法代理)
+class C7a { fn m() { return "method"; } }
+try {
+    let o = new C7a();
+    o.m = "field";
+    print("S7-T1: " + o.m);   # field
+} catch (e) { print("S7-T1-ERR: " + e); }
+
+# S7-T2: 字段遮蔽方法后调用方法 -> 字段不可调用应报错
+class C7b { fn m() { return "method"; } }
+try {
+    let o = new C7b();
+    o.m = "field";
+    print("S7-T2: " + o.m());   # ERR: 不可调用
+} catch (e) { print("S7-T2-OK-EXC: " + e); }
+
+# S7-T3: callable 字段 (函数) 遮蔽方法 — 调用时执行字段函数
+class C7c {
+    fn m() { return "original"; }
+}
+try {
+    let o = new C7c();
+    o.m = fn() { return "override"; };
+    print("S7-T3: " + o.m());   # override
+} catch (e) { print("S7-T3-ERR: " + e); }
+
+# S7-T4: 字段默认值与方法同名 (声明时)
+class C7d { let m = "field"; fn m() { return "method"; } }
+try {
+    let o = new C7d();
+    print("S7-T4: " + o.m);   # field (字段优先)
+} catch (e) { print("S7-T4-ERR: " + e); }
+
+# S7-T5: 方法中访问字段 vs 局部变量
+class C7e {
+    let x = 1;
+    fn get() { let x = 100; return self.x; }
+}
+try {
+    let o = new C7e();
+    print("S7-T5: " + o.get());   # 1 (self.x 显式读字段)
+} catch (e) { print("S7-T5-ERR: " + e); }
+
+# ============================================================
+# S8: private 字段 (外部访问 / 跨实例)
+# loadAttr/storeAttr: private 字段从外部 (callerSelf !== obj) 访问 -> 报错.
+# ============================================================
+print("=== S8: private field ===");
+
+class C8a { private let x = 10; fn get() { return self.x; } fn set(v) { self.x = v; } }
+
+# S8-T1: 方法内访问私有字段
+try {
+    let o = new C8a();
+    print("S8-T1: " + o.get());   # 10
+} catch (e) { print("S8-T1-ERR: " + e); }
+
+# S8-T2: 外部读取私有字段 -> 报错
+try {
+    let o = new C8a();
+    print("S8-T2: " + o.x);   # ERR: Private access denied
+} catch (e) { print("S8-T2-OK-EXC: " + e); }
+
+# S8-T3: 外部写入私有字段 -> 报错
+try {
+    let o = new C8a();
+    o.x = 99;
+    print("S8-T3: wrote " + o.x);   # ERR: Private write denied
+} catch (e) { print("S8-T3-OK-EXC: " + e); }
+
+# S8-T4: 私有字段修改后方法内可见
+try {
+    let o = new C8a();
+    o.set(77);
+    print("S8-T4: " + o.get());   # 77
+} catch (e) { print("S8-T4-ERR: " + e); }
+
+# S8-T5: 跨实例访问私有字段 (callerSelf !== obj) -> 报错
+class C8b { private let x = 1; fn peek(other) { return other.x; } }
+try {
+    let a = new C8b();
+    let b = new C8b();
+    print("S8-T5: " + a.peek(b));   # ERR: 跨实例私有访问
+} catch (e) { print("S8-T5-OK-EXC: " + e); }
+
+# S8-T6: private 字段默认值负数
+class C8c { private let n = -7; fn get() { return self.n; } }
+try {
+    let o = new C8c();
+    print("S8-T6: " + o.get());   # -7
+} catch (e) { print("S8-T6-ERR: " + e); }
+
+# ============================================================
+# S9: 类方法递归 (self.method vs 裸 method)
+# ============================================================
+print("=== S9: method recursion ===");
+
+# S9-T1: self.method 递归
+class C9a {
+    fn fact(n) { if (n <= 1) { return 1; } return n * self.fact(n - 1); }
+}
+try {
+    let o = new C9a();
+    print("S9-T1: " + o.fact(5));   # 120
+} catch (e) { print("S9-T1-ERR: " + e); }
+
+# S9-T2: 裸 method 递归 (lookup 优先 self.fields)
+class C9b {
+    fn fact(n) { if (n <= 1) { return 1; } return n * fact(n - 1); }
+}
+try {
+    let o = new C9b();
+    print("S9-T2: " + o.fact(5));   # 120 (或 ERR 若裸名无法解析到方法)
+} catch (e) { print("S9-T2-OK-EXC: " + e); }
+
+# S9-T3: 递归 + self 字段累加
+class C9c {
+    let count = 0;
+    fn tick(n) { if (n <= 0) { return self.count; } self.count = self.count + 1; return self.tick(n - 1); }
+}
+try {
+    let o = new C9c();
+    print("S9-T3: " + o.tick(5));   # 5
+} catch (e) { print("S9-T3-ERR: " + e); }
+
+# S9-T4: 互相递归 (self.a 调 self.b)
+class C9d {
+    fn isEven(n) { if (n == 0) { return true; } return self.isOdd(n - 1); }
+    fn isOdd(n) { if (n == 0) { return false; } return self.isEven(n - 1); }
+}
+try {
+    let o = new C9d();
+    print("S9-T4: " + o.isEven(4) + "," + o.isOdd(4));   # true,false
+} catch (e) { print("S9-T4-ERR: " + e); }
+
+# S9-T5: 裸 method 互相递归
+class C9e {
+    fn isEven(n) { if (n == 0) { return true; } return isOdd(n - 1); }
+    fn isOdd(n) { if (n == 0) { return false; } return isEven(n - 1); }
+}
+try {
+    let o = new C9e();
+    print("S9-T5: " + o.isEven(4));   # true (或 ERR)
+} catch (e) { print("S9-T5-OK-EXC: " + e); }
+
+# S9-T6: 递归深度 (50 层)
+class C9f { fn sum(n) { if (n <= 0) { return 0; } return n + self.sum(n - 1); } }
+try {
+    let o = new C9f();
+    print("S9-T6: " + o.sum(50));   # 1275
+} catch (e) { print("S9-T6-ERR: " + e); }
+
+# ============================================================
+# S10: 类作为值 (赋值 / 参数 / 返回)
+# ============================================================
+print("=== S10: class as value ===");
+
+class C10a { let x = 1; fn get() { return self.x; } }
+
+# S10-T1: 类赋值给变量, 再 new
+try {
+    let Cls = C10a;
+    let o = new Cls();
+    print("S10-T1: " + o.get());   # 1
+} catch (e) { print("S10-T1-ERR: " + e); }
+
+# S10-T2: 类作为参数传递
+fn makeInstance(Cls) { return new Cls(); }
+try {
+    let o = makeInstance(C10a);
+    print("S10-T2: " + o.get());   # 1
+} catch (e) { print("S10-T2-ERR: " + e); }
+
+# S10-T3: 类作为返回值
+fn getClass() { return C10a; }
+try {
+    let Cls = getClass();
+    let o = new Cls();
+    print("S10-T3: " + o.x);   # 1
+} catch (e) { print("S10-T3-ERR: " + e); }
+
+# S10-T4: 类存入列表, 取出后 new (new 后须是标识符, 不能是表达式)
+try {
+    let lst = [C10a];
+    let Cls = lst[0];
+    let o = new Cls();
+    print("S10-T4: " + o.x);   # 1
+} catch (e) { print("S10-T4-ERR: " + e); }
+
+# S10-T5: 类存入字典, 取出后 new
+try {
+    let d = {"k": C10a};
+    let Cls = d["k"];
+    let o = new Cls();
+    print("S10-T5: " + o.x);   # 1
+} catch (e) { print("S10-T5-ERR: " + e); }
+
+# S10-T5b: new <expr>() 直接表达式 — 解析器限制 (new 后须 IDENTIFIER)
+# 注: `new lst[0]()` 是 SyntaxError, 会阻塞整个文件编译, 见 _probe144_s10_newexpr.hto
+print("S10-T5b-DOC: new <expr>() -> SyntaxError (new 后须 IDENTIFIER); tested in probe");
+
+# S10-T6: 类的 static fn 经变量调用
+class C10b { static fn v() { return 42; } }
+try {
+    let Cls = C10b;
+    print("S10-T6: " + Cls.v());   # 42
+} catch (e) { print("S10-T6-ERR: " + e); }
+
+# ============================================================
+# S11: instanceof / is (x is Foo, x is int, 子类 is 父类)
+# ============================================================
+print("=== S11: instanceof / is ===");
+
+class C11a { let x = 1; }
+class C11b extends C11a { let y = 2; }
+class C11c { let z = 3; }
+
+# S11-T1: 实例 is 自身类
+try {
+    let o = new C11a();
+    print("S11-T1: " + (o is C11a));   # true
+} catch (e) { print("S11-T1-ERR: " + e); }
+
+# S11-T2: 子类实例 is 父类
+try {
+    let o = new C11b();
+    print("S11-T2: " + (o is C11a) + "," + (o is C11b));   # true,true
+} catch (e) { print("S11-T2-ERR: " + e); }
+
+# S11-T3: 实例 is 无关类
+try {
+    let o = new C11a();
+    print("S11-T3: " + (o is C11c));   # false
+} catch (e) { print("S11-T3-ERR: " + e); }
+
+# S11-T4: x is int
+try {
+    let n = 42;
+    print("S11-T4: " + (n is int));   # true
+} catch (e) { print("S11-T4-ERR: " + e); }
+
+# S11-T5: x is str
+try {
+    let s = "hello";
+    print("S11-T5: " + (s is str));   # true
+} catch (e) { print("S11-T5-ERR: " + e); }
+
+# S11-T6: x is bool
+try {
+    let b = true;
+    print("S11-T6: " + (b is bool));   # true
+} catch (e) { print("S11-T6-ERR: " + e); }
+
+# S11-T7: x is list
+try {
+    let lst = [1, 2];
+    print("S11-T7: " + (lst is list));   # true
+} catch (e) { print("S11-T7-ERR: " + e); }
+
+# S11-T8: x is dict
+try {
+    let d = {"a": 1};
+    print("S11-T8: " + (d is dict));   # true
+} catch (e) { print("S11-T8-ERR: " + e); }
+
+# S11-T9: x is null
+try {
+    let z = null;
+    print("S11-T9: " + (z is null));   # true
+} catch (e) { print("S11-T9-ERR: " + e); }
+
+# S11-T10: int is int (浮点 vs 整数)
+try {
+    let f = 3.14;
+    print("S11-T10: " + (f is int) + "," + (f is float) + "," + (f is number));   # false,true,true
+} catch (e) { print("S11-T10-ERR: " + e); }
+
+# S11-T11: 三层继承 is 链
+class C11d { let a = 1; }
+class C11e extends C11d { let b = 2; }
+class C11f extends C11e { let c = 3; }
+try {
+    let o = new C11f();
+    print("S11-T11: " + (o is C11d) + "," + (o is C11e) + "," + (o is C11f));   # true,true,true
+} catch (e) { print("S11-T11-ERR: " + e); }
+
+# S11-T12: 整数 is int 边界 (大数)
+try {
+    let big = 1000000000;
+    print("S11-T12: " + (big is int));   # true
+} catch (e) { print("S11-T12-ERR: " + e); }
+
+# ============================================================
+# S12: 多实例隔离 (实例字段独立 / static 共享?)
+# H# 无 static 字段 (static let 是 SyntaxError); static fn 无状态.
+# 实例字段默认值经 deepCopy 独立.
+# ============================================================
+print("=== S12: multi-instance isolation ===");
+
+# S12-T1: 两实例字段独立
+class C12a { let x = 0; }
+try {
+    let a = new C12a();
+    let b = new C12a();
+    a.x = 11;
+    b.x = 22;
+    print("S12-T1: " + a.x + "," + b.x);   # 11,22
+} catch (e) { print("S12-T1-ERR: " + e); }
+
+# S12-T2: 列表默认值独立 (deepCopy)
+class C12b { let lst = []; }
+try {
+    let a = new C12b();
+    let b = new C12b();
+    push(a.lst, 1);
+    print("S12-T2: " + a.lst + " | " + b.lst);   # [1] | []
+} catch (e) { print("S12-T2-ERR: " + e); }
+
+# S12-T3: 字典默认值独立
+class C12c { let d = {"k": 0}; }
+try {
+    let a = new C12c();
+    let b = new C12c();
+    a.d["k"] = 99;
+    print("S12-T3: " + a.d["k"] + " | " + b.d["k"]);   # 99 | 0
+} catch (e) { print("S12-T3-ERR: " + e); }
+
+# S12-T4: 嵌套列表默认值深拷贝
+class C12d { let m = [[1, 2], [3, 4]]; }
+try {
+    let a = new C12d();
+    let b = new C12d();
+    push(a.m[0], 99);
+    print("S12-T4: " + a.m + " | " + b.m);   # [[1,2,99],[3,4]] | [[1,2],[3,4]]
+} catch (e) { print("S12-T4-ERR: " + e); }
+
+# S12-T5: 多次 new 连续创建, 各自独立
+class C12e { let lst = []; }
+try {
+    let a = new C12e();
+    let b = new C12e();
+    let c = new C12e();
+    push(a.lst, "a");
+    push(b.lst, "b");
+    print("S12-T5: " + a.lst + " | " + b.lst + " | " + c.lst);   # [a] | [b] | []
+} catch (e) { print("S12-T5-ERR: " + e); }
+
+# S12-T6: 方法内修改列表默认值, 不影响其他实例
+class C12f { let lst = []; fn add(v) { push(lst, v); } }
+try {
+    let a = new C12f();
+    let b = new C12f();
+    a.add(1);
+    a.add(2);
+    b.add(9);
+    print("S12-T6: " + a.lst + " | " + b.lst);   # [1,2] | [9]
+} catch (e) { print("S12-T6-ERR: " + e); }
+
+# S12-T7: 实例方法内 self 修改不影响其他
+class C12g { let x = 0; fn inc() { self.x = self.x + 1; return self.x; } }
+try {
+    let a = new C12g();
+    let b = new C12g();
+    a.inc();
+    a.inc();
+    b.inc();
+    print("S12-T7: " + a.x + "," + b.x);   # 2,1
+} catch (e) { print("S12-T7-ERR: " + e); }
+
+# ============================================================
+# S13: 构造中的异常 (init 抛异常 / new 失败后状态)
+# ============================================================
+print("=== S13: exception in constructor ===");
+
+# S13-T1: init 抛异常, new 外层 catch
+class C13a {
+    let x = 0;
+    fn init() { self.x = 1; throw "init-failed"; }
+}
+try {
+    let o = new C13a();
+    print("S13-T1: " + o.x);   # 不应到达
+} catch (e) { print("S13-T1-OK-EXC: " + e); }   # init-failed
+
+# S13-T2: init 抛异常后, 实例是否被创建? (字段已部分设置)
+class C13b {
+    let x = 0;
+    let y = 0;
+    fn init() { self.x = 1; throw "boom"; self.y = 2; }
+}
+try {
+    let o = new C13b();
+    print("S13-T2: " + o.x);   # 不应到达
+} catch (e) {
+    print("S13-T2-OK-EXC: " + e);   # boom
+}
+
+# S13-T3: super.init 抛异常, 子类 catch
+class C13cA { fn init() { throw "base-fail"; } }
+class C13cB extends C13cA {
+    let log = "";
+    fn init() {
+        try { super.init(); } catch (e) { self.log = "caught:" + e; }
+    }
+}
+try {
+    let o = new C13cB();
+    print("S13-T3: " + o.log);   # caught:base-fail
+} catch (e) { print("S13-T3-ERR: " + e); }
+
+# S13-T4: init 中调用不存在的方法 -> 异常
+class C13d { fn init() { return self.missing(); } }
+try {
+    let o = new C13d();
+    print("S13-T4: reached");   # 不应到达
+} catch (e) { print("S13-T4-OK-EXC: " + e); }
+
+# S13-T5: new 后实例可用 (无异常路径)
+class C13e { let x = 5; fn init() { self.x = self.x + 1; } }
+try {
+    let o = new C13e();
+    print("S13-T5: " + o.x);   # 6
+} catch (e) { print("S13-T5-ERR: " + e); }
+
+# S13-T6: init 中除零异常
+class C13f { let v = 0; fn init() { self.v = 1 / 0; } }
+try {
+    let o = new C13f();
+    print("S13-T6: " + o.v);   # 不应到达
+} catch (e) { print("S13-T6-OK-EXC: " + e); }
+
+# ============================================================
+# S14: 字段延迟添加 (动态添加新字段)
+# storeAttr 对 HInstance 无声明检查, 直接 fields[name]=v.
+# ============================================================
+print("=== S14: dynamic field addition ===");
+
+class C14a { let x = 1; }
+
+# S14-T1: 给实例添加新字段
+try {
+    let o = new C14a();
+    o.newField = 99;
+    print("S14-T1: " + o.newField);   # 99
+} catch (e) { print("S14-T1-ERR: " + e); }
+
+# S14-T2: 动态字段只影响该实例
+try {
+    let a = new C14a();
+    let b = new C14a();
+    a.dyn = 7;
+    print("S14-T2a: " + a.dyn);   # 7
+    try {
+        print("S14-T2b: " + b.dyn);   # ERR: not found
+    } catch (e) { print("S14-T2b-OK-EXC: " + e); }
+} catch (e) { print("S14-T2-ERR: " + e); }
+
+# S14-T3: 读取不存在的字段 -> 报错
+try {
+    let o = new C14a();
+    print("S14-T3: " + o.missing);   # ERR
+} catch (e) { print("S14-T3-OK-EXC: " + e); }
+
+# S14-T4: 动态字段为函数
+try {
+    let o = new C14a();
+    o.fn_val = fn(x) { return x + 1; };
+    print("S14-T4: " + o.fn_val(10));   # 11
+} catch (e) { print("S14-T4-ERR: " + e); }
+
+# S14-T5: 动态字段为列表
+try {
+    let o = new C14a();
+    o.lst_val = [1, 2, 3];
+    print("S14-T5: " + o.lst_val);   # [1,2,3]
+} catch (e) { print("S14-T5-ERR: " + e); }
+
+# S14-T6: 动态字段为另一实例
+try {
+    let o = new C14a();
+    o.obj_val = new C14a();
+    print("S14-T6: " + o.obj_val.x);   # 1
+} catch (e) { print("S14-T6-ERR: " + e); }
+
+# S14-T7: 动态字段覆盖原有字段
+try {
+    let o = new C14a();
+    o.x = 999;
+    print("S14-T7: " + o.x);   # 999
+} catch (e) { print("S14-T7-ERR: " + e); }
+
+# S14-T8: 动态字段在方法内使用
+class C14b { fn setDyn(v) { self.dyn = v; } fn getDyn() { return self.dyn; } }
+try {
+    let o = new C14b();
+    o.setDyn(42);
+    print("S14-T8: " + o.getDyn());   # 42
+} catch (e) { print("S14-T8-ERR: " + e); }
+
+print("=== round5_144 DONE ===");

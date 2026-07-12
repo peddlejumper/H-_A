@@ -1,0 +1,10 @@
+# t10
+fn f(x) {
+    if (x == 1) {
+        print("one");
+    } else {
+        print("other");
+    }
+}
+f(1);
+f(2);

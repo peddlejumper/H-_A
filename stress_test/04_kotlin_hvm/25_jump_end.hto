@@ -1,0 +1,25 @@
+# 25_jump_end.hto — JUMP 到末尾 / 提前 return / 死代码
+print("start");
+if (true) {
+    print("branch taken");
+} else {
+    print("never");
+}
+print("end");
+
+fn early() {
+    print("in early");
+    return nullptr;
+    print("unreachable");
+}
+early();
+
+fn withJump(x) {
+    if (x > 0) {
+        return "pos";
+    }
+    return "nonpos";
+}
+print(withJump(1));
+print(withJump(-1));
+print("done");

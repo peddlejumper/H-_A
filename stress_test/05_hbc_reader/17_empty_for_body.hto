@@ -1,0 +1,19 @@
+# 17 - 空 for 循环体
+# 目的: for 循环体为空，JUMP 紧跟 FOR_ITER，验证 fixForLoopJumps 仍能正确识别
+let cnt = 0;
+let trace = "";
+for x in [1, 2, 3, 4, 5] {
+    cnt = cnt + 1;
+}
+# 单语句体（近似空体）
+for x in [1, 2, 3] { trace = trace + str(x); }
+print("cnt=" + str(cnt));
+print("expected_cnt=5");
+print("trace=" + trace);
+print("expected_trace=123");
+
+# 真正空体：只有一条 JUMP 回边
+let n = 0;
+for x in range(4) { n = n + 1; }
+print("n=" + str(n));
+print("expected_n=4");

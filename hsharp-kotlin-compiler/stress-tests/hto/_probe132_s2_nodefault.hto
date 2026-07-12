@@ -1,0 +1,5 @@
+# _probe132_s2_nodefault.hto — 探针: 无默认值字段
+# 预期: parser.py:393 eat(EQ) -> SyntaxError (let 字段必须有 '=')
+class C { let x; }
+let c = new C();
+print(c.x);

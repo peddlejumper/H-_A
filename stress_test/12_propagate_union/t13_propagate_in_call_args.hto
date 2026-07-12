@@ -1,0 +1,17 @@
+# T13 - ? in function call arguments
+fn add(a, b) { return a + b; }
+fn neg() { throw 50; return 0; }
+
+# argument that throws becomes its payload via ?
+let v = add(neg()?, 10);
+print(v);
+
+# multiple ? arguments
+fn add3(a, b, c) { return a + b + c; }
+let w = add3(neg()?, neg()?, 1);
+print(w);
+
+# ? on the callee's argument that does not throw
+fn ret(n) { return n; }
+let u = add(ret(3)?, ret(4)?);
+print(u);

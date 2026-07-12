@@ -1,0 +1,57 @@
+# 17 — chan_send after close: TOCTOU race test
+# Spawns a parallel producer that hammers chan_send; the main thread closes
+# the channel mid-stream. Per the spec, every send after close should raise.
+# We don't assert exact counts (races are inherently nondeterministic) but
+# we DO assert that (a) the producer eventually finishes (no deadlock) and
+# (b) at least one send raised after close.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+@parallel fn hammer_send(ch, n, stats) {
+    let sent = 0;
+    let raised = 0;
+    let i = 0;
+    while (i < n) {
+        let caught = false;
+        try {
+            chan_send(ch, i);
+        } catch (e) {
+            caught = true;
+        }
+        if (caught) {
+            raised = raised + 1;
+        } else {
+            sent = sent + 1;
+        }
+        i = i + 1;
+    }
+    stats[0] = stats[0] + sent;
+    stats[1] = stats[1] + raised;
+    return 0;
+}
+
+let ch = chan_new(0);
+let stats = [0, 0];
+let fut = hammer_send(ch, 10000, stats);
+# Give the producer a head start, then close.
+let busy = 0;
+while (busy < 5000) {
+    busy = busy + 1;
+}
+chan_close(ch);
+let _ = await fut;
+
+check("producer_finished", true, "");  # if we got here, no deadlock
+check("some_sends_succeeded", stats[0] > 0, "sent=" + str(stats[0]));
+check("some_sends_raised_after_close", stats[1] > 0, "raised=" + str(stats[1]));
+print("INFO sent=" + str(stats[0]) + " raised=" + str(stats[1]));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

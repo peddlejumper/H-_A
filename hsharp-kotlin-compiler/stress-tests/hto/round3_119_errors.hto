@@ -1,0 +1,840 @@
+# ============================================================
+# Round 3 / Agent #119 — 错误消息质量与一致性测试
+# H# v0.4.1
+#
+# 目标：系统性探测 H# 运行时与编译器产生的错误消息：
+#   - 消息文本是否准确/有用
+#   - 消息是否包含行号、文件名、调用栈
+#   - 相同错误是否产生相同消息（一致性）
+#   - JVM 异常消息是否泄露到 H# 层
+#   - catch 变量 e 的内容与格式
+#   - 编译错误 vs 运行时错误的区分
+#   - 退出码 / panic vs error
+#
+# 已知约束：
+#   - H# 无 finally；catch (e) 必填
+#   - throw 是语句，不是表达式
+#   - HSharpException(value) 携带 throw 的值；HSharpRuntimeError(msg) 转 HString(msg)
+#   - RuntimeException 在主循环被捕获并转 HString(ex.message)
+#
+# 重要发现（已在单独探针中确认 — 见 _probe119b/c.hto）：
+#   - 把 inline lambda 作为参数传给函数，lambda 内抛出的异常
+#     不会被接收函数的 try/catch 捕获，而是逃逸到顶层。
+#     命名函数则正常被捕获。
+#     => 本测试文件因此不使用 `probe(label, fn(){...})` 模式，
+#        改为每个用例直接用 try/catch。
+# ============================================================
+
+print("===== R3-119 START =====");
+
+# ============================================================
+# T01: 未定义变量
+# ============================================================
+print("== T01 undefined var ==");
+let r = "no-throw";
+try { r = str(undefined_var); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T01.1 undefined_var => " + r);
+try { r = str(_nope_42); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T01.2 _nope_42 => " + r);
+try { r = str(undefined_x + 1); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T01.3 undefined_x+1 => " + r);
+
+# ============================================================
+# T02: 未定义函数
+# ============================================================
+print("== T02 undefined fn ==");
+try { r = str(undefined_fn()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T02.1 undefined_fn() => " + r);
+try { r = str(call_undefined_42()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T02.2 call_undefined_42() => " + r);
+
+# ============================================================
+# T03: 类型错误 — 1 + null / "x" + 1
+# H# binAdd 把 null 当 0.0、数字当字符串拼接 — 可能不报错
+# ============================================================
+print("== T03 type errors (arith/concat) ==");
+try { r = str(1 + null); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.1 1+null => " + r);
+try { r = str(null + 1); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.2 null+1 => " + r);
+try { r = str("x" + 1); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.3 'x'+1 => " + r);
+try { r = str(1 + "x"); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.4 1+'x' => " + r);
+try { r = str([] + 1); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.5 []+1 => " + r);
+try { r = str(1 + []); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.6 1+[] => " + r);
+try { r = str({} + 1); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.7 {}+1 => " + r);
+try { r = str(null + null); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.8 null+null => " + r);
+try { r = str(true + false); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T03.9 true+false => " + r);
+
+# ============================================================
+# T04: 索引越界
+# ============================================================
+print("== T04 index out of range ==");
+try { r = str([1,2,3][10]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T04.1 [1,2,3][10] => " + r);
+try { r = str([1,2,3][-1]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T04.2 [1,2,3][-1] => " + r);
+try { r = str([1,2,3][-10]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T04.3 [1,2,3][-10] => " + r);
+try { r = str("abc"[10]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T04.4 'abc'[10] => " + r);
+try { r = str([1,2,3][0]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T04.5 [1,2,3][0] => " + r);
+
+# ============================================================
+# T05: 空列表 pop
+# ============================================================
+print("== T05 empty list pop ==");
+try { let x = []; r = str(x.pop()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T05.1 [].pop() => " + r);
+try { let x = [1]; x.pop(); r = str(x.pop()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T05.2 [1].pop() twice => " + r);
+
+# ============================================================
+# T06: dict 缺失 key
+# ============================================================
+print("== T06 dict missing key ==");
+try { r = str({"a":1}["b"]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T06.1 {'a':1}['b'] => " + r);
+try { r = str({}["x"]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T06.2 {}['x'] => " + r);
+try { r = str({"a":1}["a"]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T06.3 {'a':1}['a'] => " + r);
+
+# ============================================================
+# T07: 除以零
+# ============================================================
+print("== T07 div by zero ==");
+try { r = str(1 / 0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T07.1 1/0 => " + r);
+try { r = str(0 / 0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T07.2 0/0 => " + r);
+try { r = str(1.5 / 0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T07.3 1.5/0 => " + r);
+try { r = str(1 / 0.0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T07.4 1/0.0 => " + r);
+try { r = str(1 % 0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T07.5 1%0 => " + r);
+try { r = str(1 % 0.0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T07.6 1%0.0 => " + r);
+
+# ============================================================
+# T08: 参数数量不匹配
+# ============================================================
+print("== T08 arity mismatch ==");
+fn two_args(a, b) { return a + b; }
+try { r = str(two_args(1)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T08.1 two_args(1) => " + r);
+try { r = str(two_args(1,2,3)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T08.2 two_args(1,2,3) => " + r);
+try { r = str(two_args()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T08.3 two_args() => " + r);
+
+# ============================================================
+# T09: 调用非函数
+# ============================================================
+print("== T09 call non-function ==");
+try { let x = 5; r = str(x()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T09.1 (5)() => " + r);
+try { let x = "s"; r = str(x()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T09.2 ('s')() => " + r);
+try { let x = []; r = str(x()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T09.3 ([])() => " + r);
+try { let x = {}; r = str(x()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T09.4 ({})() => " + r);
+try { let x = null; r = str(x()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T09.5 (null)() => " + r);
+
+# ============================================================
+# T10: 方法不存在
+# ============================================================
+print("== T10 missing method ==");
+try { r = str("hello".nonexistent()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T10.1 'hello'.nonexistent() => " + r);
+try { let x = [1,2]; r = str(x.nonexistent()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T10.2 [1,2].nonexistent() => " + r);
+try { let x = {"a":1}; r = str(x.nonexistent()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T10.3 {'a':1}.nonexistent() => " + r);
+
+# ============================================================
+# T11: 属性不存在
+# ============================================================
+print("== T11 missing attribute ==");
+class C11 { let v = 1; }
+let c11 = new C11();
+try { r = str(c11.missing); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T11.1 c11.missing => " + r);
+try { r = str(c11.v); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T11.2 c11.v => " + r);
+try { r = str({"a":1}.missing); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T11.3 {'a':1}.missing => " + r);
+try { let n = null; r = str(n.missing); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T11.4 null.missing => " + r);
+try { r = str((42).missing); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T11.5 42.missing => " + r);
+
+# ============================================================
+# T12: channel 操作错误
+# ============================================================
+print("== T12 channel errors ==");
+try {
+    let ch = chan_new(2);
+    chan_close(ch);
+    r = str(chan_send(ch, 1));
+} catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T12.1 send on closed => " + r);
+try {
+    let ch = chan_new(2);
+    chan_send(ch, 1);
+    chan_close(ch);
+    chan_recv(ch);
+    r = str(chan_recv(ch));
+} catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T12.2 recv on drained closed => " + r);
+try { r = str(chan_send(5, 1)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T12.3 chan_send on non-channel => " + r);
+try { r = str(chan_recv(5)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T12.4 chan_recv on non-channel => " + r);
+try { r = str(chan_close(5)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T12.5 chan_close on non-channel => " + r);
+
+# ============================================================
+# T13: JVM 异常泄露测试
+# ============================================================
+print("== T13 JVM exception leak ==");
+try { r = str(int("abc")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.1 int('abc') => " + r);
+try { r = str(int("12abc")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.2 int('12abc') => " + r);
+try { r = str(float("xyz")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.3 float('xyz') => " + r);
+try { r = str(abs("notnum")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.4 abs('notnum') => " + r);
+try { r = str(len(42)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.5 len(42) => " + r);
+try { r = str(len(true)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.6 len(true) => " + r);
+try { r = str(len(null)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.7 len(null) => " + r);
+try { r = str(sqrt("x")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.8 sqrt('x') => " + r);
+try { let x = [1,2]; r = str(x.remove(99)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.9 [1,2].remove(99) => " + r);
+try { r = str(range("a", "b")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T13.10 range('a','b') => " + r);
+
+# ============================================================
+# T14: 错误消息是否含行号 — 同一错误在不同行触发
+# ============================================================
+print("== T14 line number in msg ==");
+try { r = str(undefined_x); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T14.1 line-A => " + r);
+try {
+    r = str(undefined_x);
+} catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T14.2 line-B => " + r);
+try {
+
+    r = str(undefined_x);
+
+} catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T14.3 line-C => " + r);
+
+# ============================================================
+# T15: 错误消息是否含文件名
+# ============================================================
+print("== T15 filename in msg ==");
+try { r = str(undefined_in_t15); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T15.1 print full e => " + r);
+
+# ============================================================
+# T16: 错误消息语言
+# ============================================================
+print("== T16 message language ==");
+let t16e = "no-throw";
+try { let v = 1 / 0; } catch (e) { t16e = str(e); }
+print("T16.1 div0 msg = [" + t16e + "]");
+
+# ============================================================
+# T17: 多个错误同时发生 — 优先报哪个
+# ============================================================
+print("== T17 multiple errors priority ==");
+try { r = str(undefined_a + undefined_b); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T17.1 undefined_a+undefined_b => " + r);
+try { r = str(undefined_a / 0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T17.2 undefined_a/0 => " + r);
+try { r = str((1 / 0) + undefined_a); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T17.3 (1/0)+undefined_a => " + r);
+
+# ============================================================
+# T18: 嵌套调用栈 A→B→C→error
+# ============================================================
+print("== T18 nested call stack ==");
+fn leaf18() { throw "boom-from-leaf18"; }
+fn mid18() { return leaf18(); }
+fn top18() { return mid18(); }
+try { top18(); r = "ok"; } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T18.1 nested throw => " + r);
+fn leaf18b() { return undefined_x18; }
+fn mid18b() { return leaf18b(); }
+fn top18b() { return mid18b(); }
+try { r = str(top18b()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T18.2 nested undefined => " + r);
+fn d18a() { return d18b(); }
+fn d18b() { return d18c(); }
+fn d18c() { return d18d(); }
+fn d18d() { return d18e(); }
+fn d18e() { return undefined_deep18; }
+try { r = str(d18a()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T18.3 5-deep undefined => " + r);
+
+# ============================================================
+# T19: catch 变量内容 / 格式
+# ============================================================
+print("== T19 catch var format ==");
+try { throw "string-err"; } catch (e) { print("T19.1 str: [" + str(e) + "] type=" + type(e)); }
+try { throw 42; } catch (e) { print("T19.2 num: [" + str(e) + "] type=" + type(e)); }
+try { throw 3.14; } catch (e) { print("T19.3 float: [" + str(e) + "] type=" + type(e)); }
+try { throw true; } catch (e) { print("T19.4 bool: [" + str(e) + "] type=" + type(e)); }
+try { throw null; } catch (e) { print("T19.5 null: [" + str(e) + "] type=" + type(e)); }
+try { throw [1,2,3]; } catch (e) { print("T19.6 list: [" + str(e) + "] type=" + type(e)); }
+try { throw {"k":"v"}; } catch (e) { print("T19.7 dict: [" + str(e) + "] type=" + type(e)); }
+
+# ============================================================
+# T20: throw 字符串 vs 数字 vs 对象 — catch 中 e 的类型保留
+# ============================================================
+print("== T20 throw types vs runtime errors ==");
+try { throw 42; } catch (e) {
+    print("T20.1 throw 42 — e==42? " + str(e == 42) + " e+1=" + str(e + 1));
+}
+try { throw "msg"; } catch (e) {
+    print("T20.2 throw 'msg' — e=='msg'? " + str(e == "msg"));
+}
+try { let v = 1 / 0; } catch (e) {
+    print("T20.3 div0 — type=" + type(e) + " e==42? " + str(e == 42) + " e+1=" + str(e + 1));
+}
+try { let _t20 = undefined_xyz; } catch (e) {
+    print("T20.4 undefined — type=" + type(e) + " msg=[" + str(e) + "]");
+}
+
+# ============================================================
+# T21-T26: 编译错误 — 不能在运行时测（会让本文件编译失败）
+# 仅留标注；用单独的探针文件测
+# ============================================================
+print("== T21-T26 compile errors (see external probes) ==");
+
+# ============================================================
+# T27: range(1,2,3,4) — 参数过多
+# ============================================================
+print("== T27 range too many args ==");
+try { r = str(range(1, 2, 3, 4)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T27.1 range(1,2,3,4) => " + r);
+try { r = str(range(1, 2, 3)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T27.2 range(1,2,3) => " + r);
+try { r = str(range()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T27.3 range() => " + r);
+try { r = str(range(1, 2, 0)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T27.4 range(1,2,0) => " + r);
+
+# ============================================================
+# T28: fmt 错误情况
+# ============================================================
+print("== T28 fmt errors ==");
+try { r = str(fmt()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T28.1 fmt() => " + r);
+try { r = str(fmt(123)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T28.2 fmt(123) => " + r);
+try { r = str(fmt("{0}", 1, 2, 3)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T28.3 fmt('{0}',1,2,3) => " + r);
+try { r = str(fmt("{9}", "a")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T28.4 fmt('{9}','a') => " + r);
+try { r = str(fmt("{0}", "abc")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T28.5 fmt('{0}','abc') => " + r);
+
+# ============================================================
+# T29: channel 类型不匹配
+# ============================================================
+print("== T29 channel type mismatch ==");
+try {
+    let ch = chan_new(2);
+    chan_send(ch, "string-val");
+    r = str(chan_recv(ch));
+} catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T29.1 chan send string => " + r);
+
+# ============================================================
+# T30: 并发块中的错误
+# ============================================================
+print("== T30 concurrent block errors ==");
+parallel fn fail30() { throw "from-parallel-30"; }
+let t30r1 = "no-throw";
+let t30r2 = "no-throw";
+try {
+    concurrent {
+        let f = fail30();
+        let rr = await f;
+        t30r1 = "got: " + str(rr);
+    }
+} catch (e) {
+    t30r1 = "EXC:[" + str(e) + "]";
+}
+print("T30.1 parallel throw => " + t30r1);
+
+parallel fn fail30b() { return undefined_in_parallel_30; }
+try {
+    concurrent {
+        let f = fail30b();
+        let rr = await f;
+        t30r2 = "got: " + str(rr);
+    }
+} catch (e) {
+    t30r2 = "EXC:[" + str(e) + "]";
+}
+print("T30.2 parallel undefined => " + t30r2);
+
+# ============================================================
+# T31: 错误消息一致性
+# ============================================================
+print("== T31 message consistency ==");
+let t31a = ""; let t31b = ""; let t31c = "";
+try { let v = 1 / 0; } catch (e) { t31a = str(e); }
+try { let v = 5 / 0; } catch (e) { t31b = str(e); }
+try { let v = 100 / 0; } catch (e) { t31c = str(e); }
+print("T31.1 div0 msgs equal? " + str(t31a == t31b and t31b == t31c));
+print("T31.1 msg = [" + t31a + "]");
+
+let t31d = ""; let t31e = "";
+try { let v = [1,2,3][99]; } catch (e) { t31d = str(e); }
+try { let v = [1,2,3][100]; } catch (e) { t31e = str(e); }
+print("T31.2 oob msgs equal? " + str(t31d == t31e));
+print("T31.2 msg1=[" + t31d + "]");
+print("T31.2 msg2=[" + t31e + "]");
+
+let t31f = ""; let t31g = "";
+try { let _t31 = undefined_consistency; } catch (e) { t31f = str(e); }
+try { let _t31b = undefined_consistency; } catch (e) { t31g = str(e); }
+print("T31.3 undefined msgs equal? " + str(t31f == t31g));
+print("T31.3 msg = [" + t31f + "]");
+
+# ============================================================
+# T32: 错误消息是否包含值 / 类型
+# ============================================================
+print("== T32 msg includes value/type? ==");
+try { r = str([1,2,3]["x"]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T32.1 [1,2,3]['x'] => " + r);
+try { r = str({"a":1}[42]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T32.2 {'a':1}[42] => " + r);
+try { let x = 5; r = str(x()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T32.3 (5)() => " + r);
+try { let x = "s"; r = str(x()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T32.4 ('s')() => " + r);
+try { r = str("hello".missing()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T32.5 'hello'.missing() => " + r);
+
+# ============================================================
+# T33: 堆栈跟踪
+# ============================================================
+print("== T33 stack trace ==");
+fn deep_a() { return deep_b(); }
+fn deep_b() { return deep_c(); }
+fn deep_c() { return undefined_deep_33; }
+try {
+    deep_a();
+} catch (e) {
+    print("T33.1 deep e = [" + str(e) + "]");
+}
+
+# ============================================================
+# T34: 错误退出码 — 见 D34
+# ============================================================
+print("== T34 exit code (see D34) ==");
+
+# ============================================================
+# T35: panic vs error 区分
+# ============================================================
+print("== T35 panic vs error ==");
+let t35a = "no-throw"; let t35b = "no-throw";
+try { throw "user-thrown"; } catch (e) { t35a = str(e); }
+try { let v = 1 / 0; } catch (e) { t35b = str(e); }
+print("T35.1 user-throw msg = [" + t35a + "]");
+print("T35.2 runtime-err msg = [" + t35b + "]");
+
+# ============================================================
+# T36: 内建函数参数错误
+# ============================================================
+print("== T36 builtin arity errors ==");
+try { r = str(len()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.1 len() => " + r);
+try { r = str(len([1], [2])); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.2 len([1],[2]) => " + r);
+try { r = str(abs()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.3 abs() => " + r);
+try { r = str(abs(-5, 3)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.4 abs(-5,3) => " + r);
+try { r = str(chr()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.5 chr() => " + r);
+try { r = str(type()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.6 type() => " + r);
+try { r = str(int()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.7 int() => " + r);
+try { r = str(int(1, 2)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.8 int(1,2) => " + r);
+try { r = str(fmt(1, 2, 3, 4, 5)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T36.9 fmt(1,2,3,4,5) => " + r);
+
+# ============================================================
+# T37: int("abc") 等字符串转整数
+# ============================================================
+print("== T37 int(string) ==");
+try { r = str(int("abc")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T37.1 int('abc') => " + r);
+try { r = str(int("12abc")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T37.2 int('12abc') => " + r);
+try { r = str(int("")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T37.3 int('') => " + r);
+try { r = str(int("42")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T37.4 int('42') => " + r);
+try { r = str(int("-7")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T37.5 int('-7') => " + r);
+try { r = str(int("3.14")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T37.6 int('3.14') => " + r);
+try { r = str(int(" 5 ")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T37.7 int(' 5 ') => " + r);
+
+# ============================================================
+# T38: 错误消息一致性 — 同一错误在不同上下文
+# ============================================================
+print("== T38 same err different ctx ==");
+let t38a = ""; let t38b = ""; let t38c = "";
+try { let _t38 = undefined_same; } catch (e) { t38a = str(e); }
+fn f38() { return undefined_same; }
+try { f38(); } catch (e) { t38b = str(e); }
+try {
+    for i in range(3) {
+        let _t38b = undefined_same;
+    }
+} catch (e) { t38c = str(e); }
+print("T38.1 all equal? " + str(t38a == t38b and t38b == t38c));
+print("T38.1 top=[" + t38a + "] fn=[" + t38b + "] loop=[" + t38c + "]");
+
+# ============================================================
+# T39: catch 块内 throw 后被外层捕获
+# ============================================================
+print("== T39 error chain messages ==");
+try {
+    try {
+        throw "first-39";
+    } catch (e) {
+        print("T39.1 inner got: [" + str(e) + "]");
+        throw "second-39: " + str(e);
+    }
+} catch (e2) {
+    print("T39.2 outer got: [" + str(e2) + "]");
+}
+try {
+    try {
+        let v = 1 / 0;
+    } catch (e) {
+        print("T39.3 inner div0: [" + str(e) + "]");
+        throw "wrapped: " + str(e);
+    }
+} catch (e2) {
+    print("T39.4 outer wrapped: [" + str(e2) + "]");
+}
+
+# ============================================================
+# T40: 异常 e 用作表达式
+# ============================================================
+print("== T40 e as expression ==");
+try {
+    let v = 1 / 0;
+} catch (e) {
+    print("T40.1 e + '!' = [" + str(e) + "!]");
+    print("T40.2 e == 'division by zero'? " + str(e == "division by zero"));
+    print("T40.3 e type = " + type(e));
+    let t40b = "no-throw";
+    try { t40b = str(e + 1); } catch (e2) { t40b = "ERR:[" + str(e2) + "]"; }
+    print("T40.4 e + 1 = " + t40b);
+}
+
+# ============================================================
+# T41: throw 复杂表达式
+# ============================================================
+print("== T41 throw complex expr ==");
+fn makeErr41(n) { return "code-" + n; }
+try { throw makeErr41(41); } catch (e) { print("T41.1 e = [" + str(e) + "] type=" + type(e)); }
+try { throw 100 / 4; } catch (e) { print("T41.2 e = [" + str(e) + "] type=" + type(e)); }
+try { throw [1, 2, 3]; } catch (e) { print("T41.3 e[1] = [" + str(e[1]) + "] type=" + type(e)); }
+
+# ============================================================
+# T42: 类实例字段访问 — 错误消息格式
+# ============================================================
+print("== T42 class field errors ==");
+class C42 {
+    let x = 0;
+    fn init(v) { x = v; }
+    fn method() { return x * 2; }
+}
+let c42 = new C42();
+c42.init(7);
+try { r = str(c42.missing_field); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T42.1 c42.missing_field => " + r);
+try { r = str(c42.missing_method()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T42.2 c42.missing_method() => " + r);
+try { r = str(c42.method()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T42.3 c42.method() => " + r);
+try { r = str(c42.x); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T42.4 c42.x => " + r);
+
+# ============================================================
+# T43: 静态方法 / 类属性错误
+# ============================================================
+print("== T43 static errors ==");
+class C43 {
+    static fn sm() { return 1; }
+    let inst = 0;
+}
+try { r = str(C43.missing_static); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T43.1 C43.missing_static => " + r);
+try { r = str(C43.sm()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T43.2 C43.sm() => " + r);
+
+# ============================================================
+# T44: super 调用错误
+# ============================================================
+print("== T44 super errors ==");
+class Base44 {
+    fn greet() { return "hi"; }
+}
+class Mid44 extends Base44 {
+    fn greet() { return super.greet() + " from mid"; }
+    fn bad() { return super.nonexistent_super(); }
+}
+let m44 = new Mid44();
+try { r = str(m44.greet()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T44.1 super.greet() => " + r);
+try { r = str(m44.bad()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T44.2 super.nonexistent_super() => " + r);
+
+# ============================================================
+# T45: list.remove(not_found) 消息
+# ============================================================
+print("== T45 list.remove missing ==");
+try { let x = [1,2,3]; r = str(x.remove(99)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T45.1 [1,2,3].remove(99) => " + r);
+try { let x = []; r = str(x.remove(1)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T45.2 [].remove(1) => " + r);
+
+# ============================================================
+# T46: 字符串方法参数错误
+# ============================================================
+print("== T46 string method arg errors ==");
+try { r = str("abc".substring(1, 2, 3)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T46.1 'abc'.substring(1,2,3) => " + r);
+try { r = str("abc".substring("x")); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T46.2 'abc'.substring('x') => " + r);
+try { r = str("abc".replace()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T46.3 'abc'.replace() => " + r);
+try { r = str("abc".find(42)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T46.4 'abc'.find(42) => " + r);
+
+# ============================================================
+# T47: dict 方法错误
+# ============================================================
+print("== T47 dict method errors ==");
+try { let d = {"a":1}; r = str(d.keys(99)); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T47.1 {'a':1}.keys(99) => " + r);
+try { let d = {"a":1}; r = str(d.missing()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T47.2 {'a':1}.missing() => " + r);
+
+# ============================================================
+# T48: 错误消息含操作符名？
+# ============================================================
+print("== T48 msg with operator name? ==");
+try { r = str(1 / 0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T48.1 1/0 => " + r);
+try { r = str(1 % 0); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T48.2 1%0 => " + r);
+try { r = str(1 << undefined_shift); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T48.3 1<<undefined => " + r);
+
+# ============================================================
+# T49: 不同长度的 undefined 名字
+# ============================================================
+print("== T49 undefined name length ==");
+try { r = str(a); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T49.1 a => " + r);
+try { r = str(abcdefghij); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T49.2 abcdefghij => " + r);
+try { r = str(a_b_c_d_e_f_g_h); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T49.3 a_b_c_d_e_f_g_h => " + r);
+try { r = str(very_long_undefined_name_with_many_chars_xyz_123); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T49.4 long name => " + r);
+
+# ============================================================
+# T50: null 的属性 / 索引 / 调用
+# ============================================================
+print("== T50 null operations ==");
+try { let n = null; r = str(n.foo); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T50.1 null.foo => " + r);
+try { let n = null; r = str(n[0]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T50.2 null[0] => " + r);
+try { let n = null; r = str(n()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T50.3 null() => " + r);
+try { let n = null; r = str(n.method()); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T50.4 null.method() => " + r);
+
+# ============================================================
+# T51: 数字 / 布尔 的属性 / 索引
+# ============================================================
+print("== T51 num/bool operations ==");
+try { r = str((42).foo); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T51.1 42.foo => " + r);
+try { r = str((42)[0]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T51.2 42[0] => " + r);
+try { r = str(true.foo); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T51.3 true.foo => " + r);
+try { r = str(true[0]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T51.4 true[0] => " + r);
+
+# ============================================================
+# T52: list/dict 索引类型错误
+# ============================================================
+print("== T52 list/dict bad index type ==");
+try { r = str([1,2,3]["x"]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T52.1 [1,2,3]['x'] => " + r);
+try { r = str([1,2,3][null]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T52.2 [1,2,3][null] => " + r);
+try { r = str([1,2,3][true]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T52.3 [1,2,3][true] => " + r);
+try { r = str([1,2,3][[]]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T52.4 [1,2,3][[]] => " + r);
+try { r = str({"a":1}[[]]); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T52.5 {'a':1}[[]] => " + r);
+
+# ============================================================
+# T53: 错误消息风格一致性
+# ============================================================
+print("== T53 message style consistency ==");
+let t53msgs = [];
+try { let _t53a = undefined_x; } catch (e) { t53msgs.append(str(e)); }
+try { let v = 1 / 0; } catch (e) { t53msgs.append(str(e)); }
+try { let v = [1,2,3][99]; } catch (e) { t53msgs.append(str(e)); }
+try { let v = {"a":1}["b"]; } catch (e) { t53msgs.append(str(e)); }
+try { let x = []; x.pop(); } catch (e) { t53msgs.append(str(e)); }
+try { let x = 5; x(); } catch (e) { t53msgs.append(str(e)); }
+try { let _t53b = "s".missing(); } catch (e) { t53msgs.append(str(e)); }
+for m in t53msgs {
+    print("T53 msg=[" + m + "]");
+}
+
+# ============================================================
+# T54: 重复抛出同一异常 — 一致性
+# ============================================================
+print("== T54 repeat same throw ==");
+let t54a = ""; let t54b = "";
+try { throw "same-msg-54"; } catch (e) { t54a = str(e); }
+try { throw "same-msg-54"; } catch (e) { t54b = str(e); }
+print("T54.1 equal? " + str(t54a == t54b) + "  msg=[" + t54a + "]");
+
+# ============================================================
+# T55: 异常值是 dict — catch 中访问字段
+# ============================================================
+print("== T55 dict exception field access ==");
+try {
+    throw {"code": 500, "msg": "boom"};
+} catch (e) {
+    print("T55.1 code=" + str(e["code"]) + " msg=" + str(e["msg"]));
+    let t55b = "no-throw";
+    try { t55b = str(e["missing"]); } catch (e2) { t55b = "EXC:[" + str(e2) + "]"; }
+    print("T55.2 e['missing'] => " + t55b);
+}
+
+# ============================================================
+# T56: 异常值是 list — catch 中访问越界
+# ============================================================
+print("== T56 list exception oob ==");
+try {
+    throw [1, 2, 3];
+} catch (e) {
+    let t56a = "no-throw";
+    try { t56a = str(e[10]); } catch (e2) { t56a = "EXC:[" + str(e2) + "]"; }
+    print("T56.1 e[10] => " + t56a);
+}
+
+# ============================================================
+# T57: throw 在 if 条件中
+# ============================================================
+print("== T57 throw in if cond ==");
+fn boom57() { throw "boom57"; }
+try {
+    if (boom57()) { r = "1"; } else { r = "2"; }
+} catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T57.1 if(boom57()) => " + r);
+
+# ============================================================
+# T58: throw 在 for iterable 中
+# ============================================================
+print("== T58 throw in for iter ==");
+fn badIter58() { throw "bad-iter-58"; }
+try {
+    for x in badIter58() { r = str(x); }
+    r = "ok";
+} catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T58.1 for in badIter58 => " + r);
+
+# ============================================================
+# T59: throw 在函数参数中
+# ============================================================
+print("== T59 throw in fn arg ==");
+fn boomArg59() { throw "in-arg-59"; }
+fn consumer59(x) { return x + 1; }
+try { r = str(consumer59(boomArg59())); } catch (e) { r = "EXC:[" + str(e) + "]"; }
+print("T59.1 consumer(boomArg()) => " + r);
+
+# ============================================================
+# T60: catch 中再调用会 throw 的函数
+# ============================================================
+print("== T60 catch calls throwing fn ==");
+fn innerThrow60() { throw "from-inner-60"; }
+try {
+    try {
+        throw "outer-60";
+    } catch (e) {
+        print("T60.1 outer caught: [" + str(e) + "]");
+        innerThrow60();
+    }
+} catch (e2) {
+    print("T60.2 final caught: [" + str(e2) + "]");
+}
+
+# ============================================================
+# T61: inline lambda 异常逃逸 bug 验证（已发现的关键 bug）
+# ============================================================
+print("== T61 inline lambda escape bug ==");
+# 命名函数版本
+fn named61() { return undefined_61; }
+let t61a = "no-throw";
+try { let v = named61(); } catch (e) { t61a = "CAUGHT:[" + str(e) + "]"; }
+print("T61.1 named fn exc => " + t61a);
+# inline lambda 版本 — 预期 bug：逃逸
+let t61b = "no-throw";
+let lam61 = fn() { return undefined_61b; };
+try { let v = lam61(); } catch (e) { t61b = "CAUGHT:[" + str(e) + "]"; }
+print("T61.2 let-bound lambda exc => " + t61b);
+
+print("===== R3-119 DONE =====");
+
+# ============================================================
+# D34: 错误退出码 — 未捕获异常
+# Main.kt 捕获 Throwable，打印 "Error: msg"，exitProcess(1)
+# ============================================================
+print("== D34 uncaught termination ==");
+throw "uncaught-termination-D34";
+print("D34 after — should NOT print");

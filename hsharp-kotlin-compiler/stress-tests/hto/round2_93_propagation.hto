@@ -1,0 +1,407 @@
+# ============================================================
+# round2_93_propagation.hto
+# Agent #93 — 错误传播 expr? 链式调用 专项压测
+#
+# 实现语义（源码审查 HSharp_v0.4_Tests/compiler.py:1132-1158 + HVM.kt:314-321,1392-1421）:
+#   `expr?` = try{expr}catch(e){e} —— 捕获异常 payload 作为值返回，
+#   NOT 提前 return / NOT 传播到调用者。
+#   SETUP_PROPAGATE / <expr> / POP_PROPAGATE / JUMP end / catch(fall-through)
+#
+# 任务描述预期语义: "expr? — 如果 expr 抛异常，传播到调用者" (Rust ? / Swift try?)
+#   → 与实现不符。本测试同时验证实现语义的内部一致性 + 标注与任务描述的偏差。
+#
+# 每条用例标注: EXPECT(实现语义) / EXPECT(任务描述) / ACTUAL(实际运行)
+# ============================================================
+
+# ---------- 辅助函数 ----------
+fn throwStr(s) { throw s; }
+fn throwIfNeg(n) { if (n < 0) { throw "neg:" + n; } return n * 2; }
+fn retVal(n) { return n; }
+fn retList() { return [1, 2, 3]; }
+
+print("== R2-93 START ==");
+
+# ============================================================
+# 域 1: 简单 let x = risky()?  —— risky() 抛异常时
+# EXPECT(实现): v1 = "E1" (异常 payload 作为值)
+# EXPECT(任务): 函数立即返回异常 (传播)
+# ACTUAL: ?
+# ============================================================
+fn throwE1() { throw "E1"; }
+let v1 = throwE1()?;
+print(fmt("D01: {0}", v1));
+
+# ---------- 域 1b: 正常返回值 ----------
+let v1b = retVal(42)?;
+print(fmt("D01b: {0}", v1b));
+
+# ============================================================
+# 域 2: 链式 let y = a()? + b()?  (都正常)
+# EXPECT: 30
+# ============================================================
+fn f10() { return 10; }
+fn g20() { return 20; }
+let v2 = f10()? + g20()?;
+print(fmt("D02: {0}", v2));
+
+# ---------- 域 2b: 链式 a()? + b()?  (a 抛异常) ----------
+# EXPECT(实现): a()? = "EA", "EA" + 30 = "EA30" (字符串拼接, b() 仍被调用)
+# EXPECT(任务): 传播, b() 不被调用
+# ACTUAL: ?
+fn throwEA() { throw "EA"; }
+let v2b = throwEA()? + g20()?;
+print(fmt("D02b: {0}", v2b));
+
+# ---------- 域 2c: 链式 a()? + b()?  (b 抛异常) ----------
+# EXPECT(实现): a()? = 10, b()? = "EB", 10 + "EB" = "10EB"
+# EXPECT(任务): 传播
+fn throwEB() { throw "EB"; }
+let v2c = f10()? + throwEB()?;
+print(fmt("D02c: {0}", v2c));
+
+# ---------- 域 2d: 链式 a()? + b()?  (都抛异常) ----------
+# EXPECT(实现): a()? = "EA", b()? = "EB", "EA" + "EB" = "EAEB"
+# EXPECT(任务): a 抛异常即传播, b 不被调用
+let v2d = throwEA()? + throwEB()?;
+print(fmt("D02d: {0}", v2d));
+
+# ---------- 域 2e: g20() 是否被调用? 用计数器验证 ----------
+let counter2e = 0;
+fn countedG() { counter2e = counter2e + 1; return 99; }
+let v2e = throwEA()? + countedG();
+print(fmt("D02e: v={0} counter={1}", v2e, counter2e));
+
+# ============================================================
+# 域 3: expr? 在表达式上下文 (函数参数、列表元素、字典值)
+# ============================================================
+# 域 3a: 作为函数参数
+print(fmt("D03a: {0}", throwE1()?));
+
+# 域 3b: 列表元素
+let lst3 = [1, throwE1()?, 3];
+print(fmt("D03b: {0}", lst3));
+
+# 域 3c: 字典值
+let d3 = {"k": throwE1()?};
+print(fmt("D03c: {0}", d3));
+
+# 域 3d: 嵌套在算术
+let v3d = (throwE1()?) * 2;
+print(fmt("D03d: {0}", v3d));
+
+# ============================================================
+# 域 4: expr? 在循环内
+# ============================================================
+let acc4 = "";
+for i in range(4) {
+    acc4 = acc4 + throwIfNeg(i - 2)? + ",";
+}
+print(fmt("D04: {0}", acc4));
+
+# ============================================================
+# 域 5: expr? 在 try 内 (双重传播?)
+# EXPECT(实现): ? 先捕获, catch 不触发 (因 ? 已把异常变值)
+# EXPECT(任务): ? 传播, 外层 catch 触发
+# ============================================================
+let log5 = "";
+try {
+    log5 = log5 + throwE1()?;
+    print(fmt("D05-inner: {0}", log5));
+} catch (e) {
+    print(fmt("D05-caught: {0}", e));
+}
+print(fmt("D05-after: {0}", log5));
+
+# ============================================================
+# 域 6: expr? 传播的异常值类型 (是否保留原始类型)
+# ============================================================
+fn throwNum() { throw 42; }
+fn throwList() { throw [1, 2, 3]; }
+fn throwDict() { throw {"code": 500}; }
+fn throwBool() { throw true; }
+fn throwNull() { throw null; }
+
+let v6a = throwNum()?;
+print(fmt("D06a-num: v={0} type={1}", v6a, type(v6a)));
+let v6b = throwList()?;
+print(fmt("D06b-list: v={0} type={1}", v6b, type(v6b)));
+let v6c = throwDict()?;
+print(fmt("D06c-dict: v={0} type={1}", v6c, type(v6c)));
+let v6d = throwBool()?;
+print(fmt("D06d-bool: v={0} type={1}", v6d, type(v6d)));
+let v6e = throwNull()?;
+print(fmt("D06e-null: v={0} type={1}", v6e, type(v6e)));
+
+# ============================================================
+# 域 7: 顶层 main 使用 expr? (传播到哪里?)
+# EXPECT(实现): 捕获为值, 程序继续
+# EXPECT(任务): 传播导致程序退出
+# ============================================================
+let v7 = throwE1()?;
+print(fmt("D07-top: {0}", v7));
+print("D07-after-top-propagate");
+
+# ============================================================
+# 域 8: expr? 与 await 组合
+# EXPECT(实现): await 先解包 future; 若 async 抛异常, await 重新抛出, ? 捕获
+# ============================================================
+async fn asyncThrower(m) { throw m; }
+async fn asyncOk(n) { return n; }
+
+# 域 8a: await f()?  —— 应为 (await f())?
+try {
+    let v8a = await asyncThrower("AE")?;
+    print(fmt("D08a: {0}", v8a));
+} catch (e) {
+    print(fmt("D08a-ERR: {0}", e));
+}
+
+# 域 8b: await 正常 async + ?
+try {
+    let v8b = await asyncOk(88)?;
+    print(fmt("D08b: {0}", v8b));
+} catch (e) {
+    print(fmt("D08b-ERR: {0}", e));
+}
+
+# 域 8c: (await f())? 显式括号
+try {
+    let v8c = (await asyncThrower("AE2"))?;
+    print(fmt("D08c: {0}", v8c));
+} catch (e) {
+    print(fmt("D08c-ERR: {0}", e));
+}
+
+# ============================================================
+# 域 9: expr? 与 match 组合
+# ============================================================
+union Result9 {
+    Ok: value;
+    Err: msg;
+}
+fn classify9(n) {
+    if (n >= 0) { return Result9{Ok: n}; }
+    return Result9{Err: "negative"};
+}
+# 域 9a: match 整体加 ?
+let m9a = classify9(-1);
+let v9a = (match m9a {
+    Ok(v) => v,
+    Err(m) => m
+})?;
+print(fmt("D09a: {0}", v9a));
+
+# 域 9b: match arm 内部用 ?
+fn risky9(n) { if (n == 0) { throw "zero"; } return n; }
+let m9b = classify9(0);
+let v9b = match m9b {
+    Ok(v) => risky9(v)?,
+    Err(m) => m
+};
+print(fmt("D09b: {0}", v9b));
+
+# ============================================================
+# 域 10: expr? 返回成功值 (无异常时) —— 已隐含覆盖, 显式验证
+# ============================================================
+let v10 = retVal(100)?;
+print(fmt("D10: {0}", v10));
+let v10b = (40 + 2)?;
+print(fmt("D10b: {0}", v10b));
+
+# ============================================================
+# 域 11: expr? 与赋值
+# ============================================================
+let x11 = 0;
+x11 = throwE1()?;
+print(fmt("D11: x={0}", x11));
+
+# 域 11b: 复合赋值 (+= 不一定支持, 用展开形式)
+let x11b = 5;
+x11b = x11b + throwE1()?;
+print(fmt("D11b: x={0}", x11b));
+
+# ============================================================
+# 域 12: expr? 在 lambda 内
+# ============================================================
+fn makePropagator(msg) {
+    fn inner() { return throwStr(msg)?; }
+    return inner;
+}
+let lam12 = makePropagator("LAM");
+let v12 = lam12();
+print(fmt("D12: {0}", v12));
+
+# 域 12b: lambda 内 ? 后继续执行
+fn makePropContinue() {
+    fn inner() {
+        let r = throwE1()?;
+        return "after:" + r;
+    }
+    return inner;
+}
+let lam12b = makePropContinue();
+print(fmt("D12b: {0}", lam12b()));
+
+# ============================================================
+# 域 13: expr? 在 async 函数内
+# ============================================================
+async fn asyncUseProp(n) {
+    let r = throwIfNeg(n)?;
+    return r + 1;
+}
+try {
+    let v13a = await asyncUseProp(5);
+    print(fmt("D13a: {0}", v13a));
+} catch (e) {
+    print(fmt("D13a-ERR: {0}", e));
+}
+try {
+    let v13b = await asyncUseProp(-3);
+    print(fmt("D13b: {0}", v13b));
+} catch (e) {
+    print(fmt("D13b-ERR: {0}", e));
+}
+
+# ============================================================
+# 域 14: 非 throwing 函数用 ? (H# 无 throws 标注, 应允许)
+# ============================================================
+fn plain14() { return 14; }
+let v14 = plain14()?;
+print(fmt("D14: {0}", v14));
+
+# ============================================================
+# 附加探测 A: 嵌套 ?  —— (f()?)? 内层捕获后, 外层 ? 永不触发
+# ============================================================
+let vA1 = (throwE1()?)?;
+print(fmt("DA1: {0}", vA1));
+
+# 附加探测 B: ? 捕获运行时错误 (除零)
+try {
+    let vB1 = (1 / 0)?;
+    print(fmt("DB1: {0}", vB1));
+} catch (e) {
+    print(fmt("DB1-ERR: {0}", e));
+}
+
+# 附加探测 C: ? 捕获运行时错误 (索引越界)
+try {
+    let arrC = [10, 20];
+    let vC1 = (arrC[10])?;
+    print(fmt("DC1: {0}", vC1));
+} catch (e) {
+    print(fmt("DC1-ERR: {0}", e));
+}
+
+# 附加探测 D: ? 捕获运行时错误 (属性访问 null)
+# 注: 字面量 null.foo 会触发 parser bug (NullLiteral 未走 _parse_postfix),
+#     故用变量 n 持有 null 以绕开, 测试运行时 attr-on-null 捕获。
+let nD = null;
+try {
+    let vD1 = (nD.foo)?;
+    print(fmt("DD1: {0}", vD1));
+} catch (e) {
+    print(fmt("DD1-ERR: {0}", e));
+}
+
+# 附加探测 E: ? 与 && 短路 (异常值 "EE" 是真值, g() 被调用?)
+let calledE = 0;
+fn sideEffectE() { calledE = calledE + 1; return true; }
+let vE1 = throwE1()? && sideEffectE();
+print(fmt("DE1: v={0} called={1}", vE1, calledE));
+
+# 附加探测 F: ? 与 || 短路 (异常值 "EE" 真值, || 短路, g() 不被调用)
+let calledF = 0;
+fn sideEffectF() { calledF = calledF + 1; return "fallback"; }
+let vF1 = throwE1()? || sideEffectF();
+print(fmt("DF1: v={0} called={1}", vF1, calledF));
+
+# 附加探测 G: ? 在 if 条件内 (异常值真值)
+if (throwE1()?) {
+    print("DG1: truthy-exception");
+} else {
+    print("DG1: falsy-exception");
+}
+
+# 附加探测 H: ? 与 == 比较 (异常值能否比较)
+let vH1 = throwE1()? == "E1";
+print(fmt("DH1: {0}", vH1));
+
+# 附加探测 I: ? 链  a()?()?(连续两次?)  —— 期望两次都捕获但无异常故原值
+let vI1 = retVal(7())?;
+print(fmt("DI1: {0}", vI1));
+
+# 附加探测 J: ? 重复捕获不丢失 (5 层嵌套)
+let vJ1 = (((((throwE1())?))?))?;
+print(fmt("DJ1: {0}", vJ1));
+
+# 附加探测 K: ? 捕获后值是否可索引 (异常是列表)
+let vK1 = throwList()?;
+print(fmt("DK1: len={0} first={1}", len(vK1), vK1[0]));
+
+# 附加探测 L: ? 在 for-in 的 collection 位置
+let srcL = [1, 2, 3];
+let accL = "";
+for x in (srcL)? {
+    accL = accL + x;
+}
+print(fmt("DL1: {0}", accL));
+
+# 附加探测 M: ? 捕获后 type() 与原 throw 值类型一致 (已在域6, 再验证 list/dict 引用)
+let lstM = [9, 8, 7];
+fn throwRef() { throw lstM; }
+let vM1 = throwRef()?;
+vM1[0] = 999;
+print(fmt("DM1: orig={0} captured={1}", lstM[0], vM1[0]));
+
+# 附加探测 N: ? 在类方法内
+class ServiceN {
+    let log = "";
+    fn doRisky(self, n) {
+        self.log = self.log + "enter;";
+        let r = throwIfNeg(n)?;
+        self.log = self.log + "got=" + r + ";";
+        return r;
+    }
+}
+let svcN = new ServiceN();
+let vN1 = svcN.doRisky(-1);
+print(fmt("DN1: v={0} log={1}", vN1, svcN.log));
+
+# 附加探测 O: ? 在递归函数内 (每层独立捕获)
+fn recurO(n) {
+    if (n == 0) { return "done"; }
+    let r = throwIfNeg(n - 3)?;
+    return recurO(n - 1) + "," + r;
+}
+try {
+    let vO1 = recurO(5);
+    print(fmt("DO1: {0}", vO1));
+} catch (e) {
+    print(fmt("DO1-ERR: {0}", e));
+}
+
+# 附加探测 P: ? 捕获 null 异常 vs 正常返回 null (歧义)
+fn retNull() { return null; }
+fn throwNullVal() { throw null; }
+let vP_norm = retNull()?;
+let vP_throw = throwNullVal()?;
+print(fmt("DP1: norm={0} throw={1} eq={2}", vP_norm, vP_throw, vP_norm == vP_throw));
+
+# 附加探测 Q: ? 与字符串拼接优先级  "a" + f()? + "b"
+fn throwQ() { throw "X"; }
+let vQ1 = "a" + throwQ()? + "b";
+print(fmt("DQ1: {0}", vQ1));
+
+# 附加探测 R: ? 在闭包捕获变量后
+fn makeCounterR() {
+    let c = 0;
+    fn bump() { c = c + 1; return c; }
+    fn risky() { if (c >= 2) { throw "max"; } return c; }
+    return fn() { return risky()?; };
+}
+let cr = makeCounterR();
+print(fmt("DR1: {0}", cr()));
+print(fmt("DR2: {0}", cr()));
+print(fmt("DR3: {0}", cr()));
+
+print("== R2-93 END ==");

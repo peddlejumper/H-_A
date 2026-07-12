@@ -1,0 +1,19 @@
+# 16_for_empty.hto — FOR_ITER 空集合 / 单元素 / 空字符串
+for i in [] {
+    print("never");
+}
+print("empty done");
+for i in [42] {
+    print("single: " + str(i));
+}
+for c in "x" {
+    print("char: " + c);
+}
+for c in "" {
+    print("never2");
+}
+let d = {};
+for k in d {
+    print("never3");
+}
+print("all done");

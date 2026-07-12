@@ -1,0 +1,58 @@
+# probe: closure default params (BUG verification)
+# E07 showed: returned lambda with default + freevar fails
+
+# Case 1: lambda with freevar + default, called with no args
+try {
+    fn mk() {
+        let base = 100;
+        return fn(x=1) { return base + x; };
+    }
+    let f = mk();
+    print("case1 f()=" + f());       # BUG: expects 1 args (min 1) ; expected 101
+} catch (e) { print("case1 f() ERR: " + e); }
+
+# Case 2: same but call WITH arg
+try {
+    fn mk() {
+        let base = 100;
+        return fn(x=1) { return base + x; };
+    }
+    let f = mk();
+    print("case2 f(5)=" + f(5));     # 105
+} catch (e) { print("case2 f(5) ERR: " + e); }
+
+# Case 3: lambda at module scope (no freevar) + default
+try {
+    let g = fn(x=1) { return x + 1; };
+    print("case3 g()=" + g());       # 2 (works, no freevar)
+} catch (e) { print("case3 g() ERR: " + e); }
+
+# Case 4: lambda capturing global (freevar) + default
+let glob = 1000;
+try {
+    let h = fn(x=1) { return glob + x; };
+    print("case4 h()=" + h());       # BUG? 1001 or error
+} catch (e) { print("case4 h() ERR: " + e); }
+
+# Case 5: nested fn statement (not let-lambda) + default, returned
+try {
+    fn mk5() {
+        let base = 50;
+        fn inner(x=1) { return base + x; }
+        return inner;
+    }
+    let f5 = mk5();
+    print("case5 f5()=" + f5());     # BUG? 51 or error
+} catch (e) { print("case5 f5() ERR: " + e); }
+
+# Case 6: closure with default + multiple freevars
+try {
+    fn mk6() {
+        let a = 10;
+        let b = 20;
+        return fn(x=1, y=2) { return a + b + x + y; };
+    }
+    let f6 = mk6();
+    print("case6 f6()=" + f6());      # BUG? 33 or error
+    print("case6 f6(100)=" + f6(100)); # 132
+} catch (e) { print("case6 ERR: " + e); }

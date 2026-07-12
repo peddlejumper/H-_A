@@ -1,0 +1,29 @@
+# 21_nested_except.hto — SETUP_EXCEPT 嵌套 + 重抛
+try {
+    try {
+        throw "inner";
+    } catch (e1) {
+        print("inner caught: " + str(e1));
+        throw "rethrown";
+    }
+} catch (e2) {
+    print("outer caught: " + str(e2));
+}
+
+# 三层嵌套
+try {
+    try {
+        try {
+            throw 42;
+        } catch (a) {
+            print("L1: " + str(a));
+            throw 99;
+        }
+    } catch (b) {
+        print("L2: " + str(b));
+        throw "deep";
+    }
+} catch (c) {
+    print("L3: " + str(c));
+}
+print("done");

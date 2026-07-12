@@ -1,0 +1,319 @@
+# Round 2 / Test #82 — String Encoding, Escapes, Unicode
+# Goal: probe escape sequences, Unicode handling, method edge cases.
+# Each potentially-crashing case is wrapped in try/catch so we keep
+# going and collect as many bugs as possible in one run.
+
+# =============================================================
+# Section 1: Basic escape sequences (lexer-supported: \n \t \r \\ \")
+# =============================================================
+let s_nl = "a\nb";
+print("S1a newline-len: " + str(len(s_nl)));
+print("S1b ord-a: " + str(ord(s_nl[0])));
+print("S1c ord-nl: " + str(ord(s_nl[1])));
+print("S1d ord-b: " + str(ord(s_nl[2])));
+
+let s_tab = "x\ty";
+print("S1e tab-len: " + str(len(s_tab)));
+print("S1f ord-tab: " + str(ord(s_tab[1])));
+
+let s_cr = "a\rb";
+print("S1g cr-len: " + str(len(s_cr)));
+print("S1h ord-cr: " + str(ord(s_cr[1])));
+
+let s_bs = "a\\b";
+print("S1i bs-len: " + str(len(s_bs)));
+print("S1j ord-bs: " + str(ord(s_bs[1])));
+
+let s_q = "a\"b";
+print("S1k quote-len: " + str(len(s_q)));
+print("S1l ord-quote: " + str(ord(s_q[1])));
+
+# =============================================================
+# Section 2: Unsupported escape sequences (\0 \xNN \uNNNN)
+# These are NOT handled by the lexer (else-branch keeps them literal).
+# =============================================================
+let s_zero = "a\0b";
+print("S2a zero-len: " + str(len(s_zero)));
+print("S2b zero-ord-1: " + str(ord(s_zero[1])));
+print("S2c zero-ord-2: " + str(ord(s_zero[2])));
+
+let s_hex = "\x41";
+print("S2d hex-len: " + str(len(s_hex)));
+print("S2e hex-ord-0: " + str(ord(s_hex[0])));
+print("S2f hex-raw: [" + s_hex + "]");
+
+let s_uni = "\u4e2d";
+print("S2g uni-len: " + str(len(s_uni)));
+print("S2h uni-ord-0: " + str(ord(s_uni[0])));
+print("S2i uni-raw: [" + s_uni + "]");
+
+# =============================================================
+# Section 3: Unicode strings — Chinese
+# =============================================================
+let cn = "你好世界";
+print("S3a cn-len: " + str(len(cn)));
+print("S3b cn-0: " + cn[0]);
+print("S3c cn-1: " + cn[1]);
+print("S3d cn-2: " + cn[2]);
+print("S3e cn-3: " + cn[3]);
+print("S3f cn-ord-0: " + str(ord(cn[0])));
+print("S3g cn-slice-0-2: " + cn[0:2]);
+print("S3h cn-slice-1-3: " + cn[1:3]);
+print("S3i cn-reverse: " + cn[::-1]);
+
+# =============================================================
+# Section 4: Unicode strings — Emoji (supplementary plane)
+# 😀 = U+1F600 (surrogate pair in UTF-16: 2 code units)
+# 🎉 = U+1F389
+# =============================================================
+let em = "😀🎉";
+print("S4a em-len: " + str(len(em)));
+print("S4b em-0: " + em[0]);
+print("S4c em-1: " + em[1]);
+try {
+    print("S4d em-2: " + em[2]);
+} catch (e) {
+    print("S4d-err: " + e);
+}
+print("S4e em-ord-0: " + str(ord(em[0])));
+print("S4f em-slice-0-1: [" + em[0:1] + "]");
+print("S4g em-slice-0-2: [" + em[0:2] + "]");
+print("S4h em-reverse: [" + em[::-1] + "]");
+
+let one_em = "😀";
+print("S4i one-em-len: " + str(len(one_em)));
+print("S4j one-em-ord-0: " + str(ord(one_em[0])));
+try {
+    print("S4k one-em-1: " + one_em[1]);
+} catch (e) {
+    print("S4k-err: " + e);
+}
+
+# =============================================================
+# Section 5: Mixed ASCII + Unicode + Emoji
+# =============================================================
+let mixed = "a中😀";
+print("S5a mixed-len: " + str(len(mixed)));
+print("S5b mixed-0: " + mixed[0]);
+print("S5c mixed-1: " + mixed[1]);
+print("S5d mixed-2: " + mixed[2]);
+print("S5e mixed-3: " + mixed[3]);
+print("S5f mixed-slice-0-2: [" + mixed[0:2] + "]");
+print("S5g mixed-slice-1-3: [" + mixed[1:3] + "]");
+print("S5h mixed-reverse: [" + mixed[::-1] + "]");
+
+# =============================================================
+# Section 6: upper()/lower() on non-ASCII
+# =============================================================
+print("S6a upper-ß: " + "ß".upper());
+print("S6b upper-ß-len: " + str(len("ß".upper())));
+print("S6c lower-İ: " + "İ".lower());
+print("S6d upper-中: " + "中".upper());
+print("S6e lower-中: " + "中".lower());
+print("S6f upper-é: " + "é".upper());
+print("S6g lower-É: " + "É".lower());
+print("S6h upper-emoji: " + "😀".upper());
+print("S6i upper-german: " + "straße".upper());
+print("S6j lower-german: " + "STRASSE".lower());
+
+# =============================================================
+# Section 7: find() — not found returns -1
+# =============================================================
+print("S7a find-hit: " + str("hello".find("ll")));
+print("S7b find-miss: " + str("hello".find("xx")));
+print("S7c find-empty: " + str("hello".find("")));
+print("S7d find-start: " + str("abcabc".find("a", 2)));
+print("S7e find-over-start: " + str("abcabc".find("a", 100)));
+print("S7f find-unicode: " + str("你好世界".find("世界")));
+print("S7g find-unicode-miss: " + str("你好世界".find("地球")));
+print("S7h find-emoji: " + str("😀🎉".find("🎉")));
+
+# =============================================================
+# Section 8: substring(s, start, len) boundary cases
+# =============================================================
+print("S8a sub-normal: " + substring("hello", 1, 3));
+print("S8b sub-len-over: " + substring("hello", 0, 100));
+print("S8c sub-start-over: " + substring("hello", 10, 3));
+print("S8d sub-zero-len: " + substring("hello", 1, 0));
+print("S8e sub-empty-str: " + substring("", 0, 5));
+try {
+    print("S8f sub-neg-start: " + substring("hello", -2, 4));
+} catch (e) {
+    print("S8f-err: " + e);
+}
+try {
+    print("S8g sub-neg-len: " + substring("hello", 3, -1));
+} catch (e) {
+    print("S8g-err: " + e);
+}
+try {
+    print("S8h sub-neg-both: " + substring("hello", -5, -1));
+} catch (e) {
+    print("S8h-err: " + e);
+}
+
+# =============================================================
+# Section 9: replace(old, new) — old empty, new empty, multi
+# =============================================================
+print("S9a replace-normal: " + "hello".replace("l", "L"));
+print("S9b replace-all: " + "aaa".replace("a", "b"));
+print("S9c replace-miss: " + "hello".replace("x", "y"));
+print("S9d replace-empty-old: " + "abc".replace("", "X"));
+print("S9e replace-empty-new: " + "abc".replace("b", ""));
+print("S9f replace-both-empty: " + "abc".replace("", ""));
+print("S9g replace-unicode: " + "你好世界".replace("好", "们"));
+print("S9h replace-multi-unicode: " + "哈哈哈".replace("哈", "嘻"));
+
+# =============================================================
+# Section 10: split(d) — empty delimiter, not found, multi
+# =============================================================
+print("S10a split-normal: " + str("a,b,c".split(",")));
+print("S10b split-miss: " + str("abc".split(",")));
+print("S10c split-multi: " + str("a,,b".split(",")));
+print("S10d split-trailing: " + str("a,b,".split(",")));
+try {
+    print("S10e split-empty: " + str("abc".split("")));
+} catch (e) {
+    print("S10e-err: " + e);
+}
+print("S10f split-empty-str: " + str("".split(",")));
+print("S10g split-unicode: " + str("你 好 们".split(" ")));
+
+# =============================================================
+# Section 11: trim() vs strip() — naming discrepancy
+# =============================================================
+print("S11a strip-spaces: [" + "  hello  ".strip() + "]");
+print("S11b strip-tabs: [" + "\thi\t".strip() + "]");
+print("S11c strip-newlines: [" + "\nhi\n".strip() + "]");
+print("S11d strip-mixed: [" + " \t\nhi \t\n".strip() + "]");
+print("S11e lstrip: [" + "  hello  ".lstrip() + "]");
+print("S11f rstrip: [" + "  hello  ".rstrip() + "]");
+try {
+    print("S11g trim: [" + "  hello  ".trim() + "]");
+} catch (e) {
+    print("S11g-err: " + e);
+}
+
+# =============================================================
+# Section 12: String + number (implicit conversion?)
+# =============================================================
+print("S12a str+int: " + ("x" + 1));
+print("S12b str+float: " + ("x" + 3.14));
+print("S12c str+bool: " + ("x" + true));
+print("S12d str+null: " + ("x" + null));
+print("S12e int+str: " + (1 + "x"));
+print("S12f str+str: " + ("a" + "b"));
+print("S12g concat-chain: " + "a" + 1 + "b" + 2);
+
+# =============================================================
+# Section 13: Multi-line strings — triple-quote NOT supported by
+# lexer (parsed as empty-string + string → syntax error at compile
+# time, so it cannot even be tested at runtime).  Documented in report.
+# =============================================================
+
+# =============================================================
+# Section 14: String comparison (== != < > <= >=)
+# =============================================================
+print("S14a eq-equal: " + str("abc" == "abc"));
+print("S14b eq-diff: " + str("abc" == "abd"));
+print("S14c neq: " + str("abc" != "abd"));
+print("S14d lt: " + str("abc" < "abd"));
+print("S14e gt: " + str("abd" > "abc"));
+print("S14f lte-eq: " + str("abc" <= "abc"));
+print("S14g gte-eq: " + str("abc" >= "abc"));
+print("S14h lt-prefix: " + str("abc" < "abcd"));
+print("S14i gt-prefix: " + str("abcd" > "abc"));
+print("S14j cmp-empty: " + str("" < "a"));
+print("S14k cmp-unicode: " + str("中" < "文"));
+print("S14l cmp-case: " + str("Z" < "a"));
+print("S14m eq-empty: " + str("" == ""));
+
+# =============================================================
+# Section 15: chr() / ord() round-trip & edge cases
+# =============================================================
+print("S15a chr-65: " + chr(65));
+print("S15b ord-A: " + str(ord("A")));
+print("S15c chr-0: " + chr(0));
+print("S15d chr-20013: " + chr(20013));
+print("S15e ord-cn: " + str(ord("中")));
+try {
+    print("S15f chr-128512-emoji: " + chr(128512));
+    print("S15g chr-128512-len: " + str(len(chr(128512))));
+    print("S15h chr-128512-ord: " + str(ord(chr(128512))));
+} catch (e) {
+    print("S15f-err: " + e);
+}
+print("S15i ord-empty: " + str(ord("")));
+print("S15j ord-multi: " + str(ord("abc")));
+
+# =============================================================
+# Section 16: String repetition edge cases
+# =============================================================
+print("S16a rep-3: " + "ab" * 3);
+print("S16b rep-0: [" + "ab" * 0 + "]");
+print("S16c rep-1: " + "ab" * 1);
+print("S16d rep-unicode: " + "中" * 3);
+try {
+    print("S16e rep-neg: " + "ab" * -1);
+} catch (e) {
+    print("S16e-err: " + e);
+}
+try {
+    print("S16f rep-emoji: " + "😀" * 2);
+} catch (e) {
+    print("S16f-err: " + e);
+}
+
+# =============================================================
+# Section 17: Empty string edge cases
+# =============================================================
+let empty = "";
+print("S17a empty-len: " + str(len(empty)));
+print("S17b empty-is-empty: " + str(empty.is_empty()));
+print("S17c empty-upper: [" + empty.upper() + "]");
+print("S17d empty-find: " + str(empty.find("a")));
+try {
+    print("S17e empty-index: " + empty[0]);
+} catch (e) {
+    print("S17e-err: " + e);
+}
+print("S17f empty-slice: [" + empty[0:5] + "]");
+print("S17g empty-replace: [" + empty.replace("a", "b") + "]");
+print("S17h empty-split: " + str(empty.split(",")));
+print("S17i empty-concat: [" + empty + "x" + "]");
+
+# =============================================================
+# Section 18: contains / starts_with / ends_with on Unicode
+# =============================================================
+print("S18a contains-hit: " + str("hello".contains("ell")));
+print("S18b contains-miss: " + str("hello".contains("xyz")));
+print("S18c contains-empty: " + str("hello".contains("")));
+print("S18d contains-unicode: " + str("你好世界".contains("好世")));
+print("S18e contains-emoji: " + str("😀🎉".contains("🎉")));
+print("S18f starts_with: " + str("hello".starts_with("he")));
+print("S18g ends_with: " + str("hello".ends_with("lo")));
+print("S18h starts_empty: " + str("hello".starts_with("")));
+print("S18i ends_empty: " + str("hello".ends_with("")));
+
+# =============================================================
+# Section 19: join() on mixed & unicode lists
+# =============================================================
+print("S19a join-str: " + ",".join(["a", "b", "c"]));
+print("S19b join-num: " + ",".join([1, 2, 3]));
+print("S19c join-mixed: " + "-".join(["a", 1, true]));
+print("S19d join-empty: " + ",".join([]));
+print("S19e join-single: " + ",".join(["x"]));
+print("S19f join-unicode: " + "+".join(["中", "文"]));
+print("S19g join-emoji-sep: " + "😀".join(["a", "b"]));
+
+# =============================================================
+# Section 20: 'in' operator on strings (substring)
+# =============================================================
+print("S20a in-hit: " + str("ell" in "hello"));
+print("S20b in-miss: " + str("xyz" in "hello"));
+print("S20c in-empty: " + str("" in "hello"));
+print("S20d in-unicode: " + str("中" in "中文"));
+print("S20e in-emoji: " + str("😀" in "😀🎉"));
+print("S20f in-empty-str: " + str("a" in ""));
+
+print("DONE-82");

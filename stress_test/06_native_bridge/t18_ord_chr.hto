@@ -1,0 +1,37 @@
+# t18 — ord() multi-char / empty ; chr() negative / zero / valid
+print("== t18 ord / chr ==");
+try {
+    print("ord(\"ab\")=" + str(ord("ab")));
+} catch (e) {
+    print("ord(\"ab\") ERR: " + str(e));
+}
+try {
+    print("ord(\"\")=" + str(ord("")));
+} catch (e) {
+    print("ord(\"\") ERR: " + str(e));
+}
+try {
+    print("ord(\"A\")=" + str(ord("A")));
+} catch (e) {
+    print("ord(\"A\") ERR: " + str(e));
+}
+try {
+    print("chr(-1)=[" + chr(-1) + "]");
+} catch (e) {
+    print("chr(-1) ERR: " + str(e));
+}
+try {
+    print("chr(0)=[" + chr(0) + "]");
+} catch (e) {
+    print("chr(0) ERR: " + str(e));
+}
+try {
+    print("chr(65)=[" + chr(65) + "]");
+} catch (e) {
+    print("chr(65) ERR: " + str(e));
+}
+try {
+    print("chr(8364)=[" + chr(8364) + "]");
+} catch (e) {
+    print("chr(8364) ERR: " + str(e));
+}

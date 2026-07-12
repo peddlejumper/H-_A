@@ -1,0 +1,5 @@
+# test16: empty function body
+fn noop() {
+}
+noop();
+print("done");

@@ -1,0 +1,144 @@
+# round2_fixes3.hto — compiler.py bug-fix verification (round 3)
+#
+# Verifies fixes for:
+#   Bug 1: `del d[k]` now actually removes the key (was lowered to
+#          `d[k] = null`, leaving the key residue).  Now lowered to
+#          `d.remove(k)` which dispatches to HVM.kt's
+#          callDictMethod `entries.remove(key)`.
+#   Bug 2: `concurrent { ... }` now wraps the body in
+#          SETUP_EXCEPT/RAISE so CONCURRENT_EXIT always runs, even
+#          when the body raises.  Prevents ConcurrentScope leak
+#          (the P-LEAK scenario from round2_91_concurrent.hto).
+#
+# All runtime-risky ops are wrapped in try/catch so the suite runs
+# to completion regardless of VM behaviour.
+
+print("=== R2.FIXES3 START ===");
+
+# ============================================================
+# Bug 1: del d[k] removes the key (no residue)
+# ============================================================
+print("B1-del-dict-key");
+
+let d1 = {"a": 1, "b": 2, "c": 3};
+print("before-len:" + str(d1.len()));        # 3
+print("before-has-a:" + str(d1.has_key("a")));  # true
+
+del d1["a"];
+
+print("after-has-a:" + str(d1.has_key("a")));   # false (was true — key residue bug)
+print("after-len:" + str(d1.len()));            # 2 (was 3 — key residue bug)
+print("after-has-b:" + str(d1.has_key("b")));   # true (untouched)
+print("after-has-c:" + str(d1.has_key("c")));   # true (untouched)
+
+# Deleting a non-existent key should be a no-op (dict.remove returns null)
+let d2 = {"x": 10};
+try {
+    del d2["missing"];
+    print("del-missing:ok");
+    print("d2-len:" + str(d2.len()));           # 1 (unchanged)
+} catch (e) {
+    print("del-missing-ERR:" + str(e));
+}
+
+# Delete then re-add the same key works
+let d3 = {"k": 99};
+del d3["k"];
+print("d3-after-del-has:" + str(d3.has_key("k")));  # false
+d3["k"] = 100;
+print("d3-readd:" + str(d3["k"]));                   # 100
+print("d3-readd-len:" + str(d3.len()));              # 1
+
+# Delete multiple keys sequentially
+let d4 = {"p": 1, "q": 2, "r": 3, "s": 4};
+del d4["p"];
+del d4["r"];
+print("d4-len:" + str(d4.len()));               # 2
+print("d4-has-p:" + str(d4.has_key("p")));      # false
+print("d4-has-r:" + str(d4.has_key("r")));      # false
+print("d4-has-q:" + str(d4.has_key("q")));      # true
+print("d4-has-s:" + str(d4.has_key("s")));      # true
+
+# ============================================================
+# Bug 1 regression: del on identifier / member still works (null store)
+# ============================================================
+print("B1-del-identifier");
+let g = 5;
+del g;
+print("g-after-del:" + str(g));                 # null
+
+# ============================================================
+# Bug 2: concurrent{} body raising must still run CONCURRENT_EXIT
+#        (scope-leak / P-LEAK regression)
+# ============================================================
+print("B2-concurrent-exit-on-throw");
+
+parallel fn r3_fail() { throw "r3-boom"; }
+parallel fn r3_ok() { return 42; }
+
+# First concurrent raises via await; without the fix CONCURRENT_EXIT
+# is skipped and the scope leaks.  The second concurrent then enters
+# with a polluted parent chain and may misbehave.
+try {
+    try {
+        concurrent {
+            let f = r3_fail();
+            let r = await f;
+            print("unreachable");
+        }
+    } catch (e) {
+        print("first-caught:" + str(e));
+    }
+    # Second concurrent — if scope leaked, this breaks or errors.
+    concurrent {
+        let f = r3_ok();
+        let r = await f;
+        print("second-r:" + str(r));
+    }
+    print("B2-LEAK-ok");
+} catch (e) {
+    print("B2-LEAK-ERR:" + str(e));
+}
+
+# ============================================================
+# Bug 2 baseline: normal concurrent (no throw) still works
+# ============================================================
+print("B2-concurrent-normal");
+parallel fn r3_work(n) { return n * 2; }
+try {
+    concurrent {
+        let f1 = r3_work(10);
+        let f2 = r3_work(20);
+        let r1 = await f1;
+        let r2 = await f2;
+        print("sum:" + str(r1 + r2));           # 60
+    }
+    print("B2-normal-ok");
+} catch (e) {
+    print("B2-normal-ERR:" + str(e));
+}
+
+# ============================================================
+# Bug 2: throw directly inside concurrent body (not via await)
+# ============================================================
+print("B2-concurrent-direct-throw");
+try {
+    try {
+        concurrent {
+            throw "direct-boom";
+        }
+    } catch (e) {
+        print("direct-caught:" + str(e));
+    }
+    # If CONCURRENT_EXIT was skipped, the scope leaks here.
+    concurrent {
+        let f = r3_ok();
+        let r = await f;
+        print("after-direct-r:" + str(r));
+    }
+    print("B2-direct-ok");
+} catch (e) {
+    print("B2-direct-ERR:" + str(e));
+}
+
+print("=== R2.FIXES3 DONE ===");

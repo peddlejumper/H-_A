@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# rules/submission_limit.hto — 提交频率限制规则
+# 检查某用户是否超过每分钟提交限制（防刷屏）
+# 由 .NET 后端在提交前调用，返回 {"allowed": true/false}
+# ═══════════════════════════════════════════════════════════════════════════
+
+let MAX_PER_MINUTE = 5;
+let API_BASE = "http://localhost:5000";
+
+# 从环境变量获取用户 ID（由 .NET 宿主注入）
+let user_id = env_get("HSHARG_USER_ID");
+if (user_id == nullptr or user_id == "") {
+    print("{\"allowed\": false, \"reason\": \"missing user_id\"}");
+} else {
+    # 查询该用户最近提交（简化：调用 API）
+    let recent = http_get(API_BASE + "/api/v1/submissions/user/" + user_id + "?page=1&pageSize=20");
+    let allowed = true;
+    let reason = "";
+
+    if (recent != nullptr) {
+        let data = json_parse(recent);
+        # 简化判断：如果有超过 MAX_PER_MINUTE 条记录在最近一分钟内则拒绝
+        # 实际实现需检查时间戳
+        if (data != nullptr and len(data["items"]) >= MAX_PER_MINUTE) {
+            allowed = false;
+            reason = "提交过于频繁，每分钟最多 " + str(MAX_PER_MINUTE) + " 次";
+        }
+    }
+
+    if (allowed) {
+        print("{\"allowed\": true}");
+    } else {
+        print("{\"allowed\": false, \"reason\": \"" + reason + "\"}");
+    }
+}

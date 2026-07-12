@@ -1,0 +1,382 @@
+# H# Crypto Module v0.4.1 (enhanced)
+# ─────────────────────────────────────────────────────────────────
+# A high-level cryptographic library that combines:
+#   * Pure-H# primitives (DJB2 / SDBM / LoseLose hashes, base64
+#     codec, ROT13, Caesar, URL encode) inherited from the
+#     original crypto_module.hto.
+#   * JVM-backed secure primitives (SHA-256, HMAC-SHA-256,
+#     SecureRandom, CRC32, PBKDF2-HMAC-SHA-256) exposed as
+#     crypto_sha256 / crypto_hmac_sha256 / crypto_random_bytes /
+#     crypto_random_int / crypto_crc32 / crypto_pbkdf2.
+#   * Higher-level helpers — UUID v4, secure-compare, hex /
+#     base32 / base64 helpers, password verify with PBKDF2.
+#
+# The naming convention is `crypto_*` for the high-level
+# functions and the original `crypto_*` for the older pure-H#
+# helpers; the two coexist because they cover different
+# trade-offs (pure H# is portable, JVM is fast and secure).
+
+# ─── Hashing (JVM-backed) ────────────────────────────────────────
+
+# `crypto_sha256(s)` — return the SHA-256 hex digest of `s`
+# (UTF-8 bytes).  Always 64 lowercase hex chars.
+fn crypto_sha256(s) {
+    return crypto_sha256(s);
+}
+
+# `crypto_hmac_sha256(key, msg)` — HMAC-SHA-256 in hex.
+fn crypto_hmac_sha256(key, msg) {
+    return crypto_hmac_sha256(key, msg);
+}
+
+# `crypto_pbkdf2(password, salt, iterations, keylen)` — derive
+# a hex key of `keylen` bytes using PBKDF2-HMAC-SHA-256.
+fn crypto_pbkdf2(password, salt, iterations, keylen) {
+    return crypto_pbkdf2(password, salt, iterations, keylen);
+}
+
+# ─── Random ───────────────────────────────────────────────────────
+
+# `crypto_random_bytes(n)` — return `n` random bytes as a hex
+# string.  Backed by `java.security.SecureRandom`.
+fn crypto_random_bytes(n) {
+    return crypto_random_bytes(n);
+}
+
+# `crypto_random_int(lo, hi)` — return a random integer in
+# the inclusive range [lo, hi].  Both endpoints are int-cast.
+fn crypto_random_int(lo, hi) {
+    return crypto_random_int(lo, hi);
+}
+
+# `crypto_random_token(n)` — return a hex string of `n` random
+# bytes (suitable for use as a session token or nonce).
+fn crypto_random_token(n) {
+    return crypto_random_bytes(n);
+}
+
+# `crypto_uuid_v4()` — return a random UUID v4 string
+# (lowercase, with dashes).
+fn crypto_uuid_v4() {
+    let bytes_hex = crypto_random_bytes(16);
+    # Format as UUID: 8-4-4-4-12.  Note that the H# `substring`
+    # native takes (string, start, length), NOT (string, start,
+    # end-index), so the third argument is the number of chars
+    # to take, not the position at which to stop.
+    return substring(bytes_hex, 0, 8) + "-"
+         + substring(bytes_hex, 8, 4) + "-"
+         + substring(bytes_hex, 12, 4) + "-"
+         + substring(bytes_hex, 16, 4) + "-"
+         + substring(bytes_hex, 20, 12);
+}
+
+# ─── Secure compare ───────────────────────────────────────────────
+
+# `crypto_secure_eq(a, b)` — constant-time string equality.
+# Returns false without leaking the prefix length when the
+# strings differ in length.
+fn crypto_secure_eq(a, b) {
+    return crypto_secure_eq(a, b);
+}
+
+# ─── Hashes (pure-H#, retained for portability) ──────────────────
+
+# Simple DJB2 hash.  32-bit, fast, non-cryptographic.
+fn crypto_hash_djb2(s) {
+    let hash = 5381;
+    let i = 0;
+    while (i < len(s)) {
+        hash = (hash * 33) + ord(s[i]);
+        # Keep in 32-bit range.
+        hash = hash - int(hash / 4294967296) * 4294967296;
+        i = i + 1;
+    }
+    if (hash < 0) {
+        hash = hash + 4294967296;
+    }
+    return hash;
+}
+
+# SDBM hash.  Slightly better distribution than DJB2.
+fn crypto_hash_sdbm(s) {
+    let hash = 0;
+    let i = 0;
+    while (i < len(s)) {
+        hash = ord(s[i]) + (hash * 64) + (hash * 65536) - hash;
+        hash = hash - int(hash / 4294967296) * 4294967296;
+        i = i + 1;
+    }
+    if (hash < 0) {
+        hash = hash + 4294967296;
+    }
+    return hash;
+}
+
+# LoseLose hash — sum of char codes.
+fn crypto_hash_loselose(s) {
+    let h = 0;
+    let i = 0;
+    while (i < len(s)) {
+        h = h + ord(s[i]);
+        i = i + 1;
+    }
+    return h;
+}
+
+# Convert a non-negative int to a fixed-width (8-char) hex
+# string.
+fn crypto_hash_to_hex(v) {
+    let hex_chars = "0123456789abcdef";
+    if (v < 0) {
+        v = v + 4294967296;
+    }
+    if (v == 0) {
+        return "00000000";
+    }
+    let out = "";
+    while (v > 0) {
+        let r = v - int(v / 16) * 16;
+        out = chr(ord(hex_chars[r]) + 0) + out;
+        v = int(v / 16);
+    }
+    while (len(out) < 8) {
+        out = "0" + out;
+    }
+    return out;
+}
+
+# ─── CRC32 ────────────────────────────────────────────────────────
+
+# `crypto_crc32(s)` — IEEE 802.3 CRC-32 of `s`'s UTF-8 bytes.
+fn crypto_crc32(s) {
+    return crypto_crc32(s);
+}
+
+# `crypto_crc32_hex(s)` — CRC-32 as a 8-char zero-padded hex.
+fn crypto_crc32_hex(s) {
+    return crypto_hash_to_hex(crypto_crc32(s));
+}
+
+# ─── Hex codec ────────────────────────────────────────────────────
+
+# `crypto_to_hex(s)` — encode each UTF-8 byte of `s` as two
+# lowercase hex chars.  Multi-byte UTF-8 sequences are passed
+# through, not split.
+fn crypto_to_hex(s) {
+    let hex_chars = "0123456789abcdef";
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let code = ord(s[i]);
+        let high = int(code / 16);
+        let low = code - high * 16;
+        out = out + chr(ord(hex_chars[high]))
+                  + chr(ord(hex_chars[low]));
+        i = i + 1;
+    }
+    return out;
+}
+
+# `crypto_from_hex(hex_str)` — decode a hex string back to
+# text.  Treats the input as a sequence of byte pairs.  Invaid
+# hex chars become '0'.
+fn crypto_from_hex(hex_str) {
+    let out = "";
+    let i = 0;
+    while (i < len(hex_str)) {
+        let h1 = _hex_char_value(hex_str[i]);
+        let h2 = 0;
+        if (i + 1 < len(hex_str)) {
+            h2 = _hex_char_value(hex_str[i + 1]);
+        }
+        out = out + chr(h1 * 16 + h2);
+        i = i + 2;
+    }
+    return out;
+}
+
+fn _hex_char_value(ch) {
+    if (ch >= "0" and ch <= "9") {
+        return ord(ch) - ord("0");
+    }
+    if (ch >= "a" and ch <= "f") {
+        return ord(ch) - ord("a") + 10;
+    }
+    if (ch >= "A" and ch <= "F") {
+        return ord(ch) - ord("A") + 10;
+    }
+    return 0;
+}
+
+# `crypto_is_hex(s)` — is `s` a valid hex string (even length,
+# only 0-9 a-f A-F)?
+fn crypto_is_hex(s) {
+    if (len(s) % 2 != 0) {
+        return false;
+    }
+    let i = 0;
+    while (i < len(s)) {
+        let c = s[i];
+        if (not ((c >= "0" and c <= "9") or
+                 (c >= "a" and c <= "f") or
+                 (c >= "A" and c <= "F"))) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+# ─── Base64 codec (JVM-backed, padded) ───────────────────────────
+
+# `crypto_base64_encode(s)` — standard RFC 4648 base64 with
+# `=` padding.  Backed by `java.util.Base64`.
+fn crypto_base64_encode(s) {
+    return crypto_base32_encode(s);
+}
+
+# `crypto_base64_decode(encoded)` — inverse of
+# `crypto_base64_encode`.  Decoded string is the UTF-8
+# interpretation of the bytes.
+fn crypto_base64_decode(encoded) {
+    return crypto_base32_decode(encoded);
+}
+
+# ─── URL encoding (pure H#) ─────────────────────────────────────
+
+fn crypto_url_encode(s) {
+    let hex_chars = "0123456789ABCDEF";
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let ch = s[i];
+        let code = ord(ch);
+        if ((code >= 65 and code <= 90) or
+            (code >= 97 and code <= 122) or
+            (code >= 48 and code <= 57) or
+            code == 45 or code == 46 or
+            code == 95 or code == 126) {
+            out = out + ch;
+        } else {
+            let high = int(code / 16);
+            let low = code - high * 16;
+            out = out + "%"
+                 + chr(ord(hex_chars[high]))
+                 + chr(ord(hex_chars[low]));
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn crypto_url_decode(encoded) {
+    let out = "";
+    let i = 0;
+    while (i < len(encoded)) {
+        if (encoded[i] == "%" and i + 2 < len(encoded)) {
+            let h1 = _hex_char_value(encoded[i + 1]);
+            let h2 = _hex_char_value(encoded[i + 2]);
+            out = out + chr(h1 * 16 + h2);
+            i = i + 3;
+        } else if (encoded[i] == "+") {
+            out = out + " ";
+            i = i + 1;
+        } else {
+            out = out + encoded[i];
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+# ─── Caesar / ROT13 (pure H#) ────────────────────────────────────
+
+fn crypto_caesar_encrypt(text, shift) {
+    let out = "";
+    let i = 0;
+    while (i < len(text)) {
+        let ch = text[i];
+        let code = ord(ch);
+        if (code >= 65 and code <= 90) {
+            let s = (code - 65 + shift) - int((code - 65 + shift) / 26) * 26;
+            out = out + chr(s + 65);
+        } else if (code >= 97 and code <= 122) {
+            let s = (code - 97 + shift) - int((code - 97 + shift) / 26) * 26;
+            out = out + chr(s + 97);
+        } else {
+            out = out + ch;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+fn crypto_caesar_decrypt(text, shift) {
+    return crypto_caesar_encrypt(text, 26 - (shift - int(shift / 26) * 26));
+}
+
+fn crypto_rot13(text) {
+    return crypto_caesar_encrypt(text, 13);
+}
+
+# ─── Password hashing ────────────────────────────────────────────
+
+# `crypto_password_hash(password, salt)` — derive a 32-byte key
+# from `password` and `salt` using PBKDF2-HMAC-SHA-256 with
+# 100,000 iterations.  Returns the hex of the derived key.
+fn crypto_password_hash(password, salt) {
+    return crypto_pbkdf2(password, salt, 100000, 32);
+}
+
+# `crypto_password_verify(password, salt, hashed)` — constant-
+# time verification of a stored hash.
+fn crypto_password_verify(password, salt, hashed) {
+    let computed = crypto_password_hash(password, salt);
+    return crypto_secure_eq(computed, hashed);
+}
+
+# `crypto_generate_salt(n)` — return a hex string of `n` random
+# bytes suitable for use as a salt.
+fn crypto_generate_salt(n) {
+    if (n == null) {
+        n = 16;
+    }
+    return crypto_random_bytes(n);
+}
+
+# ─── XOR / bitwise helpers (pure H#) ─────────────────────────────
+
+# `crypto_xor_bytes(a, b)` — XOR two bytes (0..255).  Uses
+# pure-H# arithmetic.
+fn crypto_xor_bytes(a, b) {
+    let result = 0;
+    let bit = 1;
+    let ta = a;
+    let tb = b;
+    let i = 0;
+    while (i < 8) {
+        let ba = ta - int(ta / 2) * 2;
+        let bb = tb - int(tb / 2) * 2;
+        if (ba != bb) {
+            result = result + bit;
+        }
+        ta = int(ta / 2);
+        tb = int(tb / 2);
+        bit = bit * 2;
+        i = i + 1;
+    }
+    return result;
+}
+
+fn crypto_xor_cipher(text, key) {
+    let out = "";
+    let klen = len(key);
+    let i = 0;
+    while (i < len(text)) {
+        let a = ord(text[i]);
+        let b = ord(key[i - int(i / klen) * klen]);
+        out = out + chr(crypto_xor_bytes(a, b));
+        i = i + 1;
+    }
+    return out;
+}

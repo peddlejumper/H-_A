@@ -1,0 +1,26 @@
+# T05 - Union + class interop: a class field holding a union, methods reading it
+# (H# class convention: no `self` param; fields accessed by bare name)
+union Status {
+    Ok: code;
+    Err: code, msg;
+}
+
+class Result {
+    let st = 0;
+    fn init(s) { st = s; }
+    fn is_ok() { return st.__variant__ == "Ok"; }
+    fn message() {
+        if (st.__variant__ == "Ok") {
+            return "ok:" + str(st.code);
+        }
+        return "err:" + str(st.code) + "/" + st.msg;
+    }
+}
+
+let r1 = new Result(Status{Ok: 200});
+let r2 = new Result(Status{Err: 404, "not found"});
+
+print(r1.is_ok());
+print(r1.message());
+print(r2.is_ok());
+print(r2.message());

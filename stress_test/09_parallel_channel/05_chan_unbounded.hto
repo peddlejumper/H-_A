@@ -1,0 +1,71 @@
+# 05 — chan_new(0) unbounded channel
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+let ch = chan_new(0);
+check("type_is_channel", type(ch) == "channel", "type=" + type(ch));
+check("empty_size",      chan_size(ch) == 0,     "size=" + str(chan_size(ch)));
+
+# Sends to unbounded channel never block (no consumer yet)
+chan_send(ch, 1);
+chan_send(ch, 2);
+chan_send(ch, 3);
+chan_send(ch, 4);
+chan_send(ch, 5);
+check("after_5_sends", chan_size(ch) == 5, "size=" + str(chan_size(ch)));
+
+# Mixed-type sends
+chan_send(ch, "hello");
+chan_send(ch, [1, 2, 3]);
+chan_send(ch, {"k": "v"});
+check("after_mixed_sends", chan_size(ch) == 8, "size=" + str(chan_size(ch)));
+
+# FIFO receive order — capture each recv into its own var to avoid double-recv
+let a = chan_recv(ch);
+let b = chan_recv(ch);
+let c = chan_recv(ch);
+check("fifo_1", a == 1, "a=" + str(a));
+check("fifo_2", b == 2, "b=" + str(b));
+check("fifo_3", c == 3, "c=" + str(c));
+check("size_after_recv", chan_size(ch) == 5, "size=" + str(chan_size(ch)));
+
+# Receive remaining: 4, 5, "hello", [1,2,3], {"k":"v"}
+let d = chan_recv(ch);
+let e = chan_recv(ch);
+let s = chan_recv(ch);
+let l = chan_recv(ch);
+let m = chan_recv(ch);
+check("recv_4",      d == 4,         "d=" + str(d));
+check("recv_5",      e == 5,         "e=" + str(e));
+check("recv_string", s == "hello",   "s=" + str(s));
+check("recv_list",   l[2] == 3,      "l=" + str(l));
+check("recv_dict",   m["k"] == "v",  "m=" + str(m));
+check("size_0",      chan_size(ch) == 0, "size=" + str(chan_size(ch)));
+
+# Bulk send/recv
+let ch2 = chan_new(0);
+let i = 0;
+while (i < 1000) {
+    chan_send(ch2, i);
+    i = i + 1;
+}
+check("bulk_size", chan_size(ch2) == 1000, "size=" + str(chan_size(ch2)));
+
+let sum = 0;
+let j = 0;
+while (j < 1000) {
+    sum = sum + chan_recv(ch2);
+    j = j + 1;
+}
+check("bulk_sum",   sum == 499500, "sum=" + str(sum));
+check("bulk_empty", chan_size(ch2) == 0, "size=" + str(chan_size(ch2)));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

@@ -1,0 +1,23 @@
+# t11 - variant pattern quirks: bare variant name is a BINDING not a variant match
+# `Empty` without parens is a binding (matches anything), NOT a variant pattern.
+# This is a known parser design: only `Name(...)` is a variant; `Name` is a binding.
+union Opt {
+    Some: v;
+    None;
+}
+fn classify(x) {
+    return match x {
+        Some(v) => "some:" + str(v),
+        None => "none-binding",
+        _ => "other"
+    };
+}
+let s = Opt{Some: 5};
+let n = Opt{None};
+print("t11_some:" + classify(s));
+print("t11_none:" + classify(n));
+# CRITICAL: `None` (bare) is a binding — matches ANY value.
+# So classify(42) hits Some(v)? No (not an HInstance w/ __variant__=Some).
+# Then None (binding) matches 42 → "none-binding"
+print("t11_int_hits_none_binding:" + classify(42));
+print("t11_str_hits_none_binding:" + classify("hi"));

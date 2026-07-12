@@ -1,0 +1,30 @@
+# t18_cancel_via_join.hto
+# 不通过 await 触发失败，而是依赖 CONCURRENT_EXIT 的 join() 收集错误。
+# parent-wins 要求：fail 一失败就 cancel slow，块立即以 X 失败。
+# 观察点：是否打印 "slow-done"？elapsed 多大？
+#   若 join 不取消兄弟 -> slow 跑完整循环才结束，"slow-done" 打印，elapsed 大。
+parallel fn fail() {
+    throw "X";
+}
+parallel fn slow() {
+    let i = 0;
+    while (i < 2000000) {
+        i = i + 1;
+    }
+    print("slow-done");
+    return i;
+}
+let t0 = time_now();
+try {
+    concurrent {
+        let fa = fail();
+        let fb = slow();
+    }
+} catch (e) {
+    let t1 = time_now();
+    print("caught:");
+    print(e);
+    print("elapsed-ms:");
+    print(t1 - t0);
+}
+print("after");

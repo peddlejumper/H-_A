@@ -1,0 +1,33 @@
+# t12 — regex_* boundaries: no-match, empty replacement, invalid pattern, groups
+print("== t12 regex ==");
+try {
+    print("regex_match(\"xyz\",\"hello\")=" + str(regex_match("xyz", "hello")));
+} catch (e) {
+    print("regex_match(none) ERR: " + str(e));
+}
+try {
+    print("regex_search(\"xyz\",\"hello\")=[" + regex_search("xyz", "hello") + "]");
+} catch (e) {
+    print("regex_search(none) ERR: " + str(e));
+}
+try {
+    print("regex_find_all(\"x\",\"axbxc\")=" + str(regex_find_all("x", "axbxc")));
+} catch (e) {
+    print("regex_find_all ERR: " + str(e));
+}
+try {
+    print("regex_replace(\"l\",\"\",\"hello\")=" + regex_replace("l", "", "hello"));
+} catch (e) {
+    print("regex_replace(empty) ERR: " + str(e));
+}
+try {
+    print("regex_groups(\"(\\\\d+)\",\"abc123\")=" + str(regex_groups("(\\d+)", "abc123")));
+} catch (e) {
+    print("regex_groups ERR: " + str(e));
+}
+# invalid regex pattern
+try {
+    print("regex_match(\"(\",\"abc\")=" + str(regex_match("(", "abc")));
+} catch (e) {
+    print("regex_match(bad pattern) ERR: " + str(e));
+}

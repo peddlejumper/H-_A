@@ -1,0 +1,298 @@
+# H# zzwUI Test 01 — Widget core (Button, Label, Panel, CheckBox, TextInput,
+# Slider, ListBox, ProgressBar, ImageView, Canvas).  The base zzwUI class and
+# these widget classes come from hwdui_min.hto (prepended by build.py).
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. zzwUI base class properties & behaviour ──────────────────────────
+let u = new zzwUI();
+u.set_pos(10, 20);
+u.set_size(50, 60);
+check("ui/pos",           u.x == 10 and u.y == 20);
+check("ui/size",          u.width == 50 and u.height == 60);
+check("ui/visible",       u.visible == true);
+check("ui/enabled",       u.enabled == true);
+check("ui/parent",        u.parent == nullptr);
+check("ui/no_kids",       len(u.children) == 0);
+u.set_opacity(0.5);
+check("ui/opacity",       u.opacity == 0.5);
+u.set_rotation(45);
+check("ui/rot",           u.rotation == 45);
+u.set_tooltip("hi");
+check("ui/tooltip",       u.tooltip == "hi");
+u.set_focus(true);
+check("ui/focus",         u.focused == true);
+u.add_class("primary");
+check("ui/cls1",          u.classes[0] == "primary");
+u.set_inline_style("color", "#ff00ff");
+check("ui/style_k",       u.get_inline_style("color", "") == "#ff00ff");
+check("ui/style_def",     u.get_inline_style("missing", "x") == "x");
+check("ui/contains",      u.contains(20, 30) == true);
+check("ui/contains_no",   u.contains(0, 0) == false);
+
+# ─── 2. Button ───────────────────────────────────────────────────────────
+let b = new Button();
+b.init_btn("OK");
+check("btn/type",         b.widget_type == "Button");
+check("btn/text",         b.text == "OK");
+check("btn/w100",         b.width == 100);
+check("btn/h30",          b.height == 30);
+check("btn/visible",      b.visible == true);
+check("btn/checked0",     b.is_checked == false);
+b.set_text("Submit");
+check("btn/set_text",     b.get_text() == "Submit");
+b.set_pos(15, 25);
+check("btn/pos",          b.x == 15 and b.y == 25);
+b.set_size(120, 40);
+check("btn/size",         b.width == 120 and b.height == 40);
+b.set_icon("✓");
+check("btn/icon",         b.icon == "✓");
+b.set_checked(true);
+check("btn/checked",      b.is_checked == true);
+b.set_default(true);
+check("btn/default",      b.is_default == true);
+b.set_cancel(true);
+check("btn/cancel",       b.is_cancel == true);
+b.set_toggle(true);
+check("btn/toggle",       b.is_toggle == true);
+b.set_shortcut("Ctrl+S");
+check("btn/shortcut",     b.shortcut == "Ctrl+S");
+let hits = [0];
+b.set_onClick(fn(btn) { hits[0] = hits[0] + 1; });
+b.click();
+check("btn/click1",       hits[0] == 1);
+check("btn/pressed",      b.is_pressed() == true);
+b.release();
+check("btn/released",     b.is_pressed() == false);
+check("btn/toggled",      b.is_checked == false);
+
+# ─── 3. Label ────────────────────────────────────────────────────────────
+let l = new Label();
+l.init_label("Hello");
+check("lbl/type",         l.widget_type == "Label");
+check("lbl/text",         l.text == "Hello");
+check("lbl/fs12",         l.font_size == 12);
+check("lbl/align_l",      l.text_align == "left");
+check("lbl/color",        l.text_color == "#000000");
+l.set_text("World");
+check("lbl/set_text",     l.get_text() == "World");
+l.set_font_size(18);
+check("lbl/fs18",         l.font_size == 18);
+l.set_alignment("center");
+check("lbl/center",       l.text_align == "center");
+l.set_color("#ff0000");
+check("lbl/color_set",    l.text_color == "#ff0000");
+l.set_word_wrap(true);
+check("lbl/word_wrap",    l.word_wrap == true);
+l.set_multi_line(true);
+check("lbl/multi",        l.multi_line == true);
+l.set_max_lines(3);
+check("lbl/max_lines",    l.max_lines == 3);
+
+# ─── 4. Panel layout: vbox / hbox / grid ────────────────────────────────
+let pv = new Panel();
+pv.init_panel("vbox");
+pv.set_pos(0, 0);
+pv.set_size(100, 200);
+let c1 = new Button(); c1.init_btn("A"); c1.set_size(100, 30);
+let c2 = new Button(); c2.init_btn("B"); c2.set_size(100, 30);
+let c3 = new Button(); c3.init_btn("C"); c3.set_size(100, 30);
+pv.add_child(c1);
+pv.add_child(c2);
+pv.add_child(c3);
+check("pnl/vbox_n",       len(pv.children) == 3);
+check("pnl/vbox_p0",      c1.parent == pv);
+pv.do_layout();
+check("pnl/vbox_y0",      c1.y == 0);
+check("pnl/vbox_y1",      c2.y == 34);
+check("pnl/vbox_y2",      c3.y == 68);
+check("pnl/vbox_x",       c1.x == 0 and c2.x == 0 and c3.x == 0);
+
+let ph = new Panel();
+ph.init_panel("hbox");
+ph.set_size(300, 30);
+let h1 = new Label(); h1.init_label("a"); h1.set_size(30, 30);
+let h2 = new Label(); h2.init_label("b"); h2.set_size(30, 30);
+let h3 = new Label(); h3.init_label("c"); h3.set_size(30, 30);
+ph.add_child(h1);
+ph.add_child(h2);
+ph.add_child(h3);
+ph.do_layout();
+check("pnl/hbox_x0",      h1.x == 0);
+check("pnl/hbox_x1",      h2.x == 34);
+check("pnl/hbox_x2",      h3.x == 68);
+check("pnl/hbox_y",       h1.y == 0 and h2.y == 0 and h3.y == 0);
+
+let pg = new Panel();
+pg.init_panel("grid");
+pg.set_size(200, 200);
+let g1 = new Button(); g1.init_btn("1"); g1.set_size(50, 50);
+let g2 = new Button(); g2.init_btn("2"); g2.set_size(50, 50);
+let g3 = new Button(); g3.init_btn("3"); g3.set_size(50, 50);
+let g4 = new Button(); g4.init_btn("4"); g4.set_size(50, 50);
+pg.add_child(g1);
+pg.add_child(g2);
+pg.add_child(g3);
+pg.add_child(g4);
+pg.do_layout();
+check("pnl/grid00",       g1.x == 0 and g1.y == 0);
+check("pnl/grid10",       g2.x == 54 and g2.y == 0);
+check("pnl/grid01",       g3.x == 0 and g3.y == 54);
+check("pnl/grid11",       g4.x == 54 and g4.y == 54);
+
+# remove_child
+let pr = new Panel();
+pr.init_panel("vbox");
+let rk = new Button(); rk.init_btn("X");
+pr.add_child(rk);
+check("pnl/rm_n1",        len(pr.children) == 1);
+pr.remove_child(rk);
+check("pnl/rm_n0",        len(pr.children) == 0);
+check("pnl/rm_p",         rk.parent == nullptr);
+
+# ─── 5. CheckBox ─────────────────────────────────────────────────────────
+let cb = new CheckBox();
+cb.init_cb("Accept");
+check("cb/type",          cb.widget_type == "CheckBox");
+check("cb/init",          cb.is_checked == false);
+cb.set_checked(true);
+check("cb/checked",       cb.is_checked == true);
+cb.toggle();
+check("cb/toggle",        cb.is_checked == false);
+cb.toggle();
+check("cb/toggle2",       cb.is_checked == true);
+
+# ─── 6. TextInput ────────────────────────────────────────────────────────
+let ti = new TextInput();
+ti.init_input("enter text", "hello");
+check("ti/type",          ti.widget_type == "TextInput");
+check("ti/placeholder",   ti.placeholder == "enter text");
+check("ti/value",         ti.value == "hello");
+ti.append("!");
+check("ti/append",        ti.value == "hello!");
+ti.backspace();
+check("ti/bs",            ti.value == "hello");
+ti.clear_input();
+check("ti/clear",         ti.value == "");
+ti.set_value("world");
+check("ti/set",           ti.get_value() == "world");
+ti.set_password(true);
+check("ti/pwd",           ti.is_password == true);
+ti.set_max_length(20);
+check("ti/max",           ti.max_length == 20);
+
+# ─── 7. Slider ───────────────────────────────────────────────────────────
+let s = new Slider();
+s.init_slider(0, 100, 25);
+check("sld/type",         s.widget_type == "Slider");
+check("sld/min",          s.min_value == 0);
+check("sld/max",          s.max_value == 100);
+check("sld/val",          s.value == 25);
+s.set_value(50);
+check("sld/set",          s.get_value() == 50);
+s.set_value(200);
+check("sld/clamp_h",      s.get_value() == 100);
+s.set_value(-10);
+check("sld/clamp_l",      s.get_value() == 0);
+s.set_step(5);
+check("sld/step",         s.step == 5);
+s.set_vertical(true);
+check("sld/vert",         s.is_vertical == true);
+
+# ─── 8. ListBox ──────────────────────────────────────────────────────────
+let lb = new ListBox();
+lb.init_listbox();
+check("lb/type",          lb.widget_type == "ListBox");
+check("lb/init_n",        lb.get_count() == 0);
+lb.add_item("alpha");
+lb.add_item("beta");
+lb.add_item("gamma");
+check("lb/n3",            lb.get_count() == 3);
+check("lb/get0",          lb.get_item(0) == "alpha");
+check("lb/get2",          lb.get_item(2) == "gamma");
+lb.set_selected(1);
+check("lb/sel",           lb.get_selected() == 1);
+check("lb/sel_t",         lb.get_selected_text() == "beta");
+lb.remove_item(0);
+check("lb/rm_n2",         lb.get_count() == 2);
+check("lb/rm_first",      lb.get_item(0) == "beta");
+lb.set_selected(-1);
+check("lb/sel_n1",        lb.get_selected() == -1);
+lb.set_selected(99);
+check("lb/sel_oob",       lb.get_selected() == -1);
+lb.set_multi_select(true);
+check("lb/multi",         lb.multi_select == true);
+lb.clear_items();
+check("lb/clear",         lb.get_count() == 0);
+
+# ─── 9. ProgressBar ──────────────────────────────────────────────────────
+let pb = new ProgressBar();
+pb.init_pb(25, 100);
+check("pb/type",          pb.widget_type == "ProgressBar");
+check("pb/v",             pb.value == 25);
+check("pb/m",             pb.max_value == 100);
+check("pb/pct",           pb.get_percent() == 25);
+pb.set_value(50);
+check("pb/pct50",         pb.get_percent() == 50);
+let pb0 = new ProgressBar();
+pb0.init_pb(10, 0);
+check("pb/div0",          pb0.get_percent() == 0);
+pb.set_show_text(false);
+check("pb/st",            pb.show_text == false);
+pb.set_orientation("vertical");
+check("pb/orient",        pb.orientation == "vertical");
+
+# ─── 10. ImageView / Canvas ──────────────────────────────────────────────
+let iv = new ImageView();
+iv.init_image("logo.png");
+check("iv/type",          iv.widget_type == "ImageView");
+check("iv/src",           iv.source == "logo.png");
+iv.set_source("bg.jpg");
+check("iv/src2",          iv.source == "bg.jpg");
+iv.set_stretch("uniform");
+check("iv/stretch",       iv.stretch == "uniform");
+iv.set_preserve_aspect(false);
+check("iv/aspect",        iv.preserve_aspect == false);
+
+let c = new Canvas();
+c.init_canvas();
+check("c/type",           c.widget_type == "Canvas");
+check("c/w",              c.width == 200);
+c.clear("#fff");
+check("c/bg",             c.bg_color == "#fff");
+
+# ─── 11. Tree hierarchy ──────────────────────────────────────────────────
+let root = new Panel();
+root.init_panel("absolute");
+root.set_pos(5, 5);
+root.set_size(800, 600);
+let child = new Button();
+child.init_btn("Go");
+let grand = new Label();
+grand.init_label("caption");
+root.add_child(child);
+child.add_child(grand);
+check("tree/grand_p",     grand.parent == child);
+check("tree/child_p",     child.parent == root);
+check("tree/grand_gp",    grand.parent.parent == root);
+check("tree/n_grand",     len(child.children) == 1);
+check("tree/n_root",      len(root.children) == 1);
+
+print("01_ZZW_WIDGET_CORE : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

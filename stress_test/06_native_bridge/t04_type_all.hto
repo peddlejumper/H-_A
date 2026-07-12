@@ -1,0 +1,12 @@
+# t04 — type() / typeof() across all value kinds
+print("== t04 type of each ==");
+print("type(42)=" + type(42));
+print("type(3.14)=" + type(3.14));
+print("type(str)=" + type("hi"));
+print("type(list)=" + type([]));
+print("type(dict)=" + type({}));
+print("type(null)=" + type(null));
+print("type(true)=" + type(true));
+print("type(false)=" + type(false));
+print("typeof(42)=" + typeof(42));
+print("typeof(nullptr)=" + typeof(nullptr));

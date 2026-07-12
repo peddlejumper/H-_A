@@ -1,0 +1,9 @@
+# t05: await at the top level of a module.
+# compiler.py:969-972 says the entry script acts as an implicit
+# async context, so top-level await is allowed.
+async fn foo() {
+    return 10;
+}
+let x = await foo();
+let y = await foo();
+print(x + y);

@@ -1,0 +1,472 @@
+# ============================================================
+# round4_137_stdlib.hto — 标准库边界条件测试
+# 智能体 #137, Round 4
+# 目标: 对所有内置函数传入空、null、错误类型参数，探测边界行为
+# 方法: 每个用例用 try/catch 包裹，打印 [S## TAG | observed | EXPECT=expected | PASS/FAIL]
+# ============================================================
+
+let stats = [0, 0];
+fn report(tag, observed, expected) {
+    let ok = observed == expected;
+    if (ok) {
+        stats[0] = stats[0] + 1;
+    } else {
+        stats[1] = stats[1] + 1;
+    }
+    let status = "FAIL";
+    if (ok) { status = "PASS"; }
+    print("S" + tag + " | " + str(observed) + " | EXPECT=" + str(expected) + " | " + status);
+}
+
+# 辅助：执行可能抛异常的表达式，返回 "OK:<val>" 或 "ERR:<msg>"
+fn probe(expr_fn) {
+    let r = "no-run";
+    try {
+        r = "OK:" + str(expr_fn());
+    } catch (e) {
+        r = "ERR:[" + str(e) + "]";
+    }
+    return r;
+}
+
+print("===== R4-137 STDLIB BOUNDARY START =====");
+
+# ============================================================
+# S1: len() 边界
+#   len(""), len([]), len({}), len(null), len(42), len(true), len("中")
+# ============================================================
+print("== S1: len() boundary ==");
+
+report("1.01-len-empty-str", len(""), 0);
+report("1.02-len-empty-list", len([]), 0);
+report("1.03-len-empty-dict", len({}), 0);
+report("1.04-len-unicode", len("中"), 1);
+report("1.05-len-unicode-multi", len("中文a"), 3);
+
+# len(null) — 应抛异常
+let s1a = "no-err";
+try { s1a = "got:" + str(len(null)); } catch (e) { s1a = "ERR:[" + str(e) + "]"; }
+report("1.06-len-null", s1a, "ERR");
+
+# len(42) — 应抛异常
+let s1b = "no-err";
+try { s1b = "got:" + str(len(42)); } catch (e) { s1b = "ERR:[" + str(e) + "]"; }
+report("1.07-len-int", s1b, "ERR");
+
+# len(true) — 应抛异常
+let s1c = "no-err";
+try { s1c = "got:" + str(len(true)); } catch (e) { s1c = "ERR:[" + str(e) + "]"; }
+report("1.08-len-bool", s1c, "ERR");
+
+# len() 无参数 — 应抛异常
+let s1d = "no-err";
+try { s1d = "got:" + str(len()); } catch (e) { s1d = "ERR:[" + str(e) + "]"; }
+report("1.09-len-no-args", s1d, "ERR");
+
+# len 过多参数
+let s1e = "no-err";
+try { s1e = "got:" + str(len([1], [2])); } catch (e) { s1e = "ERR:[" + str(e) + "]"; }
+report("1.10-len-too-many", s1e, "ERR");
+
+# ============================================================
+# S2: abs() 边界
+#   abs(-5), abs(0), abs(3.14), abs(-3.14), abs("str"), abs(null), abs([])
+# ============================================================
+print("== S2: abs() boundary ==");
+
+report("2.01-abs-neg-int", abs(-5), 5);
+report("2.02-abs-zero", abs(0), 0);
+report("2.03-abs-float", abs(3.14), 3.14);
+report("2.04-abs-neg-float", abs(-3.14), 3.14);
+
+# abs("str") — 应抛异常
+let s2a = "no-err";
+try { s2a = "got:" + str(abs("str")); } catch (e) { s2a = "ERR:[" + str(e) + "]"; }
+report("2.05-abs-string", s2a, "ERR");
+
+# abs(null) — toDouble(HNull)=0.0, 可能返回 0 而非报错 (潜在 bug)
+let s2b = "no-err";
+try { s2b = "got:" + str(abs(null)); } catch (e) { s2b = "ERR:[" + str(e) + "]"; }
+report("2.06-abs-null", s2b, "ERR");
+
+# abs([]) — 应抛异常
+let s2c = "no-err";
+try { s2c = "got:" + str(abs([])); } catch (e) { s2c = "ERR:[" + str(e) + "]"; }
+report("2.07-abs-list", s2c, "ERR");
+
+# abs(true) — toDouble(HBool)=1.0, 可能返回 1 (类型混淆)
+let s2d = "no-err";
+try { s2d = "got:" + str(abs(true)); } catch (e) { s2d = "ERR:[" + str(e) + "]"; }
+report("2.08-abs-bool", s2d, "ERR");
+
+# abs 无参数
+let s2e = "no-err";
+try { s2e = "got:" + str(abs()); } catch (e) { s2e = "ERR:[" + str(e) + "]"; }
+report("2.09-abs-no-args", s2e, "ERR");
+
+# ============================================================
+# S3: ord()/chr() 边界
+#   ord(""), ord("ab"), ord(null), chr(-1), chr(0), chr(1114112), chr(0xD800)
+# ============================================================
+print("== S3: ord()/chr() boundary ==");
+
+report("3.01-ord-A", ord("A"), 65);
+report("3.02-ord-chinese", ord("中"), 20013);
+
+# ord("") — 应抛异常
+let s3a = "no-err";
+try { s3a = "got:" + str(ord("")); } catch (e) { s3a = "ERR:[" + str(e) + "]"; }
+report("3.03-ord-empty", s3a, "ERR");
+
+# ord("ab") — 应抛异常 (多字符)
+let s3b = "no-err";
+try { s3b = "got:" + str(ord("ab")); } catch (e) { s3b = "ERR:[" + str(e) + "]"; }
+report("3.04-ord-multi-char", s3b, "ERR");
+
+# ord(null) — null 被转为 "null" 字符串，报误导性错误
+let s3c = "no-err";
+try { s3c = "got:" + str(ord(null)); } catch (e) { s3c = "ERR:[" + str(e) + "]"; }
+report("3.05-ord-null", s3c, "ERR");
+
+# chr(-1) — 应抛异常
+let s3d = "no-err";
+try { s3d = "got:" + str(chr(-1)); } catch (e) { s3d = "ERR:[" + str(e) + "]"; }
+report("3.06-chr-neg", s3d, "ERR");
+
+# chr(0) — 应返回 null 字符
+let s3e = "no-err";
+try { s3e = "got:" + str(ord(chr(0))); } catch (e) { s3e = "ERR:[" + str(e) + "]"; }
+report("3.07-chr-zero-roundtrip", s3e, "got:0");
+
+# chr(1114112) — 超出 Unicode 范围 (0x10FFFF=1114111)
+let s3f = "no-err";
+try { s3f = "got:" + str(chr(1114112)); } catch (e) { s3f = "ERR:[" + str(e) + "]"; }
+report("3.08-chr-too-big", s3f, "ERR");
+
+# chr(55296) — surrogate 范围 (0xD800=55296)
+let s3g = "no-err";
+try { s3g = "got:" + str(chr(55296)); } catch (e) { s3g = "ERR:[" + str(e) + "]"; }
+report("3.09-chr-surrogate", s3g, "ERR");
+
+# chr 无参数
+let s3h = "no-err";
+try { s3h = "got:" + str(chr()); } catch (e) { s3h = "ERR:[" + str(e) + "]"; }
+report("3.10-chr-no-args", s3h, "ERR");
+
+# ============================================================
+# S4: int()/float()/str()/bool() 边界
+#   int(null), int(""), int("  "), int("abc"), float(null), str(null), bool(null)
+# ============================================================
+print("== S4: int/float/str/bool boundary ==");
+
+# int(null) — 应抛异常
+let s4a = "no-err";
+try { s4a = "got:" + str(int(null)); } catch (e) { s4a = "ERR:[" + str(e) + "]"; }
+report("4.01-int-null", s4a, "ERR");
+
+# int("") — 应抛异常
+let s4b = "no-err";
+try { s4b = "got:" + str(int("")); } catch (e) { s4b = "ERR:[" + str(e) + "]"; }
+report("4.02-int-empty-str", s4b, "ERR");
+
+# int("  ") — 空白字符串，应抛异常
+let s4c = "no-err";
+try { s4c = "got:" + str(int("  ")); } catch (e) { s4c = "ERR:[" + str(e) + "]"; }
+report("4.03-int-whitespace", s4c, "ERR");
+
+# int("abc") — 应抛异常
+let s4d = "no-err";
+try { s4d = "got:" + str(int("abc")); } catch (e) { s4d = "ERR:[" + str(e) + "]"; }
+report("4.04-int-non-numeric", s4d, "ERR");
+
+# int("42") — 正常
+report("4.05-int-valid-str", int("42"), 42);
+
+# float(null) — 应抛异常
+let s4e = "no-err";
+try { s4e = "got:" + str(float(null)); } catch (e) { s4e = "ERR:[" + str(e) + "]"; }
+report("4.06-float-null", s4e, "ERR");
+
+# float("") — 应抛异常
+let s4f = "no-err";
+try { s4f = "got:" + str(float("")); } catch (e) { s4f = "ERR:[" + str(e) + "]"; }
+report("4.07-float-empty", s4f, "ERR");
+
+# str(null) — 应返回 "null"
+report("4.08-str-null", str(null), "null");
+
+# str([]) — 空列表
+report("4.09-str-empty-list", str([]), "[]");
+
+# bool(null) — 应返回 false
+report("4.10-bool-null", bool(null), false);
+
+# bool(0) — 应返回 false
+report("4.11-bool-zero", bool(0), false);
+
+# bool("") — 应返回 false
+report("4.12-bool-empty-str", bool(""), false);
+
+# bool([]) — 应返回 false
+report("4.13-bool-empty-list", bool([]), false);
+
+# bool() 无参数 — 可能 JVM 异常泄露 (arity=1 但无检查)
+let s4g = "no-err";
+try { s4g = "got:" + str(bool()); } catch (e) { s4g = "ERR:[" + str(e) + "]"; }
+report("4.14-bool-no-args", s4g, "ERR");
+
+# int() 无参数
+let s4h = "no-err";
+try { s4h = "got:" + str(int()); } catch (e) { s4h = "ERR:[" + str(e) + "]"; }
+report("4.15-int-no-args", s4h, "ERR");
+
+# ============================================================
+# S5: range() 边界
+#   range(0,0), range(5,0), range(-3,3), range(0,10,0), range(0,10,-1), range(0,10,2.5)
+# ============================================================
+print("== S5: range() boundary ==");
+
+report("5.01-range-empty", range(0, 0), []);
+report("5.02-range-reverse", range(5, 0), []);
+report("5.03-range-neg", range(-3, 3), [-3, -2, -1, 0, 1, 2]);
+report("5.04-range-len", len(range(0, 10)), 10);
+
+# range(0,10,0) — 步长 0，应抛异常
+let s5a = "no-err";
+try { s5a = "got:" + str(range(0, 10, 0)); } catch (e) { s5a = "ERR:[" + str(e) + "]"; }
+report("5.05-range-step-zero", s5a, "ERR");
+
+# range(0,10,-1) — 负步长但 start<end，应返回 []
+report("5.06-range-neg-step-wrong-dir", range(0, 10, -1), []);
+
+# range(0,10,2.5) — 浮点步长，可能被静默截断为 2
+let s5b = "no-err";
+try { s5b = "got:" + str(range(0, 10, 2.5)); } catch (e) { s5b = "ERR:[" + str(e) + "]"; }
+report("5.07-range-float-step", s5b, "ERR");
+
+# range(10,0,-1) — 正常负步长
+report("5.08-range-neg-step", range(10, 0, -1), [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);
+
+# range() 无参数
+let s5c = "no-err";
+try { s5c = "got:" + str(range()); } catch (e) { s5c = "ERR:[" + str(e) + "]"; }
+report("5.09-range-no-args", s5c, "ERR");
+
+# range 过多参数
+let s5d = "no-err";
+try { s5d = "got:" + str(range(1, 2, 3, 4)); } catch (e) { s5d = "ERR:[" + str(e) + "]"; }
+report("5.10-range-too-many", s5d, "ERR");
+
+# ============================================================
+# S6: push() 边界
+#   push(null, 1), push("str", 1), push(42, 1), push({}, 1)
+# ============================================================
+print("== S6: push() boundary ==");
+
+# push(null, 1) — 应抛异常
+let s6a = "no-err";
+try { s6a = "got:" + str(push(null, 1)); } catch (e) { s6a = "ERR:[" + str(e) + "]"; }
+report("6.01-push-null", s6a, "ERR");
+
+# push("str", 1) — 应抛异常
+let s6b = "no-err";
+try { s6b = "got:" + str(push("str", 1)); } catch (e) { s6b = "ERR:[" + str(e) + "]"; }
+report("6.02-push-string", s6b, "ERR");
+
+# push(42, 1) — 应抛异常
+let s6c = "no-err";
+try { s6c = "got:" + str(push(42, 1)); } catch (e) { s6c = "ERR:[" + str(e) + "]"; }
+report("6.03-push-int", s6c, "ERR");
+
+# push({}, 1) — 应抛异常 (dict 不是 list)
+let s6d = "no-err";
+try { s6d = "got:" + str(push({}, 1)); } catch (e) { s6d = "ERR:[" + str(e) + "]"; }
+report("6.04-push-dict", s6d, "ERR");
+
+# push 正常工作
+let s6list = [1, 2];
+push(s6list, 3);
+report("6.05-push-normal", s6list, [1, 2, 3]);
+
+# push() 参数不足
+let s6e = "no-err";
+try { s6e = "got:" + str(push([1])); } catch (e) { s6e = "ERR:[" + str(e) + "]"; }
+report("6.06-push-too-few", s6e, "ERR");
+
+# ============================================================
+# S7: 字符串方法边界
+#   "".upper(), "".split(""), "abc".split(""), "".replace("","x"), "aaa".replace("a","")
+# ============================================================
+print("== S7: string method boundary ==");
+
+report("7.01-empty-upper", "".upper(), "");
+report("7.02-empty-lower", "".lower(), "");
+report("7.03-empty-strip", "".strip(), "");
+
+# "".split("") — 空分隔符，可能异常或意外结果
+let s7a = "no-err";
+try { s7a = "got:" + str("".split("")); } catch (e) { s7a = "ERR:[" + str(e) + "]"; }
+report("7.04-empty-split-empty-sep", s7a, "ERR");
+
+# "abc".split("") — 空分隔符
+let s7b = "no-err";
+try { s7b = "got:" + str("abc".split("")); } catch (e) { s7b = "ERR:[" + str(e) + "]"; }
+report("7.05-split-empty-sep", s7b, "ERR");
+
+# "".replace("","x") — 空查找空替换
+let s7c = "no-err";
+try { s7c = "got:" + str("".replace("", "x")); } catch (e) { s7c = "ERR:[" + str(e) + "]"; }
+report("7.06-empty-replace-empty", s7c, "got:");
+
+# "aaa".replace("a","") — 删除所有 a
+report("7.07-replace-delete", "aaa".replace("a", ""), "");
+
+# "".find("x") — 空字符串查找
+report("7.08-empty-find", "".find("x"), -1);
+
+# "".find("") — 查找空字符串
+report("7.09-empty-find-empty", "".find(""), 0);
+
+# "abc".find("") — 查找空字符串
+report("7.10-find-empty", "abc".find(""), 0);
+
+# "".contains("") — 空包含空
+report("7.11-empty-contains-empty", "".contains(""), true);
+
+# "abc".contains("") — 非空包含空
+report("7.12-contains-empty", "abc".contains(""), true);
+
+# "".replace("a","b") — 空字符串替换
+report("7.13-empty-replace", "".replace("a", "b"), "");
+
+# replace 参数不足
+let s7d = "no-err";
+try { s7d = "got:" + str("abc".replace()); } catch (e) { s7d = "ERR:[" + str(e) + "]"; }
+report("7.14-replace-no-args", s7d, "ERR");
+
+# split 参数不足
+let s7e = "no-err";
+try { s7e = "got:" + str("abc".split()); } catch (e) { s7e = "ERR:[" + str(e) + "]"; }
+report("7.15-split-no-args", s7e, "ERR");
+
+# ============================================================
+# S8: min()/max() 边界
+#   min(), min([]), min([1]), min([1,"a"]), max([])
+# ============================================================
+print("== S8: min()/max() boundary ==");
+
+report("8.01-min-list", min([3, 1, 2]), 1);
+report("8.02-max-list", max([3, 1, 2]), 3);
+report("8.03-min-single", min([5]), 5);
+report("8.04-min-neg", min([-3, -1, -2]), -3);
+
+# min() 无参数 — 应抛异常
+let s8a = "no-err";
+try { s8a = "got:" + str(min()); } catch (e) { s8a = "ERR:[" + str(e) + "]"; }
+report("8.05-min-no-args", s8a, "ERR");
+
+# min([]) 空列表 — 应抛异常
+let s8b = "no-err";
+try { s8b = "got:" + str(min([])); } catch (e) { s8b = "ERR:[" + str(e) + "]"; }
+report("8.06-min-empty-list", s8b, "ERR");
+
+# min([1,"a"]) 混合类型 — 应抛异常
+let s8c = "no-err";
+try { s8c = "got:" + str(min([1, "a"])); } catch (e) { s8c = "ERR:[" + str(e) + "]"; }
+report("8.07-min-mixed-types", s8c, "ERR");
+
+# max([]) 空列表 — 应抛异常
+let s8d = "no-err";
+try { s8d = "got:" + str(max([])); } catch (e) { s8d = "ERR:[" + str(e) + "]"; }
+report("8.08-max-empty-list", s8d, "ERR");
+
+# max() 无参数
+let s8e = "no-err";
+try { s8e = "got:" + str(max()); } catch (e) { s8e = "ERR:[" + str(e) + "]"; }
+report("8.09-max-no-args", s8e, "ERR");
+
+# min 多参数
+let s8f = "no-err";
+try { s8f = "got:" + str(min(3, 1, 2)); } catch (e) { s8f = "ERR:[" + str(e) + "]"; }
+report("8.10-min-multiarg", s8f, "got:1");
+
+# ============================================================
+# S9: sum() 边界
+#   sum([]), sum([1,2,3]), sum(["a","b"]), sum(null)
+# ============================================================
+print("== S9: sum() boundary ==");
+
+report("9.01-sum-empty", sum([]), 0);
+report("9.02-sum-list", sum([1, 2, 3]), 6);
+report("9.03-sum-neg", sum([-1, -2, -3]), -6);
+report("9.04-sum-float", sum([1.5, 2.5]), 4);
+
+# sum(["a","b"]) — 应抛异常
+let s9a = "no-err";
+try { s9a = "got:" + str(sum(["a", "b"])); } catch (e) { s9a = "ERR:[" + str(e) + "]"; }
+report("9.05-sum-strings", s9a, "ERR");
+
+# sum(null) — 应抛异常
+let s9b = "no-err";
+try { s9b = "got:" + str(sum(null)); } catch (e) { s9b = "ERR:[" + str(e) + "]"; }
+report("9.06-sum-null", s9b, "ERR");
+
+# sum(42) — 非 list，应抛异常
+let s9c = "no-err";
+try { s9c = "got:" + str(sum(42)); } catch (e) { s9c = "ERR:[" + str(e) + "]"; }
+report("9.07-sum-int", s9c, "ERR");
+
+# sum() 无参数 — 可能 JVM 异常 (arity=1 但无检查)
+let s9d = "no-err";
+try { s9d = "got:" + str(sum()); } catch (e) { s9d = "ERR:[" + str(e) + "]"; }
+report("9.08-sum-no-args", s9d, "ERR");
+
+# sum 混合 [1, "a"]
+let s9e = "no-err";
+try { s9e = "got:" + str(sum([1, "a"])); } catch (e) { s9e = "ERR:[" + str(e) + "]"; }
+report("9.09-sum-mixed", s9e, "ERR");
+
+# ============================================================
+# S10: type() 边界
+#   type(null), type(chan_new(0)), type(range(0,3)), type(type)
+#   注: type(print) 无法测试 — print 是语句关键字，非表达式
+# ============================================================
+print("== S10: type() boundary ==");
+
+report("10.01-type-null", type(null), "null");
+report("10.02-type-int", type(42), "number");
+report("10.03-type-string", type("a"), "string");
+report("10.04-type-list", type([]), "list");
+report("10.05-type-dict", type({}), "dict");
+report("10.06-type-bool", type(true), "bool");
+report("10.07-type-range", type(range(0, 3)), "list");
+
+# type(chan_new(0)) — channel
+report("10.08-type-channel", type(chan_new(0)), "channel");
+
+# type(type) — 内建函数
+report("10.09-type-builtin", type(type), "native");
+
+# type(len) — 内建函数
+report("10.10-type-len-builtin", type(len), "native");
+
+# type 用户函数
+fn my_fn() { return 1; }
+report("10.11-type-user-fn", type(my_fn), "function");
+
+# type() 无参数
+let s10a = "no-err";
+try { s10a = "got:" + str(type()); } catch (e) { s10a = "ERR:[" + str(e) + "]"; }
+report("10.12-type-no-args", s10a, "ERR");
+
+# type 过多参数
+let s10b = "no-err";
+try { s10b = "got:" + str(type(1, 2)); } catch (e) { s10b = "ERR:[" + str(e) + "]"; }
+report("10.13-type-too-many", s10b, "ERR");
+
+# ============================================================
+# 汇总
+# ============================================================
+print("===== R4-137 SUMMARY =====");
+print("PASS: " + str(stats[0]) + " / FAIL: " + str(stats[1]));
+print("===== R4-137 DONE =====");

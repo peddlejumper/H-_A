@@ -1,0 +1,24 @@
+# t02_jump_if_elif.hto - JUMP 回填（嵌套 if/elif/else）
+fn classify(n) {
+    if (n < 0) {
+        return "negative";
+    } else if (n == 0) {
+        return "zero";
+    } else if (n < 10) {
+        return "small";
+    } else if (n < 100) {
+        if (n % 2 == 0) {
+            return "small-even";
+        } else {
+            return "small-odd";
+        }
+    } else {
+        return "large";
+    }
+}
+print(classify(-5));
+print(classify(0));
+print(classify(7));
+print(classify(44));
+print(classify(45));
+print(classify(500));

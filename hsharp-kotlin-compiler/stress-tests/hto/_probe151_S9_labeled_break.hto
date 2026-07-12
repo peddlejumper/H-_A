@@ -1,0 +1,15 @@
+# Probe S9 — Labelled break/continue.
+# H# has no label syntax in the lexer/parser (no LABEL token, no
+# `outer:` production).  Common labelled-break forms should raise a
+# compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.
+
+let out = "";
+outer: for i in [1, 2, 3] {
+    for j in [1, 2, 3] {
+        if (i == 2 && j == 2) { break outer; }
+        out = out + i + "" + j + " ";
+    }
+}
+print(out);

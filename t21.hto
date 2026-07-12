@@ -1,0 +1,5 @@
+# t21
+fn f() {
+    return nullptr;
+}
+print("ok");

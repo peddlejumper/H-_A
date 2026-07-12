@@ -1,0 +1,14 @@
+# t09_make_closure.hto - MAKE_CLOSURE (lambda 表达式)
+# lambda 直接赋值并调用
+let double = fn(x) { return x * 2; };
+print(double(21));
+
+# lambda 作为参数传递
+fn apply(f, v) {
+    return f(v);
+}
+print(apply(fn(x) { return x * x; }, 9));
+
+# lambda 立即调用
+let r = (fn() { return 42; })();
+print(r);

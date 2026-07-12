@@ -1,0 +1,138 @@
+# build: hwdui_min.hto, zzw_native.hto, zzw_render_min.hto, _libs/raytracer_math.hto, _libs/raytracer_scene.hto, _libs/raytracer_core.hto, _libs/raytracer_pipeline.hto
+# T40 - H# Raytracer - 渲染到窗口 + 录屏
+# ─────────────────────────────────────────────────────────
+# 对每个场景：
+#   1. 启动后台 recorder 线程（java.awt.Robot 抓全屏）
+#   2. 渲染场景到 rgb bytes
+#   3. 打开 JFrame 窗口显示 rgb bytes（hold_ms 后自动关）
+#      期间 recorder 抓到 JFrame 弹出 + 静态画面
+#   4. 关窗 + 停止 recorder
+# 录完所有场景后用 Python+PIL 把 PNG 帧合成动画 GIF
+#（没 ffmpeg 也能用，浏览器/Slack 都能直接看）。
+
+fn t40_render_parallel(scene_id, samples, depth, W, H) {
+    let s = scene_by_index(scene_id);
+    let cam = look_at(0, 1.5, 5, 0, 0.5, 0, 60);
+    let tiles = make_tiles(W, H, 16, 16);
+    let total = len(tiles);
+    let result_chan = chan_new(total);
+    let tile_queue = chan_new(total);
+    let i = 0;
+    while (i < total) {
+        chan_send(tile_queue, tiles[i]);
+        i = i + 1;
+    }
+    chan_close(tile_queue);
+    let np = parallelism();
+    if (np < 1) { np = 1; }
+    if (np > total) { np = total; }
+    concurrent {
+        let w = 0;
+        while (w < np) {
+            let stop = false;
+            while (not stop) {
+                let got = null;
+                try {
+                    got = chan_recv(tile_queue);
+                } catch (e) {
+                    stop = true;
+                }
+                if (not stop and got != null) {
+                    let _u = render_tile_worker(s, cam, got, W, H,
+                                                samples, depth,
+                                                result_chan, null);
+                }
+            }
+            w = w + 1;
+        }
+    }
+    chan_close(result_chan);
+    let img = [];
+    let pad = W * H * 3;
+    let p = 0;
+    while (p < pad) { push(img, 0); p = p + 1; }
+    let got = 0;
+    while (got < total) {
+        let r = chan_recv(result_chan);
+        if (r == null) { break; }
+        let data = r["data"];
+        let tw = r["w"];
+        let th = r["h"];
+        let x0 = r["x0"];
+        let y0 = r["y0"];
+        let py = 0;
+        while (py < th) {
+            let px = 0;
+            while (px < tw) {
+                let src = (py * tw + px) * 3;
+                let dst = ((y0 + py) * W + (x0 + px)) * 3;
+                img[dst]     = data[src];
+                img[dst + 1] = data[src + 1];
+                img[dst + 2] = data[src + 2];
+                px = px + 1;
+            }
+            py = py + 1;
+        }
+        got = got + 1;
+    }
+    return img;
+}
+
+fn clamp_bytes(img) {
+    let out = [];
+    let i = 0;
+    while (i < len(img)) {
+        let v = img[i];
+        if (v < 0) { v = 0; }
+        if (v > 255) { v = 255; }
+        push(out, v);
+        i = i + 1;
+    }
+    return out;
+}
+
+fn main() {
+    let W = 160;
+    let H = 120;
+    let samples = 3;
+    let depth = 4;
+    let names = ["three_spheres", "glass_ball", "mirror_corridor"];
+    let outdir = "/Users/peddlejumper/H#/v0.4/hsharp-renders";
+    let frames_dir = outdir + "/recording_frames";
+    let hold_ms = 3000;
+    let fps = 6;
+    print("=== H# Raytracer - Window + Screen Recording ===");
+    print("workers=" + str(parallelism()) + "  W=" + str(W) + "  H=" + str(H) +
+          "  spp=" + str(samples) + "  depth=" + str(depth) +
+          "  fps=" + str(fps) + "  hold_ms=" + str(hold_ms));
+    print("frames -> " + frames_dir);
+    let scene = 0;
+    while (scene < 3) {
+        print("");
+        print("--- scene " + str(scene) + " (" + names[scene] + ") ---");
+        # 1. 启动 recorder
+        let rdir = native_start_recording(frames_dir, fps);
+        print("  recorder started -> " + str(rdir));
+        # 2. 渲染
+        let t0 = time_ms();
+        let img = t40_render_parallel(scene, samples, depth, W, H);
+        let t1 = time_ms();
+        let stats = image_stats(img);
+        print("  rendered in " + str(t1 - t0) + " ms, max_lum=" + str(stats["max_lum"]));
+        # 3. 显示 JFrame 窗口（hold_ms 后自动关）
+        let bytes = clamp_bytes(img);
+        print("  opening window (auto-close in " + str(hold_ms) + " ms)...");
+        native_show_image_timed("H# Raytracer - " + names[scene] + " - " + str(t1 - t0) + " ms",
+                                W, H, bytes, hold_ms);
+        print("  window closed.");
+        # 4. 停止 recorder
+        let n = native_stop_recording();
+        print("  recorder stopped, captured " + str(n) + " frames");
+        scene = scene + 1;
+    }
+    print("");
+    print("=== done ===");
+    print("frames in: " + frames_dir);
+    print("encode:    python3 " + outdir + "/encode_gif.py " + frames_dir + " " + outdir + "/recording.gif " + str(fps));
+}
+main();

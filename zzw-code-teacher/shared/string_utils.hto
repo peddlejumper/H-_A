@@ -1,0 +1,78 @@
+# shared/string_utils.hto
+# H# 字符串工具函数(本地副本,避免跨包引用)
+
+fn str_index_of(s, substr) {
+    let substr_len = len(substr);
+    let s_len = len(s);
+    if (substr_len == 0) {
+        return 0;
+    }
+    if (substr_len > s_len) {
+        return -1;
+    }
+    let i = 0;
+    while (i <= s_len - substr_len) {
+        let found = true;
+        let j = 0;
+        while (j < substr_len) {
+            if (s[i + j] != substr[j]) {
+                found = false;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn str_split(s, delimiter) {
+    let result = [];
+    let delim_len = len(delimiter);
+    let start = 0;
+    let i = 0;
+    while (i <= len(s) - delim_len) {
+        let found = true;
+        let j = 0;
+        while (j < delim_len) {
+            if (s[i + j] != delimiter[j]) {
+                found = false;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            push(result, substring(s, start, i - start));
+            i = i + delim_len;
+            start = i;
+        } else {
+            i = i + 1;
+        }
+    }
+    push(result, substring(s, start, len(s) - start));
+    return result;
+}
+
+fn str_trim(s) {
+    let start = 0;
+    let end = len(s) - 1;
+    while (start <= end and (s[start] == " " or s[start] == "\t" or s[start] == "\n" or s[start] == "\r")) {
+        start = start + 1;
+    }
+    while (end >= start and (s[end] == " " or s[end] == "\t" or s[end] == "\n" or s[end] == "\r")) {
+        end = end - 1;
+    }
+    if (start > end) {
+        return "";
+    }
+    return substring(s, start, end - start + 1);
+}
+
+fn str_substring(s, start, length) {
+    return substring(s, start, length);
+}
+
+fn str_contains(s, substr) {
+    return str_index_of(s, substr) != -1;
+}

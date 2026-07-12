@@ -1,0 +1,106 @@
+# ============================================================
+# 60_lexer_edge.hto — 词法分析器边界测试
+# 目标：探测 lexer 在数字字面量、字符串转义、注释、特殊 token、
+#       标识符、空白、运算符等边界的行为，发现 bug。
+# ============================================================
+
+# ---- T1: 已支持的字符串转义 \n \t \r \\ \" ----
+let s1 = "a\nb\tc\rd\\e\"f";
+print("T1-supported-escapes-len=" + str(len(s1)));
+print(s1);
+# 预期: len=11  字符序列: a \n b \t c \r d \ e " f
+
+# ---- T2: 不支持的转义 \x41 与 \0 （BUG 探测） ----
+let s2 = "\x41";
+print("T2-hex-escape-len=" + str(len(s2)));
+print(s2);
+# 预期(若支持 hex): len=1, 输出 A
+# 实际(lexer 不支持 \x): len=4, 输出 \x41
+
+let s2b = "a\0b";
+print("T2b-null-escape-len=" + str(len(s2b)));
+# 预期(若支持 \0): 3 ; 实际: 4 (反斜杠+0 原样保留)
+
+# ---- T3: 字符串内的 # 与行尾/中文注释 ----
+let s3 = "a#b#c";
+print("T3-hash-in-string=" + s3);
+# 预期: a#b#c  (# 在字符串内不应被当作注释起点) # 这是行尾中文注释
+
+# ---- T4: 中文标识符 + 下划线开头标识符 ----
+let 中文变量 = 99;
+let _priv = 7;
+print("T4-chinese-id=" + str(中文变量));
+print("T4-underscore-id=" + str(_priv));
+# 预期: 99, 7
+
+# ---- T5: 数字字面量边界 ----
+print("T5-leading-zeros=" + str(007) + "," + str(00));
+# 预期: 7,0  (无八进制语义，前导零被忽略)
+let big = 1234567890123456789;
+print("T5-big-int=" + str(big));
+# 预期: 1234567890123456789 (19位， fits in Long)
+# 注: 超过 Long.MAX_VALUE(9223372036854775807) 的字面量会令 HVM 加载时
+#     抛 NumberFormatException 并整体崩溃 —— 见单独的 60b 复现。
+print("T5-float=" + str(3.14) + "," + str(-2.5));
+# 预期: 3.14,-2.5
+print("T5-float-precision=" + str(0.1 + 0.2));
+# 预期: 0.30000000000000004 (IEEE754) 或 0.3
+
+# ---- T6: ** 运算符 （BUG 探测：被解析为 乘 + 解引用） ----
+try {
+    print("T6-power=" + str(2 ** 3));
+    # 预期(若为幂运算): 8
+    # 实际: 2 * (deref 3) -> 运行时很可能报错
+} catch (e) {
+    print("T6-power-caught-error");
+}
+
+# ---- T7: 位运算符 & | ^ ~ << >> ----
+print("T7-bitand=" + str(5 & 3));
+print("T7-bitor=" + str(5 | 2));
+print("T7-bitxor=" + str(5 ^ 1));
+print("T7-bitnot=" + str(~0));
+print("T7-lshift=" + str(1 << 4));
+print("T7-rshift=" + str(256 >> 2));
+# 预期: 1, 7, 4, -1, 16, 64
+
+# ---- T8: 取模（含负数） ----
+print("T8-mod=" + str(10 % 3));
+print("T8-mod-neg=" + str(-7 % 3));
+# 预期: 1 ; 负数模: Python 语义=2, C 语义=-1
+
+# ---- T9: 逻辑运算符（符号形式 && || ! 与关键字形式 and/or/not） ----
+print("T9-and-sym=" + str(true && false));
+print("T9-or-sym=" + str(true || false));
+print("T9-not-sym=" + str(!true));
+print("T9-and-kw=" + str(true and false));
+print("T9-or-kw=" + str(true or false));
+print("T9-not-kw=" + str(not true));
+# 预期: false, true, false, false, true, false
+
+# ---- T10: 特殊 token: ... (ELLIPSIS), ?: (QMARK_COLON), ?. (可选链) ----
+fn variadic(...args) { return len(args); }
+print("T10-ellipsis=" + str(variadic(1, 2, 3, 4)));
+# 预期: 4
+
+let ternary = (5 > 3) ?: "yes" : "no";
+print("T10-ternary=" + ternary);
+# 预期: yes
+
+let n = null;
+print("T10-opt-chain=" + str(n?.foo));
+# 预期: null
+
+# ---- T11: 混合空白（tab 缩进 + 空格 + 空行） ----
+let a = 1;
+		let b = 2;
+let c = 3;
+
+print("T11-mixed-ws=" + str(a + b + c));
+# 预期: 6
+
+# ---- T12: 长字符串与多行字符串（通过 \n） ----
+let long = "start\nmiddle\nend";
+print("T12-multiline-len=" + str(len(long)));
+print(long);
+# 预期: len=16  (start=5 + \n=1 + middle=6 + \n=1 + end=3)

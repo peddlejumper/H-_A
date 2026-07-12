@@ -1,0 +1,8 @@
+# t17: observe that an un-awaited async fn result is an HFuture.
+# Print the future directly (eager-resolve), then await it.
+async fn f() {
+    return 42;
+}
+let fut = f();
+print(fut);
+print(await fut);

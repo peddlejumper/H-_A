@@ -1,0 +1,11 @@
+# Probe: multiple catch clauses — `catch (e) { } catch (e2) { }`
+# H# parser only supports a single catch — this should be a COMPILE ERROR
+print("before");
+try {
+    throw "x";
+} catch (e) {
+    print("first catch: " + e);
+} catch (e2) {
+    print("second catch: " + e2);
+}
+print("after");

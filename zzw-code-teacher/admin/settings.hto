@@ -1,0 +1,163 @@
+# admin/settings.hto
+# 系统设置: AI 配置 / 评测配置 / 服务器配置
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "shared/json_utils.hto";
+
+let _st_widgets = nullptr;
+
+fn build(parent, x, y, w, h) {
+    let t = ide_theme();
+    let panel = new Panel();
+    panel.init_panel("settings");
+    panel.set_pos(x, y);
+    panel.set_size(w, h);
+    ide_paint_panel(panel, "soft");
+    parent.add_child(panel);
+    let title = new Label();
+    title.init_label("⚙ 系统设置");
+    title.set_pos(20, 10);
+    title.set_size(w - 40, 26);
+    title.set_color(t["accent"]);
+    title.set_font_size(15);
+    panel.add_child(title);
+    # AI 段
+    let s_ai = new Label(); s_ai.init_label("AI 配置"); s_ai.set_pos(20, 50); s_ai.set_size(200, 20); s_ai.set_color(t["purple"]); s_ai.set_font_size(13);
+    panel.add_child(s_ai);
+    let f1 = new Label(); f1.init_label("启用:"); f1.set_pos(40, 80); f1.set_size(80, 20);
+    let ai_en = new CheckBox(); ai_en.init_checkbox(); ai_en.set_pos(120, 78); ai_en.set_size(20, 20);
+    panel.add_child(f1); panel.add_child(ai_en);
+    let f2 = new Label(); f2.init_label("Endpoint:"); f2.set_pos(40, 110); f2.set_size(80, 20);
+    let ai_ep = new TextBox(); ai_ep.init_textbox(); ai_ep.set_pos(120, 110); ai_ep.set_size(700, 24);
+    panel.add_child(f2); panel.add_child(ai_ep);
+    let f3 = new Label(); f3.init_label("API Key:"); f3.set_pos(40, 140); f3.set_size(80, 20);
+    let ai_k = new TextBox(); ai_k.init_textbox(); ai_k.set_pos(120, 140); ai_k.set_size(700, 24); ai_k.set_password(true);
+    panel.add_child(f3); panel.add_child(ai_k);
+    let f4 = new Label(); f4.init_label("Model:"); f4.set_pos(40, 170); f4.set_size(80, 20);
+    let ai_m = new TextBox(); ai_m.init_textbox(); ai_m.set_pos(120, 170); ai_m.set_size(300, 24);
+    panel.add_child(f4); panel.add_child(ai_m);
+    let f5 = new Label(); f5.init_label("MaxTokens:"); f5.set_pos(440, 170); f5.set_size(80, 20);
+    let ai_mt = new TextBox(); ai_mt.init_textbox(); ai_mt.set_pos(520, 170); ai_mt.set_size(120, 24);
+    panel.add_child(f5); panel.add_child(ai_mt);
+    let f6 = new Label(); f6.init_label("Temperature:"); f6.set_pos(660, 170); f6.set_size(80, 20);
+    let ai_t = new TextBox(); ai_t.init_textbox(); ai_t.set_pos(740, 170); ai_t.set_size(80, 24);
+    panel.add_child(f6); panel.add_child(ai_t);
+    let f7 = new Label(); f7.init_label("System Prompt:"); f7.set_pos(40, 200); f7.set_size(80, 20);
+    let ai_sp = new TextBox(); ai_sp.init_textbox(); ai_sp.set_pos(120, 200); ai_sp.set_size(820, 80); ai_sp.set_multi_line(true);
+    panel.add_child(f7); panel.add_child(ai_sp);
+    # 评测段
+    let s_j = new Label(); s_j.init_label("评测配置"); s_j.set_pos(20, 290); s_j.set_size(200, 20); s_j.set_color(t["purple"]); s_j.set_font_size(13);
+    panel.add_child(s_j);
+    let f8 = new Label(); f8.init_label("时间限制(ms):"); f8.set_pos(40, 320); f8.set_size(120, 20);
+    let j_t = new TextBox(); j_t.init_textbox(); j_t.set_pos(160, 320); j_t.set_size(200, 24);
+    panel.add_child(f8); panel.add_child(j_t);
+    let f9 = new Label(); f9.init_label("内存(KB):"); f9.set_pos(380, 320); f9.set_size(80, 20);
+    let j_m = new TextBox(); j_m.init_textbox(); j_m.set_pos(460, 320); j_m.set_size(200, 24);
+    panel.add_child(f9); panel.add_child(j_m);
+    let f10 = new Label(); f10.init_label("HSVM 路径:"); f10.set_pos(40, 350); f10.set_size(120, 20);
+    let j_p = new TextBox(); j_p.init_textbox(); j_p.set_pos(160, 350); j_p.set_size(500, 24);
+    panel.add_child(f10); panel.add_child(j_p);
+    # 服务端
+    let s_s = new Label(); s_s.init_label("服务端"); s_s.set_pos(20, 390); s_s.set_size(200, 20); s_s.set_color(t["purple"]); s_s.set_font_size(13);
+    panel.add_child(s_s);
+    let f11 = new Label(); f11.init_label("Host:"); f11.set_pos(40, 420); f11.set_size(80, 20);
+    let sv_h = new TextBox(); sv_h.init_textbox(); sv_h.set_pos(120, 420); sv_h.set_size(200, 24);
+    panel.add_child(f11); panel.add_child(sv_h);
+    let f12 = new Label(); f12.init_label("Port:"); f12.set_pos(340, 420); f12.set_size(50, 20);
+    let sv_p = new TextBox(); sv_p.init_textbox(); sv_p.set_pos(390, 420); sv_p.set_size(100, 24);
+    panel.add_child(f12); panel.add_child(sv_p);
+    # 保存
+    let btn_save = new Button();
+    btn_save.init_button("💾 保存全部");
+    btn_save.set_pos(40, 480);
+    btn_save.set_size(140, 36);
+    btn_save.set_bg_color(t["accent"]);
+    panel.add_child(btn_save);
+    let status = new Label(); status.init_label(""); status.set_pos(200, 488); status.set_size(600, 24);
+    status.set_color(t["warning"]);
+    panel.add_child(status);
+    _st_widgets = {
+        "panel": panel,
+        "ai_en": ai_en,
+        "ai_ep": ai_ep,
+        "ai_k": ai_k,
+        "ai_m": ai_m,
+        "ai_mt": ai_mt,
+        "ai_t": ai_t,
+        "ai_sp": ai_sp,
+        "j_t": j_t,
+        "j_m": j_m,
+        "j_p": j_p,
+        "sv_h": sv_h,
+        "sv_p": sv_p,
+        "status": status
+    };
+    btn_save.onClick = fn() { _save(); };
+    refresh();
+    return _st_widgets;
+}
+
+fn refresh() {
+    if (_st_widgets != nullptr) {
+        let resp = admin_get("/api/admin/config");
+        let data = admin_parse(resp);
+        if (data != nullptr and data["ok"]) {
+            let cfg = data["data"];
+            if ("ai" in cfg) {
+                let ai = cfg["ai"];
+                if ("enabled" in ai) { _st_widgets["ai_en"].set_checked(ai["enabled"]); }
+                if ("endpoint" in ai) { _st_widgets["ai_ep"].set_text(ai["endpoint"]); }
+                if ("api_key" in ai) { _st_widgets["ai_k"].set_text(ai["api_key"]); }
+                if ("model" in ai) { _st_widgets["ai_m"].set_text(ai["model"]); }
+                if ("max_tokens" in ai) { _st_widgets["ai_mt"].set_text(str(ai["max_tokens"])); }
+                if ("temperature" in ai) { _st_widgets["ai_t"].set_text(str(ai["temperature"])); }
+                if ("system_prompt" in ai) { _st_widgets["ai_sp"].set_text(ai["system_prompt"]); }
+            }
+            if ("judge" in cfg) {
+                let j = cfg["judge"];
+                if ("time_limit_ms" in j) { _st_widgets["j_t"].set_text(str(j["time_limit_ms"])); }
+                if ("memory_limit_kb" in j) { _st_widgets["j_m"].set_text(str(j["memory_limit_kb"])); }
+                if ("hsvm_path" in j) { _st_widgets["j_p"].set_text(j["hsvm_path"]); }
+            }
+            if ("server" in cfg) {
+                let s = cfg["server"];
+                if ("host" in s) { _st_widgets["sv_h"].set_text(s["host"]); }
+                if ("port" in s) { _st_widgets["sv_p"].set_text(str(s["port"])); }
+            }
+        }
+    }
+}
+
+fn _save() {
+    let w = _st_widgets;
+    let body = {
+        "ai": {
+            "enabled": w["ai_en"].is_checked(),
+            "endpoint": w["ai_ep"].get_text(),
+            "api_key": w["ai_k"].get_text(),
+            "model": w["ai_m"].get_text(),
+            "max_tokens": int(w["ai_mt"].get_text()),
+            "temperature": float(w["ai_t"].get_text()),
+            "system_prompt": w["ai_sp"].get_text()
+        },
+        "judge": {
+            "time_limit_ms": int(w["j_t"].get_text()),
+            "memory_limit_kb": int(w["j_m"].get_text()),
+            "hsvm_path": w["j_p"].get_text()
+        },
+        "server": {
+            "host": w["sv_h"].get_text(),
+            "port": int(w["sv_p"].get_text())
+        }
+    };
+    let resp = admin_put("/api/admin/config", json_stringify(body));
+    let data = admin_parse(resp);
+    if (data == nullptr or not data["ok"]) {
+        w["status"].set_text("❌ 保存失败: " + http_get_body(resp));
+        w["status"].set_color("#F48771");
+    } else {
+        w["status"].set_text("✅ 已保存(AI 配置立即生效)");
+        w["status"].set_color("#4EC9B0");
+    }
+}

@@ -1,0 +1,12 @@
+print("start");
+fn probe(label, f) {
+    try {
+        let r = f();
+        print(label + " OK:" + str(r));
+    } catch (e) {
+        print(label + " EXC:[" + str(e) + "]");
+    }
+}
+probe("T1", fn() { return undefined_var; });
+probe("T2", fn() { return undefined_y; });
+print("end");

@@ -1,0 +1,340 @@
+# H# Library Test 11 — OO Design Library
+# Tests object-oriented design patterns in H#.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Section 1: Class with state mutation (Bank Account)
+# =====================================================
+class BankAccount {
+    let owner = "";
+    let balance = 0;
+    let history = [];
+
+    fn init(owner, initial) {
+        self.owner = owner;
+        self.balance = initial;
+        push(self.history, "OPEN:" + str(initial));
+    }
+
+    fn deposit(amt) {
+        self.balance = self.balance + amt;
+        push(self.history, "DEP:" + str(amt));
+        return self.balance;
+    }
+
+    fn withdraw(amt) {
+        if (amt > self.balance) {
+            push(self.history, "WD-FAIL:" + str(amt));
+            return -1;
+        }
+        self.balance = self.balance - amt;
+        push(self.history, "WD:" + str(amt));
+        return self.balance;
+    }
+
+    fn get_balance() { return self.balance; }
+    fn get_owner() { return self.owner; }
+    fn history_len() { return len(self.history); }
+}
+
+let ba = new BankAccount();
+ba.init("Alice", 100);
+check("oo/ba/init_bal",   ba.get_balance() == 100);
+check("oo/ba/owner",      ba.get_owner() == "Alice");
+ba.deposit(50);
+check("oo/ba/dep",        ba.get_balance() == 150);
+ba.withdraw(30);
+check("oo/ba/wd",         ba.get_balance() == 120);
+let wd_fail = ba.withdraw(1000);
+check("oo/ba/wd_fail",    wd_fail == -1);
+check("oo/ba/unchanged",  ba.get_balance() == 120);
+check("oo/ba/hist_len",   ba.history_len() == 4);
+
+# =====================================================
+# Section 2: Linked List
+# =====================================================
+class LinkedList {
+    let head = null;
+    let size = 0;
+
+    fn push_front(v) {
+        # build node manually
+        let n = new LinkedList();
+        n.value = v;
+        n.next = self.head;
+        self.head = n;
+        self.size = self.size + 1;
+    }
+
+    fn pop_front() {
+        if (self.head == null) { return null; }
+        let v = self.head.value;
+        self.head = self.head.next;
+        self.size = self.size - 1;
+        return v;
+    }
+
+    fn front() {
+        if (self.head == null) { return null; }
+        return self.head.value;
+    }
+
+    fn get_size() { return self.size; }
+    fn is_empty() { return self.size == 0; }
+}
+
+let ll = new LinkedList();
+check("oo/ll/empty",     ll.is_empty() == true);
+ll.push_front(1);
+ll.push_front(2);
+ll.push_front(3);
+check("oo/ll/size",       ll.get_size() == 3);
+check("oo/ll/front",      ll.front() == 3);
+check("oo/ll/pop1",       ll.pop_front() == 3);
+check("oo/ll/pop2",       ll.pop_front() == 2);
+check("oo/ll/pop3",       ll.pop_front() == 1);
+check("oo/ll/empty2",     ll.is_empty() == true);
+
+# =====================================================
+# Section 3: Vector (Dynamic array)
+# =====================================================
+class Vector {
+    let data = [];
+    let cap = 0;
+
+    fn init() {
+        self.data = [];
+        self.cap = 0;
+    }
+
+    fn push(v) {
+        push(self.data, v);
+        self.cap = self.cap + 1;
+    }
+
+    fn get(i) {
+        if (i < 0 || i >= self.cap) { return null; }
+        return self.data[i];
+    }
+
+    fn set(i, v) {
+        if (i < 0 || i >= self.cap) { return false; }
+        self.data[i] = v;
+        return true;
+    }
+
+    fn length() { return self.cap; }
+}
+
+let v1 = new Vector();
+v1.init();
+v1.push(10);
+v1.push(20);
+v1.push(30);
+check("oo/vec/len",       v1.length() == 3);
+check("oo/vec/get0",      v1.get(0) == 10);
+check("oo/vec/get2",      v1.get(2) == 30);
+v1.set(1, 25);
+check("oo/vec/set",       v1.get(1) == 25);
+check("oo/vec/oob",       v1.get(100) == null);
+
+# =====================================================
+# Section 4: Counter
+# =====================================================
+class Counter {
+    let counts = [];
+
+    fn init() {
+        self.counts = [];
+    }
+
+    fn increment(key) {
+        let i = 0;
+        let found = -1;
+        while (i < len(self.counts)) {
+            if (self.counts[i][0] == key) { found = i; }
+            let i = i + 1;
+        }
+        if (found == -1) {
+            push(self.counts, [key, 1]);
+        } else {
+            self.counts[found][1] = self.counts[found][1] + 1;
+        }
+    }
+
+    fn get(key) {
+        let i = 0;
+        while (i < len(self.counts)) {
+            if (self.counts[i][0] == key) { return self.counts[i][1]; }
+            let i = i + 1;
+        }
+        return 0;
+    }
+
+    fn total() {
+        let t = 0;
+        let i = 0;
+        while (i < len(self.counts)) {
+            let t = t + self.counts[i][1];
+            let i = i + 1;
+        }
+        return t;
+    }
+}
+
+let ctr = new Counter();
+ctr.init();
+ctr.increment("a");
+ctr.increment("a");
+ctr.increment("b");
+ctr.increment("a");
+ctr.increment("c");
+check("oo/ctr/a",        ctr.get("a") == 3);
+check("oo/ctr/b",        ctr.get("b") == 1);
+check("oo/ctr/c",        ctr.get("c") == 1);
+check("oo/ctr/x",        ctr.get("x") == 0);
+check("oo/ctr/total",    ctr.total() == 5);
+
+# =====================================================
+# Section 5: Stack (Array-based)
+# =====================================================
+class MinStack {
+    let main = [];
+    let mins = [];
+
+    fn push(v) {
+        push(self.main, v);
+        if (len(self.mins) == 0 || v <= self.mins[len(self.mins) - 1]) {
+            push(self.mins, v);
+        }
+    }
+
+    fn pop() {
+        if (len(self.main) == 0) { return null; }
+        let v = self.main[len(self.main) - 1];
+        # pop last
+        let kept = [];
+        let i = 0;
+        while (i < len(self.main) - 1) {
+            push(kept, self.main[i]);
+            i = i + 1;
+        }
+        self.main = kept;
+        if (v == self.mins[len(self.mins) - 1]) {
+            let kept2 = [];
+            let j = 0;
+            while (j < len(self.mins) - 1) {
+                push(kept2, self.mins[j]);
+                j = j + 1;
+            }
+            self.mins = kept2;
+        }
+        return v;
+    }
+
+    fn top() {
+        if (len(self.main) == 0) { return null; }
+        return self.main[len(self.main) - 1];
+    }
+
+    fn get_min() {
+        if (len(self.mins) == 0) { return null; }
+        return self.mins[len(self.mins) - 1];
+    }
+}
+
+let ms = new MinStack();
+ms.push(5);
+ms.push(2);
+ms.push(8);
+ms.push(1);
+check("oo/ms/min1",      ms.get_min() == 1);
+check("oo/ms/top",       ms.top() == 1);
+ms.pop();
+check("oo/ms/pop",       ms.top() == 8);
+ms.pop();
+check("oo/ms/min2",      ms.get_min() == 2);
+
+# =====================================================
+# Section 6: BST (Binary Search Tree)
+# =====================================================
+class BST {
+    let root = null;
+
+    fn insert(v) {
+        let n = new BST();
+        n.value = v;
+        n.left = null;
+        n.right = null;
+        if (self.root == null) {
+            self.root = n;
+            return null;
+        }
+        let cur = self.root;
+        let done = false;
+        while (!done) {
+            if (v < cur.value) {
+                if (cur.left == null) { cur.left = n; done = true; }
+                else { cur = cur.left; }
+            } else {
+                if (cur.right == null) { cur.right = n; done = true; }
+                else { cur = cur.right; }
+            }
+        }
+    }
+
+    fn contains(v) {
+        let cur = self.root;
+        while (cur != null) {
+            if (v == cur.value) { return true; }
+            if (v < cur.value) { cur = cur.left; }
+            else { cur = cur.right; }
+        }
+        return false;
+    }
+
+    fn size() {
+        # recursive helper
+        return bst_size(self.root);
+    }
+}
+
+fn bst_size(node) {
+    if (node == null) { return 0; }
+    return 1 + bst_size(node.left) + bst_size(node.right);
+}
+
+let tree = new BST();
+tree.insert(5);
+tree.insert(3);
+tree.insert(7);
+tree.insert(1);
+tree.insert(4);
+check("oo/bst/has5",      tree.contains(5) == true);
+check("oo/bst/has3",      tree.contains(3) == true);
+check("oo/bst/has7",      tree.contains(7) == true);
+check("oo/bst/has1",      tree.contains(1) == true);
+check("oo/bst/has4",      tree.contains(4) == true);
+check("oo/bst/has8",      tree.contains(8) == false);
+check("oo/bst/has0",      tree.contains(0) == false);
+check("oo/bst/size",      tree.size() == 5);
+
+print("11_OO_LIB  : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

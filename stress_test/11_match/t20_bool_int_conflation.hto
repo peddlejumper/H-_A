@@ -1,0 +1,30 @@
+# t20 - bool vs int literal conflation edge cases
+# In H#, True == 1 may be true (Python bool is int subclass).
+# The compiler uses _bool_aware_eq to keep them separate in const pool.
+# But does the HVM literalEq also keep them separate?
+fn biconf(x) {
+    return match x {
+        true => "is-true",
+        1 => "is-one",
+        false => "is-false",
+        0 => "is-zero",
+        _ => "other"
+    };
+}
+print("t20_true:" + biconf(true));
+print("t20_one:" + biconf(1));
+print("t20_false:" + biconf(false));
+print("t20_zero:" + biconf(0));
+print("t20_two:" + biconf(2));
+
+# type pattern: is bool vs is int
+fn biconf2(x) {
+    return match x {
+        is bool => "bool",
+        is int => "int",
+        _ => "other"
+    };
+}
+print("t20_isbool_true:" + biconf2(true));
+print("t20_isint_1:" + biconf2(1));
+print("t20_isint_42:" + biconf2(42));

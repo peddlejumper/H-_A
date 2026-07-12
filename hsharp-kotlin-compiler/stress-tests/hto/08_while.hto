@@ -1,0 +1,16 @@
+# T08 - While loops
+let i = 0;
+let sum = 0;
+while (i < 10) {
+    sum = sum + i;
+    i = i + 1;
+}
+print(sum);
+
+let n = 0;
+let fact = 1;
+while (n < 7) {
+    n = n + 1;
+    fact = fact * n;
+}
+print(fact);

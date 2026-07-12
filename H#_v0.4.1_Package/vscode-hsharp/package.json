@@ -1,0 +1,216 @@
+{
+  "name": "hsharp-language",
+  "displayName": "H# Language Support",
+  "description": "Syntax highlighting, snippets, diagnostics, IntelliSense, run, compile, and package for the H# programming language (v0.4) — powered by the Kotlin H# VM/compiler",
+  "version": "0.4.1",
+  "publisher": "hsharp",
+  "license": "MIT",
+  "icon": "images/hsharp-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/peddlejumper/H-_A"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "hsharp",
+    "h#",
+    "hsharp language",
+    "currying",
+    "union types",
+    "machine learning",
+    "3d",
+    "dzzw",
+    "parallel",
+    "kotlin",
+    "jvm",
+    "native packaging"
+  ],
+  "activationEvents": [
+    "onLanguage:hsharp"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "hsharp",
+        "aliases": [
+          "H#",
+          "HSharp",
+          "hsharp"
+        ],
+        "extensions": [
+          ".hto",
+          ".hsi"
+        ],
+        "filenames": [
+          "hsharp.json",
+          "hsharp.config"
+        ],
+        "icon": {
+          "light": "images/hsharp-icon.png",
+          "dark": "images/hsharp-icon.png"
+        },
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "hsharp",
+        "scopeName": "source.hsharp",
+        "path": "./syntaxes/hsharp.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "hsharp",
+        "path": "./snippets/hsharp.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "hsharp.showInfo",
+        "title": "H#: Show Info"
+      },
+      {
+        "command": "hsharp.runFile",
+        "title": "H#: Run .hto via Kotlin VM",
+        "icon": "$(play)"
+      },
+      {
+        "command": "hsharp.compileFile",
+        "title": "H#: Compile .hto to .hbc",
+        "icon": "$(file-binary)"
+      },
+      {
+        "command": "hsharp.packageApp",
+        "title": "H#: Package as native app (.app/.exe)",
+        "icon": "$(package)"
+      },
+      {
+        "command": "hsharp.openOutput",
+        "title": "H#: Show output channel"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "hsharp.runFile",
+          "when": "editorLangId == hsharp",
+          "group": "navigation@1"
+        },
+        {
+          "command": "hsharp.compileFile",
+          "when": "editorLangId == hsharp",
+          "group": "navigation@2"
+        },
+        {
+          "command": "hsharp.packageApp",
+          "when": "editorLangId == hsharp",
+          "group": "navigation@3"
+        }
+      ],
+      "editor/title/run": [
+        {
+          "command": "hsharp.runFile",
+          "when": "editorLangId == hsharp",
+          "group": "run@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "hsharp.runFile",
+          "when": "editorLangId == hsharp",
+          "group": "hsharp@1"
+        },
+        {
+          "command": "hsharp.compileFile",
+          "when": "editorLangId == hsharp",
+          "group": "hsharp@2"
+        },
+        {
+          "command": "hsharp.packageApp",
+          "when": "editorLangId == hsharp && resourceExtname == .hbc",
+          "group": "hsharp@3"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "hsharp.runFile",
+        "key": "ctrl+f5",
+        "when": "editorLangId == hsharp"
+      },
+      {
+        "command": "hsharp.compileFile",
+        "key": "ctrl+shift+b",
+        "when": "editorLangId == hsharp"
+      }
+    ],
+    "configuration": [
+      {
+        "title": "H#",
+        "properties": {
+          "hsharp.format.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable H# code formatting (trailing whitespace removal, indentation)"
+          },
+          "hsharp.diagnostics.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable real-time diagnostics (syntax checks)"
+          },
+          "hsharp.kotlinCompiler.jar": {
+            "type": "string",
+            "default": "",
+            "description": "Path to hsharp-kotlin-compiler.jar. Leave empty to use the bundled copy shipped with this extension."
+          },
+          "hsharp.kotlinRuntime.jar": {
+            "type": "string",
+            "default": "",
+            "description": "Path to hsharp-runtime.jar. Leave empty to use the bundled copy shipped with this extension."
+          },
+          "hsharp.pythonCompiler.path": {
+            "type": "string",
+            "default": "python3",
+            "description": "Path to the Python interpreter used by .hto → .hbc compilation step. The Kotlin extension is still the runtime/packager."
+          },
+          "hsharp.pythonSrcDir": {
+            "type": "string",
+            "default": "",
+            "description": "Optional override for the directory containing the bundled Python compiler (hsharp_compile.py). Leave empty to use the copy shipped inside the extension."
+          },
+          "hsharp.package.target": {
+            "type": "string",
+            "enum": [
+              "mac",
+              "win",
+              "linux"
+            ],
+            "default": "mac",
+            "description": "Target platform for the packaged app."
+          },
+          "hsharp.package.type": {
+            "type": "string",
+            "enum": [
+              "image",
+              "dmg",
+              "msi",
+              "exe",
+              "deb",
+              "rpm"
+            ],
+            "default": "image",
+            "description": "Package type passed to jpackage."
+          }
+        }
+      }
+    ]
+  }
+}

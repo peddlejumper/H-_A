@@ -1,0 +1,32 @@
+# t17 — substring() out of bounds: start>len, huge length, negative start, negative length
+print("== t17 substring oob ==");
+try {
+    print("substring(\"hello\",10,2)=[" + substring("hello", 10, 2) + "]");
+} catch (e) {
+    print("substring(start>len) ERR: " + str(e));
+}
+try {
+    print("substring(\"hello\",0,100)=[" + substring("hello", 0, 100) + "]");
+} catch (e) {
+    print("substring(huge len) ERR: " + str(e));
+}
+try {
+    print("substring(\"hello\",-1,3)=[" + substring("hello", -1, 3) + "]");
+} catch (e) {
+    print("substring(neg start) ERR: " + str(e));
+}
+try {
+    print("substring(\"hello\",2,-1)=[" + substring("hello", 2, -1) + "]");
+} catch (e) {
+    print("substring(neg len) ERR: " + str(e));
+}
+try {
+    print("substring(\"hello\",2,3)=[" + substring("hello", 2, 3) + "]");
+} catch (e) {
+    print("substring(normal) ERR: " + str(e));
+}
+try {
+    print("substring(\"\",0,0)=[" + substring("", 0, 0) + "]");
+} catch (e) {
+    print("substring(empty) ERR: " + str(e));
+}

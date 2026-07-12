@@ -1,0 +1,114 @@
+# T66 - Control Flow Edge Cases (高强度边界测试)
+# 测试领域: if 链 / while / for / break / continue / 短路 / 解包
+# 每个用例打印 "Cn:<expected>" 形式以便核对
+
+# ===== 公用: 带副作用的函数 (用于短路测试) =====
+fn sideEffect() {
+    print("SIDE_EFFECT_CALLED");
+    return true;
+}
+
+# ===== C1: 多层 else-if 链 (5 分支, 边界分数) =====
+# 预期: 73 命中 >=70 分支 -> C
+print("C1:C");
+let score = 73;
+if (score >= 90) { print("A"); }
+else if (score >= 80) { print("B"); }
+else if (score >= 70) { print("C"); }
+else if (score >= 60) { print("D"); }
+else { print("F"); }
+
+# ===== C2: 空 for 循环体 (应正常终止) =====
+# 预期: C2done
+print("C2:C2done");
+for x in [1, 2, 3] { }
+print("C2done");
+
+# ===== C3: for 迭代空列表 (循环体不应执行) =====
+# 预期: 0
+print("C3:0");
+let cnt = 0;
+for x in [] { cnt = cnt + 1; }
+print(cnt);
+
+# ===== C4: for-in 字符串 (逐字符迭代) =====
+# 预期: abc
+print("C4:abc");
+let acc = "";
+for ch in "abc" { acc = acc + ch; }
+print(acc);
+
+# ===== C5: for k,v 解包字典 =====
+# 预期: a:1,b:2,
+print("C5:a:1,b:2,");
+let d = {"a": 1, "b": 2};
+let pairs = "";
+for k, v in d { pairs = pairs + k + ":" + str(v) + ","; }
+print(pairs);
+
+# ===== C6: 嵌套 for + break 仅跳出内层 =====
+# 预期: 11 21 31
+print("C6:11 21 31");
+let out6 = "";
+for i in [1, 2, 3] {
+    for j in [1, 2, 3] {
+        if (j == 2) { break; }
+        out6 = out6 + str(i) + str(j) + " ";
+    }
+}
+print(out6);
+
+# ===== C7: continue 在 for 最后一次迭代 (不应崩溃/多迭代) =====
+# 预期: 12
+print("C7:12");
+let out7 = "";
+for i in [1, 2, 3] {
+    if (i == 3) { continue; }
+    out7 = out7 + str(i);
+}
+print(out7);
+
+# ===== C8: 短路求值 - false and f() 不应调用 f =====
+# 预期: AND_FALSE (不应出现 SIDE_EFFECT_CALLED)
+print("C8:AND_FALSE");
+if (false and sideEffect()) { print("AND_TRUE"); }
+else { print("AND_FALSE"); }
+
+# ===== C9: 短路求值 - true or f() 不应调用 f =====
+# 预期: OR_TRUE (不应出现 SIDE_EFFECT_CALLED)
+print("C9:OR_TRUE");
+if (true or sideEffect()) { print("OR_TRUE"); }
+else { print("OR_FALSE"); }
+
+# ===== C10: while(true) 死循环 + break 逃逸 + 嵌套 while continue =====
+# 预期: 5 12
+print("C10:5 12");
+let i = 0;
+while (true) {
+    i = i + 1;
+    if (i >= 5) { break; }
+}
+let j = 0;
+let sum = 0;
+while (j < 5) {
+    j = j + 1;
+    if (j == 3) { continue; }
+    sum = sum + j;
+}
+print(i);
+print(sum);
+
+# ===== C11: 非布尔值作为 if 条件 (truthy 语义 - 与 Python 解释器不一致) =====
+# Python 解释器会抛 "If condition must be boolean"; Kotlin VM 使用 truthy() 放行
+# 预期 (Kotlin VM): YES
+print("C11:YES");
+if (1) { print("YES"); } else { print("NO"); }
+
+# ===== C12: for k,v 解包列表 (列表无 k/v 概念, v 应未定义) =====
+# 预期: 报错 "Undefined name: v" (parser 允许但运行时 v 从未绑定)
+print("C12:ERROR_OR_undef");
+for k, v in [10, 20, 30] {
+    print(k);
+    print(v);
+}
+print("C12end");

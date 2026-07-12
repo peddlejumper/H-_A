@@ -1,0 +1,158 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# zzw_native.h — 100% H# Native GUI Function Wrappers
+# Calls the compiled-in native rendering primitives (tkinter-backed)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ─── Window Management ───
+
+fn native_create_window(title, w, h, bg) {
+    return gui_create_window(title, w, h, bg);
+}
+
+fn native_destroy_window(win_id) {
+    return gui_destroy_window(win_id);
+}
+
+fn native_show_window(win_id) {
+    return gui_show_window(win_id);
+}
+
+fn native_hide_window(win_id) {
+    return gui_hide_window(win_id);
+}
+
+fn native_set_window_title(win_id, title) {
+    return gui_set_window_title(win_id, title);
+}
+
+fn native_set_window_size(win_id, w, h) {
+    return gui_set_window_size(win_id, w, h);
+}
+
+fn native_get_window_size(win_id) {
+    return gui_get_window_size(win_id);
+}
+
+# ─── Drawing Primitives ───
+
+fn native_clear(win_id, color) {
+    return gui_clear(win_id, color);
+}
+
+fn native_draw_rect(win_id, x, y, w, h, color, fill) {
+    return gui_draw_rect(win_id, x, y, w, h, color, fill);
+}
+
+fn native_draw_rounded_rect(win_id, x, y, w, h, radius, color, fill) {
+    return gui_draw_rounded_rect(win_id, x, y, w, h, radius, color, fill);
+}
+
+fn native_draw_line(win_id, x1, y1, x2, y2, color, width) {
+    return gui_draw_line(win_id, x1, y1, x2, y2, color, width);
+}
+
+fn native_draw_circle(win_id, cx, cy, r, color, fill) {
+    return gui_draw_circle(win_id, cx, cy, r, color, fill);
+}
+
+fn native_draw_arc(win_id, x, y, w, h, start_angle, extent, color, fill) {
+    return gui_draw_arc(win_id, x, y, w, h, start_angle, extent, color, fill);
+}
+
+fn native_draw_polygon(win_id, points, color, fill) {
+    return gui_draw_polygon(win_id, points, color, fill);
+}
+
+fn native_draw_text(win_id, x, y, text, color, font_size, bold, font_family) {
+    return gui_draw_text(win_id, x, y, text, color, font_size, bold, font_family);
+}
+
+fn native_draw_text_centered(win_id, x, y, text, color, font_size, bold) {
+    return gui_draw_text_centered(win_id, x, y, text, color, font_size, bold);
+}
+
+fn native_measure_text(text, font_size, bold) {
+    return gui_measure_text(text, font_size, bold);
+}
+
+fn native_draw_image(win_id, x, y, w, h, color) {
+    return gui_draw_image(win_id, x, y, w, h, color);
+}
+
+fn native_set_clip(win_id, x, y, w, h) {
+    return gui_set_clip(win_id, x, y, w, h);
+}
+
+fn native_clear_clip(win_id) {
+    return gui_clear_clip(win_id);
+}
+
+# ─── Event System ───
+
+fn native_get_events(win_id) {
+    return gui_get_events(win_id);
+}
+
+fn native_update(win_id) {
+    return gui_update(win_id);
+}
+
+fn native_start_event_loop() {
+    return gui_start_event_loop();
+}
+
+fn native_stop_event_loop() {
+    return gui_stop_event_loop();
+}
+
+fn native_poll_events() {
+    return gui_poll_events();
+}
+
+# ─── Timer ───
+
+fn native_set_timer(win_id, timer_id, delay_ms, callback_name) {
+    return gui_set_timer(win_id, timer_id, delay_ms, callback_name);
+}
+
+fn native_clear_timer(win_id, timer_id) {
+    return gui_clear_timer(win_id, timer_id);
+}
+
+# ─── Screen Info ───
+
+fn native_get_screen_size() {
+    return gui_get_screen_size();
+}
+
+fn native_get_mouse_pos() {
+    return gui_get_mouse_pos();
+}
+
+fn native_beep() {
+    return gui_beep();
+}
+
+# ─── Clipboard ───
+
+fn native_clipboard_copy(text) {
+    return gui_clipboard_copy(text);
+}
+
+fn native_clipboard_paste() {
+    return gui_clipboard_paste();
+}
+
+# ─── Color Utilities ───
+
+fn native_parse_color(hex_color) {
+    return gui_parse_color(hex_color);
+}
+
+fn native_color_to_hex(r, g, b) {
+    return gui_color_to_hex(r, g, b);
+}
+
+fn native_lerp_color(c1, c2, t) {
+    return gui_lerp_color(c1, c2, t);
+}

@@ -1,0 +1,80 @@
+# 11 — idempotent await on the same future
+# Covers: 多次 await 同一 future（应幂等，返回同一值 / 同一异常）
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+parallel fn give(n) {
+    return n;
+}
+
+# RESOLVED future: 多次 await 同值
+let f = give(123);
+let a1 = await f;
+let a2 = await f;
+let a3 = await f;
+check("resolved_3_awaits_same", a1 == 123 and a2 == 123 and a3 == 123,
+      str(a1) + "/" + str(a2) + "/" + str(a3));
+
+# 1000 次 await 同一 future
+let f2 = give(7);
+let all7 = true;
+let i = 0;
+while (i < 1000) {
+    if (await f2 != 7) { all7 = false; }
+    i = i + 1;
+}
+check("resolved_1000_awaits_same", all7, "value drifted");
+
+# FAILED future: 多次 await 同样抛同样 payload
+parallel fn failwith(m) {
+    throw m;
+}
+let ff = failwith("idem-fail");
+let msgs = [];
+let c1 = "";
+try { let _ = await ff; } catch (e) { c1 = str(e); }
+let c2 = "";
+try { let _ = await ff; } catch (e) { c2 = str(e); }
+let c3 = "";
+try { let _ = await ff; } catch (e) { c3 = str(e); }
+check("failed_3_awaits_same_payload", c1 == "idem-fail" and c2 == "idem-fail" and c3 == "idem-fail",
+      "[" + c1 + "]/[" + c2 + "]/[" + c3 + "]");
+
+# 并发：多个线程同时 await 同一 future（不应崩、不应死锁）
+parallel fn src() {
+    let k = 0;
+    while (k < 50000) { k = k + 1; }
+    return 42;
+}
+let shared_fut = src();
+let readers = [];
+let r = 0;
+while (r < 20) {
+    push(readers, give(0));   # 占位，真正 await 在下面
+    r = r + 1;
+}
+# 直接在主线程并发 await（顺序但同一个 future）
+let ok = true;
+let q = 0;
+while (q < 20) {
+    if (await shared_fut != 42) { ok = false; }
+    q = q + 1;
+}
+check("shared_future_20_awaits", ok, "some await on shared future failed");
+
+# await 一个尚未 resolve 的 future 多次（每次都阻塞到 resolve）
+parallel fn slow_give() {
+    let k = 0;
+    while (k < 200000) { k = k + 1; }
+    return 99;
+}
+let sf = slow_give();
+let r1 = await sf;
+let r2 = await sf;
+check("pending_then_resolved_repeat", r1 == 99 and r2 == 99,
+      str(r1) + "/" + str(r2));
+
+print("T11_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

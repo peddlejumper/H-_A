@@ -1,0 +1,22 @@
+# t04_nested.hto
+# concurrent 嵌套：外层 concurrent 内再开一个 concurrent，每层各跑一个 parallel。
+# 预期：内层先 join 完，外层再 join，结果 100 / 200。
+parallel fn inner() {
+    return 100;
+}
+parallel fn outer() {
+    return 200;
+}
+concurrent {
+    let fo = outer();
+    concurrent {
+        let fi = inner();
+        let ri = await fi;
+        print("inner:");
+        print(ri);
+    }
+    let ro = await fo;
+    print("outer:");
+    print(ro);
+}
+print("done");

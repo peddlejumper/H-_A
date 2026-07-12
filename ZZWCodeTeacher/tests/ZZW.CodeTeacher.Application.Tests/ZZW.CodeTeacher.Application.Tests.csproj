@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ZZW.CodeTeacher.Application.Tests</RootNamespace>
+    <!-- xUnit 测试方法名沿用下划线惯例,抑制 CA1707 -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ZZW.CodeTeacher.Application\ZZW.CodeTeacher.Application.csproj" />
+    <ProjectReference Include="..\..\src\ZZW.CodeTeacher.Domain\ZZW.CodeTeacher.Domain.csproj" />
+  </ItemGroup>
+</Project>

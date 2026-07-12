@@ -1,0 +1,38 @@
+
+fn dzzw_info() {
+    let w = dzzw_worker_count();
+    print("DZZW v2.0 Thread Pool: " + str(w) + " workers (work-stealing, VM reuse)");
+    print("  Submitted: " + str(dzzw_total_submitted()) + ", Completed: " + str(dzzw_total_completed()));
+    return w > 0;
+}
+
+fn dzzw_perf_benchmark() {
+    # Benchmark: spawn many parallel tasks
+    fn worker_task(x) {
+        let s = 0;
+        for i in range(0, 10000) {
+            s = s + i;
+        }
+        return s;
+    }
+    
+    let n = 100;
+    let handles = [];
+    let start = time_now();
+    
+    for i in range(0, n) {
+        let h = dzzw_spawn(worker_task, [i]);
+        push(handles, h);
+    }
+    
+    for i in range(0, n) {
+        let r = dzzw_await(handles[i]);
+    }
+    
+    let elapsed = time_now() - start;
+    print("DZZW v2.0 Benchmark: " + str(n) + " tasks in " + str(elapsed) + "ms");
+    dzzw_dump_stats();
+    return elapsed;
+}
+
+dzzw_info();

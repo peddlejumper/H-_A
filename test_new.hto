@@ -1,0 +1,14 @@
+# 测试 new 是否自动调用 init
+class Foo {
+    fn init(x) {
+        self.x = x;
+        print("init called with " + x);
+    }
+    fn hello() {
+        print("x = " + self.x);
+    }
+}
+let f = new Foo();
+print("after new");
+f.init(42);
+f.hello();

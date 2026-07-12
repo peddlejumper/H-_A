@@ -1,0 +1,21 @@
+# 08 - for over 空集合 (list/string/dict)
+# 目的: 空集合迭代，循环体不应执行；fixForLoopJumps 不应导致越界
+let ec = 0;
+for x in [] { ec = ec + 1; }
+print("empty_list_cnt=" + str(ec));
+print("expected=0");
+
+let sc = "";
+for c in "" { sc = sc + c; }
+print("empty_str_len=" + str(len(sc)));
+print("expected=0");
+
+let dc = 0;
+for k in {} { dc = dc + 1; }
+print("empty_dict_cnt=" + str(dc));
+print("expected=0");
+
+let dkv = 0;
+for k, v in {} { dkv = dkv + 1; }
+print("empty_dict_kv_cnt=" + str(dkv));
+print("expected=0");

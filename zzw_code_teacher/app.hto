@@ -1,0 +1,194 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# app.hto — ZZW Code Teacher 入口（现代化角色选择画面）
+# ═══════════════════════════════════════════════════════════════════════════
+import "bootstrap/zzw_native.hto";
+import "zzw_code_teacher/common/theme.hto";
+import "zzw_code_teacher/student/student_ide.hto";
+import "zzw_code_teacher/teacher/teacher_admin.hto";
+
+let _app = {
+    "win_id": 0,
+    "win_w": 720,
+    "win_h": 480,
+    "running": true,
+    "choice": -1,
+    "hover_card": -1
+};
+
+# ───────────────────────── 渲染选择画面 ─────────────────────────
+fn render_choice(win_id) {
+    let w = _app["win_w"];
+    let h = _app["win_h"];
+    native_clear(win_id, "#0a0a0a");
+
+    # 顶部品牌区（克制，不花哨）
+    native_draw_text(win_id, 0, 0, "", "#000000", 1, false, "Arial");
+    native_draw_text_centered(win_id, w / 2, 80, "Code Teacher", "#ededed", 32, true);
+    native_draw_text_centered(win_id, w / 2, 116, "选择角色进入工作台", "#71717a", 14, false);
+
+    # 分隔线
+    native_draw_rect(win_id, w / 2 - 20, 140, 40, 2, "#262626", true);
+
+    # 两个角色卡片
+    let card_w = 260;
+    let card_h = 220;
+    let gap = 32;
+    let total_w = card_w * 2 + gap;
+    let start_x = (w - total_w) / 2;
+    let card_y = 180;
+
+    # 学生卡片
+    let sx = start_x;
+    let s_hover = (_app["hover_card"] == 0);
+    let card_bg = "#161616";
+    let card_border = "#262626";
+    if (s_hover) { card_border = "#3f3f46"; }
+    native_draw_rounded_rect(win_id, sx, card_y, card_w, card_h, 12, card_bg, true);
+    native_draw_rounded_rect(win_id, sx, card_y, card_w, card_h, 12, card_border, false);
+
+    # 图标占位（圆角方块 + 字母）
+    native_draw_rounded_rect(win_id, sx + card_w / 2 - 24, card_y + 24, 48, 48, 12, "#1c1c1c", true);
+    native_draw_rounded_rect(win_id, sx + card_w / 2 - 24, card_y + 24, 48, 48, 12, "#333333", false);
+    native_draw_text_centered(win_id, sx + card_w / 2, card_y + 48, "S", "#e4e4e7", 20, true);
+
+    native_draw_text_centered(win_id, sx + card_w / 2, card_y + 96, "学生端", "#ededed", 18, true);
+    native_draw_text_centered(win_id, sx + card_w / 2, card_y + 122, "代码编辑 · 题目练习", "#a1a1aa", 12, false);
+    native_draw_text_centered(win_id, sx + card_w / 2, card_y + 140, "学习助手 · 提交记录", "#71717a", 12, false);
+
+    # 进入按钮
+    let btn_w = 120;
+    let btn_x = sx + (card_w - btn_w) / 2;
+    let btn_y = card_y + card_h - 44;
+    let btn_bg = "#ffffff";
+    if (s_hover) { btn_bg = "#e4e4e7"; }
+    native_draw_rounded_rect(win_id, btn_x, btn_y, btn_w, 30, 6, btn_bg, true);
+    native_draw_text_centered(win_id, btn_x + btn_w / 2, btn_y + 15, "进入 →", "#0a0a0a", 12, true);
+
+    # 教师卡片
+    let tx = start_x + card_w + gap;
+    let t_hover = (_app["hover_card"] == 1);
+    let t_border = "#262626";
+    if (t_hover) { t_border = "#3f3f46"; }
+    native_draw_rounded_rect(win_id, tx, card_y, card_w, card_h, 12, card_bg, true);
+    native_draw_rounded_rect(win_id, tx, card_y, card_w, card_h, 12, t_border, false);
+
+    native_draw_rounded_rect(win_id, tx + card_w / 2 - 24, card_y + 24, 48, 48, 12, "#221a3d", true);
+    native_draw_rounded_rect(win_id, tx + card_w / 2 - 24, card_y + 24, 48, 48, 12, "#3d2e5f", false);
+    native_draw_text_centered(win_id, tx + card_w / 2, card_y + 48, "A", "#a78bfa", 20, true);
+
+    native_draw_text_centered(win_id, tx + card_w / 2, card_y + 96, "教师端", "#ededed", 18, true);
+    native_draw_text_centered(win_id, tx + card_w / 2, card_y + 122, "题目管理 · 用户管理", "#a1a1aa", 12, false);
+    native_draw_text_centered(win_id, tx + card_w / 2, card_y + 140, "提交审阅 · 评测统计", "#71717a", 12, false);
+
+    let tbtn_bg = "#161616";
+    if (t_hover) { tbtn_bg = "#1c1c1c"; }
+    native_draw_rounded_rect(win_id, tx + (card_w - btn_w) / 2, btn_y, btn_w, 30, 6, tbtn_bg, true);
+    native_draw_rounded_rect(win_id, tx + (card_w - btn_w) / 2, btn_y, btn_w, 30, 6, "#a78bfa", false);
+    native_draw_text_centered(win_id, tx + card_w / 2, btn_y + 15, "进入 →", "#a78bfa", 12, true);
+
+    # 底部信息
+    native_draw_text_centered(win_id, w / 2, h - 28, "Code Teacher v1.0  ·  Powered by H#", "#3f3f46", 11, false);
+
+    native_update(win_id);
+    return 0;
+}
+
+# ───────────────────────── 事件处理 ─────────────────────────
+fn handle_events(win_id) {
+    let events = native_get_events(win_id);
+    let i = 0;
+    while (i < len(events)) {
+        let evt = events[i];
+        if (evt["type"] == "close") {
+            _app["choice"] = -1;
+            _app["running"] = false;
+        }
+        if (evt["type"] == "mouse_move") {
+            update_hover(evt["x"], evt["y"]);
+        }
+        if (evt["type"] == "mouse_down") {
+            handle_click(evt["x"], evt["y"]);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn update_hover(px, py) {
+    let w = _app["win_w"];
+    let card_w = 260;
+    let card_h = 220;
+    let gap = 32;
+    let total_w = card_w * 2 + gap;
+    let start_x = (w - total_w) / 2;
+    let card_y = 180;
+
+    _app["hover_card"] = -1;
+    let sx = start_x;
+    if (px >= sx and px < sx + card_w and py >= card_y and py < card_y + card_h) {
+        _app["hover_card"] = 0;
+    }
+    let tx = start_x + card_w + gap;
+    if (px >= tx and px < tx + card_w and py >= card_y and py < card_y + card_h) {
+        _app["hover_card"] = 1;
+    }
+    return 0;
+}
+
+fn handle_click(px, py) {
+    let w = _app["win_w"];
+    let card_w = 260;
+    let card_h = 220;
+    let gap = 32;
+    let total_w = card_w * 2 + gap;
+    let start_x = (w - total_w) / 2;
+    let card_y = 180;
+
+    let sx = start_x;
+    if (px >= sx and px < sx + card_w and py >= card_y and py < card_y + card_h) {
+        _app["choice"] = 0;
+        _app["running"] = false;
+        return 0;
+    }
+    let tx = start_x + card_w + gap;
+    if (px >= tx and px < tx + card_w and py >= card_y and py < card_y + card_h) {
+        _app["choice"] = 1;
+        _app["running"] = false;
+        return 0;
+    }
+    return 0;
+}
+
+# ───────────────────────── 入口 ─────────────────────────
+fn main() {
+    let wid = native_create_window("Code Teacher", _app["win_w"], _app["win_h"], "#0a0a0a");
+    if (wid <= 0) {
+        print("ERROR: 启动窗口创建失败");
+        return 0;
+    }
+    _app["win_id"] = wid;
+    print("[app] 启动选择画面...");
+
+    while (_app["running"]) {
+        handle_events(wid);
+        render_choice(wid);
+        native_poll_events();
+    }
+    native_destroy_window(wid);
+    print("[app] 选择画面关闭。choice=" + str(_app["choice"]));
+
+    if (_app["choice"] == 0) {
+        print("[app] → 启动学生端");
+        run_student();
+    }
+    if (_app["choice"] == 1) {
+        print("[app] → 启动教师端");
+        run_teacher();
+    }
+    if (_app["choice"] < 0) {
+        print("[app] 用户取消，退出。");
+    }
+    return 0;
+}
+
+main();

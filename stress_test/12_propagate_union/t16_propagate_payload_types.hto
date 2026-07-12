@@ -1,0 +1,24 @@
+# T16 - ? payload variety: dict payload, nested payload, union payload
+union Tag {
+    A: n;
+    B: s;
+}
+
+fn throw_union() { throw Tag{A: 7}; return 0; }
+let u = throw_union()?;
+print(u.__variant__);
+print(u.n);
+
+fn throw_dict() { throw {"k": "v"}; return 0; }
+let d = throw_dict()?;
+print(d.k);
+
+# ? captures payload exactly, including its type identity
+fn throw_bool() { throw true; return false; }
+let b = throw_bool()?;
+print(b);
+
+# payload is null
+fn throw_null() { throw null; return 0; }
+let nn = throw_null()?;
+print(nn);

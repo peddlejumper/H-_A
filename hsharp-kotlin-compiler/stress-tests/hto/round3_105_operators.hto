@@ -1,0 +1,462 @@
+# Round 3 / #105 — Operator Overloading & Custom Behaviour stress test
+# H# v0.4.1
+#
+# GOAL: probe whether H# supports operator overloading on class instances
+# (magic methods like __add__/__eq__/__lt__/__str__/__bool__/__len__),
+# and document the actual behaviour of binary/comparison/cast operators
+# when applied to user-defined class instances.
+#
+# CONTEXT (from source inspection of hsharp-kotlin-compiler/runtime):
+#   * HVM.binAdd/binSub/binMul/BINARY_DIV/BINARY_MOD handle HString/HList/
+#     HNumber specially and fall through to HValueOps.toDouble(a)+toDouble(b)
+#     for the "else" branch — which throws "cannot coerce INSTANCE to number".
+#   * HVM.compareOp routes EQEQ/BANGEQ through HValueOps.equals, where two
+#     HInstances compare by *reference* (a === b); GT/LT/GTE/LTE fall through
+#     to HValueOps.toDouble(...), which also throws on HInstance.
+#   * Magic-method names like __add__/__eq__/__lt__ are *legal* method names
+#     (parser allows them as identifiers) but the runtime NEVER dispatches
+#     to them for the corresponding operator.
+#   * str()/fmt()/`"x" + obj` use obj.toDisplayString() — a built-in
+#     serialiser that prints `ClassName{field=value, ...}`.  A user-defined
+#     `to_string()` method is NOT consulted.
+#   * len()/bool() builtins: len() throws on HInstance ("len() not supported
+#     on INSTANCE"); bool() returns HValueOps.truthy(v) whose `else` arm is
+#     `true` for any HInstance (so every instance is truthy).
+#   * `if (obj)`: same truthy() path — every instance is truthy.
+#   * Indexing `obj[i]` and slicing `obj[i:j]`: getItem() handles only
+#     HList/HDict/HString — throws "Cannot index INSTANCE".
+#   * `for x in obj`: needs verification (the FOR_ITER opcode likely rejects
+#     non-iterables).
+#   * `is`/`as` binary operators are NOT parsed outside `match` (per
+#     round2_87 finding); only `match v { is T => ... }` and
+#     `match v { is T as x => ... }` are accepted.
+#
+# All risky probes are wrapped in try/catch so the suite runs to
+# completion; each prints r105_<id>:<result> for triage.
+
+print("=== R3.105 START ===");
+
+# ============================================================
+# Helper: safe-call wrapper
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# Class under test — defines a value-like type with all the
+# magic-method names a Python-style runtime would look for, plus
+# a regular to_string() method.
+# ============================================================
+class Vec {
+    let x = 0;
+    let y = 0;
+    fn init(a, b) { x = a; y = b; }
+    fn to_string() { return "Vec(" + x + "," + y + ")"; }
+    fn __str__() { return "MAGIC_STR_Vec(" + x + "," + y + ")"; }
+    fn __repr__() { return "MAGIC_REPR_Vec(" + x + "," + y + ")"; }
+    fn __add__(other) { return new Vec(x + other.x, y + other.y); }
+    fn __sub__(other) { return new Vec(x - other.x, y - other.y); }
+    fn __mul__(k) { return new Vec(x * k, y * k); }
+    fn __eq__(other) { return x == other.x and y == other.y; }
+    fn __lt__(other) { return (x*x + y*y) < (other.x*other.x + other.y*other.y); }
+    fn __bool__() { return x != 0 or y != 0; }
+    fn __len__() { return 2; }
+    fn __getitem__(i) {
+        if (i == 0) { return x; }
+        if (i == 1) { return y; }
+        return null;
+    }
+    fn __iter__() { return [x, y]; }
+    fn __hash__() { return x * 1000 + y; }
+}
+
+let v1 = new Vec(1, 2);
+let v2 = new Vec(1, 2);   # same field values as v1, different identity
+let v3 = new Vec(3, 4);
+
+# ============================================================
+# 1.  Class instance + number  — `obj + 1`
+#     Expected (overloading supported): calls __add__(1) — but our
+#       __add__ expects a Vec, so it would error on `other.x`.
+#     Expected (no overloading): HVM.binAdd else branch →
+#       toDouble(HInstance) throws "cannot coerce INSTANCE to number".
+# ============================================================
+safe("r105_obj_plus_num", fn() { return v1 + 1; });
+
+# ============================================================
+# 2.  Class instance == class instance (same fields, different ref)
+#     Expected (overloading): __eq__ returns true.
+#     Expected (no overloading): HValueOps.equals → HInstance vs HInstance
+#       uses reference equality → false.
+# ============================================================
+safe("r105_eq_same_fields_diff_ref", fn() { return v1 == v2; });
+safe("r105_eq_same_ref", fn() { return v1 == v1; });
+safe("r105_eq_diff_fields", fn() { return v1 == v3; });
+
+# ============================================================
+# 3.  Class instance < (less-than)
+#     Expected (overloading): __lt__ returns bool.
+#     Expected (no overloading): compareOp LT → toDouble(HInstance)
+#       throws "cannot coerce INSTANCE to number".
+# ============================================================
+safe("r105_lt_instance", fn() { return v1 < v3; });
+safe("r105_gt_instance", fn() { return v1 > v3; });
+safe("r105_lte_instance", fn() { return v1 <= v3; });
+safe("r105_gte_instance", fn() { return v1 >= v3; });
+
+# ============================================================
+# 4.  Class instance as dict key
+#     coerceKey() falls back to v.toDisplayString() for HInstance,
+#     so it should work but produce a long string key.  Two
+#     instances with identical fields will COLLIDE because their
+#     toDisplayString() is identical — value-equality at the key
+#     level, not identity-equality.
+# ============================================================
+safe("r105_obj_as_dict_key", fn() {
+    let d = {};
+    d[v1] = "first";
+    d[v2] = "second";   # v2 has same fields as v1 — should overwrite?
+    return d[v1];
+});
+safe("r105_obj_as_dict_key_count", fn() {
+    let d = {};
+    d[v1] = 1;
+    d[v2] = 2;
+    d[v3] = 3;
+    return len(d.keys());
+});
+
+# ============================================================
+# 5.  Class instance + string  — "x" + obj  and  obj + "x"
+#     binAdd: `a is HString && b !is HString -> a.value + b.toDisplayString()`
+#     So "x" + obj produces "x" + obj.toDisplayString() (NOT __str__).
+#     Likewise obj + "x" produces obj.toDisplayString() + "x".
+#     A user-defined to_string()/__str__() is NOT consulted.
+# ============================================================
+safe("r105_str_plus_obj", fn() { return "x=" + v1; });
+safe("r105_obj_plus_str", fn() { return v1 + "=x"; });
+
+# ============================================================
+# 6.  Class instance in fmt()  — fmt("{0}", obj)
+#     fmt uses rest[idx].toDisplayString() — built-in serialiser,
+#     not __str__.
+# ============================================================
+safe("r105_fmt_obj", fn() { return fmt("v={0}", v1); });
+safe("r105_fmt_multi", fn() { return fmt("a={0} b={1}", v1, v3); });
+
+# ============================================================
+# 7.  len(obj)  — should the runtime invoke __len__?
+#     len() builtin: `else -> throw "len() not supported on INSTANCE"`.
+# ============================================================
+safe("r105_len_obj_builtin", fn() { return len(v1); });
+
+# ============================================================
+# 8.  str(obj)  — should the runtime invoke __str__/to_string?
+#     str() builtin: `args[0].toDisplayString()` — built-in serialiser.
+# ============================================================
+safe("r105_str_obj_builtin", fn() { return str(v1); });
+
+# ============================================================
+# 9.  bool(obj)  — should the runtime invoke __bool__?
+#     bool() builtin: HValueOps.truthy(args[0]) — for HInstance the
+#     `else -> true` arm fires, so EVERY instance is truthy regardless
+#     of any __bool__ method.
+# ============================================================
+safe("r105_bool_obj_nonzero", fn() { return bool(v1); });
+# An "empty" Vec that __bool__ would say is false — but runtime ignores it
+let v0 = new Vec(0, 0);
+safe("r105_bool_obj_zero_vec", fn() { return bool(v0); });
+
+# ============================================================
+# 10. Class instance in `if` condition  — `if (obj) { }`
+#     Same truthy() path: always truthy.
+# ============================================================
+safe("r105_if_obj_nonzero", fn() {
+    if (v1) { return "truthy"; }
+    return "falsy";
+});
+safe("r105_if_obj_zero_vec", fn() {
+    if (v0) { return "truthy"; }
+    return "falsy";
+});
+safe("r105_not_obj", fn() { return !v1; });
+
+# ============================================================
+# 11. Class instance iteration  — `for x in obj { }`
+#     FOR_ITER expects HList/HDict/HString.  HInstance should error.
+# ============================================================
+safe("r105_for_in_obj", fn() {
+    let total = 0;
+    for x in v1 { total = total + x; }
+    return total;
+});
+
+# ============================================================
+# 12. Class instance indexing  — `obj[0]`
+#     getItem() handles only HList/HDict/HString — throws on HInstance.
+# ============================================================
+safe("r105_index_obj_0", fn() { return v1[0]; });
+safe("r105_index_obj_1", fn() { return v1[1]; });
+
+# ============================================================
+# 13. Class instance slicing  — `obj[0:2]`
+#     Slice should also be rejected for HInstance.
+# ============================================================
+safe("r105_slice_obj", fn() { return v1[0:2]; });
+
+# ============================================================
+# 14. Magic-method operator dispatch (the central question)
+#     If operator overloading is supported, `v1 + v3` calls
+#     v1.__add__(v3) → new Vec(4,6).  Otherwise binAdd falls
+#     through to toDouble → throws.
+# ============================================================
+safe("r105_magic_add", fn() { return str(v1 + v3); });
+safe("r105_magic_sub", fn() { return str(v1 - v3); });
+safe("r105_magic_mul", fn() { return str(v1 * 3); });
+
+# ============================================================
+# 15. `is` operator (binary form)  — `obj is ClassName`
+#     Per round2_87 finding: parser only accepts `is T` inside
+#     `match`.  The binary form should be a parse error.
+#     We attempt it inside try/catch but parse errors abort the
+#     WHOLE file, so we cannot test inline — documented instead.
+# ============================================================
+print("r105_is_binary:SKIPPED(parse-error; documented in round2_87)");
+
+# 15b. `is T` inside match — the only supported form.  Verify it
+#      still works for class instances.
+safe("r105_match_is_class", fn() {
+    return match v1 {
+        is Vec => "is-Vec",
+        _ => "other",
+    };
+});
+
+# 15c. `is T as x` — binding form.  At TOP LEVEL (no lambda wrap):
+#      the binding should be written into the local frame env.
+let r105_is_as_result = "no-match";
+try {
+    r105_is_as_result = match v1 {
+        is Vec as vv => vv.to_string(),
+        _ => "no-match",
+    };
+} catch (e) {
+    r105_is_as_result = "EXC[" + str(e) + "]";
+}
+print("r105_match_is_as_toplevel:" + r105_is_as_result);
+
+# 15d. `is T as x` — binding form INSIDE A LAMBDA.  The compiler's
+#      freevar analysis does NOT know that the MATCH_CASE opcode will
+#      bind `vv` into the local frame env, so it treats `vv` as a
+#      freevar/closure cell and emits `LOAD_DEREF 'vv'` for the body.
+#      At runtime MATCH_CASE writes to f.env["vv"] (local), but the
+#      body reads via LOAD_DEREF (closure cell) — and the cell is
+#      empty/undefined → "Undefined name: vv".
+safe("r105_match_is_as_in_lambda", fn() {
+    return match v1 {
+        is Vec as vv => vv.to_string(),
+        _ => "no-match",
+    };
+});
+
+# ============================================================
+# 16. `as` operator (binary form)  — `obj as ClassName`
+#     Same parser limitation as `is`.  Documented.
+# ============================================================
+print("r105_as_binary:SKIPPED(parse-error; documented in round2_87)");
+
+# ============================================================
+# 17. Operator returns new instance — only meaningful if
+#     overloading exists.  Without it, `v1 + v3` errors, so
+#     the chain below will fail at the first `+`.
+# ============================================================
+safe("r105_op_returns_new", fn() {
+    let sum = v1 + v3;
+    sum.x = 99;
+    return str(v1.x) + "/" + str(sum.x);
+});
+
+# ============================================================
+# 18. Operator chaining — `obj1 + obj2 + obj3`
+# ============================================================
+safe("r105_op_chain", fn() {
+    let v4 = new Vec(5, 6);
+    let total = v1 + v3 + v4;
+    return str(total);
+});
+
+# ============================================================
+# 19. Operator with inheritance — child instance vs parent instance
+# ============================================================
+class V2D {
+    let x = 0;
+    let y = 0;
+    fn init(a, b) { x = a; y = b; }
+    fn __add__(o) { return new V2D(x + o.x, y + o.y); }
+}
+class V3D extends V2D {
+    let z = 0;
+    fn init(a, b, c) { x = a; y = b; z = c; }
+}
+let p2 = new V2D(1, 2);
+let p3 = new V3D(3, 4, 5);
+safe("r105_op_inherit_child_plus_parent", fn() { return str(p3 + p2); });
+safe("r105_op_inherit_parent_plus_child", fn() { return str(p2 + p3); });
+
+# ============================================================
+# 20. Operator with null  — `obj + null`, `null == obj`, `obj == null`
+# ============================================================
+safe("r105_obj_plus_null", fn() { return v1 + null; });
+safe("r105_null_plus_obj", fn() { return null + v1; });
+safe("r105_null_eq_obj", fn() { return null == v1; });
+safe("r105_obj_eq_null", fn() { return v1 == null; });
+safe("r105_obj_neq_null", fn() { return v1 != null; });
+safe("r105_null_eq_null", fn() { return null == null; });
+
+# ============================================================
+# 21. Operator with mixed types — `obj + [1,2]`, `obj + {"k":1}`
+# ============================================================
+safe("r105_obj_plus_list", fn() { return v1 + [1, 2]; });
+safe("r105_list_plus_obj", fn() { return [1, 2] + v1; });
+safe("r105_obj_plus_dict", fn() { return v1 + {"k": 1}; });
+safe("r105_dict_plus_obj", fn() { return {"k": 1} + v1; });
+
+# ============================================================
+# 22. `==` for two instances of same class, identical fields
+#     (already in #2, but isolated here for clarity)
+# ============================================================
+let a = new Vec(7, 8);
+let b = new Vec(7, 8);
+safe("r105_eq_value_eq_check", fn() { return a == b; });
+
+# ============================================================
+# 23. `!=` behaviour — should be the negation of `==`
+# ============================================================
+safe("r105_neq_same_ref", fn() { return v1 != v1; });
+safe("r105_neq_same_fields", fn() { return v1 != v2; });
+safe("r105_neq_diff_fields", fn() { return v1 != v3; });
+
+# ============================================================
+# 24. Class instance as function default parameter
+#     Per HFunction docs: "Currently the compiler only supports
+#     literal default values (numbers, strings, bools, null)."
+#     A `new Vec()` default is a *parse error* — the parser's
+#     default-arg production only accepts literal tokens, so
+#     `fn f(v = new Vec(0,0)) { }` aborts compilation of the
+#     WHOLE file with SyntaxError "Unexpected token: EQ".
+#     We therefore CANNOT test this inline (it would kill the
+#     rest of the suite).  Documented as a parser limitation.
+# ============================================================
+print("r105_default_param_new_vec:SKIPPED(parser-rejects-new-as-default; SyntaxError on 'v = new Vec(0,0)')");
+# Verify a literal default still works:
+fn withDefaultNum(n = 5) { return n; }
+safe("r105_default_param_literal", fn() { return withDefaultNum(); });
+safe("r105_default_param_override", fn() { return withDefaultNum(99); });
+
+# ============================================================
+# 25. Compound-assignment on instances — `obj += 1`
+#     The lexer has NO `+=` token, so `v += 1` is tokenised as
+#     `v`, `+`, `=`, `1` and the parser fails on the stray `=`
+#     (SyntaxError "Unexpected token: EQ").  This aborts the
+#     whole file, so we CANNOT test `+=` inline.  Documented as
+#     a lexer/parser limitation.  The semantically equivalent
+#     `v = v + 1` is already covered by #14 (magic_add) and #17
+#     (op_returns_new).
+# ============================================================
+print("r105_plus_eq:SKIPPED(lexer-has-no-+=-token; SyntaxError on 'v += 1')");
+
+# ============================================================
+# 26. Bitwise operators on instances — `obj & 1`, `obj | 1`
+#     BINARY_AND requires int operands (per Python interpreter).
+#     In Kotlin runtime, BITAND etc. likely also coerce to Long.
+# ============================================================
+safe("r105_bitand_obj", fn() { return v1 & 1; });
+safe("r105_bitor_obj", fn() { return v1 | 1; });
+safe("r105_bitxor_obj", fn() { return v1 ^ 1; });
+safe("r105_lshift_obj", fn() { return v1 << 1; });
+safe("r105_rshift_obj", fn() { return v1 >> 1; });
+
+# ============================================================
+# 27. Unary minus on instances — `-obj`
+#     NOTE: unary `+obj` is NOT supported by the parser (the
+#     `unary()` production handles MINUS/NOT/STAR/TILDE/AWAIT/MATCH
+#     but not PLUS), so `+v1` is a parse error and aborts the file.
+#     Documented as a parser limitation; not tested inline.
+# ============================================================
+safe("r105_unary_minus_obj", fn() { return -v1; });
+print("r105_unary_plus:SKIPPED(parser-rejects-unary-PLUS; SyntaxError on '+v1')");
+
+# ============================================================
+# 28. Modulo on instances — `obj % 2`
+# ============================================================
+safe("r105_mod_obj", fn() { return v1 % 2; });
+
+# ============================================================
+# 29. Star (multiplication) with instance on either side
+# ============================================================
+safe("r105_obj_mul_num", fn() { return v1 * 2; });
+safe("r105_num_mul_obj", fn() { return 2 * v1; });
+
+# ============================================================
+# 30. `in` operator on instance — `1 in obj`
+# ============================================================
+safe("r105_in_obj", fn() { return 1 in v1; });
+safe("r105_obj_in_list", fn() { return v1 in [v1, v2, v3]; });
+
+# ============================================================
+# 31. `type()` on an instance — should return "instance"
+# ============================================================
+safe("r105_type_obj", fn() { return type(v1); });
+safe("r105_type_class", fn() { return type(Vec); });
+
+# ============================================================
+# 32. Field-callable / bound-method as operator operand
+#     (Edge case: bound method as object — does `+` work?)
+# ============================================================
+safe("r105_bound_method_plus", fn() {
+    let m = v1.to_string;
+    return m + "!";
+});
+
+# ============================================================
+# 33. Equality across class hierarchies — child == parent
+# ============================================================
+safe("r105_eq_child_vs_parent", fn() { return p2 == p3; });
+safe("r105_eq_child_vs_child", fn() {
+    let p3b = new V3D(3, 4, 5);
+    return p3 == p3b;
+});
+
+# ============================================================
+# 34. Empty-class instance — minimal object
+# ============================================================
+class Bare { }
+let bare = new Bare();
+safe("r105_bare_str", fn() { return str(bare); });
+safe("r105_bare_eq", fn() {
+    let bare2 = new Bare();
+    return bare == bare2;
+});
+safe("r105_bare_truthy", fn() { return bool(bare); });
+safe("r105_bare_plus_num", fn() { return bare + 1; });
+
+# ============================================================
+# 35. Magic-method direct call vs operator dispatch
+#     If `v1.__add__(v3)` works but `v1 + v3` doesn't, we have
+#     strong evidence that overloading is unsupported.
+# ============================================================
+safe("r105_magic_call_direct", fn() { return str(v1.__add__(v3)); });
+safe("r105_magic_eq_direct", fn() { return v1.__eq__(v2); });
+safe("r105_magic_lt_direct", fn() { return v1.__lt__(v3); });
+safe("r105_magic_len_direct", fn() { return v1.__len__(); });
+safe("r105_magic_str_direct", fn() { return v1.__str__(); });
+safe("r105_magic_bool_direct", fn() { return v1.__bool__(); });
+safe("r105_magic_getitem_direct", fn() { return v1.__getitem__(0); });
+
+print("=== R3.105 DONE ===");

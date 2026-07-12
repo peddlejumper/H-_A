@@ -1,0 +1,6 @@
+# Probe 124-A: obj?.field = value  (可选链作为赋值左侧)
+# 预期: PARSE 错误 — PropagateExpression 不是合法 lvalue
+print("probe A start");
+let obj = {"a": 1};
+obj?.a = 10;
+print("probe A end, obj.a=" + str(obj.a));

@@ -1,0 +1,18 @@
+# t09 - type pattern: is ClassName (user class)
+# NOTE: `new ClassName()` with __init__(self) fails with "Function <lambda> expects 1 args, got 0"
+# This is a class-instantiation compiler bug, not a match bug.
+# Workaround: use a class without __init__ and set fields after construction.
+class Animal { }
+class Dog extends Animal { }
+fn typ(x) {
+    return match x {
+        is Dog => "dog",
+        is Animal => "animal",
+        _ => "other"
+    };
+}
+let a = new Animal();
+let d = new Dog();
+print("t09_animal:" + typ(a));
+print("t09_dog:" + typ(d));
+print("t09_other:" + typ(42));

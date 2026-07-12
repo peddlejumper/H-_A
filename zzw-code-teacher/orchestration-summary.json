@@ -1,0 +1,150 @@
+{
+  "project": {
+    "name": "ZZW Code Teacher 客户端",
+    "path": "/Users/peddlejumper/H#/v0.4/zzw-code-teacher",
+    "operation": "create",
+    "deviceType": "desktop",
+    "language": "zh-CN",
+    "dashboardMode": false,
+    "replicationMode": null,
+    "sourceUrl": null,
+    "visualSpecExcerpt": null,
+    "styleDefinitionBrief": null,
+    "designRead": "coding education client / developers & learners / calm premium trust / medium density / avoid neon tech hero",
+    "designDials": {
+      "layoutVariance": 2,
+      "motionIntensity": 2,
+      "visualDensity": 3
+    },
+    "specsConstraints": null,
+    "sharedProjectShellContract": {
+      "navigationShell": "Apple-style sidebar navigation with icon + label, dark background (#0a0a0a), rounded items, active state uses brand blue tint",
+      "primaryColorSystem": "Pinguo Blue #0066cc as primary CTA and active states, no secondary brand hue",
+      "typographySystem": "DM Sans for all UI and display, JetBrains Mono for code blocks and technical details",
+      "radiusScale": "1.2rem global, pill buttons, rounded cards, tight radius for small controls",
+      "surfaceDepthModel": "1px border-first, whisper-light shadows at rest (0 1px 2px rgba(0,0,0,0.04)), deeper elevation on hover/overlay",
+      "ctaStyle": "pill-shaped primary buttons, brand blue fill, white text, rounded secondary buttons with border",
+      "alignmentRules": "left-aligned content, centered hero areas, consistent 16/24/32/48 spacing rhythm"
+    },
+    "generationTree": null
+  },
+  "designSource": {
+    "operatingMode": "library-bound",
+    "libraryIdentity": {
+      "name": "苹果",
+      "id": "dl_builtin_apple",
+      "version": null,
+      "scope": "built-in-global",
+      "path": "/Users/peddlejumper/.trae-cn/design_libraries/dl_builtin_apple",
+      "versionSource": "metadata.json"
+    },
+    "libraryPath": "/Users/peddlejumper/.trae-cn/design_libraries/dl_builtin_apple",
+    "cssFilePath": "/Users/peddlejumper/.trae-cn/design_libraries/dl_builtin_apple/colors_and_type.css",
+    "brandPrefix": "pinguo",
+    "themeMode": "light",
+    "designDecisionSummary": "Apple-inspired premium restraint: Pinguo Blue #0066cc primary, Space Black #0a0a0a dark surfaces, Silver Mist #f5f5f7 light backgrounds, DM Sans typography, 1.2rem radius, whisper shadows",
+    "componentContractKind": "legacy-json",
+    "forbiddenInventedComponents": [],
+    "allowedComponents": [],
+    "styleConstraints": {
+      "radiusMax": 20,
+      "spacingBase": 4,
+      "fontSizeBody": 14,
+      "fontSizeMin": 11,
+      "controlHeightDefault": 32,
+      "controlHeightLarge": 40
+    },
+    "productContext": {
+      "kitType": "app",
+      "productType": "consumer imaging product ecosystem"
+    },
+    "iconAssets": {
+      "source": "assets/icons",
+      "projectIconDir": "assets/icons/dl_builtin_apple",
+      "libraryKey": "dl_builtin_apple",
+      "renderMethod": "css-mask",
+      "pathTemplate": "../assets/icons/dl_builtin_apple/{name}.svg",
+      "availableNames": ["arrow-down", "arrow-left", "arrow-right", "arrow-up", "box", "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up", "chevrons-down-up", "chevrons-up-down", "circle-alert", "circle-check", "circle-minus", "circle-pause", "circle-play", "circle-plus", "circle-question-mark", "external-link", "file", "folder-open", "folder", "funnel", "grip", "heart", "house", "mail", "map-pin", "message-circle-more", "mouse-pointer-click", "pen-line", "send-horizontal", "star", "tag", "thumbs-down", "thumbs-up", "trash-2", "triangle-alert", "user"],
+      "totalCount": 41,
+      "coloringRule": "currentColor by default; override with Library token when needed"
+    }
+  },
+  "pages": [
+    {
+      "nodeId": "page-home",
+      "title": "主界面",
+      "htmlSrc": "pages/home.html",
+      "pageIndex": 1,
+      "pageType": "information-dense",
+      "businessScenario": "main dashboard showing course categories, learning progress, and recommended courses",
+      "visualNorthStar": "Calm, focused learning dashboard — sidebar nav + main content with course cards arranged in a clean grid",
+      "compositionPattern": "sidebar + content-area layout, hero welcome section, category chip row, course card grid, progress summary",
+      "continuityAnchors": [
+        "sidebar navigation with dark background and brand blue active state",
+        "DM Sans typography with 1.2rem card radius and whisper shadows"
+      ],
+      "componentPlan": [
+        {"slug": "navigation", "reason": "sidebar navigation pattern"},
+        {"slug": "card", "reason": "course card containers"},
+        {"slug": "button", "reason": "CTA buttons in cards"}
+      ],
+      "imagePlan": [],
+      "chartsRequired": false
+    },
+    {
+      "nodeId": "page-course-detail",
+      "title": "课程详情",
+      "htmlSrc": "pages/course-detail.html",
+      "pageIndex": 2,
+      "pageType": "showcase",
+      "businessScenario": "single course detail view with course description, chapter list, and code preview",
+      "visualNorthStar": "Editorial course page — split layout with course hero and chapter sidebar",
+      "compositionPattern": "course hero header, info-action dual-column, chapter list with progress indicators",
+      "continuityAnchors": [
+        "sidebar navigation with dark background and brand blue active state",
+        "DM Sans typography with 1.2rem card radius and whisper shadows"
+      ],
+      "componentPlan": [
+        {"slug": "navigation", "reason": "sidebar navigation pattern"},
+        {"slug": "card", "reason": "chapter and info cards"},
+        {"slug": "button", "reason": "enroll and action buttons"},
+        {"slug": "input", "reason": "search within course"}
+      ],
+      "imagePlan": [],
+      "chartsRequired": false
+    },
+    {
+      "nodeId": "page-code-practice",
+      "title": "代码练习",
+      "htmlSrc": "pages/code-practice.html",
+      "pageIndex": 3,
+      "pageType": "task-driven",
+      "businessScenario": "interactive code practice environment with editor, problem description, and output panel",
+      "visualNorthStar": "IDE-inspired coding environment — dark code editor panel, clean task sidebar, focused split layout",
+      "compositionPattern": "task description panel, code editor area, output/console panel, submit toolbar",
+      "continuityAnchors": [
+        "sidebar navigation with dark background and brand blue active state",
+        "DM Sans typography with 1.2rem card radius and whisper shadows"
+      ],
+      "componentPlan": [
+        {"slug": "navigation", "reason": "sidebar navigation pattern"},
+        {"slug": "input", "reason": "code editor styled area"},
+        {"slug": "button", "reason": "submit and run actions"}
+      ],
+      "imagePlan": [],
+      "chartsRequired": false
+    }
+  ],
+  "assets": [],
+  "wiringPlan": [
+    {"from": "page-home", "to": "page-course-detail", "domId": "link-course-detail"},
+    {"from": "page-course-detail", "to": "page-code-practice", "domId": "link-code-practice"}
+  ],
+  "hiddenInteractionPlan": [
+    {"from": "page-course-detail", "to": "page-home", "domId": "back-home", "reason": "back navigation"},
+    {"from": "page-code-practice", "to": "page-course-detail", "domId": "back-course-detail", "reason": "back navigation"},
+    {"from": "page-home", "to": "page-home", "domId": "nav-home", "reason": "global nav active"},
+    {"from": "page-course-detail", "to": "page-home", "domId": "nav-home", "reason": "global nav"},
+    {"from": "page-code-practice", "to": "page-home", "domId": "nav-home", "reason": "global nav"}
+  ]
+}

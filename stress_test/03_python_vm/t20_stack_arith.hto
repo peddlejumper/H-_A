@@ -1,0 +1,46 @@
+# t20_stack_arith.hto - 栈上大量算术与字符串拼接
+# 测试 BINARY_ADD/SUB/MUL/DIV/MOD 在深栈使用下的正确性
+fn calc(a, b) {
+    let s = a + b;
+    let d = a - b;
+    let p = a * b;
+    let q = a / b;
+    let m = a % b;
+    return [s, d, p, q, m];
+}
+print(calc(17, 5));
+print(calc(100, 7));
+print(calc(1000, 3));
+# 字符串拼接
+fn concat_n(n) {
+    let s = "";
+    let i = 0;
+    while (i < n) {
+        s = s + "x";
+        i = i + 1;
+    }
+    return s;
+}
+let r = concat_n(20);
+print("len20=");
+print(len(r));
+print("content=");
+print(r);
+# 除零测试
+try {
+    let z = 10 / 0;
+    print("div0 no throw: ");
+    print(z);
+} catch (e) {
+    print("div0 caught: ");
+    print(e);
+}
+try {
+    let z = 10 % 0;
+    print("mod0 no throw: ");
+    print(z);
+} catch (e) {
+    print("mod0 caught: ");
+    print(e);
+}
+print("done");

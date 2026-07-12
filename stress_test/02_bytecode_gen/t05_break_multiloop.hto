@@ -1,0 +1,16 @@
+# t05_break_multiloop.hto - break 在多层循环
+# break 只应跳出最内层
+let log = [];
+for i in [1, 2, 3] {
+    for j in [1, 2, 3, 4] {
+        if (j == 3) {
+            break;
+        }
+        push(log, str(i) + "-" + str(j));
+    }
+}
+print(len(log));
+for e in log {
+    print(e);
+}
+# 预期: 1-1,1-2,2-1,2-2,3-1,3-2 => 6 个

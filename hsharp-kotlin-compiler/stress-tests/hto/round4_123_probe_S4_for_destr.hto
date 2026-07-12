@@ -1,0 +1,12 @@
+# Probe S4 — Destructure in for-loop header.
+# `for [a, b] in [[1,2], [3,4]] { print(a + b); }`
+# The parser's `for_statement` only accepts `for IDENT in ...` or
+# `for IDENT, IDENT in ...`, so a leading `[` should raise a
+# compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.  This probe exists to confirm that.
+
+let pairs = [[1, 2], [3, 4], [5, 6]];
+for [a, b] in pairs {
+    print(a + b);
+}

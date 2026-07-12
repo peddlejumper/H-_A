@@ -1,0 +1,5 @@
+# t15: await expressions participating in arithmetic.
+async fn a() { return 10; }
+async fn b() { return 3; }
+let r = (await a()) * 2 + (await b()) - 1;
+print(r);

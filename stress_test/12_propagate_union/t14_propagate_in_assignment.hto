@@ -1,0 +1,24 @@
+# T14 - ? on the right-hand side of an assignment
+fn f(n) {
+    if (n > 100) { throw "too big"; }
+    return n;
+}
+
+let a = f(5)?;
+print(a);
+
+let b = f(200)?;
+print(b);
+
+# RHS in a compound expression
+let c = f(3)? + f(4)?;
+print(c);
+
+# RHS where the thrown payload is a number used downstream
+fn g(n) {
+    if (n < 0) { throw 999; }
+    return n;
+}
+let d = g(-1)?;
+let e = d + 1;
+print(e);

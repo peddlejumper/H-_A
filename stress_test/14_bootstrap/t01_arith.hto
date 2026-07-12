@@ -1,0 +1,4 @@
+# 测试 01: 基本算术 — H# 自举管线 tokenize→parse→compile→execute
+# 期望输出: 3
+let x = 1 + 2;
+print(x);

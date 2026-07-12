@@ -1,0 +1,18 @@
+# t12_class.hto - simple class
+class Counter {
+    fn __init__(self) {
+        self.count = 0;
+    }
+    fn inc(self) {
+        self.count = self.count + 1;
+    }
+    fn get(self) {
+        return self.count;
+    }
+}
+
+let c = Counter();
+c.inc();
+c.inc();
+c.inc();
+print(c.get());

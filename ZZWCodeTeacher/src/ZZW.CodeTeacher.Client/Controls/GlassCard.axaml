@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ZZW.CodeTeacher.Client.Controls.GlassCard"
+             x:Name="Root"
+             CornerRadius="20"
+             Padding="16">
+
+  <Grid>
+    <Border Background="{DynamicResource GlassSurfaceBrush}"
+            BorderBrush="{DynamicResource GlassBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="{Binding CornerRadius, ElementName=Root}"
+            BoxShadow="{DynamicResource Elevation2}" />
+    <Border Background="{DynamicResource GlassInsetBrush}"
+            Opacity="0.42"
+            CornerRadius="{Binding CornerRadius, ElementName=Root}"
+            Margin="1" />
+    <Border Padding="{Binding Padding, ElementName=Root}"
+            CornerRadius="{Binding CornerRadius, ElementName=Root}">
+      <ContentPresenter Content="{Binding Content, ElementName=Root}" />
+    </Border>
+  </Grid>
+</UserControl>

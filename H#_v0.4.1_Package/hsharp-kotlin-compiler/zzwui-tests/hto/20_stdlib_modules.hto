@@ -1,0 +1,343 @@
+# build: _libs/assert_module.hto, _libs/path_module.hto, _libs/regex_module.hto, _libs/crypto_module.hto
+# T20 - Standard-library modules (v0.4.1)
+# ─────────────────────────────────────────────────────────────────
+# Integration test for the four new H# stdlib modules:
+#   * assert_module.hto   — self-contained test/assert framework
+#   * path_module.hto     — path algebra + I/O on top of fs_*
+#   * regex_module.hto    — regular-expression primitives
+#   * crypto_module.hto   — hash / cipher / random primitives
+#                          (pure-H# + JVM-backed)
+#
+# H# has no anonymous-function syntax, so each test is a
+# top-level `fn` whose name is passed to test_register.  Names
+# are prefixed with `__t20_` to avoid collisions with anything
+# loaded from `_libs/`.
+
+# ─── A: assert framework ────────────────────────────────────────
+
+fn __t20_a_eq_passes() {
+    assert_eq(1, 1, "1 == 1");
+    assert_eq("x", "x", "x == x");
+    assert_eq(true, true, "true == true");
+}
+test_register("A/eq_passes", __t20_a_eq_passes);
+
+fn __t20_a_eq_throws() {
+    let p = assert_raises(__t20_a_eq_throws_helper, null);
+    assert_true(p != null, "raised something");
+}
+fn __t20_a_eq_throws_helper() {
+    assert_eq(1, 2, null);
+}
+test_register("A/eq_throws", __t20_a_eq_throws);
+
+fn __t20_a_ne_and_bool() {
+    assert_ne(1, 2, null);
+    assert_true(1 < 2, "1 < 2");
+    assert_false(1 > 2, "1 > 2");
+    assert_le(2, 2, "2 <= 2");
+    assert_ge(3, 3, "3 >= 3");
+}
+test_register("A/ne_and_bool", __t20_a_ne_and_bool);
+
+fn __t20_a_in_string() {
+    assert_in("foo", "the foo bar", null);
+}
+fn __t20_a_in_list() {
+    assert_in(2, [1, 2, 3], null);
+}
+fn __t20_a_in_dict() {
+    assert_in("b", {"a": 1, "b": 2}, null);
+}
+fn __t20_a_in_missing_raises() {
+    let raised = false;
+    try {
+        assert_in(99, [1, 2, 3], null);
+    } catch (e) {
+        raised = true;
+    }
+    assert_true(raised, "missing raises");
+}
+test_register("A/in_string", __t20_a_in_string);
+test_register("A/in_list", __t20_a_in_list);
+test_register("A/in_dict", __t20_a_in_dict);
+test_register("A/in_missing_raises", __t20_a_in_missing_raises);
+
+fn __t20_a_raises_with_message() {
+    let p = assert_raises_with(__t20_a_raises_with_helper, "bad-input", null);
+    assert_eq(str(p), "boom:bad-input", "payload matches");
+}
+fn __t20_a_raises_with_helper() {
+    throw "boom:bad-input";
+}
+test_register("A/raises_with_message", __t20_a_raises_with_message);
+
+fn __t20_a_none_and_some() {
+    assert_none(null, null);
+    assert_some(0, null);
+    assert_some(false, null);
+    let r = false;
+    try {
+        assert_some(null, null);
+    } catch (e) {
+        r = true;
+    }
+    assert_true(r, "some(null) raises");
+}
+test_register("A/none_and_some", __t20_a_none_and_some);
+
+fn __t20_a_almost_eq() {
+    assert_almost_eq(1.0, 1.0 + 0.0000000001, null, null);
+    assert_approx(0.1 + 0.2, 0.3, null);
+    let r = false;
+    try {
+        assert_almost_eq(1.0, 2.0, 0.01, null);
+    } catch (e) {
+        r = true;
+    }
+    assert_true(r, "almost_eq far raises");
+}
+test_register("A/almost_eq_and_approx", __t20_a_almost_eq);
+
+# ─── B: path / fs module ────────────────────────────────────────
+
+fn __t20_b_path_algebra() {
+    let sep = path_sep();
+    let j = path_join("a", "b");
+    assert_true(len(j) > 1, "join produces non-trivial");
+    assert_in("a", j, "join has a");
+    assert_in("b", j, "join has b");
+
+    let comps = path_components("/usr/local/bin");
+    assert_eq(len(comps), 3, "3 components");
+    assert_eq(comps[0], "usr", "first comp");
+    assert_eq(comps[2], "bin", "last comp");
+
+    let base = path_basename("/a/b/c.txt");
+    assert_eq(base, "c.txt", "basename");
+    let dir = path_dirname("/a/b/c.txt");
+    assert_in("a", dir, "dirname has a");
+    let stem = path_stem("/a/b/c.txt");
+    assert_eq(stem, "c", "stem drops ext");
+    let ext = path_extension("/a/b/c.txt");
+    assert_eq(ext, ".txt", "ext is .txt");
+}
+test_register("B/path_algebra", __t20_b_path_algebra);
+
+fn __t20_b_path_with_extension() {
+    let p = path_with_extension("/a/b/c.txt", "md");
+    assert_in(".md", p, "extension replaced");
+}
+test_register("B/path_with_extension", __t20_b_path_with_extension);
+
+fn __t20_b_file_io_roundtrip() {
+    let tmp = temp_file("t20_io");
+    file_write(tmp, "hello\nworld\n");
+    let s = file_read(tmp);
+    assert_eq(s, "hello\nworld\n", "roundtrip read");
+    let lines = file_read_lines(tmp);
+    assert_eq(len(lines), 2, "2 lines");
+    assert_eq(lines[0], "hello", "line 0");
+    assert_eq(lines[1], "world", "line 1");
+    file_append(tmp, "!\n");
+    let lines2 = file_read_lines(tmp);
+    assert_eq(len(lines2), 3, "3 lines after append");
+    let info = file_info(tmp);
+    assert_some(info, "info is some");
+    assert_true(info["size"] >= 12, "size >= 12");
+    file_delete(tmp);
+    assert_false(file_exists(tmp), "file gone");
+}
+test_register("B/file_io_roundtrip", __t20_b_file_io_roundtrip);
+
+fn __t20_b_dir_walk_and_glob() {
+    let d = temp_dir("t20_walk");
+    file_write(path_join(d, "a.txt"), "a");
+    file_write(path_join(d, "b.md"), "b");
+    let sub = path_join(d, "sub");
+    fs_mkdir(sub);
+    file_write(path_join(sub, "c.txt"), "c");
+    let entries = dir_walk(d);
+    assert_eq(len(entries), 3, "3 files walked");
+    let txts = dir_glob(d, "*.txt");
+    assert_eq(len(txts), 2, "2 .txt files");
+    file_remove_recursive(d);
+    assert_false(dir_exists(d), "dir gone");
+}
+test_register("B/dir_walk_and_glob", __t20_b_dir_walk_and_glob);
+
+fn __t20_b_format_size() {
+    let kb = format_size(2048);
+    assert_in("KB", kb, "format KB");
+    let mb = format_size(2 * 1048576);
+    assert_in("MB", mb, "format MB");
+}
+test_register("B/format_size", __t20_b_format_size);
+
+# ─── C: regex module ────────────────────────────────────────────
+
+fn __t20_c_basic_match() {
+    assert_true(regex_test("a", "abc"), "a in abc");
+    assert_false(regex_test("z", "abc"), "z not in abc");
+    assert_true(regex_test("^[0-9]+$", "12345"), "digits only");
+    assert_false(regex_test("^[0-9]+$", "12a45"), "with letter");
+}
+test_register("C/basic_match", __t20_c_basic_match);
+
+fn __t20_c_find_first() {
+    let m = regex_first("[0-9]+", "abc 42 def 7");
+    assert_eq(m, "42", "first match");
+    let none = regex_first("xyz", "abc");
+    assert_eq(none, null, "no match -> null");
+}
+test_register("C/find_first", __t20_c_find_first);
+
+fn __t20_c_find_all() {
+    let all = regex_all("[0-9]+", "a1 b22 c333");
+    assert_eq(len(all), 3, "3 matches");
+    assert_eq(all[0], "1", "first");
+    assert_eq(all[1], "22", "second");
+    assert_eq(all[2], "333", "third");
+}
+test_register("C/find_all", __t20_c_find_all);
+
+fn __t20_c_replace() {
+    let s = regex_sub("[aeiou]", "hello world", "*");
+    assert_eq(s, "h*ll* w*rld", "vowels replaced");
+    let s2 = regex_sub("([0-9]+)", "x = 42", "[$1]");
+    assert_eq(s2, "x = [42]", "captures in repl");
+}
+test_register("C/replace", __t20_c_replace);
+
+fn __t20_c_split() {
+    let parts = regex_split("[,;\s]+", "a, b ;c  d");
+    assert_eq(len(parts), 4, "4 parts");
+    assert_eq(parts[0], "a", "a");
+    assert_eq(parts[3], "d", "d");
+}
+test_register("C/split", __t20_c_split);
+
+fn __t20_c_captures_and_named() {
+    let caps = regex_captures("(\w+)@(\w+)", "user@host");
+    assert_eq(len(caps), 3, "3 elements");
+    assert_eq(caps[0], "user@host", "full");
+    assert_eq(caps[1], "user", "g1");
+    assert_eq(caps[2], "host", "g2");
+    let n = regex_named("(?<u>\w+)@(?<h>\w+)", "user@host");
+    assert_eq(n["u"], "user", "named u");
+    assert_eq(n["h"], "host", "named h");
+}
+test_register("C/captures_and_named", __t20_c_captures_and_named);
+
+fn __t20_c_escape_and_is_valid() {
+    assert_eq(regex_escape("a.b"), "a\.b", "dot escaped");
+    assert_eq(regex_escape("(x)"), "\(x\)", "parens");
+    assert_true(regex_is_valid("[a-z]+"), "valid");
+    assert_false(regex_is_valid("[a-z"), "invalid");
+}
+test_register("C/escape_and_is_valid", __t20_c_escape_and_is_valid);
+
+# ─── D: crypto module ──────────────────────────────────────────
+
+fn __t20_d_sha256_known() {
+    let h = crypto_sha256("abc");
+    assert_eq(h, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+              "sha256(abc)");
+    assert_eq(crypto_sha256(""),
+              "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "sha256(empty)");
+}
+test_register("D/sha256_known", __t20_d_sha256_known);
+
+fn __t20_d_hmac_sha256_known() {
+    let mac = crypto_hmac_sha256("key",
+        "The quick brown fox jumps over the lazy dog");
+    assert_eq(mac,
+              "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8",
+              "hmac-sha256(known)");
+}
+test_register("D/hmac_sha256_known", __t20_d_hmac_sha256_known);
+
+fn __t20_d_hex_roundtrip() {
+    let h = crypto_to_hex("hello");
+    assert_eq(h, "68656c6c6f", "hello -> hex");
+    let back = crypto_from_hex("68656c6c6f");
+    assert_eq(back, "hello", "hex -> hello");
+    assert_true(crypto_is_hex("deadbeef"), "valid hex");
+    assert_false(crypto_is_hex("xyz"), "invalid hex");
+}
+test_register("D/hex_roundtrip", __t20_d_hex_roundtrip);
+
+fn __t20_d_base64_roundtrip() {
+    let s = "Hello, world!";
+    let enc = crypto_base64_encode(s);
+    let dec = crypto_base64_decode(enc);
+    assert_eq(dec, s, "base64 roundtrip");
+}
+test_register("D/base64_roundtrip", __t20_d_base64_roundtrip);
+
+fn __t20_d_random() {
+    let r1 = crypto_random_bytes(16);
+    let r2 = crypto_random_bytes(16);
+    assert_eq(len(r1), 32, "16 bytes -> 32 hex");
+    assert_ne(r1, r2, "two random calls differ");
+    let n = crypto_random_int(10, 20);
+    assert_true(n >= 10 and n <= 20, "in range");
+    let u = crypto_uuid_v4();
+    assert_eq(len(u), 36, "uuid has dashes");
+    assert_eq(u[8], "-", "dash at 8");
+    assert_eq(u[13], "-", "dash at 13");
+    assert_eq(u[18], "-", "dash at 18");
+    assert_eq(u[23], "-", "dash at 23");
+}
+test_register("D/random", __t20_d_random);
+
+fn __t20_d_secure_eq() {
+    assert_true(crypto_secure_eq("abc", "abc"), "equal");
+    assert_false(crypto_secure_eq("abc", "abd"), "diff");
+    assert_false(crypto_secure_eq("abc", "abcd"), "diff len");
+    assert_true(crypto_secure_eq("", ""), "empty equal");
+}
+test_register("D/secure_eq", __t20_d_secure_eq);
+
+fn __t20_d_crc32() {
+    # CRC-32 of "123456789" is 0xCBF43926 = 3421780262.
+    let v = crypto_crc32("123456789");
+    assert_eq(v, 3421780262, "crc32(123456789)");
+}
+test_register("D/crc32", __t20_d_crc32);
+
+fn __t20_d_pbkdf2_and_password() {
+    let pwd = "correct horse battery staple";
+    let salt = crypto_generate_salt(16);
+    let h1 = crypto_password_hash(pwd, salt);
+    assert_eq(len(h1), 64, "32 bytes -> 64 hex");
+    let verified = crypto_password_verify(pwd, salt, h1);
+    assert_true(verified, "verify good password");
+    let denied = crypto_password_verify("wrong", salt, h1);
+    assert_false(denied, "verify bad password");
+}
+test_register("D/pbkdf2_and_password", __t20_d_pbkdf2_and_password);
+
+fn __t20_d_legacy_hashes() {
+    let h = crypto_hash_djb2("hello");
+    assert_eq(h, 261238937, "djb2(hello) deterministic");
+    let s = crypto_hash_sdbm("hello");
+    assert_eq(s, crypto_hash_sdbm("hello"), "sdbm stable");
+    let ll = crypto_hash_loselose("a");
+    assert_eq(ll, ord("a"), "loselose sums");
+    let hex = crypto_hash_to_hex(255);
+    assert_eq(hex, "000000ff", "hex padding");
+}
+test_register("D/legacy_hashes", __t20_d_legacy_hashes);
+
+# ─── E: end-to-end smoke test ───────────────────────────────────
+
+fn __t20_e_test_framework_summary() {
+    assert_true(test_count(null) >= 25, "registered >= 25 cases");
+}
+test_register("E/test_framework_summary", __t20_e_test_framework_summary);
+
+# ─── Run everything ─────────────────────────────────────────────
+
+test_run(null);

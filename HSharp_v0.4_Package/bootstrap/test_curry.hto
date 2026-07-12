@@ -1,0 +1,156 @@
+# H# Currying Tests
+# Tests for currying / partial application support
+
+# ============================================================
+# Test 1: Implicit partial application - too few args returns partial
+# ============================================================
+fn add3(a, b, c) {
+    return a + b + c;
+}
+
+# Calling with only 1 arg should return a partial
+let step1 = add3(1);
+print("step1 type: " + typeof(step1));  # should print "partial"
+print("step1 arity: " + str(arity(step1)));   # should print 3
+print("step1 bound: " + str(bound_n(step1)));  # should print 1
+print("step1 is_partial: " + str(is_partial(step1)));  # should print 1 (true)
+
+# Apply second arg
+let step2 = step1(2);
+print("step2 bound: " + str(bound_n(step2)));  # should print 2
+print("step2 is_partial: " + str(is_partial(step2)));  # should print 1
+
+# Apply third arg -> final call
+let r1 = step2(3);
+print("add3(1)(2)(3) = " + str(r1));  # should print 6
+
+# ============================================================
+# Test 2: Explicit curry() builtin
+# ============================================================
+let add5 = curry(add3, 1, 2);
+print("add5 is_partial: " + str(is_partial(add5)));  # should print 1
+let r2 = add5(10);
+print("curry(add3,1,2)(10) = " + str(r2));  # should print 13
+
+# ============================================================
+# Test 3: Arity and bound_n for plain functions
+# ============================================================
+print("arity(add3) = " + str(arity(add3)));  # should print 3
+print("bound_n(add3) = " + str(bound_n(add3)));  # should print 0
+print("is_partial(add3) = " + str(is_partial(add3)));  # should print 0
+
+# ============================================================
+# Test 4: Higher-order currying - partial applied to map
+# ============================================================
+fn mul(a, b) {
+    return a * b;
+}
+
+# Create a "double" function by partial application
+let doubler = mul(2);
+print("doubler(5) = " + str(doubler(5)));  # should print 10
+print("doubler(7) = " + str(doubler(7)));  # should print 14
+
+# Create a "triple" function
+let tripler = mul(3);
+print("tripler(4) = " + str(tripler(4)));  # should print 12
+
+# ============================================================
+# Test 5: Chained partial application
+# ============================================================
+let stepA = add3(10);
+let stepB = stepA(20);
+let stepC = stepB(30);
+print("chained = " + str(stepC));  # should print 60
+
+# ============================================================
+# Test 6: Direct full call still works
+# ============================================================
+let direct = add3(1, 2, 3);
+print("direct = " + str(direct));  # should print 6
+
+# ============================================================
+# Test 7: Currying with strings
+# ============================================================
+fn greet(greeting, name) {
+    return greeting + ", " + name;
+}
+
+let say_hi = greet("Hi");
+let r3 = say_hi("Alice");
+print("greeting = " + r3);  # should print "Hi, Alice"
+
+let say_hello = greet("Hello");
+let r4 = say_hello("Bob");
+print("greeting = " + r4);  # should print "Hello, Bob"
+
+# ============================================================
+# Test 8: Recursive currying - reduce
+# ============================================================
+fn add2(a, b) {
+    return a + b;
+}
+
+fn reduce(op, init, lst) {
+    let acc = init;
+    let i = 0;
+    let n = len(lst);
+    while (i < n) {
+        acc = op(acc, lst[i]);
+        i = i + 1;
+    }
+    return acc;
+}
+
+# sum = reduce(add2, 0, [1,2,3,4,5]) = 15
+let sum_fn = reduce(add2, 0, [1, 2, 3, 4, 5]);
+print("sum = " + str(sum_fn));  # should print 15
+
+# product = reduce(mul, 1, [2,3,4]) = 24
+let prod = reduce(mul, 1, [2, 3, 4]);
+print("prod = " + str(prod));  # should print 24
+
+# ============================================================
+# Test 9: Function composition via partial
+# ============================================================
+fn compose2(f, g, x) {
+    return f(g(x));
+}
+
+# Partial application: f = double = mul(2)
+let double = mul(2);
+# f is a partial; g is identity-ish; x is value
+let result_compose = compose2(double, double, 3);
+print("compose(double, double, 3) = " + str(result_compose));  # 2*(2*3) = 12
+
+# ============================================================
+# Test 10: Multiple stages with is_partial checks
+# ============================================================
+fn add5full(a, b, c, d, e) {
+    return a + b + c + d + e;
+}
+
+let s1 = add5full(1);  # partial
+let s2 = s1(2);         # partial
+let s3 = s2(3);         # partial
+let s4 = s3(4);         # partial
+let s5 = s4(5);         # full call
+print("add5full(1)(2)(3)(4)(5) = " + str(s5));  # should print 15
+
+# ============================================================
+# Test 11: curry and uncurry
+# ============================================================
+let f1 = curry(add3, 1);
+let f2 = uncurry(f1, 2);
+let r5 = f2(3);
+print("curry/uncurry roundtrip = " + str(r5));  # should print 6
+
+# ============================================================
+# Test 12: arg list with 0 bound (full call)
+# ============================================================
+let f_zero = curry(add3);
+print("f_zero bound: " + str(bound_n(f_zero)));  # should print 0
+let r6 = f_zero(4, 5, 6);
+print("f_zero(4,5,6) = " + str(r6));  # should print 15
+
+print("=== ALL CURRY TESTS COMPLETED ===");

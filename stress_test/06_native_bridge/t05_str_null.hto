@@ -1,0 +1,11 @@
+# t05 — str() on nullptr / bool / list / dict (PY "None"/"True" vs KT "null"/"true")
+print("== t05 str of scalars ==");
+print("str(nullptr)=" + str(nullptr));
+print("str(true)=" + str(true));
+print("str(false)=" + str(false));
+print("str(42)=" + str(42));
+print("str(3.5)=" + str(3.5));
+print("str([1, 2, 3])=" + str([1, 2, 3]));
+print("str({})=" + str({}));
+print("str(dict)=" + str({"k": 1}));
+print("str(empty)=[" + str("") + "]");

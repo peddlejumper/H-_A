@@ -1,0 +1,31 @@
+# t09 — abs() of int-min / negative zero / null; floor/ceil/round edges
+print("== t09 abs / floor / ceil / round ==");
+try {
+    print("abs(-2147483648)=" + str(abs(-2147483648)));
+} catch (e) {
+    print("abs(-2147483648) ERR: " + str(e));
+}
+try {
+    print("abs(-0.0)=" + str(abs(-0.0)));
+} catch (e) {
+    print("abs(-0.0) ERR: " + str(e));
+}
+try {
+    print("abs(nullptr)=" + str(abs(nullptr)));
+} catch (e) {
+    print("abs(null) ERR: " + str(e));
+}
+try {
+    print("abs(-7)=" + str(abs(-7)));
+} catch (e) {
+    print("abs(-7) ERR: " + str(e));
+}
+try {
+    print("floor(2.7)=" + str(floor(2.7)));
+    print("ceil(2.3)=" + str(ceil(2.3)));
+    print("round(2.5)=" + str(round(2.5)));
+    print("round(2.4)=" + str(round(2.4)));
+    print("round(-2.5)=" + str(round(-2.5)));
+} catch (e) {
+    print("round-ops ERR: " + str(e));
+}

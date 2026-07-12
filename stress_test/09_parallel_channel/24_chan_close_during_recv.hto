@@ -1,0 +1,51 @@
+# 24 — chan_close during blocking recv (consumer parked on empty channel)
+# A consumer calls chan_recv on an empty (not-yet-closed) channel and blocks
+# in queue.take().  Another thread then closes the channel.  Per the spec,
+# the parked recv should wake and raise "recv on closed channel".  Per the
+# implementation (HChannel.recv), the close does NOT interrupt queue.take(),
+# so the consumer deadlocks.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+@parallel fn blocking_consumer(ch, result) {
+    let caught = false;
+    try {
+        let v = chan_recv(ch);   # blocks — no sender, channel not yet closed
+    } catch (e) {
+        caught = true;
+    }
+    if (caught) {
+        result[0] = 1;   # raised
+    } else {
+        result[0] = 2;   # got value
+    }
+    return 0;
+}
+
+let ch = chan_new(0);
+let result = [0];
+let fut = blocking_consumer(ch, result);
+
+# Give the consumer time to park on chan_recv.
+let busy = 0;
+while (busy < 100000) {
+    busy = busy + 1;
+}
+
+# Now close the channel.  Per spec, the parked recv should wake and raise.
+chan_close(ch);
+
+# Await the consumer — if close doesn't wake queue.take(), this hangs.
+let _ = await fut;
+let raised = result[0] == 1;
+check("consumer_woken_by_close", raised, "result=" + str(result[0]));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

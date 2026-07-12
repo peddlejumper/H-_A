@@ -1,0 +1,24 @@
+# main_admin.hto
+# ZZW Code Teacher — 管理员入口
+# 用法:python3 hsharp.py main_admin.hto
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "client/login_window.hto";
+import "admin/login_window.hto";
+import "admin/admin_main.hto";
+
+fn main() {
+    print("═══════════════════════════════════════════");
+    print("  ZZW Code Teacher — Admin");
+    print("  智能代码教练 · 管理端");
+    print("═══════════════════════════════════════════");
+    hwdui_init();
+    hwdui_theme_dark();
+    # 默认显示登录窗口
+    let w = build_admin_login_window();
+    w["window"].open();
+    ui_run();
+    return 0;
+}
+main();

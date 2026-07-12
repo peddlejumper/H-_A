@@ -1,0 +1,18 @@
+# Probe for chained assignment `a = b = c` — item 13 of the test domain.
+# In most C-family languages `=` is a right-associative expression
+# operator, so `a = b = c` assigns c to b, then b to a.
+#
+# H# only handles `=` as a STATEMENT (let / AssignmentIdentifier /
+# AssignmentIndex / AssignmentMember).  The expression parser has no
+# `=` binary operator, so `b = c` is not a valid expression and
+# `a = b = c;` should be a compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.  This probe exists only to confirm that.
+
+let a = 0;
+let b = 0;
+let c = 5;
+a = b = c;
+print("probe a=");  print(a);
+print("probe b=");  print(b);
+print("probe c=");  print(c);

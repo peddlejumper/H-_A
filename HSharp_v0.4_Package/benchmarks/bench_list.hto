@@ -1,0 +1,11 @@
+# H# Benchmark 4: List Operations (sum only, no list storage)
+# Sum of arithmetic series 0..N-1 = N*(N-1)/2
+
+let n = 10000000;
+let total = 0;
+let i = 0;
+while (i < n) {
+    total = total + i;
+    i = i + 1;
+}
+print("sum=" + str(total));

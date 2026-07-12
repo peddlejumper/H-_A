@@ -1,0 +1,9 @@
+# t18: chain of awaits across multiple async fns.
+async fn step1(x) { return x + 1; }
+async fn step2(x) { return x * 2; }
+async fn pipeline(x) {
+    let a = await step1(x);
+    let b = await step2(a);
+    return b;
+}
+print(await pipeline(10));

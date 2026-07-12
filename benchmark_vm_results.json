@@ -1,0 +1,10 @@
+{
+  "zzwUI Widget Creation (50 widgets)": 2.3777919996064156,
+  "zzwUI Widget Tree (62 widgets, 20 find_by_id)": "ERROR: CALL_METHOD on non-instance (inst=int 5)",
+  "zzwUI CSS Computation (30 times)": "ERROR: Undefined name: c",
+  "D3System Point Operations (100 times)": 8.7082919999375,
+  "D3System Bounding Box (100 times)": 4.323708000811166,
+  "D3System Vector Math (100 times)": 8.852957999806677,
+  "D3System Region Query (50 queries, 20 regions)": 9.672332999798527,
+  "Combined zzwUI + D3System (20 ops)": 2.9240000003483146
+}

@@ -1,0 +1,7 @@
+# t04: await inside a plain (non-async) fn.
+# compiler.py:977-982 should reject this at compile time:
+#   "Static type error: `await` is only allowed inside an `async fn`"
+fn plain() {
+    return await 42;
+}
+print(plain());

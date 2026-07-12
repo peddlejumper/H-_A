@@ -1,0 +1,33 @@
+# t06 — int() conversion boundaries: bad string, null, float-string, bool, hex
+print("== t06 int conversions ==");
+try {
+    print("int(\"abc\")=" + str(int("abc")));
+} catch (e) {
+    print("int(\"abc\") ERR: " + str(e));
+}
+try {
+    print("int(null)=" + str(int(null)));
+} catch (e) {
+    print("int(null) ERR: " + str(e));
+}
+try {
+    print("int(\"3.5\")=" + str(int("3.5")));
+} catch (e) {
+    print("int(\"3.5\") ERR: " + str(e));
+}
+try {
+    print("int(true)=" + str(int(true)));
+} catch (e) {
+    print("int(true) ERR: " + str(e));
+}
+try {
+    print("int(\"0x1F\")=" + str(int("0x1F")));
+} catch (e) {
+    print("int(\"0x1F\") ERR: " + str(e));
+}
+try {
+    print("int(\"\")=" + str(int("")));
+} catch (e) {
+    print("int(\"\") ERR: " + str(e));
+}
+print("int(42)=" + str(int(42)));

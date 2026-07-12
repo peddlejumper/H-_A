@@ -1,0 +1,32 @@
+# t02 — push() to non-list values (dict / string / number / null)
+print("== t02 push non-list ==");
+try {
+    let d = {"a": 1};
+    push(d, 2);
+    print("push dict OK (unexpected)");
+} catch (e) {
+    print("push(dict) ERR: " + str(e));
+}
+try {
+    let s = "hi";
+    push(s, "x");
+    print("push str OK (unexpected)");
+} catch (e) {
+    print("push(str) ERR: " + str(e));
+}
+try {
+    push(42, 1);
+    print("push num OK (unexpected)");
+} catch (e) {
+    print("push(num) ERR: " + str(e));
+}
+try {
+    push(nullptr, 1);
+    print("push nullptr OK (unexpected)");
+} catch (e) {
+    print("push(nullptr) ERR: " + str(e));
+}
+# push on a real list — sanity
+let xs = [1, 2];
+push(xs, 3);
+print(str(xs));

@@ -1,0 +1,51 @@
+# 02 — @parallel decorator form
+# Covers: @parallel fn decorator syntax, is_parallel flag, equivalent to parallel fn
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+@parallel fn dec_add(x, y) {
+    return x + y;
+}
+
+@parallel fn dec_id(x) {
+    return x;
+}
+
+@parallel fn dec_const() {
+    return 99;
+}
+
+# Both forms should produce is_parallel=true HFunctions
+check("dec_is_parallel_1", dec_add.is_parallel == true, "is_parallel=" + str(dec_add.is_parallel));
+check("dec_is_parallel_2", dec_id.is_parallel == true,  "is_parallel=" + str(dec_id.is_parallel));
+check("dec_is_parallel_3", dec_const.is_parallel == true, "is_parallel=" + str(dec_const.is_parallel));
+
+# Calls return futures
+let f1 = dec_add(10, 20);
+let f2 = dec_id("hello");
+let f3 = dec_const();
+check("dec_returns_future_1", type(f1) == "future", "type=" + type(f1));
+check("dec_returns_future_2", type(f2) == "future", "type=" + type(f2));
+check("dec_returns_future_3", type(f3) == "future", "type=" + type(f3));
+
+# await unwraps
+check("dec_await_add",   await f1 == 30,       "got " + str(await f1));
+check("dec_await_id",    await f2 == "hello",  "got " + str(await f2));
+check("dec_await_const", await f3 == 99,       "got " + str(await f3));
+
+# Mixed: parallel fn and @parallel fn interoperate
+parallel fn plain_par(x) { return x - 1; }
+@parallel fn dec_par(x) { return x + 1; }
+let fa = plain_par(10);
+let fb = dec_par(10);
+check("mixed_await", (await fa) + (await fb) == 20, "got " + str((await fa) + (await fb)));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

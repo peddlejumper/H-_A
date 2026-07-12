@@ -1,0 +1,42 @@
+# t19 — keys/values/items/has_key on dict; items() arity; has_key arg-order divergence
+print("== t19 keys/values/items/has_key ==");
+let d = {"a": 1, "b": 2, "c": 3};
+try {
+    print("keys=" + str(keys(d)));
+} catch (e) {
+    print("keys ERR: " + str(e));
+}
+try {
+    print("values=" + str(values(d)));
+} catch (e) {
+    print("values ERR: " + str(e));
+}
+try {
+    print("items=" + str(items(d)));
+} catch (e) {
+    print("items ERR: " + str(e));
+}
+# has_key — Python VM (bytecode) expects has_key(key, dict); Kotlin 2nd def expects has_key(dict, key)
+try {
+    print("has_key(d,\"a\")=" + str(has_key(d, "a")));
+} catch (e) {
+    print("has_key(d,\"a\") ERR: " + str(e));
+}
+try {
+    print("has_key(\"a\",d)=" + str(has_key("a", d)));
+} catch (e) {
+    print("has_key(\"a\",d) ERR: " + str(e));
+}
+try {
+    print("has_key(d,\"z\")=" + str(has_key(d, "z")));
+} catch (e) {
+    print("has_key(d,\"z\") ERR: " + str(e));
+}
+# empty dict
+let e = {};
+try {
+    print("keys({})=" + str(keys(e)));
+    print("items({})=" + str(items(e)));
+} catch (e4) {
+    print("empty dict dict-ops ERR: " + str(e4));
+}

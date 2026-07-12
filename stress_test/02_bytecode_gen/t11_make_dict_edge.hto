@@ -1,0 +1,18 @@
+# t11_make_dict_edge.hto - MAKE_DICT 边界（空字典/嵌套）
+let empty = {};
+print(len(empty));
+
+let d = {"a": 1, "b": 2, "c": 3};
+print(d["a"]);
+print(d["b"] + d["c"]);
+
+let nested = {"outer": {"inner": {"deep": 42}}};
+print(nested["outer"]["inner"]["deep"]);
+
+let list_in_dict = {"nums": [10, 20, 30], "name": "test"};
+print(list_in_dict["nums"][2]);
+print(list_in_dict["name"]);
+
+let dict_in_list = [{"k": 1}, {"k": 2}, {"k": 3}];
+print(dict_in_list[1]["k"]);
+print(len(dict_in_list));

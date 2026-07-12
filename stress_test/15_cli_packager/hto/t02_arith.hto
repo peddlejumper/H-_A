@@ -1,0 +1,7 @@
+# t02_arith.hto - arithmetic operations
+let a = 6;
+let b = 7;
+let c = a * b + 1;
+print(c);
+let d = (a + b) * 2;
+print(d);

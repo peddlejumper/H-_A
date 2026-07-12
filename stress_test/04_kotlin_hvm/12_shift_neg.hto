@@ -1,0 +1,17 @@
+# 12_shift_neg.hto — 负数位移 (Kotlin 预期语义差异或崩溃)
+try {
+    print(1 << -1);
+} catch (e) {
+    print("caught: " + str(e));
+}
+try {
+    print(256 >> -2);
+} catch (e) {
+    print("caught2: " + str(e));
+}
+try {
+    print(-1 << 3);
+} catch (e) {
+    print("caught3: " + str(e));
+}
+print("after");

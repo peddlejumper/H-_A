@@ -1,0 +1,407 @@
+# Round-2 Test #86 — Class private fields, self semantics, field access control
+# Agent #86.  Tests the 16 domains from the brief.  Each case is wrapped so
+# that expected-failure paths use try/catch (keeping the whole file runnable).
+
+# ====================================================================
+# T1 — self is implicitly available inside methods (no self param needed)
+# Expected: T1: 5
+# ====================================================================
+class T1A {
+    let x = 5;
+    fn get() { return self.x; }
+}
+let t1 = new T1A();
+print("T1: " + t1.get());
+
+# ====================================================================
+# T2 — self as explicit first param is auto-bound (dropped from arity)
+# Expected: T2: 42 / T2: 42
+# ====================================================================
+class T2A {
+    let x = 0;
+    fn init(self, v) { self.x = v; }
+    fn get(self) { return self.x; }
+}
+let t2 = new T2A(42);
+print("T2: " + t2.x);
+print("T2: " + t2.get());
+
+# ====================================================================
+# T3 — __init__ (dunder) is recognised as the constructor
+# Expected: T3: 10
+# ====================================================================
+class T3A {
+    let x = 0;
+    fn __init__(v) { self.x = v; }
+}
+let t3 = new T3A(10);
+print("T3: " + t3.x);
+
+# ====================================================================
+# T4 — new Cls() with zero args does NOT auto-call init when init has params
+#      (documented H# behaviour: arg-count must match)
+# Expected: T4: 99
+# ====================================================================
+class T4A {
+    let x = 99;
+    fn init(v) { self.x = v; }
+}
+let t4 = new T4A();
+print("T4: " + t4.x);
+
+# ====================================================================
+# T5 — Private field: read from outside should be DENIED
+# Expected: T5: 42 / T5: private-read-denied
+# ====================================================================
+class T5A {
+    private let secret = 42;
+    fn get() { return secret; }
+}
+let t5 = new T5A();
+print("T5: " + t5.get());
+try {
+    print("T5: " + t5.secret);
+    print("T5: READ-LEAK-BUG");
+} catch (err) {
+    print("T5: private-read-denied");
+}
+
+# ====================================================================
+# T6 — Private field: write from outside should be DENIED
+# Expected: T6: private-write-denied
+# ====================================================================
+class T6A {
+    private let secret = 1;
+    fn get() { return secret; }
+}
+let t6 = new T6A();
+try {
+    t6.secret = 999;
+    print("T6: WRITE-LEAK-BUG=" + t6.get());
+} catch (err) {
+    print("T6: private-write-denied");
+}
+
+# ====================================================================
+# T7 — Private field access from a method (bare name AND self.name)
+# Expected: T7: 7 / T7: 7
+# ====================================================================
+class T7A {
+    private let secret = 7;
+    fn revealBare() { return secret; }
+    fn revealSelf() { return self.secret; }
+}
+let t7 = new T7A();
+print("T7: " + t7.revealBare());
+print("T7: " + t7.revealSelf());
+
+# ====================================================================
+# T8 — self.x = v creates/updates an INSTANCE field (shadowing class default)
+# Expected: T8: 1 / T8: 99 / T8: 99 / T8: 99
+# ====================================================================
+class T8A {
+    let x = 1;
+    fn set(v) { self.x = v; }
+    fn get() { return self.x; }
+    fn getBare() { return x; }
+}
+let t8 = new T8A();
+print("T8: " + t8.x);
+t8.set(99);
+print("T8: " + t8.get());
+print("T8: " + t8.x);
+print("T8: " + t8.getBare());
+
+# ====================================================================
+# T9 — Method calling another method: self.other() vs bare other()
+# Expected: T9: 2 / T9: bare-call-...
+# ====================================================================
+class T9A {
+    fn a() { return 1; }
+    fn viaSelf() { return self.a() + 1; }
+    fn viaBare() { return a() + 1; }
+}
+let t9 = new T9A();
+print("T9: " + t9.viaSelf());
+try {
+    print("T9: " + t9.viaBare());
+} catch (err) {
+    print("T9: bare-call-failed: " + err);
+}
+
+# ====================================================================
+# T10 — Static method accessing an instance field via bare name (no self)
+# Expected: T10: static-field-failed: ...
+# ====================================================================
+class T10A {
+    let x = 42;
+    static fn bad() { return x; }
+}
+try {
+    print("T10: " + T10A.bad());
+    print("T10: STATIC-LEAK-BUG");
+} catch (err) {
+    print("T10: static-field-failed: " + err);
+}
+
+# ====================================================================
+# T11 — Static method calling an instance method via self (no self)
+# Expected: T11: static-self-failed: ...
+# ====================================================================
+class T11A {
+    fn m() { return 1; }
+    static fn bad() { return self.m(); }
+}
+try {
+    print("T11: " + T11A.bad());
+    print("T11: STATIC-SELF-BUG");
+} catch (err) {
+    print("T11: static-self-failed: " + err);
+}
+
+# ====================================================================
+# T12 — Static method CAN read a private field of its own class when given
+#       an instance reference (intended: __static_class__ exemption)
+# Expected: T12: 5
+# ====================================================================
+class T12A {
+    private let secret = 5;
+    static fn read(inst) { return inst.secret; }
+}
+let t12 = new T12A();
+print("T12: " + T12A.read(t12));
+
+# ====================================================================
+# T13 — Subclass method accessing a parent PRIVATE field via self.
+#       Private should mean "private to the declaring class" — a subclass
+#       method reading it is questionable.  We document actual behaviour.
+# Expected: T13: 10 / T13: <see actual>
+# ====================================================================
+class T13Base {
+    private let secret = 10;
+    fn get() { return secret; }
+}
+class T13Child extends T13Base {
+    fn viaSelf() { return self.secret; }
+    fn viaBare() { return secret; }
+}
+let t13 = new T13Child();
+print("T13: " + t13.get());
+try {
+    print("T13: viaSelf=" + t13.viaSelf());
+} catch (err) {
+    print("T13: viaSelf-failed: " + err);
+}
+try {
+    print("T13: viaBare=" + t13.viaBare());
+} catch (err) {
+    print("T13: viaBare-failed: " + err);
+}
+
+# ====================================================================
+# T14 — super.__init__() invocation in a child constructor
+# Expected: T14: 10 / T14: 20 / T14: 10
+# ====================================================================
+class T14P {
+    let x = 0;
+    fn init(v) { self.x = v; }
+    fn get() { return self.x; }
+}
+class T14C extends T14P {
+    let y = 0;
+    fn init(a, b) { super.init(a); self.y = b; }
+    fn getY() { return self.y; }
+}
+let t14 = new T14C(10, 20);
+print("T14: " + t14.x);
+print("T14: " + t14.getY());
+print("T14: " + t14.get());
+
+# ====================================================================
+# T15 — Multi-level super.method() chain (C -> B -> A)
+#       This previously hung because callSuper restarted from
+#       inst.__class__.base every level.  Fixed via __current_class__.
+# Expected: T15: C<B<A>>
+# ====================================================================
+class T15A { fn m() { return "A"; } }
+class T15B extends T15A { fn m() { return "B<" + super.m() + ">"; } }
+class T15C extends T15B { fn m() { return "C<" + super.m() + ">"; } }
+let t15 = new T15C();
+try {
+    print("T15: " + t15.m());
+} catch (err) {
+    print("T15: super-chain-failed: " + err);
+}
+
+# ====================================================================
+# T16 — super.method() when no such method exists in any base
+# Expected: T16: no-super-failed: ...
+# ====================================================================
+class T16A { }
+class T16B extends T16A {
+    fn m() { return super.m(); }
+}
+let t16 = new T16B();
+try {
+    print("T16: " + t16.m());
+    print("T16: NO-SUPER-BUG");
+} catch (err) {
+    print("T16: no-super-failed: " + err);
+}
+
+# ====================================================================
+# T17 — del self.x should remove the instance field
+#       Compiler lowers `del` to a null-store, so the field is NOT removed.
+# Expected (correct): T17: 5 / T17: deleted (or attr-not-found)
+# Actual (likely):    T17: 5 / T17: null  (field still present, value null)
+# ====================================================================
+class T17A {
+    let x = 5;
+    fn delX() { del self.x; }
+}
+let t17 = new T17A();
+print("T17: " + t17.x);
+t17.delX();
+try {
+    let v = t17.x;
+    if (v == null) {
+        print("T17: null (NOT deleted, set to null - BUG)");
+    } else {
+        print("T17: " + v + " (still present - BUG)");
+    }
+} catch (err) {
+    print("T17: deleted-ok");
+}
+
+# ====================================================================
+# T18 — Instance used as a dict key (questionable semantics)
+#       coerceKey() falls back to toDisplayString() for HInstance, so two
+#       different instances with the same field values COLLIDE.
+# Expected: T18: value / T18: COLLISION (both map to same key string)
+# ====================================================================
+class T18A {
+    let v = 1;
+}
+let t18a = new T18A();
+let t18b = new T18A();
+let t18d = {};
+t18d[t18a] = "first";
+t18d[t18b] = "second";
+print("T18: " + t18d[t18a]);
+print("T18: " + t18d[t18b]);
+
+# ====================================================================
+# T19 — Class field default with a non-literal expression
+#       eval_literal() returns None for anything but Number/String/Bool/
+#       Array/Dict literals, so the default is silently lost.
+# Expected (correct): T19: 42
+# Actual (likely):    T19: null
+# ====================================================================
+fn t19makeDefault() { return 42; }
+class T19A {
+    let x = t19makeDefault();
+}
+let t19 = new T19A();
+try {
+    let v = t19.x;
+    if (v == null) {
+        print("T19: null (non-literal default lost - BUG)");
+    } else {
+        print("T19: " + v);
+    }
+} catch (err) {
+    print("T19: failed: " + err);
+}
+
+# ====================================================================
+# T20 — Child class with NO init inherits parent init (auto-called)
+# Expected: T20: 5
+# ====================================================================
+class T20P {
+    let x = 0;
+    fn init(v) { self.x = v; }
+}
+class T20C extends T20P { }
+let t20 = new T20C(5);
+print("T20: " + t20.x);
+
+# ====================================================================
+# T21 — Field default with mutable array literal: each instance gets its own
+#       (deepCopy in callNew should prevent sharing)
+# Expected: T21: [1] / T21: []
+# ====================================================================
+class T21A {
+    let items = [];
+}
+let t21a = new T21A();
+let t21b = new T21A();
+push(t21a.items, 1);
+print("T21: " + t21a.items);
+print("T21: " + t21b.items);
+
+# ====================================================================
+# T22 — Static method called via an INSTANCE (instance.staticMethod())
+# Expected: T22: 42
+# ====================================================================
+class T22A {
+    static fn v() { return 42; }
+}
+let t22 = new T22A();
+try {
+    print("T22: " + t22.v());
+} catch (err) {
+    print("T22: instance-static-failed: " + err);
+}
+
+# ====================================================================
+# T23 — Reflection: ClassName.__name__ and obj.__class__.__name__
+# Expected: T23: T23A / T23: T23A
+# ====================================================================
+class T23A { let z = 1; }
+try {
+    print("T23: " + T23A.__name__);
+} catch (err) {
+    print("T23: class-name-failed: " + err);
+}
+let t23 = new T23A();
+try {
+    print("T23: " + t23.__class__.__name__);
+} catch (err) {
+    print("T23: instance-class-name-failed: " + err);
+}
+
+# ====================================================================
+# T24 — Virtual dispatch during __init__: parent init calls self.log(),
+#       child overrides log() -> must dispatch to child's log().
+# Expected: T24: child-log
+# ====================================================================
+class T24P {
+    fn init() { print("T24: " + self.log()); }
+    fn log() { return "parent-log"; }
+}
+class T24C extends T24P {
+    fn log() { return "child-log"; }
+}
+let t24 = new T24C();
+
+# ====================================================================
+# T25 — Private field on parent is inherited (merged) into child's
+#       privateFields list.  Reading it from a child method via self
+#       is allowed by the runtime (callerSelf === obj).  This may be
+#       looser than the spec intends.
+# Expected: T25: 100
+# ====================================================================
+class T25P {
+    private let p = 100;
+}
+class T25C extends T25P {
+    fn read() { return self.p; }
+}
+let t25 = new T25C();
+try {
+    print("T25: " + t25.read());
+} catch (err) {
+    print("T25: child-private-failed: " + err);
+}
+
+print("ROUND2_86_DONE");

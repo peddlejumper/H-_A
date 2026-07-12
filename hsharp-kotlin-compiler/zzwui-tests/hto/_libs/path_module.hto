@@ -1,0 +1,502 @@
+# H# Path / File System Module (v0.4.1 enhanced)
+# ─────────────────────────────────────────────────────────────────
+# A higher-level path / file-system library layered on the v0.4
+# fs_* natives.  Provides path algebra, recursive walking, file
+# metadata, atomic rename/copy, and remove-recursive semantics.
+#
+# Conventions:
+#   * All "path" arguments are H# strings.  The module does not
+#     try to interpret them as URIs or relative-to-CWD paths
+#     unless explicitly asked.
+#   * Functions that take optional arguments use `null` as the
+#     "no value" sentinel (H# has no default arguments).
+#   * `path_*` functions are pure path algebra — they never
+#     touch the file system.  `file_*` functions actually do I/O.
+#
+# Pre-existing fs_* natives are still callable from user code;
+# this module is a strict superset.
+
+# ─── Path algebra (no I/O) ────────────────────────────────────────
+
+# The OS path separator.  "/" on Unix, "\" on Windows.
+fn path_sep() {
+    return path_separator();
+}
+
+# The OS list separator.  ":" on Unix, ";" on Windows.
+fn path_list_sep() {
+    return path_list_separator();
+}
+
+# `path_is_absolute(p)` — does `p` start at the filesystem root?
+fn path_is_absolute(p) {
+    return path_is_absolute(p);
+}
+
+# `path_normalize(p)` — resolve "." / ".." and dedup separators.
+fn path_normalize(p) {
+    return path_normalize(p);
+}
+
+# `path_split(p)` — return [directory, filename].
+fn path_split(p) {
+    return path_split(p);
+}
+
+# `path_dirname(p)` — directory component of `p`.
+fn path_dirname(p) {
+    return fs_get_dirname(p);
+}
+
+# `path_basename(p)` — filename component of `p`.
+fn path_basename(p) {
+    return fs_get_basename(p);
+}
+
+# `path_extension(p)` — extension of `p` (including the leading
+# dot), or "" if there is none.  Note: the existing native
+# returns the full extension including the dot, or "".
+fn path_extension(p) {
+    return fs_get_ext(p);
+}
+
+# `path_stem(p)` — basename without its final extension.
+fn path_stem(p) {
+    let base = fs_get_basename(p);
+    let ext = fs_get_ext(base);
+    if (len(ext) > 0) {
+        return substring(base, 0, len(base) - len(ext));
+    }
+    return base;
+}
+
+# `path_components(p)` — return a list of path components in
+# order.  E.g. "/a/b/c" -> ["a", "b", "c"].
+fn path_components(p) {
+    return path_components(p);
+}
+
+# `path_join(a, b)` — join two components with the platform
+# separator.  Multiple-argument join is done by chaining.
+fn path_join(a, b) {
+    return fs_join_path(a, b);
+}
+
+# `path_join_many(parts)` — join a list of components.
+fn path_join_many(parts) {
+    if (len(parts) == 0) {
+        return "";
+    }
+    let result = str(parts[0]);
+    let i = 1;
+    while (i < len(parts)) {
+        result = path_join(result, str(parts[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+# `path_with_extension(p, ext)` — return `p` with its
+# extension replaced.  If `ext` does not start with a dot, one
+# is added.
+fn path_with_extension(p, ext) {
+    let stem = path_stem(p);
+    if (len(ext) > 0 and ext[0] != ".") {
+        ext = "." + ext;
+    }
+    return stem + ext;
+}
+
+# `path_relative_to(base, p)` — compute a path from `base` to
+# `p` if both are absolute.  Returns the empty string if `p`
+# is not under `base`.  Pure-string operation; no I/O.
+fn path_relative_to(base, p) {
+    if (not path_is_absolute(base) or not path_is_absolute(p)) {
+        return "";
+    }
+    let bn = path_normalize(base);
+    let pn = path_normalize(p);
+    # Strip trailing slash on base.
+    if (len(bn) > 1 and bn[len(bn) - 1] == path_sep()) {
+        bn = substring(bn, 0, len(bn) - 1);
+    }
+    if (len(pn) < len(bn)) {
+        return "";
+    }
+    if (pn != bn and not __starts_with(pn, bn + path_sep())) {
+        return "";
+    }
+    if (pn == bn) {
+        return ".";
+    }
+    return substring(pn, len(bn) + 1, len(pn));
+}
+
+# ─── Local string helpers ─────────────────────────────────────────
+
+fn __starts_with(s, prefix) {
+    if (len(prefix) > len(s)) {
+        return false;
+    }
+    let i = 0;
+    let ok = true;
+    while (i < len(prefix) and ok) {
+        if (s[i] != prefix[i]) {
+            ok = false;
+        }
+        i = i + 1;
+    }
+    return ok;
+}
+
+fn __ends_with(s, suffix) {
+    if (len(suffix) > len(s)) {
+        return false;
+    }
+    let off = len(s) - len(suffix);
+    let i = 0;
+    let ok = true;
+    while (i < len(suffix) and ok) {
+        if (s[off + i] != suffix[i]) {
+            ok = false;
+        }
+        i = i + 1;
+    }
+    return ok;
+}
+
+# ─── File metadata ────────────────────────────────────────────────
+
+fn file_exists(p) {
+    return fs_exists(p) and fs_is_file(p);
+}
+
+fn file_size(p) {
+    return file_size(p);
+}
+
+fn file_mtime(p) {
+    return file_mtime(p);
+}
+
+fn file_atime(p) {
+    return file_atime(p);
+}
+
+fn file_is_readable(p) {
+    return file_is_readable(p);
+}
+
+fn file_is_writable(p) {
+    return file_is_writable(p);
+}
+
+fn file_is_hidden(p) {
+    let base = fs_get_basename(p);
+    if (len(base) == 0) {
+        return false;
+    }
+    return base[0] == ".";
+}
+
+# `file_info(p)` — return a dict of metadata.  Returns `null`
+# if the path does not exist.
+fn file_info(p) {
+    if (not fs_exists(p)) {
+        return null;
+    }
+    let info = {};
+    info["path"] = p;
+    info["exists"] = true;
+    info["is_file"] = fs_is_file(p);
+    info["is_dir"] = fs_is_dir(p);
+    info["size"] = file_size(p);
+    info["extension"] = fs_get_ext(p);
+    info["mtime"] = file_mtime(p);
+    info["is_readable"] = file_is_readable(p);
+    info["is_writable"] = file_is_writable(p);
+    return info;
+}
+
+# ─── File operations ──────────────────────────────────────────────
+
+fn file_read(p) {
+    return read_file(p);
+}
+
+fn file_write(p, content) {
+    write_file(p, content);
+    return null;
+}
+
+fn file_append(p, content) {
+    io_append_file(p, content);
+    return null;
+}
+
+fn file_read_lines(p) {
+    return io_read_lines(p);
+}
+
+fn file_write_lines(p, lines) {
+    io_write_lines(p, lines);
+    return null;
+}
+
+fn file_rename(src, dst) {
+    file_rename(src, dst);
+    return null;
+}
+
+fn file_copy(src, dst) {
+    file_copy(src, dst);
+    return null;
+}
+
+fn file_delete(p) {
+    fs_remove(p);
+    return null;
+}
+
+# `file_remove_recursive(p)` — rm -rf equivalent.  Returns
+# the path on success, raises on failure.
+fn file_remove_recursive(p) {
+    file_remove_recursive(p);
+    return p;
+}
+
+# ─── Directory operations ─────────────────────────────────────────
+
+fn dir_exists(p) {
+    return fs_exists(p) and fs_is_dir(p);
+}
+
+fn dir_create(p) {
+    fs_mkdir(p);
+    return null;
+}
+
+fn dir_ensure(p) {
+    if (not dir_exists(p)) {
+        fs_mkdir(p);
+    }
+    return null;
+}
+
+fn dir_list(p) {
+    return fs_list_dir(p);
+}
+
+# `dir_list_files(p)` — non-recursive list of files in `p`.
+fn dir_list_files(p) {
+    let all = fs_list_dir(p);
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        let full = path_join(p, all[i]);
+        if (fs_is_file(full)) {
+            push(out, all[i]);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+# `dir_list_dirs(p)` — non-recursive list of subdirectories in `p`.
+fn dir_list_dirs(p) {
+    let all = fs_list_dir(p);
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        let full = path_join(p, all[i]);
+        if (fs_is_dir(full)) {
+            push(out, all[i]);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+# `dir_walk(p)` — recursively walk `p` and return a list of
+# every file path.  Hidden files are included.  The order is
+# depth-first.
+fn dir_walk(p) {
+    return fs_walk(p);
+}
+
+# `dir_walk_with_type(p)` — like `dir_walk` but each entry is
+# a 2-element list [path, "file" | "dir"].
+fn dir_walk_with_type(p) {
+    let out = [];
+    let entries = fs_walk(p);
+    let i = 0;
+    while (i < len(entries)) {
+        let e = entries[i];
+        let kind = "file";
+        if (fs_is_dir(e)) {
+            kind = "dir";
+        }
+        push(out, [e, kind]);
+        i = i + 1;
+    }
+    return out;
+}
+
+# `dir_copy_tree(src, dst)` — recursively copy `src` directory
+# tree to `dst`.  Creates `dst` if it doesn't exist.
+fn dir_copy_tree(src, dst) {
+    dir_ensure(dst);
+    let entries = fs_walk(src);
+    let i = 0;
+    while (i < len(entries)) {
+        let src_file = entries[i];
+        let rel = path_relative_to(src, src_file);
+        let dst_file = path_join(dst, rel);
+        file_copy(src_file, dst_file);
+        i = i + 1;
+    }
+    return null;
+}
+
+# `dir_size(p)` — total size in bytes of all files under `p`.
+fn dir_size(p) {
+    let total = 0;
+    let files = fs_walk(p);
+    let i = 0;
+    while (i < len(files)) {
+        total = total + file_size(files[i]);
+        i = i + 1;
+    }
+    return total;
+}
+
+# `dir_is_empty(p)` — does `p` have no entries?
+fn dir_is_empty(p) {
+    return len(fs_list_dir(p)) == 0;
+}
+
+# `dir_clear(p)` — remove all entries in `p` but keep `p`.
+fn dir_clear(p) {
+    let entries = fs_list_dir(p);
+    let i = 0;
+    while (i < len(entries)) {
+        let full = path_join(p, entries[i]);
+        if (fs_is_dir(full)) {
+            file_remove_recursive(full);
+        } else {
+            fs_remove(full);
+        }
+        i = i + 1;
+    }
+    return null;
+}
+
+# ─── Glob / match (limited `*` support) ──────────────────────────
+# A simple `*`-glob matcher that supports:
+#   * matches any (possibly empty) run of characters that does
+#     not cross a `/`.
+#   ** is NOT supported; use a recursive walk + fnmatch_path
+#     for that.
+# Returns true if `text` matches `pattern`.
+fn fnmatch_path(pattern, text) {
+    let pi = 0;
+    let ti = 0;
+    let star_pi = -1;
+    let star_ti = 0;
+    while (ti < len(text)) {
+        if (pi < len(pattern) and pattern[pi] == "*") {
+            star_pi = pi;
+            star_ti = ti;
+            pi = pi + 1;
+        } else if (pi < len(pattern) and pattern[pi] == text[ti]) {
+            pi = pi + 1;
+            ti = ti + 1;
+        } else if (star_pi >= 0) {
+            pi = star_pi + 1;
+            star_ti = star_ti + 1;
+            ti = star_ti;
+        } else {
+            return false;
+        }
+    }
+    while (pi < len(pattern) and pattern[pi] == "*") {
+        pi = pi + 1;
+    }
+    return pi == len(pattern);
+}
+
+# `dir_glob(root, pattern)` — recursively list files under
+# `root` whose relative path matches `pattern`.  Pattern uses
+# `*` as a wildcard.
+fn dir_glob(root, pattern) {
+    let out = [];
+    let files = fs_walk(root);
+    let i = 0;
+    while (i < len(files)) {
+        let rel = path_relative_to(root, files[i]);
+        if (fnmatch_path(pattern, rel)) {
+            push(out, files[i]);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+# ─── Temp file / dir helpers ─────────────────────────────────────
+
+fn temp_file(prefix) {
+    if (prefix == null) {
+        prefix = "tmp";
+    }
+    let ts = time_now();
+    let filename = prefix + "_" + str(int(ts)) + ".tmp";
+    let p = path_join(fs_get_cwd(), filename);
+    write_file(p, "");
+    return p;
+}
+
+fn temp_dir(prefix) {
+    if (prefix == null) {
+        prefix = "tmp";
+    }
+    let ts = time_now();
+    let dirname = prefix + "_" + str(int(ts));
+    let p = path_join(fs_get_cwd(), dirname);
+    fs_mkdir(p);
+    return p;
+}
+
+# ─── Formatting helpers ───────────────────────────────────────────
+
+# `format_size(bytes)` — pretty-print a byte count.
+# "1024" -> "1.0 KB", "1048576" -> "1.0 MB", etc.
+fn format_size(n) {
+    if (n < 1024) {
+        return str(int(n)) + " B";
+    }
+    if (n < 1048576) {
+        return _format_one_decimal(n / 1024.0) + " KB";
+    }
+    if (n < 1073741824) {
+        return _format_one_decimal(n / 1048576.0) + " MB";
+    }
+    if (n < 1099511627776) {
+        return _format_one_decimal(n / 1073741824.0) + " GB";
+    }
+    return _format_one_decimal(n / 1099511627776.0) + " TB";
+}
+
+fn _format_one_decimal(v) {
+    let whole = int(v);
+    let frac = int((v - whole) * 10);
+    if (frac < 0) {
+        frac = 0 - frac;
+    }
+    return str(whole) + "." + str(frac);
+}
+
+# `format_mtime(ts)` — return an ISO-8601-ish timestamp for a
+# `file_mtime()` value.  Uses `date_format` from the runtime.
+fn format_mtime(ts) {
+    return date_format(ts, "yyyy-MM-dd HH:mm:ss");
+}

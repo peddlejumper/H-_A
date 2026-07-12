@@ -1,0 +1,18 @@
+# t04 - literal string/bool/null patterns
+fn classify(x) {
+    return match x {
+        "yes" => "affirm",
+        "no" => "neg",
+        true => "T",
+        false => "F",
+        null => "N",
+        _ => "other"
+    };
+}
+print("t04_str_yes:" + classify("yes"));
+print("t04_str_no:" + classify("no"));
+print("t04_str_oth:" + classify("maybe"));
+print("t04_bool_t:" + classify(true));
+print("t04_bool_f:" + classify(false));
+print("t04_null:" + classify(null));
+print("t04_other:" + classify(5));

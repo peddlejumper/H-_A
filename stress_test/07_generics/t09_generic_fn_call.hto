@@ -1,0 +1,21 @@
+# t09_generic_fn_call.hto — 泛型函数调用 identity<string>("hi")
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+fn identity<T>(x) { return x; }
+
+check("9/call_int", identity<int>(5) == 5);
+check("9/call_str", identity<string>("hi") == "hi");
+check("9/call_bool", identity<bool>(true) == true);
+check("9/call_list", identity<int>([1, 2, 3]) == [1, 2, 3]);
+
+# 嵌套调用
+check("9/nested", identity<int>(identity<int>(42)) == 42);
+
+# 作为参数
+print("9/as_arg=" + str(identity<int>(identity<int>(7))));
+
+# 返回值用于比较
+check("9/in_cmp", (identity<int>(3) < 4) == true);

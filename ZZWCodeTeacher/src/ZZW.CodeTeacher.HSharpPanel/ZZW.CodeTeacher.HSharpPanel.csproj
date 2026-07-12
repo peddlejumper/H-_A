@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ZZW.CodeTeacher.HSharpPanel</RootNamespace>
+  </PropertyGroup>
+  <!--
+    H# 控制面板项目：承载 H# 脚本（.hto 文件）。
+    这些脚本通过 H# 解释器执行，通过 HTTP 与 .NET 后端通信，
+    提供动态配置、规则执行、运维脚本等能力。
+    本项目同时提供一个 .NET 宿主，负责调用 H# 解释器进程。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\ZZW.CodeTeacher.Application\ZZW.CodeTeacher.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="scripts\*.hto" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="rules\*.hto" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="config\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

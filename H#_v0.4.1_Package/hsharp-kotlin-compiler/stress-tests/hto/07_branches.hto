@@ -1,0 +1,21 @@
+# T07 - If / else / nested
+let x = 10;
+if (x > 0) { print("positive"); }
+if (x < 0) { print("negative"); } else { print("nonneg"); }
+
+let score = 85;
+let grade = "F";
+if (score >= 90) { grade = "A"; }
+else if (score >= 80) { grade = "B"; }
+else if (score >= 70) { grade = "C"; }
+else if (score >= 60) { grade = "D"; }
+print(grade);
+
+# nested
+let n = 15;
+let tag = "none";
+if (n > 0) {
+    if (n < 10) { tag = "single"; }
+    else { tag = "double"; }
+} else { tag = "neg"; }
+print(tag);

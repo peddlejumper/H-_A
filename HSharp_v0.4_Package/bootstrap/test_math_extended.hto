@@ -1,0 +1,579 @@
+# H# Mathematics Module Test Suite
+# Tests for matrix operations, statistics, and vector math
+
+# Import the math module
+import "bootstrap/math_extended";
+
+print("========================================");
+print("H# Mathematics Module Test Suite");
+print("========================================");
+print("");
+
+let tests_passed = 0;
+let tests_failed = 0;
+
+# Helper function to check equality
+fn assert_equals(test_name, actual, expected) {
+    if (actual == expected) {
+        print("[PASS] " + test_name);
+        return true;
+    } else {
+        print("[FAIL] " + test_name);
+        print("  Expected: " + str(expected));
+        print("  Actual:   " + str(actual));
+        return false;
+    }
+}
+
+# Helper for approximate equality (floating point)
+fn assert_approx_equals(test_name, actual, expected, tolerance) {
+    let diff = actual - expected;
+    if (diff < 0) {
+        diff = -diff;
+    }
+    if (diff <= tolerance) {
+        print("[PASS] " + test_name);
+        return true;
+    } else {
+        print("[FAIL] " + test_name);
+        print("  Expected: ~" + str(expected));
+        print("  Actual:   " + str(actual));
+        return false;
+    }
+}
+
+# ============================================
+# Matrix Creation Tests
+# ============================================
+print("--- Matrix Creation ---");
+
+# Test create matrix
+let mat = math_matrix_create(2, 3, 5);
+if (len(mat) == 2 and len(mat[0]) == 3) {
+    print("[PASS] math_matrix_create dimensions");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] math_matrix_create dimensions");
+    tests_failed = tests_failed + 1;
+}
+
+# Test matrix get/set
+math_matrix_set(mat, 0, 0, 10);
+let val = math_matrix_get(mat, 0, 0);
+if (assert_equals("math_matrix_get/set", val, 10)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test identity matrix
+let ident = math_matrix_identity(3);
+let ident_val = math_matrix_get(ident, 1, 1);
+if (assert_equals("math_matrix_identity diagonal", ident_val, 1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+let ident_off = math_matrix_get(ident, 0, 1);
+if (assert_equals("math_matrix_identity off-diagonal", ident_off, 0)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test matrix dimensions
+let rows = math_matrix_rows(mat);
+let cols = math_matrix_cols(mat);
+if (assert_equals("math_matrix_rows", rows, 2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("math_matrix_cols", cols, 3)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Matrix Arithmetic Tests
+# ============================================
+print("");
+print("--- Matrix Arithmetic ---");
+
+# Test matrix addition
+let a = [[1, 2], [3, 4]];
+let b = [[5, 6], [7, 8]];
+let c = math_matrix_add(a, b);
+if (assert_equals("Matrix add [0,0]", math_matrix_get(c, 0, 0), 6)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Matrix add [1,1]", math_matrix_get(c, 1, 1), 12)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test matrix subtraction
+let d = math_matrix_subtract(b, a);
+if (assert_equals("Matrix sub [0,0]", math_matrix_get(d, 0, 0), 4)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test matrix multiplication
+let m1 = [[1, 2], [3, 4]];
+let m2 = [[5, 6], [7, 8]];
+let m3 = math_matrix_multiply(m1, m2);
+if (assert_equals("Matrix multiply [0,0]", math_matrix_get(m3, 0, 0), 19)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Matrix multiply [0,1]", math_matrix_get(m3, 0, 1), 22)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Matrix multiply [1,0]", math_matrix_get(m3, 1, 0), 43)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Matrix multiply [1,1]", math_matrix_get(m3, 1, 1), 50)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test scalar multiplication
+let sm = math_matrix_scalar_multiply([[1, 2], [3, 4]], 3);
+if (assert_equals("Scalar multiply [0,0]", math_matrix_get(sm, 0, 0), 3)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Scalar multiply [1,1]", math_matrix_get(sm, 1, 1), 12)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Matrix Transpose and Determinant
+# ============================================
+print("");
+print("--- Matrix Transpose & Determinant ---");
+
+# Test transpose
+let t_mat = [[1, 2, 3], [4, 5, 6]];
+let t_result = math_matrix_transpose(t_mat);
+if (assert_equals("Transpose rows", math_matrix_rows(t_result), 3)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Transpose cols", math_matrix_cols(t_result), 2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Transpose [0,0]", math_matrix_get(t_result, 0, 0), 1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Transpose [0,1]", math_matrix_get(t_result, 0, 1), 4)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test determinant 2x2
+let det2 = [[1, 2], [3, 4]];
+let det2_val = math_matrix_determinant(det2);
+if (assert_equals("Determinant 2x2", det2_val, -2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test determinant 3x3
+let det3 = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+let det3_val = math_matrix_determinant(det3);
+if (assert_equals("Determinant 3x3", det3_val, 0)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test determinant 1x1
+let det1 = [[5]];
+let det1_val = math_matrix_determinant(det1);
+if (assert_equals("Determinant 1x1", det1_val, 5)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Vector Operations Tests
+# ============================================
+print("");
+print("--- Vector Operations ---");
+
+# Test vector creation
+let vec = math_vector_create(3, 0);
+if (assert_equals("Vector create length", len(vec), 3)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test dot product
+let v1 = [1, 2, 3];
+let v2 = [4, 5, 6];
+let dot = math_vector_dot(v1, v2);
+if (assert_equals("Dot product", dot, 32)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test cross product
+let cross = math_vector_cross([1, 0, 0], [0, 1, 0]);
+if (assert_equals("Cross product [0]", cross[0], 0)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Cross product [1]", cross[1], 0)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Cross product [2]", cross[2], 1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test vector magnitude
+let mag = math_vector_magnitude([3, 4]);
+if (assert_approx_equals("Vector magnitude", mag, 5, 0.001)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test vector add
+let vadd = math_vector_add([1, 2, 3], [4, 5, 6]);
+if (assert_equals("Vector add [0]", vadd[0], 5)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Vector add [2]", vadd[2], 9)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test vector subtract
+let vsub = math_vector_subtract([4, 5, 6], [1, 2, 3]);
+if (assert_equals("Vector sub [0]", vsub[0], 3)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test scalar multiply
+let vsm = math_vector_scalar_multiply([1, 2, 3], 2);
+if (assert_equals("Vector scalar [0]", vsm[0], 2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("Vector scalar [2]", vsm[2], 6)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Mathematical Functions Tests
+# ============================================
+print("");
+print("--- Mathematical Functions ---");
+
+# Test square root
+let sqrt4 = math_sqrt(4);
+if (assert_approx_equals("sqrt(4)", sqrt4, 2, 0.001)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+let sqrt9 = math_sqrt(9);
+if (assert_approx_equals("sqrt(9)", sqrt9, 3, 0.001)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+let sqrt2 = math_sqrt(2);
+if (assert_approx_equals("sqrt(2)", sqrt2, 1.414, 0.01)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test absolute value
+if (assert_equals("abs(-5)", math_abs(-5), 5)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("abs(5)", math_abs(5), 5)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test power
+if (assert_equals("pow(2,3)", math_pow(2, 3), 8)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("pow(5,0)", math_pow(5, 0), 1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test factorial
+if (assert_equals("factorial(5)", math_factorial(5), 120)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("factorial(0)", math_factorial(0), 1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test GCD
+if (assert_equals("gcd(12,8)", math_gcd(12, 8), 4)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test LCM
+if (assert_equals("lcm(4,6)", math_lcm(4, 6), 12)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Statistical Functions Tests
+# ============================================
+print("");
+print("--- Statistical Functions ---");
+
+# Test sum
+let arr_sum = [1, 2, 3, 4, 5];
+if (assert_equals("sum", math_sum(arr_sum), 15)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test mean
+if (assert_equals("mean", math_mean(arr_sum), 3)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test median
+let arr_median_odd = [3, 1, 2];
+if (assert_equals("median odd", math_median(arr_median_odd), 2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+let arr_median_even = [4, 1, 3, 2];
+if (assert_equals("median even", math_median(arr_median_even), 2.5)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test mode
+let arr_mode = [1, 2, 2, 3, 2, 4];
+if (assert_equals("mode", math_mode(arr_mode), 2)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test variance and std dev
+let arr_var = [2, 4, 4, 4, 5, 5, 7, 9];
+let var_val = math_variance(arr_var);
+if (assert_approx_equals("variance", var_val, 4, 0.1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+let std_val = math_std_dev(arr_var);
+if (assert_approx_equals("std_dev", std_val, 2, 0.1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test min/max
+if (assert_equals("min", math_min([3, 1, 4, 1, 5]), 1)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_equals("max", math_max([3, 1, 4, 1, 5]), 5)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test range
+if (assert_equals("range", math_range([3, 1, 4, 1, 5]), 4)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test quartiles
+let arr_q = [1, 2, 3, 4, 5, 6, 7, 8];
+let quarts = math_quartiles(arr_q);
+if (quarts[1] >= 3 and quarts[1] <= 5) {
+    print("[PASS] quartiles median in range");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] quartiles median");
+    tests_failed = tests_failed + 1;
+}
+
+# Test percentile
+let arr_p = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let p50 = math_percentile(arr_p, 50);
+if (p50 >= 4 and p50 <= 7) {
+    print("[PASS] percentile 50th");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] percentile 50th: " + str(p50));
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Advanced Statistics Tests
+# ============================================
+print("");
+print("--- Advanced Statistics ---");
+
+# Test correlation (perfect positive)
+let x1 = [1, 2, 3, 4, 5];
+let y1 = [2, 4, 6, 8, 10];
+let corr1 = math_correlation(x1, y1);
+if (assert_approx_equals("correlation perfect positive", corr1, 1, 0.001)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test correlation (perfect negative)
+let y2 = [10, 8, 6, 4, 2];
+let corr2 = math_correlation(x1, y2);
+if (assert_approx_equals("correlation perfect negative", corr2, -1, 0.001)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test covariance
+let cov = math_covariance(x1, y1);
+if (cov > 0) {
+    print("[PASS] covariance positive");
+    tests_passed = tests_passed + 1;
+} else {
+    print("[FAIL] covariance");
+    tests_failed = tests_failed + 1;
+}
+
+# Test linear regression
+let lr = math_linear_regression(x1, y1);
+let slope = lr[0];
+let intercept = lr[1];
+if (assert_approx_equals("linear regression slope", slope, 2, 0.001)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+if (assert_approx_equals("linear regression intercept", intercept, 0, 0.001)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# Test prediction
+let pred = math_predict(2, 0, 5);
+if (assert_equals("predict", pred, 10)) {
+    tests_passed = tests_passed + 1;
+} else {
+    tests_failed = tests_failed + 1;
+}
+
+# ============================================
+# Summary
+# ============================================
+print("");
+print("========================================");
+print("Test Results Summary");
+print("========================================");
+print("Total Tests: " + str(tests_passed + tests_failed));
+print("Passed:      " + str(tests_passed));
+print("Failed:      " + str(tests_failed));
+
+if (tests_failed == 0) {
+    print("");
+    print("All tests passed!");
+} else {
+    print("");
+    print("Some tests failed. Please review.");
+}

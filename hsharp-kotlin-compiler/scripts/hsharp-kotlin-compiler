@@ -1,0 +1,5 @@
+#!/bin/sh
+# Wrapper to run the h# kotlin-compiler
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+JAR_DIR="$SCRIPT_DIR/../build/libs"
+exec java -cp "$JAR_DIR/hsharp-kotlin-compiler.jar:$JAR_DIR/lib/*" com.hsharp.compiler.MainKt "$@"

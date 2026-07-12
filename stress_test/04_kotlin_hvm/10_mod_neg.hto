@@ -1,0 +1,7 @@
+# 10_mod_neg.hto — BINARY_MOD 负数取模
+print(-7 % 3);
+print(7 % -3);
+print(-7 % -3);
+print(7 % 3);
+print(0 % 5);
+print("done");

@@ -1,0 +1,101 @@
+# ============================================================
+# H# 语法综合演示 (HSharp v0.4)
+# 覆盖：变量/类型/运算符/控制流/函数/闭包/类/继承/异常/内建函数
+# ============================================================
+
+# ---- 1. 变量与字面量 ----
+let n = 10;
+let pi = 3.14;
+let s = "H#";
+let ok = true;
+let empty = nullptr;
+print(s + " demo, n=" + str(n) + ", pi=" + str(pi));
+
+# ---- 2. 运算符 ----
+print("算术: " + str(1 + 2 * 3));        # 7
+print("括号: " + str((1 + 2) * 3));      # 9
+print("取模: " + str(10 % 3));           # 1
+print("位运算: " + str(5 | 2));          # 7
+print("移位: " + str(1 << 3));           # 8
+print("比较: " + str(3 >= 3 and not (2 > 5)));  # true
+
+# ---- 3. 三元运算符 ----
+let sign = (n > 0) ? "positive" : "non-positive";
+print("符号: " + sign);
+
+# ---- 4. 数组与字典 ----
+let arr = [1, 2, 3];
+push(arr, 4);
+print("数组长度: " + str(len(arr)));      # 4
+print("第三个元素: " + str(arr[2]));
+arr[0] = 99;
+print("修改后首元素: " + str(arr[0]));
+
+let d = {"name": "H#", "ver": 4};
+print("字典: " + d["name"] + " v" + str(d["ver"]));
+
+# ---- 5. 控制流 ----
+let total = 0;
+for i in [1, 2, 3, 4, 5] {
+    total = total + i;
+}
+print("for-in 求和: " + str(total));     # 15
+
+let c = 0;
+while (c < 3) {
+    print("while: " + str(c));
+    c = c + 1;
+}
+
+# ---- 6. 函数、Lambda 与闭包 ----
+fn add(a, b) {
+    return a + b;
+}
+print("函数: " + str(add(3, 4)));
+
+let double = fn(x) { return x * 2; };
+print("Lambda: " + str(double(21)));
+
+fn make_counter() {
+    let i = 0;
+    let inc = fn() { i = i + 1; return i; };
+    return inc;
+}
+let counter = make_counter();
+print("闭包计数: " + str(counter()) + " " + str(counter()) + " " + str(counter()));
+
+# ---- 7. 类、继承、私有字段（self 由运行时自动绑定，无需写在参数列表）----
+class Animal {
+    private let name = "";
+    fn init(name) {
+        self.name = name;
+    }
+    fn speak() {
+        print(self.name + " makes a sound");
+    }
+}
+
+class Dog extends Animal {
+    fn speak() {
+        print(self.name + " says: woof!");
+    }
+}
+
+let dog = new Dog();
+dog.init("Buddy");
+dog.speak();
+
+# ---- 8. 异常处理（注意：try/catch 仅在字节码 VM 路径可用，需用 --opt 运行；
+#         见配套文件 hsharp_trycatch_demo.hto）----
+# 此处仅作语法占位说明，默认树遍历解释器未实现 visit_TryStatement。
+
+# ---- 9. break / continue ----
+let collected = [];
+for i in [1, 2, 3, 4, 5, 6, 7, 8] {
+    if (i == 2) { continue; }
+    if (i == 6) { break; }
+    push(collected, i);
+}
+print("break/continue 结果: " + str(collected));
+
+print("=== H# 语法演示完成 ===");

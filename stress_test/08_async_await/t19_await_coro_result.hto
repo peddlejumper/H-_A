@@ -1,0 +1,8 @@
+# t19: await on the result of a coro fn (not async fn).
+# coro fn returns raw value (no HFuture wrapping), so AWAIT should
+# throw a runtime type error ("expected Future<T>").
+coro fn g() {
+    return 5;
+}
+let r = await g();
+print(r);

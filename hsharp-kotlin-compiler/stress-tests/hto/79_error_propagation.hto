@@ -1,0 +1,185 @@
+# T79 - 错误传播 ? 与可选链 ?. 全面压力测试
+#
+# 源码语义分析（HSharp_v0.4_Tests/parser.py + compiler.py + HVM.kt）:
+#   - `expr?` (PropagateExpression)：compiler.py:1050 编译为 SETUP_PROPAGATE/<expr>/POP_PROPAGATE。
+#     设计语义 = try{expr}catch(e){e}：捕获异常 payload 作为值返回，NOT 提前 return。
+#     HVM.kt:314 SETUP_PROPAGATE, HVM.kt:1300 __propagate__ dispatch。
+#   - `a?.b`：parser.py:1270 _parse_postfix 将 `?.` 解析为 PropagateExpression(a.b)，
+#     即先做 a.b 属性访问再 `?` 捕获异常，NOT null 短路。
+#   - loadAttr(HVM.kt:1329) 对 HNull 抛 "Cannot load attribute on NULL"。
+#
+# 已发现 parser bug（测试前源码审查）：_parse_postfix (parser.py:1275-1278) 无条件 eat `?`
+# 并置 wrap_propagate=True，但若 `?` 后不跟 `.`/`[`/`(`，循环 break 时 wrap_propagate
+# 未被应用，`?` 被吞且不生成 PropagateExpression。_postfix_propagate(factor:901) 因此永远
+# 看不到 bare `?`。后果：`f()?`、`x?` 等 bare propagate 完全失效。
+#
+# 任务描述预期：`expr?` = 提前 return；`a?.b` = null 短路返回 null。
+# 每个用例用 try/catch 包裹以独立观察，标注 EXPECT(任务描述) vs ACTUAL(实际运行)。
+
+# ============================================================
+# T79-01: bare expr? on function that throws (核心 bug 验证)
+# EXPECT(任务描述): 提前 return 传播错误
+# EXPECT(源码设计): v01 = 异常 payload "E1"（捕获为值）
+# ACTUAL: ? 被 parser 吞掉，异常逃逸 → catch
+# ============================================================
+fn throwStr() { throw "E1"; }
+try {
+    let v01 = throwStr()?;
+    print(fmt("T79-01: {0}", v01));
+} catch (e) {
+    print(fmt("T79-01 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-02: bare expr? on function returning normally
+# EXPECT: 42
+# ACTUAL: 42（? 被吞，但因无异常无法区分；retNum() 直接返回 42）
+# ============================================================
+fn retNum() { return 42; }
+try {
+    print(fmt("T79-02: {0}", retNum()?));
+} catch (e) {
+    print(fmt("T79-02 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-03: bare expr? in expression f()? + 1 (正常路径)
+# EXPECT: 42
+# ACTUAL: 42（? 被吞，等价 ret41() + 1）
+# ============================================================
+fn ret41() { return 41; }
+try {
+    print(fmt("T79-03: {0}", ret41()? + 1));
+} catch (e) {
+    print(fmt("T79-03 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-04: bare expr? in expression, f throws (核心：是否提前 return?)
+# EXPECT(任务描述): 提前 return，不执行 +1
+# EXPECT(源码设计): throwE4()? = "E4"，"E4"+1 → binAdd 类型错误 → 异常
+# ACTUAL: ? 被吞，throwE4() 异常直接逃逸 → catch "E4"
+# ============================================================
+fn throwE4() { throw "E4"; }
+try {
+    let r04 = throwE4()? + 1;
+    print(fmt("T79-04: {0}", r04));
+} catch (e) {
+    print(fmt("T79-04 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-05: bare expr? 链 f()? + g()? (都正常)
+# EXPECT: 30
+# ACTUAL: 30（? 被吞，等价 f10() + g20()）
+# ============================================================
+fn f10() { return 10; }
+fn g20() { return 20; }
+try {
+    print(fmt("T79-05: {0}", f10()? + g20()?));
+} catch (e) {
+    print(fmt("T79-05 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-06: bare expr? 与 try/catch 交互
+# EXPECT(任务描述): f()? 提前 return，外层 try 捕获传播错误
+# EXPECT(源码设计): f()? = "E6"，v6="E6"，打印 "v= E6"，外层 catch 不触发
+# ACTUAL: ? 被吞，throwE6() 异常逃逸 → 外层 catch 触发 "E6"
+# ============================================================
+fn throwE6() { throw "E6"; }
+try {
+    let v6 = throwE6()?;
+    print(fmt("T79-06: v= {0}", v6));
+} catch (e) {
+    print(fmt("T79-06 caught: {0}", e));
+}
+
+# ============================================================
+# T79-07: 顶层 bare expr?
+# EXPECT(任务描述): 传播错误导致程序退出，"after" 不打印
+# EXPECT(源码设计): 捕获，继续执行，打印 "after"
+# ACTUAL: ? 被吞，异常逃逸 → catch 触发，"after" 仍打印（因被本层 catch）
+# ============================================================
+fn throwE7() { throw "E7"; }
+try {
+    throwE7()?;
+    print("T79-07: no-throw-path");
+} catch (e) {
+    print(fmt("T79-07 caught: {0}", e));
+}
+print("T79-07: after");
+
+# ============================================================
+# T79-08: null?.foo (核心：null 是否短路?)
+# EXPECT(任务描述): null（短路）
+# EXPECT(源码设计): 访问 null.foo 抛异常，? 捕获 → "Cannot load attribute on NULL"
+# ACTUAL: ? 捕获 → "Cannot load attribute on NULL"（验证 ?. 工作，但非 null 短路）
+# ============================================================
+let n08 = null;
+try {
+    print(fmt("T79-08: {0}", n08?.foo));
+} catch (e) {
+    print(fmt("T79-08 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-09: obj?.foo (正常对象访问)
+# EXPECT: 42
+# ACTUAL: 42
+# ============================================================
+class Box09 { let val = 42; }
+let b09 = new Box09();
+try {
+    print(fmt("T79-09: {0}", b09?.val));
+} catch (e) {
+    print(fmt("T79-09 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-10: obj?.method() 可选方法调用
+# EXPECT: 7
+# ACTUAL: 7
+# ============================================================
+class Box10 { fn get(self) { return 7; } }
+let b10 = new Box10();
+try {
+    print(fmt("T79-10: {0}", b10?.get()));
+} catch (e) {
+    print(fmt("T79-10 ERR: {0}", e));
+}
+
+# ============================================================
+# T79-11: arr?[0] 可选索引（正常 + null）
+# EXPECT(任务描述): arr?[0]=1；null?[0]=null（短路）
+# EXPECT(源码设计): arr?[0]=1；null?[0] → 抛异常被 ? 捕获为错误信息
+# ACTUAL: 验证 ?[ 工作
+# ============================================================
+let arr11 = [1, 2, 3];
+try {
+    print(fmt("T79-11a: {0}", arr11?[0]));
+} catch (e) {
+    print(fmt("T79-11a ERR: {0}", e));
+}
+let n11 = null;
+try {
+    print(fmt("T79-11b: {0}", n11?[0]));
+} catch (e) {
+    print(fmt("T79-11b ERR: {0}", e));
+}
+
+# ============================================================
+# T79-12: a?.b?.c 链式 (null 短路?)
+# EXPECT(任务描述): null（链中任一为 null 即短路）
+# EXPECT(源码设计): o12?.inner?.v = ((o12.inner)?.v)?；o12.inner=null，
+#              访问 null.v 抛异常，? 捕获 → "Cannot load attribute on NULL"
+# ACTUAL: 验证链式 ?. 行为
+# ============================================================
+class Inner12 { let v = 99; }
+class Outer12 { let inner = null; }
+let o12 = new Outer12();
+try {
+    print(fmt("T79-12: {0}", o12?.inner?.v));
+} catch (e) {
+    print(fmt("T79-12 ERR: {0}", e));
+}

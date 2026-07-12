@@ -1,0 +1,242 @@
+# T67 - Classes & OOP advanced stress tests
+# Coverage: basics, inheritance, override, fields, static, self,
+# new expressions, bound methods, reflection, lambdas capturing self.
+#
+# NOTE: super.method() / super.init() cases (T4/T5/T6) are commented out
+# because of Bug #1: compiler.py defines a local `class SuperExpression`
+# (line 35) that SHADOWS the `h_ast.SuperExpression` imported via
+# `from h_ast import *`.  The parser produces h_ast.SuperExpression
+# instances, but Compiler.compile_expr's `isinstance(expr, SuperExpression)`
+# (line 1268) checks against the LOCAL class -> never matches ->
+# CompileError "Unsupported expression type: SuperExpression".
+# So ANY use of super.m() aborts compilation of the whole file.
+# See the blocked section at the bottom for the cases that would exercise
+# single-level super, the multi-level super chain runtime bug, and super.init().
+
+# ----------------------------------------------------------------------
+# T1 - Basic class: init, fields, methods, self
+# Expected: T1: 42 / T1: 47
+# ----------------------------------------------------------------------
+class Counter {
+    let n = 0;
+    fn init(start) { n = start; }
+    fn inc() { self.n = self.n + 1; }
+    fn get() { return self.n; }
+}
+let c1 = new Counter(42);
+print("T1: " + c1.get());
+c1.inc();
+c1.inc();
+c1.inc();
+c1.inc();
+c1.inc();
+print("T1: " + c1.get());
+
+# ----------------------------------------------------------------------
+# T2 - Multiple independent instances keep separate state
+# Expected: T2: 100 / T2: 999 / T2: 300
+# ----------------------------------------------------------------------
+class Box {
+    let v = 0;
+    fn init(x) { v = x; }
+    fn set(x) { v = x; }
+    fn get() { return v; }
+}
+let a = new Box(100);
+let b = new Box(200);
+let d = new Box(300);
+b.set(999);
+print("T2: " + a.get());
+print("T2: " + b.get());
+print("T2: " + d.get());
+
+# ----------------------------------------------------------------------
+# T3 - Empty class + fields-only class + no-arg new
+# Expected: T3: empty-ok / T3: 3 / T3: 10
+# ----------------------------------------------------------------------
+class Empty { }
+let e = new Empty();
+print("T3: empty-ok");
+
+class OnlyFields {
+    let a = 1;
+    let b = 2;
+}
+let of = new OnlyFields();
+print("T3: " + (of.a + of.b));
+of.a = 10;
+print("T3: " + of.a);
+
+# ----------------------------------------------------------------------
+# T7 - Static methods: via class vs via instance
+# Expected: T7: 42 (class) / T7: 42 (instance)
+# BUG SUSPECT (runtime): instance call to static method fails because
+#   statics live in HClass.staticMethods, not HClass.methods; callMethod
+#   on an HInstance never consults staticMethods.
+# ----------------------------------------------------------------------
+class Stat {
+    static fn v() { return 42; }
+}
+print("T7: " + Stat.v() + " (class)");
+let st = new Stat();
+try {
+    print("T7: " + st.v() + " (instance)");
+} catch (err) {
+    print("T7: instance-call failed: " + err);
+}
+
+# ----------------------------------------------------------------------
+# T8 - Reflection: ClassName.__name__ and obj.__class__.__name__
+# Expected: T8: Ref / T8: Ref
+# BUG SUSPECT (runtime): loadAttr() on HClass only handles
+#   __type_params__; __name__ raises "Attribute '__name__' not found on class".
+# ----------------------------------------------------------------------
+class Ref {
+    let z = 1;
+}
+try {
+    print("T8: " + Ref.__name__);
+} catch (err) {
+    print("T8: Ref.__name__ failed: " + err);
+}
+let r = new Ref();
+try {
+    print("T8: " + r.__class__.__name__);
+} catch (err) {
+    print("T8: r.__class__.__name__ failed: " + err);
+}
+
+# ----------------------------------------------------------------------
+# T9 - Bound method as value: let f = obj.method; f()
+# Expected: T9: 15
+# ----------------------------------------------------------------------
+class Calc {
+    let v = 0;
+    fn add(n) { v = v + n; return self; }
+    fn get() { return v; }
+}
+let calc = new Calc();
+let f = calc.add;
+f(5);
+f(10);
+print("T9: " + calc.get());
+
+# ----------------------------------------------------------------------
+# T10 - Method chaining via return self
+# Expected: T10: [a, b, c]
+# ----------------------------------------------------------------------
+class Builder {
+    let parts = [];
+    fn add(s) { push(parts, s); return self; }
+    fn build() { return parts; }
+}
+let bld = new Builder();
+let res = bld.add("a").add("b").add("c").build();
+print("T10: " + res);
+
+# ----------------------------------------------------------------------
+# T11 - Field captured by lambda inside method (via self)
+# Expected: T11: 100 / T11: 250
+# ----------------------------------------------------------------------
+class Holder {
+    let v = 100;
+    fn makeGetter() {
+        let g = fn() { return self.v; };
+        return g;
+    }
+}
+let h = new Holder();
+let g = h.makeGetter();
+print("T11: " + g());
+h.v = 250;
+print("T11: " + g());
+
+# ----------------------------------------------------------------------
+# T12 - Private field: access from method, enforcement from outside,
+#       nested new, calling another class's method.
+# Expected: T12: 42 / T12: private blocked / T12: 7 / T12: 30
+# ----------------------------------------------------------------------
+class Secret {
+    private let key = 0;
+    fn init(k) { key = k; }
+    fn reveal() { return key; }
+}
+class Wrapper {
+    let inner = 0;
+    fn init(v) { inner = v; }
+}
+let s = new Secret(42);
+print("T12: " + s.reveal());
+try {
+    print("T12: " + s.key);
+} catch (err) {
+    print("T12: private blocked");
+}
+let w = new Wrapper(new Secret(7));
+print("T12: " + w.inner.reveal());
+
+class Adder {
+    fn add(x, y) { return x + y; }
+}
+class Caller {
+    fn use(other, x, y) { return other.add(x, y); }
+}
+let ad = new Adder();
+let cl = new Caller();
+print("T12: " + cl.use(ad, 10, 20));
+
+print("T67-DONE");
+
+# ======================================================================
+# BLOCKED BY BUG #1 (compiler SuperExpression shadowing) — these cases
+# cannot be compiled.  Documented here for the record.
+# ======================================================================
+#
+# ---- T4 (BLOCKED): Single-level super.method() ----
+# Expected: T4: mid<base>
+# class Base { fn greet() { return "base"; } }
+# class Mid extends Base {
+#     fn greet() { return "mid<" + super.greet() + ">"; }
+# }
+# let m = new Mid();
+# print("T4: " + m.greet());
+#
+# ---- T5 (BLOCKED): Multi-level super chain (A -> B -> C) ----
+# Expected: T5: C<B<A>>
+# Latent RUNTIME bug (HVM.kt callSuper, lines 925-945): super resolution
+# restarts from inst.__class__.base every time, so B.who() -> super.who()
+# re-enters B.who() instead of ascending to A.who() -> infinite recursion.
+# let depth = [0];
+# class A { fn who() { return "A"; } }
+# class B extends A {
+#     fn who() {
+#         depth[0] = depth[0] + 1;
+#         if (depth[0] > 50) { throw "recursion-limit"; }
+#         return "B<" + super.who() + ">";
+#     }
+# }
+# class C extends B {
+#     fn who() { return "C<" + super.who() + ">"; }
+# }
+# try {
+#     let cc = new C();
+#     print("T5: " + cc.who());
+# } catch (err) {
+#     print("T5: caught " + err + " depth=" + depth[0]);
+# }
+#
+# ---- T6 (BLOCKED): super.init() in child constructor ----
+# Expected: T6: 10 / T6: 20 / T6: 10
+# class P {
+#     let x = 0;
+#     fn init(v) { x = v; }
+#     fn get() { return x; }
+# }
+# class Q extends P {
+#     let y = 0;
+#     fn init(a, b) { super.init(a); y = b; }
+# }
+# let q = new Q(10, 20);
+# print("T6: " + q.x);
+# print("T6: " + q.y);
+# print("T6: " + q.get());

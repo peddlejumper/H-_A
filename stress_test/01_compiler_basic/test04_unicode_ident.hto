@@ -1,0 +1,5 @@
+# test04: unicode identifiers
+let 中文 = 100;
+let café = 200;
+let résumé = 300;
+print(中文 + café + résumé);

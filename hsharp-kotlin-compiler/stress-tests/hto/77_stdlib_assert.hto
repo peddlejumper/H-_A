@@ -1,0 +1,592 @@
+# T77 - Standard library assert & test API
+# ─────────────────────────────────────────────────────────────────
+# Tests the assert_module.hto framework: 15 assert_* helpers plus
+# the test_register / test_run driver.  The module is a pure-H#
+# script (NOT a native bridge), so it is inlined below verbatim
+# from zzwui-tests/hto/_libs/assert_module.hto to keep this file
+# self-contained for the single-file compile_test.py pipeline.
+#
+# H# has no anonymous-function syntax, so every callback is a
+# top-level `fn` whose name is passed to __throws() / assert_raises.
+
+# ═══════════════════════════════════════════════════════════════
+# Inline assert_module.hto (verbatim, trimmed comments)
+# ═══════════════════════════════════════════════════════════════
+let __test_registry = [];
+let __test_pass = 0;
+let __test_fail = 0;
+let __test_failures = [];
+let __test_quiet = false;
+
+fn test_register(name, cb) {
+    push(__test_registry, [name, cb]);
+}
+
+fn __starts_with(s, prefix) {
+    if (len(prefix) > len(s)) { return false; }
+    let i = 0;
+    let ok = true;
+    while (i < len(prefix) and ok) {
+        if (s[i] != prefix[i]) { ok = false; }
+        i = i + 1;
+    }
+    return ok;
+}
+
+fn __contains_str(haystack, needle) {
+    let i = 0;
+    let n = len(haystack) - len(needle);
+    let found = false;
+    while (i <= n and not found) {
+        let m = true;
+        let j = 0;
+        while (j < len(needle) and m) {
+            if (haystack[i + j] != needle[j]) { m = false; }
+            j = j + 1;
+        }
+        if (m) { found = true; }
+        i = i + 1;
+    }
+    return found;
+}
+
+fn assert_true(cond, msg) {
+    if (not cond) {
+        if (msg == null) { throw "assert_true failed"; }
+        throw "assert_true failed: " + msg;
+    }
+}
+
+fn assert_false(cond, msg) {
+    if (cond) {
+        if (msg == null) { throw "assert_false failed"; }
+        throw "assert_false failed: " + msg;
+    }
+}
+
+fn assert_eq(a, b, msg) {
+    if (a != b) {
+        if (msg == null) {
+            throw "assert_eq failed: " + str(a) + " != " + str(b);
+        }
+        throw "assert_eq failed: " + msg
+              + " (got " + str(a) + " vs " + str(b) + ")";
+    }
+}
+
+fn assert_ne(a, b, msg) {
+    if (a == b) {
+        if (msg == null) {
+            throw "assert_ne failed: " + str(a) + " == " + str(b);
+        }
+        throw "assert_ne failed: " + msg;
+    }
+}
+
+fn assert_lt(a, b, msg) {
+    if (not (a < b)) {
+        if (msg == null) {
+            throw "assert_lt failed: " + str(a) + " >= " + str(b);
+        }
+        throw "assert_lt failed: " + msg;
+    }
+}
+
+fn assert_le(a, b, msg) {
+    if (not (a <= b)) {
+        if (msg == null) {
+            throw "assert_le failed: " + str(a) + " > " + str(b);
+        }
+        throw "assert_le failed: " + msg;
+    }
+}
+
+fn assert_gt(a, b, msg) {
+    if (not (a > b)) {
+        if (msg == null) {
+            throw "assert_gt failed: " + str(a) + " <= " + str(b);
+        }
+        throw "assert_gt failed: " + msg;
+    }
+}
+
+fn assert_ge(a, b, msg) {
+    if (not (a >= b)) {
+        if (msg == null) {
+            throw "assert_ge failed: " + str(a) + " < " + str(b);
+        }
+        throw "assert_ge failed: " + msg;
+    }
+}
+
+fn assert_in(needle, haystack, msg) {
+    let found = false;
+    let t = type(haystack);
+    if (t == "string") {
+        found = __contains_str(haystack, needle);
+    } else if (t == "list") {
+        let i = 0;
+        while (i < len(haystack) and not found) {
+            if (haystack[i] == needle) { found = true; }
+            i = i + 1;
+        }
+    } else if (t == "dict") {
+        let ks = keys(haystack);
+        let i = 0;
+        while (i < len(ks) and not found) {
+            if (ks[i] == needle) { found = true; }
+            i = i + 1;
+        }
+    } else {
+        throw "assert_in: unsupported haystack type " + t;
+    }
+    if (not found) {
+        if (msg == null) {
+            throw "assert_in failed: " + str(needle)
+                  + " not in " + str(haystack);
+        }
+        throw "assert_in failed: " + msg;
+    }
+}
+
+fn assert_raises(cb, msg) {
+    let captured = null;
+    let raised = false;
+    try {
+        cb();
+    } catch (e) {
+        raised = true;
+        captured = e;
+    }
+    if (not raised) {
+        if (msg == null) { throw "assert_raises failed: function did not throw"; }
+        throw "assert_raises failed: " + msg;
+    }
+    return captured;
+}
+
+fn assert_raises_with(cb, expected, msg) {
+    let payload = assert_raises(cb, msg);
+    let pstr = str(payload);
+    if (not __contains_str(pstr, expected)) {
+        if (msg == null) {
+            throw "assert_raises_with failed: payload \""
+                  + pstr + "\" does not contain \"" + expected + "\"";
+        }
+        throw "assert_raises_with failed: " + msg;
+    }
+    return payload;
+}
+
+fn assert_none(v, msg) {
+    if (v != null) {
+        if (msg == null) { throw "assert_none failed: got " + str(v); }
+        throw "assert_none failed: " + msg;
+    }
+}
+
+fn assert_some(v, msg) {
+    if (v == null) {
+        if (msg == null) { throw "assert_some failed: got null"; }
+        throw "assert_some failed: " + msg;
+    }
+}
+
+fn assert_almost_eq(a, b, eps, msg) {
+    if (eps == null) { eps = 0.000000001; }
+    let d = a - b;
+    if (d < 0) { d = 0 - d; }
+    if (d > eps) {
+        if (msg == null) {
+            throw "assert_almost_eq failed: |"
+                  + str(a) + " - " + str(b)
+                  + "| = " + str(d) + " > " + str(eps);
+        }
+        throw "assert_almost_eq failed: " + msg;
+    }
+}
+
+fn assert_approx(a, b, msg) {
+    assert_almost_eq(a, b, null, msg);
+}
+
+fn test_run(filter) {
+    let i = 0;
+    while (i < len(__test_registry)) {
+        let c = __test_registry[i];
+        let name = c[0];
+        let cb = c[1];
+        let should_run = true;
+        if (filter != null) { should_run = __starts_with(name, filter); }
+        if (should_run) {
+            let detail = "";
+            let ok = true;
+            try {
+                cb();
+            } catch (e) {
+                ok = false;
+                detail = str(e);
+            }
+            if (ok) {
+                __test_pass = __test_pass + 1;
+                if (not __test_quiet) { print("OK " + name); }
+            } else {
+                __test_fail = __test_fail + 1;
+                push(__test_failures, name);
+                print("FAIL " + name + " " + detail);
+            }
+        }
+        i = i + 1;
+    }
+    print("ASSERT_TEST : PASS=" + str(__test_pass)
+          + " FAIL=" + str(__test_fail));
+    return [__test_pass, __test_fail, __test_failures];
+}
+
+fn test_count(filter) {
+    if (filter == null) { return len(__test_registry); }
+    let n = 0;
+    let i = 0;
+    while (i < len(__test_registry)) {
+        if (__starts_with(__test_registry[i][0], filter)) { n = n + 1; }
+        i = i + 1;
+    }
+    return n;
+}
+
+fn test_reset_driver() {
+    __test_registry = [];
+    __test_pass = 0;
+    __test_fail = 0;
+    __test_failures = [];
+}
+
+# ═══════════════════════════════════════════════════════════════
+# Local check() framework to verify assert_* behaviour
+# NOTE: uses a LIST-based counter (not scalar reassignment) because
+# H# STORE_NAME writes to the current frame's local env, not globals.
+# Scalar reassignment inside a function does NOT persist to the
+# top-level scope (a function reads the global via lookup but writes
+# a local).  List-item mutation (SET_ITEM) does persist because the
+# list object is shared by reference.  This is the same pattern the
+# lib-tests use (__stats[0] = __stats[0] + 1).
+# ═══════════════════════════════════════════════════════════════
+let __t77_stats = [0, 0];   # [pass, fail]
+let __t77_failures = [];
+
+fn ok(name, cond) {
+    if (cond) {
+        __t77_stats[0] = __t77_stats[0] + 1;
+    } else {
+        __t77_stats[1] = __t77_stats[1] + 1;
+        push(__t77_failures, name);
+        print("  CHECK FAIL: " + name);
+    }
+}
+
+# __throws(f) -> [true, payload] or [false, null]
+fn __throws(f) {
+    let raised = false;
+    let payload = null;
+    try { f(); } catch (e) { raised = true; payload = e; }
+    return [raised, payload];
+}
+
+# ═══════════════════════════════════════════════════════════════
+# Callback helpers (top-level, since H# has no anon fns)
+# ═══════════════════════════════════════════════════════════════
+
+# ── eq passes ──
+fn h_eq_num()   { assert_eq(1, 1, null); }
+fn h_eq_str()   { assert_eq("hi", "hi", null); }
+fn h_eq_bool()  { assert_eq(true, true, null); }
+fn h_eq_null()  { assert_eq(null, null, null); }
+fn h_eq_list()  { assert_eq([1, 2, 3], [1, 2, 3], null); }
+fn h_eq_dict()  { assert_eq({"a": 1, "b": 2}, {"a": 1, "b": 2}, null); }
+
+# ── int vs float ──
+fn h_eq_int_float()  { assert_eq(1, 1.0, null); }
+fn h_eq_zero_float() { assert_eq(0, 0.0, null); }
+
+# ── type mismatch ──
+fn h_eq_true_one()   { assert_eq(true, 1, null); }
+fn h_eq_false_zero() { assert_eq(false, 0, null); }
+fn h_eq_num_str()    { assert_eq(1, "1", null); }
+
+# ── eq failure messages ──
+fn h_eq_fail_default() { assert_eq(1, 2, null); }
+fn h_eq_fail_custom()  { assert_eq(1, 2, "mismatch!"); }
+
+# ── ne ──
+fn h_ne_pass()    { assert_ne(1, 2, null); }
+fn h_ne_fail()    { assert_ne(5, 5, null); }
+fn h_ne_str_eq()  { assert_ne("a", "a", null); }
+
+# ── true / false ──
+fn h_true_ok()   { assert_true(1 < 2, null); }
+fn h_true_bad()  { assert_true(1 > 2, null); }
+fn h_false_ok()  { assert_false(1 > 2, null); }
+fn h_false_bad() { assert_false(1 < 2, null); }
+
+# ── comparisons (pass) ──
+fn h_lt_pass()    { assert_lt(1, 2, null); }
+fn h_le_eq()      { assert_le(2, 2, null); }
+fn h_gt_pass()    { assert_gt(3, 2, null); }
+fn h_ge_eq()      { assert_ge(3, 3, null); }
+# ── comparisons (fail) ──
+fn h_lt_equal_fail()  { assert_lt(2, 2, null); }
+fn h_gt_equal_fail()  { assert_gt(2, 2, null); }
+fn h_le_greater_fail() { assert_le(3, 2, null); }
+fn h_ge_less_fail()   { assert_ge(2, 3, null); }
+
+# ── assert_in (pass) ──
+fn h_in_list()   { assert_in(2, [1, 2, 3], null); }
+fn h_in_dict()   { assert_in("b", {"a": 1, "b": 2}, null); }
+fn h_in_str()    { assert_in("foo", "the foo bar", null); }
+# ── assert_in (fail) ──
+fn h_in_list_miss() { assert_in(99, [1, 2, 3], null); }
+fn h_in_dict_miss() { assert_in("z", {"a": 1}, null); }
+fn h_in_str_miss()  { assert_in("xyz", "abc", null); }
+# ── assert_in edge ──
+fn h_in_num_str()     { assert_in(1, "abc", null); }
+fn h_in_unsupported() { assert_in(1, 5, null); }
+
+# ── assert_raises ──
+fn h_raises_helper()  { throw "boom:bad-input"; }
+fn h_raises_nothrow() { return 42; }
+fn h_raises_wrap_nothrow() { assert_raises(h_raises_nothrow, null); }
+fn h_raises_with_nomatch() { assert_raises_with(h_raises_helper, "nope", null); }
+
+# ── assert_almost_eq ──
+fn h_aeq_tiny()   { assert_almost_eq(1.0, 1.0 + 0.0000000001, null, null); }
+fn h_aeq_float()  { assert_approx(0.1 + 0.2, 0.3, null); }
+fn h_aeq_custom() { assert_almost_eq(1.0, 1.5, 1.0, null); }
+fn h_aeq_far()    { assert_almost_eq(1.0, 2.0, 0.01, null); }
+fn h_aeq_int()    { assert_almost_eq(3, 3, null, null); }
+
+# ── assert_none / assert_some ──
+fn h_none_ok()       { assert_none(null, null); }
+fn h_some_0()        { assert_some(0, null); }
+fn h_some_false()    { assert_some(false, null); }
+fn h_none_nonnull()  { assert_none(0, null); }
+fn h_some_null()     { assert_some(null, null); }
+
+# ── test driver API ──
+fn h_drv_pass1() { assert_eq(1, 1, null); }
+fn h_drv_pass2() { assert_true(true, null); }
+fn h_drv_fail1() { assert_eq(1, 2, null); }
+fn h_drv_grp_pass() { assert_ne(1, 2, null); }
+
+# ═══════════════════════════════════════════════════════════════
+# Test cases
+# ═══════════════════════════════════════════════════════════════
+
+# ─── Test 1: assert_eq passes for all equal basic types ─────────
+fn t77_01_assert_eq_passes() {
+    ok("eq/number",  not __throws(h_eq_num)[0]);
+    ok("eq/string",  not __throws(h_eq_str)[0]);
+    ok("eq/bool",    not __throws(h_eq_bool)[0]);
+    ok("eq/null",    not __throws(h_eq_null)[0]);
+    ok("eq/list",    not __throws(h_eq_list)[0]);
+    ok("eq/dict",    not __throws(h_eq_dict)[0]);
+}
+
+# ─── Test 2: assert_eq(1, 1.0) — int vs float (both HNumber) ────
+fn t77_02_assert_eq_int_float() {
+    let r1 = __throws(h_eq_int_float);
+    ok("eq/1_vs_1.0_no_throw",   not r1[0]);
+    let r2 = __throws(h_eq_zero_float);
+    ok("eq/0_vs_0.0_no_throw",   not r2[0]);
+    ok("eq/raw_1_eq_1.0", 1 == 1.0);
+}
+
+# ─── Test 3: assert_eq(true, 1) — type mismatch must throw ──────
+fn t77_03_assert_eq_type_mismatch() {
+    let r1 = __throws(h_eq_true_one);
+    ok("eq/true_vs_1_throws",  r1[0]);
+    let r2 = __throws(h_eq_false_zero);
+    ok("eq/false_vs_0_throws", r2[0]);
+    let r3 = __throws(h_eq_num_str);
+    ok("eq/1_vs_str1_throws",  r3[0]);
+    ok("eq/raw_true_ne_1",  true != 1);
+    ok("eq/raw_false_ne_0", false != 0);
+}
+
+# ─── Test 4: assert_eq failure message format & custom msg ──────
+fn t77_04_assert_eq_message() {
+    let r1 = __throws(h_eq_fail_default);
+    ok("eq/fail_throws", r1[0]);
+    let p1 = str(r1[1]);
+    ok("eq/fail_default_has_values", __contains_str(p1, "1") and __contains_str(p1, "2"));
+    ok("eq/fail_default_has_prefix", __contains_str(p1, "assert_eq failed"));
+    let r2 = __throws(h_eq_fail_custom);
+    ok("eq/fail_custom_has_msg",     __contains_str(str(r2[1]), "mismatch!"));
+}
+
+# ─── Test 5: assert_ne pass and fail ────────────────────────────
+fn t77_05_assert_ne() {
+    ok("ne/unequal_no_throw", not __throws(h_ne_pass)[0]);
+    ok("ne/equal_throws",     __throws(h_ne_fail)[0]);
+    ok("ne/str_equal_throws", __throws(h_ne_str_eq)[0]);
+}
+
+# ─── Test 6: assert_true / assert_false ─────────────────────────
+fn t77_06_assert_true_false() {
+    ok("true/cond_true_no_throw",   not __throws(h_true_ok)[0]);
+    ok("true/cond_false_throws",    __throws(h_true_bad)[0]);
+    ok("false/cond_false_no_throw", not __throws(h_false_ok)[0]);
+    ok("false/cond_true_throws",    __throws(h_false_bad)[0]);
+}
+
+# ─── Test 7: assert_lt / le / gt / ge ───────────────────────────
+fn t77_07_assert_comparisons() {
+    ok("lt/pass_no_throw",   not __throws(h_lt_pass)[0]);
+    ok("le/eq_no_throw",     not __throws(h_le_eq)[0]);
+    ok("gt/pass_no_throw",   not __throws(h_gt_pass)[0]);
+    ok("ge/eq_no_throw",     not __throws(h_ge_eq)[0]);
+    ok("lt/equal_throws",    __throws(h_lt_equal_fail)[0]);
+    ok("gt/equal_throws",    __throws(h_gt_equal_fail)[0]);
+    ok("le/greater_throws",  __throws(h_le_greater_fail)[0]);
+    ok("ge/less_throws",     __throws(h_ge_less_fail)[0]);
+}
+
+# ─── Test 8: assert_in — list, dict, string (pass + fail) ───────
+fn t77_08_assert_in_pass() {
+    ok("in/list_member",     not __throws(h_in_list)[0]);
+    ok("in/dict_key",        not __throws(h_in_dict)[0]);
+    ok("in/string_substr",   not __throws(h_in_str)[0]);
+    ok("in/list_missing",    __throws(h_in_list_miss)[0]);
+    ok("in/dict_missing",    __throws(h_in_dict_miss)[0]);
+    ok("in/string_missing",  __throws(h_in_str_miss)[0]);
+}
+
+# ─── Test 9: assert_in edge cases — number needle in string ─────
+fn t77_09_assert_in_edge() {
+    # BUG PROBE: assert_in(1, "abc") calls __contains_str("abc", 1)
+    # which does len(needle) where needle is a number -> runtime error
+    # "len() not supported on number" instead of a clean assert_in failed.
+    let r = __throws(h_in_num_str);
+    ok("in/number_in_string_throws", r[0]);
+    let p = str(r[1]);
+    print("    [probe] number-in-string message: " + p);
+    ok("in/number_in_string_leaks_runtime_error", __contains_str(p, "len"));
+    # unsupported haystack type
+    let r2 = __throws(h_in_unsupported);
+    ok("in/unsupported_haystack_throws", r2[0]);
+    ok("in/unsupported_has_prefix", __contains_str(str(r2[1]), "assert_in"));
+}
+
+# ─── Test 10: assert_raises — returns payload, fails when no throw
+fn t77_10_assert_raises() {
+    let payload = assert_raises(h_raises_helper, null);
+    ok("raises/returns_payload",    payload != null);
+    ok("raises/payload_is_string",  __contains_str(str(payload), "boom"));
+    # assert_raises must itself throw when the callback does NOT throw
+    let r = __throws(h_raises_wrap_nothrow);
+    ok("raises/nothrow_fails", r[0]);
+    ok("raises/nothrow_msg",   __contains_str(str(r[1]), "did not throw"));
+    # assert_raises_with checks the payload string
+    let p2 = assert_raises_with(h_raises_helper, "bad-input", null);
+    ok("raises_with/matches",  __contains_str(str(p2), "bad-input"));
+    let r3 = __throws(h_raises_with_nomatch);
+    ok("raises_with/nomatch_throws", r3[0]);
+}
+
+# ─── Test 11: assert_almost_eq / assert_approx ──────────────────
+fn t77_11_assert_almost_eq() {
+    ok("aeq/tiny_diff_ok",       not __throws(h_aeq_tiny)[0]);
+    ok("aeq/float_rounding_ok",  not __throws(h_aeq_float)[0]);
+    ok("aeq/custom_eps_ok",      not __throws(h_aeq_custom)[0]);
+    ok("aeq/too_far_throws",     __throws(h_aeq_far)[0]);
+    ok("aeq/int_args_ok",        not __throws(h_aeq_int)[0]);
+}
+
+# ─── Test 12: assert_none / assert_some ─────────────────────────
+fn t77_12_assert_none_some() {
+    ok("none/null_no_throw",   not __throws(h_none_ok)[0]);
+    ok("some/0_no_throw",      not __throws(h_some_0)[0]);
+    ok("some/false_no_throw",  not __throws(h_some_false)[0]);
+    ok("none/nonnull_throws",  __throws(h_none_nonnull)[0]);
+    ok("some/null_throws",     __throws(h_some_null)[0]);
+}
+
+# ─── Test 13: test driver API — register / run / filter ─────────
+fn t77_13_test_driver_api() {
+    # NOTE: test_reset_driver() uses scalar reassignment so it does NOT
+    # actually reset the registry/counters (see Test 14).  But since no
+    # tests were registered before this point, the registry is empty.
+    test_register("drv/p1", h_drv_pass1);
+    test_register("drv/p2", h_drv_pass2);
+    test_register("drv/f1", h_drv_fail1);
+    test_register("grp/x1", h_drv_grp_pass);
+    ok("drv/count_all", test_count(null) == 4);
+    ok("drv/count_drv", test_count("drv/") == 3);
+    ok("drv/count_grp", test_count("grp/") == 1);
+    # run only "drv/" -> expect 2 pass, 1 fail
+    let res = test_run("drv/");
+    ok("drv/run_pass_2", res[0] == 2);
+    ok("drv/run_fail_1", res[1] == 1);
+    ok("drv/run_failure_recorded", len(res[2]) == 1);
+}
+
+# ─── Test 14: assert_module counter persistence bug ─────────────
+# BUG: test_run increments __test_pass / __test_fail via scalar
+# reassignment, which (per H# STORE_NAME semantics) writes to the
+# function's local env and does NOT persist.  test_summary() reads
+# the entry-frame globals, which are still 0.  So the documented
+# "read counters after the runner has been called externally"
+# contract is broken.
+fn h_drv_extra_pass() { assert_eq(7, 7, null); }
+
+fn t77_14_counter_persistence_bug() {
+    # test_reset_driver uses scalar reassignment -> does NOT reset.
+    # The registry still holds the 4 tests from test 13.
+    test_reset_driver();
+    let before = test_count(null);
+    print("    [probe] test_count after reset: " + str(before));
+    ok("persistence/reset_does_not_clear_registry", before > 0);
+
+    test_register("bug/extra", h_drv_extra_pass);
+    # Use a filter so only the bug/ test runs.
+    let res = test_run("bug/");
+    # res holds the in-function counts (correct: 1 pass, 0 fail)
+    ok("persistence/run_returns_correct", res[0] == 1 and res[1] == 0);
+    # The printed ASSERT_TEST line also shows the in-function count.
+    # But test_summary() re-reads the entry-frame globals, which were
+    # never updated (reassignment was local to test_run).  Expect 0.
+    let s = test_summary();
+    print("    [probe] test_summary after run: [" + str(s[0]) + ", " + str(s[1]) + ", ...]");
+    ok("persistence/summary_pass_stale", s[0] == 0);
+    ok("persistence/summary_fail_stale", s[1] == 0);
+}
+
+# minimal test_summary shim (the inlined module omitted it for brevity)
+fn test_summary() {
+    return [__test_pass, __test_fail, __test_failures];
+}
+
+# ═══════════════════════════════════════════════════════════════
+# Run all t77_* test functions
+# ═══════════════════════════════════════════════════════════════
+print("=== T77 stdlib assert & test API ===");
+t77_01_assert_eq_passes();
+t77_02_assert_eq_int_float();
+t77_03_assert_eq_type_mismatch();
+t77_04_assert_eq_message();
+t77_05_assert_ne();
+t77_06_assert_true_false();
+t77_07_assert_comparisons();
+t77_08_assert_in_pass();
+t77_09_assert_in_edge();
+t77_10_assert_raises();
+t77_11_assert_almost_eq();
+t77_12_assert_none_some();
+t77_13_test_driver_api();
+t77_14_counter_persistence_bug();
+
+print("T77 : PASS=" + str(__t77_stats[0]) + " FAIL=" + str(__t77_stats[1]));
+let __i = 0;
+while (__i < len(__t77_failures)) {
+    print("  - " + __t77_failures[__i]);
+    __i = __i + 1;
+}

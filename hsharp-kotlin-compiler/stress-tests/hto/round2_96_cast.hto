@@ -1,0 +1,256 @@
+# round2_96_cast.hto — 类型转换与强制 stress test
+# 测试智能体 #96。覆盖 task 列出的 20 个领域深边界。
+# 每个 probe 用 try/catch 包住，输出 r96_<name>:<result>，便于失败定位。
+# 注：bool/list/dict 非内建，用顶层 try/catch 测试（lambda 内未定义名异常不可捕获）。
+
+# ============================================================
+# 工具：安全执行包装（用于内建函数）
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# 1. int("123") 字符串转整数 — 正常路径
+# ============================================================
+safe("r96_int_str_123", fn() { return int("123"); });
+safe("r96_int_str_0", fn() { return int("0"); });
+safe("r96_int_str_neg", fn() { return int("-42"); });
+safe("r96_int_str_spaces", fn() { return int("  7  "); });
+safe("r96_int_str_empty", fn() { return int(""); });
+
+# ============================================================
+# 2. int("12.5") 字符串转浮点再转整数 — 应报错？实际截断
+# ============================================================
+safe("r96_int_str_float", fn() { return int("12.5"); });
+safe("r96_int_str_float_neg", fn() { return int("-3.9"); });
+safe("r96_int_str_sci", fn() { return int("1e3"); });
+
+# ============================================================
+# 3. int(12.7) 浮点转整数 — 截断 vs 四舍五入 vs floor
+# ============================================================
+safe("r96_int_float_127", fn() { return int(12.7); });
+safe("r96_int_float_neg127", fn() { return int(-12.7); });
+safe("r96_int_float_5", fn() { return int(5.0); });
+safe("r96_int_float_05", fn() { return int(0.5); });
+safe("r96_int_float_neg05", fn() { return int(-0.5); });
+
+# ============================================================
+# 4. int(true) / int(false) bool 转整数
+# ============================================================
+safe("r96_int_true", fn() { return int(true); });
+safe("r96_int_false", fn() { return int(false); });
+
+# ============================================================
+# 5. int(null) null 转整数 — 应报错？实际返回 0
+# ============================================================
+safe("r96_int_null", fn() { return int(null); });
+
+# ============================================================
+# 6. int("abc") 非数字字符串 — 应报错
+# ============================================================
+safe("r96_int_abc", fn() { return int("abc"); });
+safe("r96_int_str_hex", fn() { return int("0x1F"); });
+safe("r96_int_str_inf", fn() { return int("inf"); });
+
+# ============================================================
+# 7. int([1,2]) 列表转整数 — 应报错
+# ============================================================
+safe("r96_int_list", fn() { return int([1, 2]); });
+safe("r96_int_dict", fn() { return int({"a": 1}); });
+
+# ============================================================
+# 8. float("3.14") 字符串转浮点
+# ============================================================
+safe("r96_float_str_pi", fn() { return float("3.14"); });
+safe("r96_float_str_0", fn() { return float("0"); });
+safe("r96_float_str_neg", fn() { return float("-2.5"); });
+
+# ============================================================
+# 9. float(5) 整数转浮点
+# ============================================================
+safe("r96_float_int5", fn() { return float(5); });
+safe("r96_float_true", fn() { return float(true); });
+safe("r96_float_null", fn() { return float(null); });
+safe("r96_float_abc", fn() { return float("abc"); });
+
+# ============================================================
+# 10. str(123) 整数转字符串
+# ============================================================
+safe("r96_str_int", fn() { return str(123); });
+safe("r96_str_float", fn() { return str(3.14); });
+safe("r96_str_neg", fn() { return str(-7); });
+
+# ============================================================
+# 11. str([1,2,3]) 列表转字符串
+# ============================================================
+safe("r96_str_list", fn() { return str([1, 2, 3]); });
+safe("r96_str_nested", fn() { return str([1, [2, 3]]); });
+safe("r96_str_empty_list", fn() { return str([]); });
+
+# ============================================================
+# 12. str({"a":1}) 字典转字符串
+# ============================================================
+safe("r96_str_dict", fn() { return str({"a": 1}); });
+safe("r96_str_empty_dict", fn() { return str({}); });
+
+# ============================================================
+# 13. str(true) / str(null) bool/null 转字符串
+# ============================================================
+safe("r96_str_true", fn() { return str(true); });
+safe("r96_str_false", fn() { return str(false); });
+safe("r96_str_null", fn() { return str(null); });
+
+# ============================================================
+# 14. bool(...) 真值转换 — bool 非内建，用顶层 try/catch
+#     注：lambda 内未定义名异常不可捕获（bug #96-A）
+# ============================================================
+try { let x = bool(0); print("r96_bool_0:" + str(x)); } catch (e) { print("r96_bool_0:EXC[" + str(e) + "]"); }
+try { let x = bool(1); print("r96_bool_1:" + str(x)); } catch (e) { print("r96_bool_1:EXC[" + str(e) + "]"); }
+try { let x = bool(""); print("r96_bool_empty_str:" + str(x)); } catch (e) { print("r96_bool_empty_str:EXC[" + str(e) + "]"); }
+try { let x = bool("a"); print("r96_bool_str_a:" + str(x)); } catch (e) { print("r96_bool_str_a:EXC[" + str(e) + "]"); }
+try { let x = bool([]); print("r96_bool_empty_list:" + str(x)); } catch (e) { print("r96_bool_empty_list:EXC[" + str(e) + "]"); }
+try { let x = bool([1]); print("r96_bool_list1:" + str(x)); } catch (e) { print("r96_bool_list1:EXC[" + str(e) + "]"); }
+try { let x = bool(null); print("r96_bool_null:" + str(x)); } catch (e) { print("r96_bool_null:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 15. list(...) 转列表 — list 非内建
+# ============================================================
+try { let x = list("abc"); print("r96_list_str:" + str(x)); } catch (e) { print("r96_list_str:EXC[" + str(e) + "]"); }
+try { let x = list(123); print("r96_list_int:" + str(x)); } catch (e) { print("r96_list_int:EXC[" + str(e) + "]"); }
+try { let x = list([1, 2]); print("r96_list_list:" + str(x)); } catch (e) { print("r96_list_list:EXC[" + str(e) + "]"); }
+try { let x = list({"a": 1, "b": 2}); print("r96_list_dict:" + str(x)); } catch (e) { print("r96_list_dict:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 16. dict(...) 转换 — dict 非内建
+# ============================================================
+try { let x = dict([["a", 1]]); print("r96_dict_list:" + str(x)); } catch (e) { print("r96_dict_list:EXC[" + str(e) + "]"); }
+try { let x = dict("abc"); print("r96_dict_str:" + str(x)); } catch (e) { print("r96_dict_str:EXC[" + str(e) + "]"); }
+
+# ============================================================
+# 17. type(x) 类型名 — 注意与 is 操作符的命名一致性
+# ============================================================
+safe("r96_type_int", fn() { return type(1); });
+safe("r96_type_float", fn() { return type(3.14); });
+safe("r96_type_str", fn() { return type("a"); });
+safe("r96_type_list", fn() { return type([]); });
+safe("r96_type_dict", fn() { return type({}); });
+safe("r96_type_bool", fn() { return type(true); });
+safe("r96_type_null", fn() { return type(null); });
+safe("r96_type_fn", fn() { return type(fn() { return 1; }); });
+safe("r96_type_intval_float", fn() { return type(3.0); });
+
+# ============================================================
+# 18. 隐式转换: "x" + 1, 1 + true, 1 < "2"
+# ============================================================
+safe("r96_str_plus_int", fn() { return "x" + 1; });
+safe("r96_int_plus_str", fn() { return 1 + "x"; });
+safe("r96_int_plus_true", fn() { return 1 + true; });
+safe("r96_true_plus_true", fn() { return true + true; });
+safe("r96_str_plus_true", fn() { return "b=" + true; });
+safe("r96_str_plus_null", fn() { return "n=" + null; });
+safe("r96_str_plus_list", fn() { return "l=" + [1, 2]; });
+safe("r96_int_lt_str", fn() { return 1 < "2"; });
+safe("r96_str_lt_str_lex", fn() { return "2" < "10"; });
+safe("r96_int_eq_str", fn() { return 1 == "1"; });
+safe("r96_int_eq_true", fn() { return 1 == true; });
+safe("r96_null_eq_false", fn() { return null == false; });
+safe("r96_str_mul_int", fn() { return "ab" * 3; });
+safe("r96_int_mul_str", fn() { return 3 * "ab"; });
+
+# ============================================================
+# 19. int("0x1F") 十六进制 / float("1e5") 科学计数法
+# ============================================================
+safe("r96_int_hex", fn() { return int("0x1F"); });
+safe("r96_int_bin", fn() { return int("0b101"); });
+safe("r96_int_oct", fn() { return int("0o17"); });
+safe("r96_float_sci", fn() { return float("1e5"); });
+safe("r96_float_sci_neg", fn() { return float("1.5e-2"); });
+safe("r96_float_sci_cap", fn() { return float("1E3"); });
+safe("r96_int_sci", fn() { return int("1e3"); });
+
+# ============================================================
+# 20. 边界：大数 / 精度
+# ============================================================
+safe("r96_int_big", fn() { return int("9223372036854775807"); });
+safe("r96_int_overflow", fn() { return int("9223372036854775808"); });
+safe("r96_float_int_str", fn() { return float("123"); });
+safe("r96_str_float_val", fn() { return str(3.0); });
+safe("r96_str_big_float", fn() { return str(0.1 + 0.2); });
+
+# ============================================================
+# 21. type() vs is 的一致性探测
+#    type(1) 返回 "number"，但 match 用 is int — 命名不一致
+# ============================================================
+fn type_vs_is(x) {
+    let t = type(x);
+    return match t {
+        "number" => "num",
+        "string" => "str",
+        _ => "other:" + t
+    };
+}
+safe("r96_type_vs_is_int", fn() { return type_vs_is(1); });
+safe("r96_type_vs_is_str", fn() { return type_vs_is("hi"); });
+
+fn match_type_name(x) {
+    return match x {
+        is int => "is-int",
+        is str => "is-str",
+        is bool => "is-bool",
+        _ => "other"
+    };
+}
+safe("r96_is_int", fn() { return match_type_name(1); });
+safe("r96_is_str", fn() { return match_type_name("hi"); });
+safe("r96_is_bool", fn() { return match_type_name(true); });
+
+# ============================================================
+# 22. 链式转换
+# ============================================================
+safe("r96_chain_int_str_int", fn() { return int(str(int(42))); });
+safe("r96_chain_float_int_float", fn() { return float(int(3.99)); });
+safe("r96_chain_str_float_int", fn() { return int(float("3.99")); });
+safe("r96_chain_bool_int", fn() { return int(true) + int(false); });
+
+# ============================================================
+# 23. toDisplayString 对 float 的整数表示
+# ============================================================
+safe("r96_str_3p0", fn() { return str(3.0); });
+safe("r96_str_3p14", fn() { return str(3.14); });
+safe("r96_str_3p00", fn() { return str(3.00); });
+
+# ============================================================
+# 24. 隐式转换 in 条件/逻辑
+# ============================================================
+safe("r96_if_str", fn() { if ("x") { return "truthy"; } return "falsy"; });
+safe("r96_if_empty_str", fn() { if ("") { return "truthy"; } return "falsy"; });
+safe("r96_if_0", fn() { if (0) { return "truthy"; } return "falsy"; });
+safe("r96_if_null", fn() { if (null) { return "truthy"; } return "falsy"; });
+safe("r96_if_empty_list", fn() { if ([]) { return "truthy"; } return "falsy"; });
+
+# ============================================================
+# 25. 异常传播验证：lambda 内未定义名 vs 顶层未定义名
+# ============================================================
+# 顶层 try/catch 捕获未定义名
+try { let x = undefined_func(); print("r96_top_undef:ok:" + str(x)); } catch (e) { print("r96_top_undef:EXC[" + str(e) + "]"); }
+
+# lambda 内 try/catch 捕获内建抛出的异常（应成功）
+safe("r96_lambda_builtin_exc", fn() { return int("notnum"); });
+
+# lambda 内未定义名 — 预期崩溃（bug #96-A），放最后
+print("r96_about_to_test_lambda_undef...");
+try {
+    let r = (fn() { return undef_x; })();
+    print("r96_lambda_undef:ok:" + str(r));
+} catch (e) {
+    print("r96_lambda_undef:EXC[" + str(e) + "]");
+}
+print("r96_lambda_undef_done");
+
+print("=== r96 done ===");

@@ -1,0 +1,20 @@
+# D3: destructuring inside a function body
+fn first_two(xs) {
+    let [a, b] = xs;
+    return [a, b];
+}
+print(first_two([42, 99]));
+
+# Closure capture of destructured names
+fn make_adder() {
+    let [a, b] = [3, 4];
+    return fn() { return a + b; };
+}
+print(make_adder()());
+
+# Nested function with destructure
+fn sum_pair(xs) {
+    let [head, second] = xs;
+    return head + second;
+}
+print(sum_pair([10, 20, 30]));

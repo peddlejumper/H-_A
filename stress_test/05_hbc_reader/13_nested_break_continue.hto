@@ -1,0 +1,28 @@
+# 13 - 嵌套 for + break/continue
+# 目的: 内层 break 只跳出内层；外层 continue 跳过当次外层
+# 内层 break 用 backpatch 跳到内层 for_end；外层 continue 用 JUMP 跳到外层 for_start
+let found = "none";
+let outer_iters = 0;
+for x in [1, 2, 3] {
+    outer_iters = outer_iters + 1;
+    for y in [10, 20, 30] {
+        if (x == 2 and y == 20) { found = "x=2,y=20"; break; }
+    }
+}
+print("found=" + found);
+print("expected_found=x=2,y=20");
+print("outer_iters=" + str(outer_iters));
+print("expected_outer_iters=3");
+
+# continue 在外层
+let skipsum = 0;
+let oc = 0;
+for x in range(6) {
+    oc = oc + 1;
+    if (x == 3) { continue; }
+    skipsum = skipsum + x;
+}
+print("skipsum=" + str(skipsum));
+print("expected_skipsum=12");
+print("oc=" + str(oc));
+print("expected_oc=6");

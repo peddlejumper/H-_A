@@ -1,0 +1,9 @@
+# test19: chained calls
+class Builder {
+    let val;
+    fn init() { val = ""; }
+    fn add(s) { val = val + s; return this; }
+    fn get() { return val; }
+}
+let b = new Builder();
+print(b.add("a").add("b").add("c").get());

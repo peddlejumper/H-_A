@@ -1,0 +1,74 @@
+print("=== Parser Debug ===");
+
+let src = "fn outer() { fn inner() { return 1; } return inner(); }";
+let tokens = tokenize(src);
+print("token count: " + str(len(tokens)));
+
+print("token[0]: type=" + str(tokens[0]["type"]));
+print("token[1]: type=" + str(tokens[1]["type"]) + " val=" + str(tokens[1]["value"]));
+print("token[2]: type=" + str(tokens[2]["type"]));
+print("token[3]: type=" + str(tokens[3]["type"]));
+print("token[4]: type=" + str(tokens[4]["type"]));
+print("token[5]: type=" + str(tokens[5]["type"]) + " val=" + str(tokens[5]["value"]));
+
+let ast = parse(tokens);
+print("ast root: " + ast[0]);
+
+let stmts = ast[1];
+print("stmts len: " + str(len(stmts)));
+
+let outer = stmts[0];
+print("outer type: " + outer[0]);
+print("outer name: " + outer[1]);
+print("outer params: " + str(outer[2]));
+print("outer params len: " + str(len(outer[2])));
+
+let body = outer[3];
+print("outer body type: " + body[0]);
+let body_stmts = body[1];
+print("outer body stmts len: " + str(len(body_stmts)));
+
+let i = 0;
+while (i < len(body_stmts)) {
+    let s = body_stmts[i];
+    print("  stmt[" + str(i) + "]: " + s[0]);
+    if (s[0] == "Function") {
+        print("    name: " + s[1]);
+        print("    params: " + str(s[2]));
+        let ibody = s[3];
+        print("    ibody: " + ibody[0] + " len=" + str(len(ibody)));
+        let ibody_stmts = ibody[1];
+        print("    ibody_stmts len: " + str(len(ibody_stmts)));
+        let j = 0;
+        while (j < len(ibody_stmts)) {
+            print("      inner_stmt[" + str(j) + "]: " + ibody_stmts[j][0]);
+            j = j + 1;
+        }
+    }
+    if (s[0] == "ReturnStatement") {
+        let expr = s[1];
+        print("    return expr: " + expr[0]);
+    }
+    i = i + 1;
+}
+
+print("DONE");
+
+print("=== Compiler Test ===");
+let src2 = "print(42);";
+let tokens2 = tokenize(src2);
+print("tokens: " + str(len(tokens2)));
+
+let ast2 = parse(tokens2);
+print("ast type: " + ast2[0]);
+
+let code = compile(ast2);
+print("compiled instructions: " + str(len(code["instructions"])));
+print("compiled consts: " + str(len(code["consts"])));
+print("first instruction: " + code["instructions"][0][0]);
+
+print("=== Interpreter Test ===");
+let result = execute(code["instructions"], code["consts"]);
+print("execution: " + str(result));
+
+print("COMPILER SELF-HOST OK");

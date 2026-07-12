@@ -1,0 +1,274 @@
+# ============================================================
+# Round 4 / Agent #124 — 可选链 (optional chaining `?.`) 深度测试
+# H# v0.4.1
+#
+# 目标：系统性测试 H# 的 `?.` 语法。
+#
+# ===== 关键语义发现（来自源码 parser.py / HVM.kt） =====
+# H# 的 `a?.b` 实际解析为 PropagateExpression(a.b)，即 `(a.b)?`，
+# 这是"错误传播"语义，而非 JS/Kotlin 的"null 安全"语义：
+#   - 若 a.b 正常求值，结果 = a.b 的值
+#   - 若 a.b 抛出运行时错误，`?` 捕获并把"异常负载(错误消息字符串)"
+#     作为表达式的结果返回。
+#
+# ★ 关键限制：`?` 只保护"紧随其后的单个后缀操作"。
+#   `a?.b.c` 解析为 `(a?.b).c`：若 a 为 null，a?.b 返回错误字符串，
+#   随后 .c 在字符串上抛错(未被 ? 保护) → 逃逸崩溃。
+#   `a?.m()` 解析为 `(a?.m)()`：null?.m 返回错误字符串，
+#   随后 () 调用该字符串抛错 → 逃逸崩溃。
+#
+# 支持的三种形式 (parser.py L1304)：`?.` `?[` `?(`
+#   注意：`?[` 是无点的，`?.[` 是 PARSE 错误。
+#
+# 注意：因 round3_119 发现的 inline-lambda 异常逃逸 bug，
+# 所有可能抛错的用例均使用内联 try/catch，不通过 lambda 传参。
+#
+# 已知约束：函数级作用域 / HNumber 存 Double
+# ============================================================
+
+print("===== R4-124 START =====");
+
+# ============================================================
+# S1: 基本字段访问  (单层 ?. 不会逃逸)
+# ============================================================
+print("== S1 basic field access ==");
+let obj1 = {"a": 1, "b": null};
+print("S1.1 obj?.a         => " + str(obj1?.a));        # 预期: 1
+print("S1.2 obj?.b         => " + str(obj1?.b));        # 预期: null
+print("S1.3 obj?.missing   => " + str(obj1?.missing));  # 预期: 错误字符串
+print("S1.4 null?.a        => " + str(null?.a));        # 预期: 错误字符串
+print("S1.5 null?.missing  => " + str(null?.missing));  # 预期: 错误字符串
+
+# ============================================================
+# S2: 方法调用  (注意：null?.m() 会逃逸崩溃)
+# ============================================================
+print("== S2 method call ==");
+class C2 {
+    fn m() { return 42; }
+    fn greet() { return "hi"; }
+}
+let c2 = new C2();
+print("S2.1 c?.m()         => " + str(c2?.m()));        # 预期: 42
+# S2.2: null?.m() = (null?.m)() → null.m 抛错→propagate→errStr → errStr() 再抛错 → 逃逸
+let s2r2 = "no-throw";
+try { s2r2 = str(null?.m()); } catch (e) { s2r2 = "EXC:[" + str(e) + "]"; }
+print("S2.2 null?.m()      => " + s2r2);
+print("S2.3 c?.greet()     => " + str(c2?.greet()));    # 预期: hi
+# S2.4: 对象非 null 但方法不存在 → c?.nope() = (c?.nope)() → 逃逸
+class C2b { let x = 1; }
+let c2b = new C2b();
+let s2r4 = "no-throw";
+try { s2r4 = str(c2b?.nope()); } catch (e) { s2r4 = "EXC:[" + str(e) + "]"; }
+print("S2.4 c?.nope()      => " + s2r4);
+# S2.5: 单独成员访问 (不调用) — 应被 ? 保护返回 errStr
+print("S2.5 c?.nope (nocall) => " + str(c2b?.nope));
+
+# ============================================================
+# S3: 链式可选  obj?.a?.b?.c
+# ============================================================
+print("== S3 chained optional ==");
+print("S3.1 {a:{b:{c:5}}}?.a?.b?.c => " + str({"a":{"b":{"c":5}}}?.a?.b?.c));  # 预期: 5
+# S3.2: null?.a?.b?.c — 每层都保护，错误字符串层层传播，不崩溃
+print("S3.2 null?.a?.b?.c          => " + str(null?.a?.b?.c));
+# S3.3: 中间为 null
+let s3obj = {"a": null};
+print("S3.3 {a:null}?.a?.b?.c      => " + str(s3obj?.a?.b?.c));
+# S3.4: 部分链非可选 — {a:{b:1}}?.a.b = (obj?.a).b — obj?.a 正常，然后 .b
+print("S3.4 {a:{b:1}}?.a.b         => " + str({"a":{"b":1}}?.a.b));
+# S3.5: null?.a.b — (null?.a).b → errStr.b 抛错(无保护) → 逃逸
+let s3r5 = "no-throw";
+try { s3r5 = str(null?.a.b); } catch (e) { s3r5 = "EXC:[" + str(e) + "]"; }
+print("S3.5 null?.a.b              => " + s3r5);
+# S3.6: 链中最后一层缺失 — {a:{b:1}}?.a?.b?.c → 1.c 抛错→propagate→errStr (有保护)
+let s3b = {"a": {"b": 1}};
+print("S3.6 {a:{b:1}}?.a?.b?.c     => " + str(s3b?.a?.b?.c));
+
+# ============================================================
+# S4: 对 null 使用
+# ============================================================
+print("== S4 on null ==");
+print("S4.1 null?.field        => " + str(null?.field));   # 错误字符串
+let s4r2 = "no-throw";
+try { s4r2 = str(null?.method()); } catch (e) { s4r2 = "EXC:[" + str(e) + "]"; }
+print("S4.2 null?.method()     => " + s4r2);
+let s4r = null?.field;
+print("S4.3 type(null?.field)  => " + type(s4r));
+print("S4.4 null?.field==null? " + str(s4r == null));
+print("S4.5 null?.field is str? " + str(type(s4r) == "string"));
+
+# ============================================================
+# S5: 字典可选下标  dict?["key"]   (无点形式)
+# ============================================================
+print("== S5 dict optional subscript ==");
+let d5 = {"k": 10, "empty": null};
+print("S5.1 d?['k']            => " + str(d5?["k"]));        # 预期: 10
+print("S5.2 d?['empty']        => " + str(d5?["empty"]));    # 预期: null
+print("S5.3 d?['missing']      => " + str(d5?["missing"]));  # 错误字符串
+print("S5.4 null?['k']         => " + str(null?["k"]));      # 错误字符串
+print("S5.5 {}?['x']           => " + str({}?["x"]));        # 错误字符串
+
+# ============================================================
+# S6: 列表可选索引  list?[0]
+# ============================================================
+print("== S6 list optional index ==");
+let l6 = [100, 200, 300];
+print("S6.1 l?[0]              => " + str(l6?[0]));          # 预期: 100
+print("S6.2 l?[2]              => " + str(l6?[2]));          # 预期: 300
+print("S6.3 l?[10]             => " + str(l6?[10]));         # 错误字符串 (越界)
+print("S6.4 null?[0]           => " + str(null?[0]));        # 错误字符串
+print("S6.5 []?[0]             => " + str([]?[0]));          # 错误字符串 (空列表越界)
+
+# ============================================================
+# S7: 混合访问 — 部分可选部分必须
+# ============================================================
+print("== S7 mixed optional and required ==");
+let s7a = {"b": {"c": 7}};
+print("S7.1 {b:{c:7}}?.b.c    => " + str(s7a?.b.c));   # 预期: 7
+# S7.2: null?.b.c — (null?.b).c → errStr.c 抛错(无保护) → 逃逸
+let s7r2 = "no-throw";
+try { s7r2 = str(null?.b.c); } catch (e) { s7r2 = "EXC:[" + str(e) + "]"; }
+print("S7.2 null?.b.c         => " + s7r2);
+# S7.3: a.b?.c — 前缀 a.b 必须成功，然后 ?.c 保护
+let s7b = {"b": {"c": 9}};
+print("S7.3 {b:{c:9}}.b?.c    => " + str(s7b.b?.c));   # 预期: 9
+# S7.4: a.b?.c 其中 a.b 为 null — null?.c → 错误字符串 (单层保护)
+let s7c = {"b": null};
+print("S7.4 {b:null}.b?.c     => " + str(s7c.b?.c));
+# S7.5: 嵌套 list + dict
+let s7d = [{"v": 1}, {"v": 2}, null];
+print("S7.5 s7d[0]?.v         => " + str(s7d[0]?.v));  # 预期: 1
+# S7.6: s7d[2]?.v — s7d[2] 为 null → null?.v → 错误字符串 (单层保护)
+print("S7.6 s7d[2]?.v         => " + str(s7d[2]?.v));
+# S7.7: s7d[2]?.v() — null?.v 返回 errStr → errStr() 抛错(无保护) → 逃逸
+let s7r7 = "no-throw";
+try { s7r7 = str(s7d[2]?.v()); } catch (e) { s7r7 = "EXC:[" + str(e) + "]"; }
+print("S7.7 s7d[2]?.v()       => " + s7r7);
+
+# ============================================================
+# S8: 函数返回值
+# ============================================================
+print("== S8 function return ==");
+fn getNull() { return null; }
+fn getObj() { return {"v": 88}; }
+fn getMissing() { return {"v": 1}; }
+print("S8.1 getObj()?.v       => " + str(getObj()?.v));       # 预期: 88
+# S8.2: getNull()?.v — 单层保护 → 错误字符串
+print("S8.2 getNull()?.v      => " + str(getNull()?.v));
+# S8.3: getMissing()?.x — 属性不存在 → 错误字符串 (单层保护)
+print("S8.3 getMissing()?.x   => " + str(getMissing()?.x));
+fn getDeep() { return {"a": {"b": {"c": "deep"}}}; }
+print("S8.4 getDeep()?.a?.b?.c => " + str(getDeep()?.a?.b?.c));  # 预期: deep
+# S8.5: getObj()?.v() — (getObj()?.v)() → getObj().v 是字段值88, 88() 调用抛错 → 逃逸
+let s8r5 = "no-throw";
+try { s8r5 = str(getObj()?.v()); } catch (e) { s8r5 = "EXC:[" + str(e) + "]"; }
+print("S8.5 getObj()?.v()     => " + s8r5);
+
+# ============================================================
+# S9: 在赋值中  obj?.field = 10
+# 注意：`s9obj?.a = 10` 是 PARSE 错误 (PropagateExpression 不是合法 lvalue)，
+# 会让整个文件编译失败，故移到 _probe124_optchain_assign.hto 单独测试。
+# ============================================================
+print("== S9 assignment with ?. (see probe for direct assign) ==");
+let s9obj = {"a": 1};
+let s9v = s9obj?.a;
+print("S9.1 let v = obj?.a    => " + str(s9v));   # 预期: 1
+s9obj.a = 20;
+print("S9.2 obj.a = 20        => " + str(s9obj.a));  # 预期: 20
+let s9n = null;
+let s9r = s9n?.a;
+print("S9.3 let r = null?.a   => " + str(s9r) + " (type=" + type(s9r) + ")");
+
+# ============================================================
+# S10: 与普通访问对比
+# ============================================================
+print("== S10 optional vs required access ==");
+let s10obj = {"a": 1};
+print("S10.1 obj.a (non-null) => " + str(s10obj.a));   # 预期: 1
+print("S10.2 obj?.a (non-null)=> " + str(s10obj?.a));  # 预期: 1
+# 对 null 普通访问 — 抛错
+let s10r3 = "no-throw";
+try {
+    let n = null;
+    s10r3 = str(n.a);
+} catch (e) {
+    s10r3 = "EXC:[" + str(e) + "]";
+}
+print("S10.3 null.a (required)=> " + s10r3);            # 预期: EXC:[...]
+# 对 null 可选访问 — 返回错误字符串 (不抛)
+print("S10.4 null?.a (option) => " + str(null?.a));
+let s10r5 = "no-throw";
+try {
+    let n = null;
+    s10r5 = str(n?.a);
+} catch (e) {
+    s10r5 = "EXC:[" + str(e) + "]";
+}
+print("S10.5 null?.a in try   => " + s10r5);            # 预期: 错误字符串 (不抛)
+
+# ============================================================
+# SX: 边界情况
+# ============================================================
+print("== SX edge cases ==");
+# SX.1: 双重 ? 后缀  (null?.a)?  — null?.a 返回 errStr, 然后 errStr? (无错) → errStr
+let sxr1 = "no-throw";
+try {
+    let v = null?.a;
+    sxr1 = "v=" + str(v) + " v?=" + str(v?);
+} catch (e) {
+    sxr1 = "EXC:[" + str(e) + "]";
+}
+print("SX.1 (null?.a)?        => " + sxr1);
+# SX.2: 数字字面量后 ?. — (42)?.x → 42.x 抛错→propagate→errStr (单层保护)
+print("SX.2 (42)?.x           => " + str((42)?.x));
+# SX.3: 字符串后 ?. — "hello"?.length → 字符串无 length 属性 → errStr
+print("SX.3 'hello'?.length   => " + str("hello"?.length));
+# SX.4: 可选调用 a?(args) — f?(99)
+fn id42() { return 42; }
+let sxr4 = "no-throw";
+try {
+    let f = id42;
+    sxr4 = str(f?(99));
+} catch (e) {
+    sxr4 = "EXC:[" + str(e) + "]";
+}
+print("SX.4 f?(99) (callable) => " + sxr4);
+# SX.5: 对 null 可选调用 — null?(99) → (null)() 调用 null 抛错 → propagate → errStr
+let sxr5 = "no-throw";
+try {
+    let nf = null;
+    sxr5 = str(nf?(99));
+} catch (e) {
+    sxr5 = "EXC:[" + str(e) + "]";
+}
+print("SX.5 null?(99)         => " + sxr5);
+# SX.6: 链式可选调用方法 — o?.v()?.n
+let sxr6 = "no-throw";
+class SX6 { fn v() { return {"n": 6}; } }
+try {
+    let o = new SX6();
+    sxr6 = str(o?.v()?.n);
+} catch (e) {
+    sxr6 = "EXC:[" + str(e) + "]";
+}
+print("SX.6 o?.v()?.n         => " + sxr6);
+# SX.7: 在 print 参数中直接使用
+print("SX.7 print(null?.x)    => " + str(null?.x));
+# SX.8: 在 if 条件中使用 — null?.x 返回 errStr (truthy)
+let sxr8 = "no-throw";
+try {
+    if (null?.x) { sxr8 = "truthy"; } else { sxr8 = "falsy"; }
+} catch (e) {
+    sxr8 = "EXC:[" + str(e) + "]";
+}
+print("SX.8 if(null?.x)       => " + sxr8);
+# SX.9: null?.x 的真值 — 错误字符串是 truthy (用 if/else, 因 H# 三元用 ?: 非 ?)
+let sxr9 = "no-throw";
+try {
+    let s9v = null?.x;
+    if (s9v) { sxr9 = "truthy"; } else { sxr9 = "falsy"; }
+} catch (e) {
+    sxr9 = "EXC:[" + str(e) + "]";
+}
+print("SX.9 null?.x truthy?   => " + sxr9);
+
+print("===== R4-124 DONE =====");

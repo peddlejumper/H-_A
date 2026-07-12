@@ -1,0 +1,32 @@
+[
+  {
+    "code": "P001",
+    "title": "两数之和",
+    "description": "给定一个整数数组 nums 和一个目标值 target，在该数组中找出和为目标值的两个整数，返回它们的索引。",
+    "difficulty": "Easy",
+    "timeLimitMs": 1000,
+    "memoryLimitKb": 65536,
+    "template": "fn two_sum(nums, target) {\n  # 在此编写你的代码\n  return [];\n}",
+    "tags": ["数组", "哈希表"]
+  },
+  {
+    "code": "P002",
+    "title": "反转链表",
+    "description": "反转一个单链表。",
+    "difficulty": "Medium",
+    "timeLimitMs": 1000,
+    "memoryLimitKb": 65536,
+    "template": "fn reverse_list(head) {\n  # 在此编写你的代码\n  return nullptr;\n}",
+    "tags": ["链表", "递归"]
+  },
+  {
+    "code": "P003",
+    "title": "二叉树的中序遍历",
+    "description": "给定一个二叉树的根节点 root，返回它的中序遍历。",
+    "difficulty": "Medium",
+    "timeLimitMs": 1000,
+    "memoryLimitKb": 65536,
+    "template": "fn inorder_traversal(root) {\n  # 在此编写你的代码\n  return [];\n}",
+    "tags": ["树", "DFS"]
+  }
+]

@@ -99,12 +99,47 @@ class Parser:
             self.eat(TokenType.LET)
         else:
             self.eat(TokenType.AUTO)
+        # Destructuring: `let [a, b, c] = expr;`
+        if self.current_token[0] == TokenType.LBRACKET:
+            return self._destructure_let()
         var_name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
         self.eat(TokenType.EQ)
         value = self.expression()
         self.eat(TokenType.SEMI)
         return LetStatement(var_name, value)
+
+    def _destructure_let(self):
+        """Parse the `[a, b, _, c] = expr;` part of a destructuring let.
+
+        The leading `let`/`auto` keyword has already been consumed; the
+        next token is `[`.  `_` is treated as a skip placeholder (None
+        in the names list)."""
+        from h_ast import DestructureLet
+        self.eat(TokenType.LBRACKET)
+        names = []
+        # Empty `let [] = ...` is meaningless but parse it anyway.
+        if self.current_token[0] != TokenType.RBRACKET:
+            names.append(self._destructure_slot())
+            while self.current_token[0] == TokenType.COMMA:
+                self.eat(TokenType.COMMA)
+                names.append(self._destructure_slot())
+        self.eat(TokenType.RBRACKET)
+        self.eat(TokenType.EQ)
+        value = self.expression()
+        self.eat(TokenType.SEMI)
+        return DestructureLet(names, value)
+
+    def _destructure_slot(self):
+        """One slot in a destructuring pattern.  `_` is a skip
+        placeholder (returns None); any other identifier returns its
+        name as a string."""
+        if self.current_token[1] == '_':
+            self.eat(TokenType.IDENTIFIER)
+            return None
+        name = self.current_token[1]
+        self.eat(TokenType.IDENTIFIER)
+        return name
 
     def print_statement(self):
         self.eat(TokenType.PRINT)
@@ -132,19 +167,52 @@ class Parser:
         self.eat(TokenType.IDENTIFIER)
         self.eat(TokenType.LPAREN)
         params = []
+        defaults = []
+        self._variadic_param = None
         if self.current_token[0] != TokenType.RPAREN:
-            params.append(self.current_token[1])
-            self.eat(TokenType.IDENTIFIER)
+            self._parse_param(params, defaults)
             while self.current_token[0] == TokenType.COMMA:
                 self.eat(TokenType.COMMA)
-                params.append(self.current_token[1])
-                self.eat(TokenType.IDENTIFIER)
+                self._parse_param(params, defaults)
         self.eat(TokenType.RPAREN)
         body = self.block()
-        fn = Function(func_name, params, body)
+        fn = Function(func_name, params, body, defaults=defaults,
+                      is_variadic=(self._variadic_param is not None))
         if is_coro:
             fn.is_coro = True
         return fn
+
+    def _parse_param(self, params, defaults):
+        """Parse one function parameter, optionally with `= default`.
+        Enforces the Python rule: no non-default param may follow a
+        param with a default.  A leading `...` marks the parameter as
+        variadic — it must be the last parameter and cannot have a
+        default."""
+        is_variadic = False
+        if self.current_token[0] == TokenType.ELLIPSIS:
+            self.eat(TokenType.ELLIPSIS)
+            is_variadic = True
+        name = self.current_token[1]
+        self.eat(TokenType.IDENTIFIER)
+        params.append(name)
+        if is_variadic:
+            if self._variadic_param is not None:
+                raise SyntaxError("only one variadic parameter is allowed")
+            self._variadic_param = name
+            if self.current_token[0] == TokenType.EQ:
+                raise SyntaxError(
+                    f"variadic parameter '{name}' cannot have a default value")
+            return
+        if self._variadic_param is not None:
+            raise SyntaxError(
+                f"parameter '{name}' cannot follow variadic parameter '{self._variadic_param}'")
+        if self.current_token[0] == TokenType.EQ:
+            self.eat(TokenType.EQ)
+            defaults.append(self.expression())
+        else:
+            if defaults:
+                raise SyntaxError(
+                    f"non-default argument '{name}' follows default argument")
 
     def module_declaration(self):
         self.eat(TokenType.MODULE)
@@ -700,19 +768,23 @@ class Parser:
         token = self.current_token
         if token[0] == TokenType.FN:
             # lambda expression: fn(params) { body }
+            # Reuse _parse_param so lambdas support `= default` and
+            # `...variadic` just like named function declarations.
             self.eat(TokenType.FN)
             self.eat(TokenType.LPAREN)
             params = []
+            defaults = []
+            self._variadic_param = None
             if self.current_token[0] != TokenType.RPAREN:
-                params.append(self.current_token[1])
-                self.eat(TokenType.IDENTIFIER)
+                self._parse_param(params, defaults)
                 while self.current_token[0] == TokenType.COMMA:
                     self.eat(TokenType.COMMA)
-                    params.append(self.current_token[1])
-                    self.eat(TokenType.IDENTIFIER)
+                    self._parse_param(params, defaults)
             self.eat(TokenType.RPAREN)
             body = self.block()
-            return Lambda(params, body)
+            return Lambda(params, body,
+                          defaults=defaults,
+                          is_variadic=(self._variadic_param is not None))
         if token[0] == TokenType.NULL:
             self.eat(TokenType.NULL)
             return NullLiteral()

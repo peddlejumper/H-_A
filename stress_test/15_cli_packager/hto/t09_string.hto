@@ -1,0 +1,6 @@
+# t09_string.hto - string operations
+let s = "Hello";
+let t = "World";
+print(s);
+print(len(s));
+print(str(42));

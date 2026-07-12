@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>H# 指南 — 从零开始读懂 H#</title>
+  <meta name="description" content="H# 官方指南：安装、语法、字节码、并发、标准库、ZZW Code 实战 —— 一切关于自举语言你需要知道的事。" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header" id="header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="H# home">
+        <span class="brand-mark">H<span class="sharp">#</span></span>
+        <span class="brand-tag"><span>v0.4</span></span>
+      </a>
+      <nav class="nav" aria-label="primary">
+        <a class="nav-item" href="index.html#features">特性 <span class="caret">▾</span></a>
+        <a class="nav-item" href="index.html#zzw">ZZW Code</a>
+        <a class="nav-item" href="pricing.html">定价</a>
+        <a class="nav-item" href="download.html">下载</a>
+        <a class="nav-item nav-item-beta" href="beta.html">Beta <span class="nav-beta-tag">v0.5</span></a>
+        <a class="nav-item" href="index.html#playground">Playground</a>
+        <a class="nav-item" href="index.html#architecture">架构 <span class="caret">▾</span></a>
+        <a class="nav-item" href="guide.html" aria-current="page">指南</a>
+        <a class="nav-item" href="index.html#privacy">隐私</a>
+      </nav>
+      <div class="header-right">
+        <a class="uiverse-btn" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">
+          <span>GitHub</span>
+          <span>查看仓库 ↗</span>
+        </a>
+        <a class="uiverse-btn uiverse-btn-brand" href="download.html">
+          <span>下载 H#</span>
+          <span>立即下载 ↓</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="guide-main">
+    <!-- Guide hero -->
+    <section class="guide-hero">
+      <div class="container">
+        <div class="guide-hero-inner">
+          <div class="guide-eyebrow fade-up">
+            <span class="zzw-eyebrow-dot"></span>
+            <span>official guide · v0.4</span>
+          </div>
+          <h1 class="guide-title fade-up">
+            H# 指南，<br />
+            <span class="accent">把语言本身读懂</span>
+          </h1>
+          <p class="guide-sub fade-up">
+            从「安装 H#」到「写一个能跑在自举编译器上的小解释器」 —— 一份围绕「自举」「透明」「可读性」三个关键词展开的官方指南。
+          </p>
+
+          <div class="guide-meta fade-up">
+            <div class="guide-meta-item">
+              <span class="guide-meta-num">12</span>
+              <span class="guide-meta-label">章节</span>
+            </div>
+            <div class="guide-meta-item">
+              <span class="guide-meta-num">~45</span>
+              <span class="guide-meta-label">分钟阅读</span>
+            </div>
+            <div class="guide-meta-item">
+              <span class="guide-meta-num">8000</span>
+              <span class="guide-meta-label">行解释器源码</span>
+            </div>
+            <div class="guide-meta-item">
+              <span class="guide-meta-num">42</span>
+              <span class="guide-meta-label">条字节码指令</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Guide body: TOC + content -->
+    <section class="guide-body">
+      <div class="container guide-grid">
+        <!-- Sidebar TOC -->
+        <aside class="guide-toc" aria-label="目录">
+          <div class="guide-toc-sticky">
+            <div class="guide-toc-head">
+              <span class="guide-toc-label">ON THIS PAGE</span>
+              <span class="guide-toc-progress" aria-hidden="true">
+                <span class="guide-toc-progress-bar" data-guide-progress></span>
+              </span>
+            </div>
+            <ol class="guide-toc-list">
+              <li><a href="#ch-01" data-toc-link>01 · 安装与环境</a></li>
+              <li><a href="#ch-02" data-toc-link>02 · 第一个 H# 程序</a></li>
+              <li><a href="#ch-03" data-toc-link>03 · 变量与类型</a></li>
+              <li><a href="#ch-04" data-toc-link>04 · 控制流</a></li>
+              <li><a href="#ch-05" data-toc-link>05 · 函数与闭包</a></li>
+              <li><a href="#ch-06" data-toc-link>06 · 结构体与枚举</a></li>
+              <li><a href="#ch-07" data-toc-link>07 · 错误处理</a></li>
+              <li><a href="#ch-08" data-toc-link>08 · 并发：DZZW 原语</a></li>
+              <li><a href="#ch-09" data-toc-link>09 · 字节码与虚拟机</a></li>
+              <li><a href="#ch-10" data-toc-link>10 · 自举：H# 写 H#</a></li>
+              <li><a href="#ch-11" data-toc-link>11 · ZZW Code 实战</a></li>
+              <li><a href="#ch-12" data-toc-link>12 · 标准库与生态</a></li>
+            </ol>
+
+            <div class="guide-toc-foot">
+              <a class="btn btn-secondary btn-sm" href="https://github.com/peddlejumper/HSharp/blob/main/docs/HSharp-Guide.md" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm0 7V3.5L19.5 9H14z"/>
+                </svg>
+                阅读 Markdown 版
+              </a>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Content -->
+        <article class="guide-content">
+
+          <!-- CH 01 -->
+          <section class="guide-ch" id="ch-01">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">01</span>
+              <h2>安装与环境</h2>
+            </div>
+            <p class="fade-up">H# 的工具链以「单二进制 + 解释器 + 编译器」三件套形式分发。在 macOS / Linux / Windows 上都能直接运行 —— 不需要任何运行时依赖。</p>
+
+            <div class="guide-callout fade-up">
+              <div class="guide-callout-icon">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+                </svg>
+              </div>
+              <div>
+                <strong>系统要求：</strong>macOS 12+ / Ubuntu 20.04+ / Windows 10+ · 仅需 50 MB 磁盘。
+              </div>
+            </div>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">bash — install</span>
+                <span class="guide-code-tag">.sh</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-com"># macOS · Homebrew</span>
+brew install hsharp/tap/hsharp
+
+<span class="tok-com"># Linux · one-line installer</span>
+curl -fsSL https://hsharp.dev/install.sh | sh
+
+<span class="tok-com"># Windows · winget</span>
+winget install hsharp</code></pre>
+            </div>
+
+            <p class="fade-up">安装完成后，<code class="inline-code">h# --version</code> 会打印 <code class="inline-code">h# 0.4.2 (self-hosting)</code>。其中 <strong>self-hosting</strong> 表示这个二进制本身就是用 H# 编译出来的 —— 它编译自身，没有任何外部编译器参与。</p>
+          </section>
+
+          <!-- CH 02 -->
+          <section class="guide-ch" id="ch-02">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">02</span>
+              <h2>第一个 H# 程序</h2>
+            </div>
+            <p class="fade-up">新建一个 <code class="inline-code">hello.hto</code> 文件，写下你第一段 H# 代码：</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">hello.hto</span>
+                <span class="guide-code-tag">.hto</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-com">// H# 的入口是 main 函数</span>
+<span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+  <span class="tok-kw">let</span> name = <span class="tok-str">"H#"</span>
+  <span class="tok-fn">print</span>(<span class="tok-str">"Hello, "</span> + name + <span class="tok-str">"!"</span>)
+}</code></pre>
+            </div>
+
+            <p class="fade-up">两种运行方式：</p>
+
+            <ul class="guide-list fade-up">
+              <li><strong>解释执行</strong>：<code class="inline-code">h# hello.hto</code> —— 最快反馈，适合开发。</li>
+              <li><strong>编译执行</strong>：<code class="inline-code">h# build hello.hto → ./hello</code> —— 生成原生字节码，启动更快。</li>
+            </ul>
+
+            <div class="guide-callout guide-callout-tip fade-up">
+              <div class="guide-callout-icon">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2z"/>
+                </svg>
+              </div>
+              <div>
+                <strong>小贴士：</strong>所有 <code class="inline-code">.hto</code> 文件用 <code class="inline-code">h# run</code> 直接运行；想看 AST 加 <code class="inline-code">--ast</code>，想看字节码加 <code class="inline-code">--bc</code>。
+              </div>
+            </div>
+          </section>
+
+          <!-- CH 03 -->
+          <section class="guide-ch" id="ch-03">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">03</span>
+              <h2>变量与类型</h2>
+            </div>
+            <p class="fade-up">H# 是一门静态推断语言 —— 多数时候你不需要显式标注类型。变量用 <code class="inline-code">let</code> 声明，常量用 <code class="inline-code">const</code>。</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">types.hto</span>
+                <span class="guide-code-tag">.hto</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+  <span class="tok-kw">let</span> n: <span class="tok-ty">int</span> = <span class="tok-num">42</span>
+  <span class="tok-kw">let</span> pi: <span class="tok-ty">float</span> = <span class="tok-num">3.14</span>
+  <span class="tok-kw">let</span> msg: <span class="tok-ty">str</span> = <span class="tok-str">"hello"</span>
+  <span class="tok-kw">let</span> ok: <span class="tok-ty">bool</span> = <span class="tok-kw">true</span>
+  <span class="tok-kw">let</span> arr: [<span class="tok-ty">int</span>] = [<span class="tok-num">1</span>, <span class="tok-num">2</span>, <span class="tok-num">3</span>]
+  <span class="tok-kw">let</span> pair: (<span class="tok-ty">str</span>, <span class="tok-ty">int</span>) = (<span class="tok-str">"age"</span>, <span class="tok-num">18</span>)
+
+  <span class="tok-kw">const</span> MAX = <span class="tok-num">1000</span>
+}</code></pre>
+            </div>
+
+            <div class="guide-table fade-up">
+              <div class="guide-table-row guide-table-head">
+                <span>类型</span><span>示例</span><span>说明</span>
+              </div>
+              <div class="guide-table-row"><span><code class="inline-code">int</code></span><span><code class="inline-code">42</code></span><span>64 位有符号整数</span></div>
+              <div class="guide-table-row"><span><code class="inline-code">float</code></span><span><code class="inline-code">3.14</code></span><span>64 位 IEEE-754</span></div>
+              <div class="guide-table-row"><span><code class="inline-code">str</code></span><span><code class="inline-code">"hi"</code></span><span>不可变 UTF-8 字符串</span></div>
+              <div class="guide-table-row"><span><code class="inline-code">bool</code></span><span><code class="inline-code">true</code></span><span>布尔</span></div>
+              <div class="guide-table-row"><span><code class="inline-code">T?</code></span><span><code class="inline-code">None</code></span><span>Option 类型</span></div>
+              <div class="guide-table-row"><span><code class="inline-code">[T]</code></span><span><code class="inline-code">[1, 2]</code></span><span>动态数组</span></div>
+              <div class="guide-table-row"><span><code class="inline-code">map[K]V</code></span><span><code class="inline-code">{}</code></span><span>哈希表</span></div>
+            </div>
+          </section>
+
+          <!-- CH 04 -->
+          <section class="guide-ch" id="ch-04">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">04</span>
+              <h2>控制流</h2>
+            </div>
+            <p class="fade-up">H# 的控制流和 C 系语言非常接近 —— 但用 <code class="inline-code">match</code> 替代 switch，用 <code class="inline-code">?</code> 替代 try/catch 的繁琐。</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">flow.hto</span>
+                <span class="guide-code-tag">.hto</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-kw">fn</span> <span class="tok-fn">classify</span>(n: <span class="tok-ty">int</span>) -&gt; <span class="tok-ty">str</span> {
+  <span class="tok-kw">match</span> n {
+    <span class="tok-num">0</span>             =&gt; <span class="tok-kw">return</span> <span class="tok-str">"zero"</span>
+    <span class="tok-kw">in</span> <span class="tok-num">1</span>..<span class="tok-num">9</span>      =&gt; <span class="tok-kw">return</span> <span class="tok-str">"small"</span>
+    <span class="tok-kw">in</span> <span class="tok-num">10</span>..<span class="tok-num">99</span>    =&gt; <span class="tok-kw">return</span> <span class="tok-str">"medium"</span>
+    _              =&gt; <span class="tok-kw">return</span> <span class="tok-str">"huge"</span>
+  }
+}
+
+<span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+  <span class="tok-kw">for</span> i <span class="tok-kw">in</span> <span class="tok-num">0</span>..<span class="tok-num">3</span> {
+    <span class="tok-kw">if</span> i == <span class="tok-num">1</span> { <span class="tok-kw">continue</span> }
+    <span class="tok-fn">print</span>(<span class="tok-fn">classify</span>(i))
+  }
+}</code></pre>
+            </div>
+          </section>
+
+          <!-- CH 05 -->
+          <section class="guide-ch" id="ch-05">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">05</span>
+              <h2>函数与闭包</h2>
+            </div>
+            <p class="fade-up">H# 的函数是一等公民 —— 可以作为参数传递，可以赋值给变量，可以从函数中返回。闭包自动捕获外层变量。</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">fn.hto</span>
+                <span class="guide-code-tag">.hto</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-kw">fn</span> <span class="tok-fn">make_adder</span>(step: <span class="tok-ty">int</span>) {
+  <span class="tok-kw">return</span> <span class="tok-kw">fn</span>(n) { n + step }
+}
+
+<span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+  <span class="tok-kw">let</span> add10 = <span class="tok-fn">make_adder</span>(<span class="tok-num">10</span>)
+  <span class="tok-fn">print</span>(<span class="tok-fn">add10</span>(<span class="tok-num">5</span>))   <span class="tok-com">// 15</span>
+
+  <span class="tok-kw">let</span> nums = [<span class="tok-num">1</span>, <span class="tok-num">2</span>, <span class="tok-num">3</span>, <span class="tok-num">4</span>]
+  <span class="tok-kw">let</span> doubled = nums.<span class="tok-fn">map</span>(<span class="tok-kw">fn</span>(x) { x * <span class="tok-num">2</span> })
+  <span class="tok-fn">print</span>(doubled)          <span class="tok-com">// [2, 4, 6, 8]</span>
+}</code></pre>
+            </div>
+          </section>
+
+          <!-- CH 06 -->
+          <section class="guide-ch" id="ch-06">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">06</span>
+              <h2>结构体与枚举</h2>
+            </div>
+            <p class="fade-up">H# 没有「类」，但 <code class="inline-code">struct</code> + <code class="inline-code">impl</code> + <code class="inline-code">enum</code> 三件套足以表达绝大多数领域模型。</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">model.hto</span>
+                <span class="guide-code-tag">.hto</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-kw">struct</span> <span class="tok-ty">User</span> {
+  name: <span class="tok-ty">str</span>
+  age:  <span class="tok-ty">int</span>
+}
+
+<span class="tok-kw">enum</span> <span class="tok-ty">Event</span> {
+  <span class="tok-ty">Click</span>(x: <span class="tok-ty">int</span>, y: <span class="tok-ty">int</span>)
+  <span class="tok-ty">Key</span>(code: <span class="tok-ty">str</span>)
+  <span class="tok-ty">Quit</span>
+}
+
+<span class="tok-kw">impl</span> <span class="tok-ty">User</span> {
+  <span class="tok-kw">fn</span> <span class="tok-fn">greet</span>(self) {
+    <span class="tok-fn">print</span>(<span class="tok-str">"hi, "</span> + self.name)
+  }
+}</code></pre>
+            </div>
+          </section>
+
+          <!-- CH 07 -->
+          <section class="guide-ch" id="ch-07">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">07</span>
+              <h2>错误处理</h2>
+            </div>
+            <p class="fade-up">H# 用 <code class="inline-code">Result&lt;T, E&gt;</code> 替代异常 —— 错误是值，不是控制流。<code class="inline-code">?</code> 操作符让链式调用保持可读。</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">errors.hto</span>
+                <span class="guide-code-tag">.hto</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-kw">fn</span> <span class="tok-fn">read_config</span>(path: <span class="tok-ty">str</span>) -&gt; <span class="tok-ty">Result</span>&lt;<span class="tok-ty">str</span>, <span class="tok-ty">str</span>&gt; {
+  <span class="tok-kw">let</span> raw = <span class="tok-fn">fs</span>.<span class="tok-fn">read</span>(path)?
+  <span class="tok-kw">return</span> <span class="tok-ty">Ok</span>(raw.<span class="tok-fn">trim</span>())
+}
+
+<span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+  <span class="tok-kw">match</span> <span class="tok-fn">read_config</span>(<span class="tok-str">"h.toml"</span>) {
+    <span class="tok-ty">Ok</span>(c)  =&gt; <span class="tok-fn">print</span>(c)
+    <span class="tok-ty">Err</span>(e) =&gt; <span class="tok-fn">print</span>(<span class="tok-str">"oops: "</span> + e)
+  }
+}</code></pre>
+            </div>
+          </section>
+
+          <!-- CH 08 -->
+          <section class="guide-ch" id="ch-08">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">08</span>
+              <h2>并发：DZZW 原语</h2>
+            </div>
+            <p class="fade-up">H# 的并发模型叫 DZZW —— 灵感来自 Go 的 channel 和 Erlang 的 actor，但用 <code class="inline-code">spawn</code> + <code class="inline-code">chan</code> 两个关键字就够。</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">dzzw.hto</span>
+                <span class="guide-code-tag">.hto</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-kw">fn</span> <span class="tok-fn">producer</span>(out: <span class="tok-ty">chan</span>&lt;<span class="tok-ty">int</span>&gt;) {
+  <span class="tok-kw">for</span> i <span class="tok-kw">in</span> <span class="tok-num">0</span>..<span class="tok-num">5</span> { out.<span class="tok-fn">send</span>(i) }
+  out.<span class="tok-fn">close</span>()
+}
+
+<span class="tok-kw">fn</span> <span class="tok-fn">main</span>() {
+  <span class="tok-kw">let</span> ch = <span class="tok-fn">chan</span>&lt;<span class="tok-ty">int</span>&gt;(<span class="tok-num">2</span>)
+  <span class="tok-fn">spawn</span>(<span class="tok-fn">producer</span>, ch)
+  <span class="tok-kw">for</span> v <span class="tok-kw">in</span> ch { <span class="tok-fn">print</span>(v) }
+}</code></pre>
+            </div>
+
+            <div class="guide-callout guide-callout-warn fade-up">
+              <div class="guide-callout-icon">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>
+                </svg>
+              </div>
+              <div>
+                <strong>注意：</strong>DZZW 调度器使用 M:N 协程模型，单进程可承载数十万并发任务；但发送阻塞在容量有限的 <code class="inline-code">chan</code> 上时不会自动扩容。
+              </div>
+            </div>
+          </section>
+
+          <!-- CH 09 -->
+          <section class="guide-ch" id="ch-09">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">09</span>
+              <h2>字节码与虚拟机</h2>
+            </div>
+            <p class="fade-up">每一个 <code class="inline-code">.hto</code> 文件都会被编译成一组 <strong>42 条字节码指令</strong> 之一，序列化成 <code class="inline-code">.hbc</code> 文件后由 stack-VM 解释执行。</p>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span class="guide-code-dot-active"></span><span></span></span>
+                <span class="guide-code-title">compiled.hbc — disassembly</span>
+                <span class="guide-code-tag">.hbc</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-num">0000</span>  <span class="tok-fn">PUSH_I64</span>     <span class="tok-str">42</span>
+<span class="tok-num">0002</span>  <span class="tok-fn">STORE</span>        n@0
+<span class="tok-num">0004</span>  <span class="tok-fn">PUSH_STR</span>     <span class="tok-str">"hello"</span>
+<span class="tok-num">0006</span>  <span class="tok-fn">STORE</span>        msg@1
+<span class="tok-num">0008</span>  <span class="tok-fn">LOAD</span>         n@0
+<span class="tok-num">000a</span>  <span class="tok-fn">PRINT</span>
+<span class="tok-num">000b</span>  <span class="tok-fn">HALT</span></code></pre>
+            </div>
+
+            <p class="fade-up">想看完整指令集，运行 <code class="inline-code">h# opcodes</code>。每条指令都用一个 8-bit 操作码 + 最多两个 64-bit 操作数编码 —— 整个字节码可序列化，可跨进程加载。</p>
+          </section>
+
+          <!-- CH 10 -->
+          <section class="guide-ch" id="ch-10">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">10</span>
+              <h2>自举：H# 写 H#</h2>
+            </div>
+            <p class="fade-up">v0.4 起，H# 解释器本体（~8000 行）已经用 H# 自身重写并自举。这意味着：</p>
+
+            <ul class="guide-list fade-up">
+              <li><strong>stage0</strong>：用 H# 写的 H# 编译器，编译出 stage1 二进制；</li>
+              <li><strong>stage1</strong>：用 stage1 重新编译自身，产出 stage2；</li>
+              <li><strong>stage2</strong>：再次自举，验证 stage1 == stage2 比特完全一致 —— 编译器「站住了」。</li>
+            </ul>
+
+            <div class="guide-code-block fade-up">
+              <div class="guide-code-bar">
+                <span class="guide-code-dots"><span></span><span></span><span></span></span>
+                <span class="guide-code-title">build — bootstrap</span>
+                <span class="guide-code-tag">.sh</span>
+              </div>
+              <pre class="guide-code-body mono"><code><span class="tok-com"># Reproducible bootstrap from source</span>
+h# build --stage=0 compiler/main.hto  -o h0
+h# build --stage=1 h0 compiler/main.hto -o h1
+h# build --stage=2 h1 compiler/main.hto -o h2
+diff h1 h2   <span class="tok-com"># must be empty</span></code></pre>
+            </div>
+          </section>
+
+          <!-- CH 11 -->
+          <section class="guide-ch" id="ch-11">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">11</span>
+              <h2>ZZW Code 实战</h2>
+            </div>
+            <p class="fade-up">ZZW Code 是 H# 的官方 IDE —— 把上面所有内容变成「在编辑器里直接和 AI 协作」的工作流。</p>
+
+            <ol class="guide-steps fade-up">
+              <li><strong>安装</strong>：从 <a class="guide-link" href="download.html">下载页</a> 拉一份 ZZW Code，安装时附带 H# 工具链。</li>
+              <li><strong>配置 API Key</strong>：<code class="inline-code">⌘ ,</code> → Providers → 填入 Endpoint / Key / Model。OpenAI 兼容即可。</li>
+              <li><strong>打开项目</strong>：<code class="inline-code">⌘ O</code> → 选 <code class="inline-code">.hto</code> 文件。ZZW Code 会自动注入 H# 知识到系统提示词。</li>
+              <li><strong>让 AI 干活</strong>：在 AI 聊天面板输入 <code class="inline-code">"解释 parser.hto"</code> → ZZW AI 读取当前文件 → 返回可一键应用的补丁。</li>
+              <li><strong>SOLO 模式</strong>：<code class="inline-code">⌘ ⇧ S</code> 把目标交给 Agent —— 拆任务、跑测试、改 bug 一气呵成。</li>
+            </ol>
+          </section>
+
+          <!-- CH 12 -->
+          <section class="guide-ch" id="ch-12">
+            <div class="guide-ch-head fade-up">
+              <span class="guide-ch-num">12</span>
+              <h2>标准库与生态</h2>
+            </div>
+            <p class="fade-up">H# 的标准库按「问题域」拆分，每个模块都是一个独立发布的 crate：</p>
+
+            <div class="guide-table fade-up">
+              <div class="guide-table-row guide-table-head">
+                <span>模块</span><span>用途</span><span>导入</span>
+              </div>
+              <div class="guide-table-row"><span>std.io</span><span>文件 / 网络 IO</span><span><code class="inline-code">import std.io</code></span></div>
+              <div class="guide-table-row"><span>std.fs</span><span>路径 / 目录</span><span><code class="inline-code">import std.fs</code></span></div>
+              <div class="guide-table-row"><span>std.json</span><span>JSON 编解码</span><span><code class="inline-code">import std.json</code></span></div>
+              <div class="guide-table-row"><span>std.crypto</span><span>散列 / 签名</span><span><code class="inline-code">import std.crypto</code></span></div>
+              <div class="guide-table-row"><span>HwdUI</span><span>桌面 UI 框架</span><span><code class="inline-code">import hwd.ui</code></span></div>
+              <div class="guide-table-row"><span>DZZW</span><span>并发原语</span><span><code class="inline-code">import dzzw</code></span></div>
+            </div>
+
+            <div class="guide-callout fade-up">
+              <div class="guide-callout-icon">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <div>
+                <strong>下一步：</strong>读到这里，你应该已经有能力在浏览器里 <a class="guide-link" href="index.html#playground">直接尝试</a> 上面所有例子，或打开 ZZW Code 写自己的项目。
+              </div>
+            </div>
+          </section>
+
+          <!-- Foot CTA -->
+          <div class="guide-foot fade-up">
+            <h3>指南读完了？</h3>
+            <p>把 H# 装到本机，跑通上面每一个例子 —— 这是最快理解「自举」的方式。</p>
+            <div class="guide-foot-actions">
+              <a class="btn btn-brand btn-md" href="index.html#download">
+                下载 H#
+              </a>
+              <a class="btn btn-secondary btn-md" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">在 GitHub 上查看</a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <span class="brand-mark">H<span class="sharp">#</span></span>
+            <span class="brand-tag"><span>v0.4</span></span>
+          </div>
+          <p>A self-hosting language<br/>for the curious mind.</p>
+        </div>
+        <div class="footer-col">
+          <h5>产品</h5>
+          <a href="index.html#features">H# 特性</a>
+          <a href="index.html#zzw">ZZW Code</a>
+          <a href="pricing.html">订阅计划</a>
+          <a href="download.html">下载</a>
+          <a href="guide.html">官方指南</a>
+        </div>
+        <div class="footer-col">
+          <h5>资源</h5>
+          <a href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/peddlejumper/HSharp/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
+          <a href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer-col">
+          <h5>联系</h5>
+          <a href="mailto:hi@hsharp.dev">hi@hsharp.dev</a>
+          <a href="https://github.com/peddlejumper" target="_blank" rel="noopener">peddlejumper</a>
+          <span>独立开发，2026</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 peddlejumper · H# Project</span>
+        <span id="build-time">build · 2026.06.13</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/guide.js"></script>
+</body>
+</html>

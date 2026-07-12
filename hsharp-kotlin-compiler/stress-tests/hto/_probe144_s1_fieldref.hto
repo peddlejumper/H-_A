@@ -1,0 +1,5 @@
+# _probe144_s1_fieldref.hto — 字段默认值非字面量 -> CompileError
+# 预期: 编译失败, CompileError: Field default must be a literal
+class C { let a = 1; let b = a + 1; }
+let o = new C();
+print(o.b);

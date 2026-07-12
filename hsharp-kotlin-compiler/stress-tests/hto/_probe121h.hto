@@ -1,0 +1,3 @@
+# probe negative default
+fn f(x=-5) { return x; }
+print(f());

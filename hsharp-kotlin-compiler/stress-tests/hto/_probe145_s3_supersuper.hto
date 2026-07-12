@@ -1,0 +1,9 @@
+# _probe145_s3_supersuper.hto — 探针: super.super.method() 语法
+# 预期: SyntaxError (parser.py:1278-1291 在 SUPER 后强制 DOT IDENTIFIER)
+# 验证: super.super.method() 不可解析
+class A { fn m() { return "A"; } }
+class B extends A { fn m() { return "B"; } }
+class C extends B {
+    fn m() { return super.super.m() + "C"; }
+}
+print((new C()).m());

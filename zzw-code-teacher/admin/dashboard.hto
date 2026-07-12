@@ -1,0 +1,126 @@
+# admin/dashboard.hto
+# 仪表盘: 关键指标 + 图表(用 ASCII bar)
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "shared/json_utils.hto";
+
+let _dash_widgets = nullptr;
+
+fn build(parent, x, y, w, h) {
+    let t = ide_theme();
+    let panel = new Panel();
+    panel.init_panel("dashboard");
+    panel.set_pos(x, y);
+    panel.set_size(w, h);
+    ide_paint_panel(panel, "soft");
+    parent.add_child(panel);
+    # 标题
+    let title = new Label();
+    title.init_label("📊 仪表盘");
+    title.set_pos(20, 10);
+    title.set_size(w - 40, 28);
+    title.set_color(t["accent"]);
+    title.set_font_size(16);
+    panel.add_child(title);
+    # 关键指标文本
+    let metrics = new Label();
+    metrics.init_label("(加载中…)");
+    metrics.set_pos(20, 44);
+    metrics.set_size(w - 40, 200);
+    metrics.set_color(t["fg"]);
+    metrics.set_word_wrap(true);
+    metrics.set_font_size(12);
+    panel.add_child(metrics);
+    # 题目通过率
+    let probs = new Label();
+    probs.init_label("");
+    probs.set_pos(20, 250);
+    probs.set_size(w - 40, h - 280);
+    probs.set_color(t["fg"]);
+    probs.set_word_wrap(true);
+    probs.set_font_size(11);
+    probs.set_font_family("Menlo, Monaco, monospace");
+    panel.add_child(probs);
+    # 刷新
+    let btn = new Button();
+    btn.init_button("🔄 刷新");
+    btn.set_pos(w - 120, 14);
+    btn.set_size(100, 26);
+    panel.add_child(btn);
+    _dash_widgets = {
+        "panel": panel,
+        "metrics": metrics,
+        "probs": probs,
+        "btn": btn
+    };
+    btn.onClick = fn() { refresh(); };
+    refresh();
+    return _dash_widgets;
+}
+
+fn refresh() {
+    if (_dash_widgets != nullptr) {
+        let resp = admin_get("/api/admin/stats");
+        let data = admin_parse(resp);
+        if (data == nullptr or not data["ok"]) {
+            _dash_widgets["metrics"].set_text("加载失败: " + http_get_body(resp));
+        } else {
+            let d = data["data"];
+            let u = d["users"];
+            let s = d["submissions"];
+            let p = d["problems"];
+            let lines = [];
+            lines.append("== 用户 ==");
+            lines.append("  总数: " + str(u["total"]) + "  (活跃:" + str(u["active"]) + ")");
+            lines.append("  学生: " + str(u["students"]) + "  教师: " + str(u["teachers"]) + "  管理员: " + str(u["admins"]));
+            lines.append("");
+            lines.append("== 题目 ==");
+            lines.append("  总数: " + str(p["total"]));
+            lines.append("");
+            lines.append("== 提交 ==");
+            lines.append("  总提交: " + str(s["total"]));
+            lines.append("  ✅ Accepted: " + str(s["accepted"]));
+            lines.append("  ❌ Wrong: " + str(s["wrong_answer"]));
+            lines.append("  💥 Runtime: " + str(s["runtime_error"]));
+            lines.append("  ⏰ TLE: " + str(s["time_limit"]));
+            lines.append("  通过率: " + str(s["accept_rate"]) + "%");
+            let text = "";
+            let i = 0;
+            while (i < len(lines)) {
+                text = text + lines[i] + "\n";
+                i = i + 1;
+            }
+            _dash_widgets["metrics"].set_text(text);
+            # 题目通过率条形图
+            let ps = d["problem_stats"];
+            let pb_text = "== 题目通过率 ==\n\n";
+            let max_name = 1;
+            i = 0;
+            while (i < len(ps)) {
+                if (len(ps[i]["title"]) > max_name) { max_name = len(ps[i]["title"]); }
+                i = i + 1;
+            }
+            i = 0;
+            while (i < len(ps)) {
+                let p = ps[i];
+                let title = p["title"];
+                let bar_max = 30;
+                let filled = (p["pass_rate"] * bar_max) / 100;
+                if (filled < 0) { filled = 0; }
+                if (filled > bar_max) { filled = bar_max; }
+                let bar = "";
+                let k = 0;
+                while (k < filled) { bar = bar + "█"; k = k + 1; }
+                k = filled;
+                while (k < bar_max) { bar = bar + "░"; k = k + 1; }
+                let icon = "🟢";
+                if (p["difficulty"] == "medium") { icon = "🟡"; }
+                if (p["difficulty"] == "hard") { icon = "🔴"; }
+                pb_text = pb_text + icon + " " + title + "\n   " + bar + " " + str(p["pass_rate"]) + "% (" + str(p["accepted_count"]) + "/" + str(p["submission_count"]) + ")\n\n";
+                i = i + 1;
+            }
+            _dash_widgets["probs"].set_text(pb_text);
+        }
+    }
+}

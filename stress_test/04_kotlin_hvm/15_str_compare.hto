@@ -1,0 +1,8 @@
+# 15_str_compare.hto — 字符串比较
+print("abc" < "abd");
+print("abc" == "abc");
+print("z" > "a");
+print("abc" <= "abc");
+print("abc" >= "abd");
+print("abc" != "abd");
+print("done");

@@ -1,0 +1,11 @@
+# Phase A1: `x in y` membership operator
+let xs = [1, 2, 3, 4, 5];
+print(3 in xs);
+print(10 in xs);
+let d = {"a": 1, "b": 2, "c": 3};
+print("a" in d);
+print("z" in d);
+let s = "hello world";
+print("world" in s);
+print("xyz" in s);
+print(not (10 in xs));

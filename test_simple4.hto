@@ -1,0 +1,11 @@
+# test_simple4.hto
+let _ai_cfg = {"a": 1};
+
+fn test(cfg) {
+    if (cfg == nullptr) {
+        return;
+    }
+    if ("a" in cfg) { _ai_cfg["a"] = cfg["a"]; }
+}
+
+print("ok");

@@ -1,0 +1,44 @@
+# 8.1 字符串字面量
+let s1 = "Hello";
+let s2 = "H# Language";
+print(s1);
+print(s2);
+# 8.2 字符串拼接
+let first = "Hello";
+let second = "World";
+let combined = first + ", " + second + "!";
+print(combined);
+print("Say: " + combined);
+# 8.3 字符串索引与长度
+let s = "H#Sharp";
+print(len(s));
+print(s[0]);
+print(s[1]);
+print(s[2]);
+print(s[6]);
+# 8.4 substring 切片
+let text = "Hello World";
+print(substring(text, 0, 5));
+print(substring(text, 6, 5));
+print(substring(text, 0, 11));
+print(substring(text, 3, 4));
+# 8.5 ord 与 chr
+print(ord("A"));
+print(ord("a"));
+print(ord("0"));
+print(chr(65));
+print(chr(97));
+print(chr(48));
+# 8.6 字符串遍历
+let word = "ABC";
+for ch in word {
+    print(ch);
+}
+let msg = "Hi";
+for c in msg {
+    print(c + " -> " + str(ord(c)));
+}
+# 8.7 转义字符
+print("第一行\n第二行");
+print("引号:\"hello\"");
+print("路径C:\\Users");

@@ -1,0 +1,7 @@
+# test10: number boundary - decimals
+let a = 0.1;
+let b = 0.0;
+let c = 0.5;
+print(a);
+print(b);
+print(c);

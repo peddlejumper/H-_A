@@ -1,0 +1,27 @@
+# t10_builtins.hto - builtins: len/push/pop/range
+let lst = [10, 20, 30];
+print("len=");
+print(len(lst));
+push(lst, 40);
+push(lst, 50);
+print("len after push=");
+print(len(lst));
+let last = pop(lst);
+print("popped=");
+print(last);
+print("len after pop=");
+print(len(lst));
+let r = range(5);
+print("range5 len=");
+print(len(r));
+print("range5[0]=");
+print(r[0]);
+print("range5[4]=");
+print(r[4]);
+let r2 = range(2, 6);
+print("range2_6 len=");
+print(len(r2));
+print("range2_6[0]=");
+print(r2[0]);
+print("range2_6[3]=");
+print(r2[3]);

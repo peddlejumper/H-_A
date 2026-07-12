@@ -1,0 +1,271 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+        xmlns:v="using:ZZW.CodeTeacher.Client.Views"
+        xmlns:conv="using:ZZW.CodeTeacher.Client.Converters"
+        x:Class="ZZW.CodeTeacher.Client.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="ZZW Code Teacher 设置"
+        Width="860" Height="760"
+        MinWidth="720" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+  <Border Background="{DynamicResource AppBackgroundBrush}"
+          BorderBrush="{DynamicResource GlassBorderBrush}"
+          BorderThickness="1"
+          CornerRadius="24">
+    <DockPanel LastChildFill="True">
+      <Border DockPanel.Dock="Top" Classes="toolbar" Padding="18,10"
+              CornerRadius="24,24,0,0">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10"
+                      VerticalAlignment="Center"
+                      PointerPressed="OnTitleBarPointerPressed">
+            <Border Classes="title-dot" />
+            <StackPanel Spacing="0">
+              <TextBlock Classes="title" Text="设置" />
+              <TextBlock Classes="subtitle" Text="网络 / 运行环境 / 外观 / AI" />
+            </StackPanel>
+          </StackPanel>
+          <Border Grid.Column="1" Background="Transparent"
+                  PointerPressed="OnTitleBarPointerPressed" />
+          <Button Grid.Column="2" Classes="text icon window-close"
+                  Content="×" ToolTip.Tip="关闭"
+                  Click="OnCloseClick" />
+        </Grid>
+      </Border>
+
+      <Grid ColumnDefinitions="220,*">
+        <Border Grid.Column="0" Classes="glass-inset" Margin="14" Padding="10">
+          <StackPanel Spacing="6">
+            <TextBlock Classes="section" Text="设置分类" Margin="4,2,4,6" />
+            <Button Classes="text" Content="网络与 HTTPS" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Command="{Binding SelectSectionCommand}" CommandParameter="Network" />
+            <Button Classes="text" Content="编程语言运行环境" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Command="{Binding SelectSectionCommand}" CommandParameter="Runtime" />
+            <Button Classes="text" Content="编辑器与行为" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Command="{Binding SelectSectionCommand}" CommandParameter="Editor" />
+            <Button Classes="text" Content="外观与主题" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Command="{Binding SelectSectionCommand}" CommandParameter="Appearance" />
+            <Button Classes="text" Content="AI 接入设置" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    Command="{Binding SelectSectionCommand}" CommandParameter="Ai" />
+            <Separator Margin="0,8" />
+            <TextBlock Text="{Binding Status}" Classes="empty" TextWrapping="Wrap" Margin="4,0" />
+          </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Column="1" Padding="0">
+          <StackPanel Margin="0,14,14,14" Spacing="12">
+
+            <StackPanel IsVisible="{Binding IsNetworkSelected}" Spacing="12">
+              <Border Classes="panel" Padding="16">
+                <StackPanel Spacing="12">
+                  <TextBlock Classes="title" Text="网络与 HTTPS" />
+                  <TextBlock Classes="empty" Text="配置客户端连接后端 API 的地址。修改 API 地址后建议重启客户端，让所有 HttpClient 实例完全刷新。" />
+                  <CheckBox Content="使用 HTTPS 协议"
+                            IsChecked="{Binding UseHttps, Mode=TwoWay}" />
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="API Base URL" />
+                    <TextBox Text="{Binding ApiBaseUrl, Mode=TwoWay}"
+                             Watermark="http://127.0.0.1:5050 / https://example.com" />
+                  </StackPanel>
+                  <Button Classes="primary" Content="保存网络设置"
+                          HorizontalAlignment="Left"
+                          Command="{Binding SaveNetworkCommand}" />
+                </StackPanel>
+              </Border>
+              <Border Classes="glass-inset" Padding="12">
+                <StackPanel Spacing="3">
+                  <TextBlock Classes="section" Text="配置文件" />
+                  <TextBlock Text="{Binding AppSettingsPath}" Classes="empty"
+                             FontFamily="{StaticResource CodeFontFamily}"
+                             TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsRuntimeSelected}" Spacing="12">
+              <Border Classes="panel" Padding="16">
+                <StackPanel Spacing="12">
+                  <TextBlock Classes="title" Text="编程语言运行环境" />
+                  <TextBlock Classes="empty" Text="配置本机各语言的解释器/编译器命令或绝对路径。点击「自动检测全部」可从系统 PATH 探测已安装的语言并自动填入绝对路径;也可点击每行「浏览」选择磁盘上的可执行文件。当前提交评测仍由服务端执行,客户端设置用于本地环境检查与后续本地运行扩展。" />
+                  <ItemsControl ItemsSource="{Binding RuntimePaths}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:RuntimePathItemViewModel">
+                        <Grid ColumnDefinitions="130,*,Auto" Margin="0,4">
+                          <TextBlock Grid.Column="0" Text="{Binding DisplayName}" Classes="section"
+                                     VerticalAlignment="Center" />
+                          <TextBox Grid.Column="1" Text="{Binding ExecutablePath, Mode=TwoWay}"
+                                   Watermark="命令名或绝对路径, 如 python3 / /usr/bin/python3" />
+                          <Button Grid.Column="2" Classes="secondary" Content="浏览..."
+                                  Margin="8,0,0,0" Click="OnBrowseRuntimeClick"
+                                  ToolTip.Tip="选择磁盘上的可执行文件" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="secondary" Content="自动检测全部"
+                            Command="{Binding DetectAllCommand}"
+                            ToolTip.Tip="从系统 PATH 探测已安装的语言运行环境并自动填入" />
+                    <Button Classes="primary" Content="保存运行环境"
+                            Command="{Binding SaveRuntimeCommand}" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsEditorSelected}" Spacing="12">
+              <Border Classes="panel" Padding="16">
+                <StackPanel Spacing="12">
+                  <TextBlock Classes="title" Text="编辑器与行为" />
+                  <TextBlock Classes="empty" Text="配置代码编辑器的默认字号、Tab 宽度、新建代码时的默认编程语言,以及提交失败后是否自动让 AI 解释错误。字号与 Tab 宽将在下次打开编辑器时生效;默认语言与自动 AI 解释立即生效。" />
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding EditorFontSize, StringFormat=编辑器字号: {0}}" />
+                    <Slider Minimum="10" Maximum="22" TickFrequency="1"
+                            Value="{Binding EditorFontSize, Mode=TwoWay}" />
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding EditorTabWidth, StringFormat=Tab 宽度: {0}}" />
+                    <Slider Minimum="2" Maximum="8" TickFrequency="1"
+                            Value="{Binding EditorTabWidth, Mode=TwoWay}" />
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="默认编程语言" />
+                    <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllLanguages}"
+                              SelectedItem="{Binding SelectedDefaultLanguage, Mode=TwoWay}"
+                              HorizontalAlignment="Left" MinWidth="200">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding Converter={x:Static conv:LanguageDisplayNameConverter.Instance}}" />
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                  </StackPanel>
+                  <CheckBox Content="提交失败后自动让 AI 解释错误"
+                            IsChecked="{Binding AutoAiExplain, Mode=TwoWay}" />
+                  <Button Classes="primary" Content="保存编辑器设置"
+                          HorizontalAlignment="Left"
+                          Command="{Binding SaveEditorCommand}" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsAppearanceSelected}" Spacing="12">
+              <Border Classes="panel" Padding="16">
+                <StackPanel Spacing="12">
+                  <TextBlock Classes="title" Text="外观与主题" />
+                  <TextBlock Classes="empty" Text="切换浅色/深色主题会立即生效并持久化。自定义主窗口底图会保存在本地,重启后自动恢复。透明度建议保持在 0.15 - 0.35,避免影响代码阅读。" />
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="主题模式" />
+                    <CheckBox Content="使用深色主题"
+                              IsChecked="{Binding IsDarkTheme, Mode=TwoWay}" />
+                  </StackPanel>
+                  <Button Classes="primary" Content="保存并切换主题"
+                          HorizontalAlignment="Left"
+                          Command="{Binding SaveThemeCommand}" />
+                </StackPanel>
+              </Border>
+              <Border Classes="panel" Padding="16">
+                <StackPanel Spacing="12">
+                  <TextBlock Classes="title" Text="背景图片" />
+                  <Grid ColumnDefinitions="*,Auto,Auto">
+                    <TextBox Grid.Column="0" Text="{Binding BackgroundImagePath, Mode=OneWay}"
+                             Watermark="未选择背景图片" IsReadOnly="True" />
+                    <Button Grid.Column="1" Classes="secondary" Content="选择图片"
+                            Margin="8,0,0,0" Click="OnChooseBackgroundClick" />
+                    <Button Grid.Column="2" Classes="secondary danger" Content="清除"
+                            Margin="8,0,0,0" Command="{Binding ClearBackgroundCommand}" />
+                  </Grid>
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding BackgroundOpacity, StringFormat=背景透明度: {0:0.00}}" />
+                    <Slider Minimum="0" Maximum="0.6" TickFrequency="0.05"
+                            Value="{Binding BackgroundOpacity, Mode=TwoWay}" />
+                  </StackPanel>
+                  <Button Classes="primary" Content="保存外观设置"
+                          HorizontalAlignment="Left"
+                          Command="{Binding SaveAppearanceCommand}" />
+                </StackPanel>
+              </Border>
+              <Border Classes="panel" Padding="16">
+                <StackPanel Spacing="12">
+                  <TextBlock Classes="title" Text="控件透明度" />
+                  <TextBlock Classes="empty" Text="按控件类别调整玻璃面板的透明度,立即生效。主面板含题目浏览器/编辑器卡片/评测结果/右栏;工具栏含标题栏/状态栏/IDE 工具栏;内陷区含编辑器工具栏/输入框/问题描述;编辑器为代码编辑区背景;边框为所有玻璃控件的描边。0=完全透明,1=完全不透明。" />
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding SurfaceOpacity, StringFormat=主面板/卡片: {0:0.00}}" />
+                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05"
+                            Value="{Binding SurfaceOpacity, Mode=TwoWay}" />
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding ToolbarOpacity, StringFormat=工具栏: {0:0.00}}" />
+                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05"
+                            Value="{Binding ToolbarOpacity, Mode=TwoWay}" />
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding InsetOpacity, StringFormat=内陷区: {0:0.00}}" />
+                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05"
+                            Value="{Binding InsetOpacity, Mode=TwoWay}" />
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding EditorOpacity, StringFormat=代码编辑器: {0:0.00}}" />
+                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05"
+                            Value="{Binding EditorOpacity, Mode=TwoWay}" />
+                  </StackPanel>
+                  <StackPanel Spacing="5">
+                    <TextBlock Classes="section" Text="{Binding BorderOpacity, StringFormat=边框: {0:0.00}}" />
+                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05"
+                            Value="{Binding BorderOpacity, Mode=TwoWay}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="primary" Content="保存透明度"
+                            HorizontalAlignment="Left"
+                            Command="{Binding SaveOpacityCommand}" />
+                    <Button Classes="secondary" Content="重置默认"
+                            Command="{Binding ResetOpacityCommand}"
+                            ToolTip.Tip="恢复为 Light 主题原始 alpha 比例" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <Border Classes="glass-inset" Padding="12">
+                <StackPanel Spacing="3">
+                  <TextBlock Classes="section" Text="配置文件" />
+                  <TextBlock Text="{Binding ThemeSettingsPath}" Classes="empty"
+                             FontFamily="{StaticResource CodeFontFamily}"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding BackgroundSettingsPath}" Classes="empty"
+                             FontFamily="{StaticResource CodeFontFamily}"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding OpacitySettingsPath}" Classes="empty"
+                             FontFamily="{StaticResource CodeFontFamily}"
+                             TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <Border IsVisible="{Binding IsAiSelected}">
+              <v:AiSettingsView DataContext="{Binding AiSettings}" />
+            </Border>
+
+            <Border Classes="toolbar" Padding="12" CornerRadius="16">
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Classes="secondary" Content="全部保存"
+                        Command="{Binding SaveAllCommand}" />
+                <Button Classes="primary" Content="关闭"
+                        Click="OnCloseClick" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </DockPanel>
+  </Border>
+</Window>

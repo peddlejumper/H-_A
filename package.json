@@ -1,0 +1,47 @@
+{
+  "name": "hsharp",
+  "version": "0.4.0",
+  "description": "H# Self-Hosting Programming Language — interpreter, compiler, and VM all written in H#",
+  "entry": "hsharp.py",
+  "hsharp_entry": "bootstrap/bootstrap.hto",
+  "type": "runtime",
+  "files": {
+    "python": [
+      "hsharp.py",
+      "lexer.py",
+      "parser.py",
+      "interpreter.py",
+      "compiler.py",
+      "ast.py",
+      "bytecode.py",
+      "tokens.py",
+      "h_ast.py",
+      "host_functions.py"
+    ],
+    "bootstrap": [
+      "bootstrap/interpreter.hto",
+      "bootstrap/compiler.hto",
+      "bootstrap/executor.hto",
+      "bootstrap/parser.hto",
+      "bootstrap/bootstrap.hto",
+      "bootstrap/tokenize.hto",
+      "bootstrap/hwdui.hto",
+      "bootstrap/formatter.hto",
+      "bootstrap/linter.hto",
+      "bootstrap/fs_module.hto",
+      "bootstrap/io_module.hto",
+      "bootstrap/net_module.hto",
+      "bootstrap/db_module.hto",
+      "bootstrap/crypto_module.hto",
+      "bootstrap/datetime_module.hto",
+      "bootstrap/math_utils.hto",
+      "bootstrap/math_extended.hto",
+      "bootstrap/string_utils.hto",
+      "bootstrap/array_utils.hto",
+      "bootstrap/d3system.hto",
+      "bootstrap/d3system_ops.hto",
+      "bootstrap/perf_monitor.hto",
+      "bootstrap/env_optimized.hto"
+    ]
+  }
+}

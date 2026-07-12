@@ -104,6 +104,50 @@ fn parse(tokens) {
             let body = parse_block();
             return ["CoroFunction", fname, params, body];
         }
+        # v0.4.1: union declaration
+        # Syntax: union Name { Variant: field1, field2; Variant2; ... }
+        # (colon separates name from fields, semicolon terminates each variant)
+        if (t == "UNION") {
+            advance();
+            let name = expect("IDENTIFIER");
+            expect("LBRACE");
+            let variants = [];
+            while (peek_type() != "RBRACE" and peek_type() != "EOF") {
+                let vname = expect("IDENTIFIER");
+                let vfields = [];
+                if (peek_type() == "COLON") {
+                    advance();
+                    push(vfields, expect("IDENTIFIER"));
+                    while (peek_type() == "COMMA") { advance(); push(vfields, expect("IDENTIFIER")); }
+                }
+                expect("SEMI");
+                push(variants, [vname, vfields]);
+            }
+            expect("RBRACE");
+            return ["UnionDeclaration", name, variants];
+        }
+        # v0.4.1: concurrent block
+        if (t == "CONCURRENT") {
+            advance();
+            expect("LBRACE");
+            let body = parse_block();
+            return ["ConcurrentStatement", body];
+        }
+        # v0.4.1: async fn / parallel fn
+        if (t == "ASYNC" or t == "PARALLEL") {
+            let is_parallel = false;
+            if (t == "PARALLEL") { is_parallel = true; }
+            advance();
+            expect("FN");
+            let fname = expect("IDENTIFIER");
+            let type_params = parse_optional_type_params();
+            expect("LPAREN");
+            let params = parse_params();
+            expect("RPAREN");
+            expect("LBRACE");
+            let body = parse_block();
+            return ["AsyncFunction", fname, params, body, is_parallel, type_params];
+        }
         if (t == "CLASS") {
             return parse_class();
         }
@@ -134,12 +178,14 @@ fn parse(tokens) {
         if (t == "FN") {
             advance();
             let fname = expect("IDENTIFIER");
+            # v0.4.1: optional generic type params: fn name<T, U>(args)
+            let type_params = parse_optional_type_params();
             expect("LPAREN");
             let params = parse_params();
             expect("RPAREN");
             expect("LBRACE");
             let body = parse_block();
-            return ["Function", fname, params, body];
+            return ["Function", fname, params, body, type_params];
         }
         if (t == "RETURN") {
             advance();
@@ -276,6 +322,8 @@ fn parse(tokens) {
     fn parse_class() {
         advance();
         let cname = expect("IDENTIFIER");
+        # v0.4.1: optional generic type params: class Box<T, U> { ... }
+        let type_params = parse_optional_type_params();
         let base = nullptr;
         let impls = [];
         if (peek_type() == "EXTENDS") { advance(); base = expect("IDENTIFIER"); }
@@ -293,26 +341,50 @@ fn parse(tokens) {
                     push(members, ["FieldDeclaration", vname, val, true]);
                 } else if (peek_type() == "FN") {
                     advance(); let fname = expect("IDENTIFIER"); expect("LPAREN"); let p = parse_params(); expect("RPAREN"); expect("LBRACE"); let b = parse_block();
-                    push(members, ["Function", fname, p, b]);
+                    push(members, ["Function", fname, p, b, []]);
                 } else { break; }
             } else if (peek_type() == "STATIC") {
                 advance();
                 if (peek_type() == "FN") {
                     advance(); let fname = expect("IDENTIFIER"); expect("LPAREN"); let p = parse_params(); expect("RPAREN"); expect("LBRACE"); let b = parse_block();
-                    push(members, ["StaticFunction", fname, p, b]);
+                    push(members, ["StaticFunction", fname, p, b, []]);
                 } else { break; }
             } else if (peek_type() == "LET") {
                 advance(); let vname = expect("IDENTIFIER"); expect("EQ"); let val = parse_expression(); expect("SEMI");
                 push(members, ["FieldDeclaration", vname, val, false]);
             } else if (peek_type() == "FN") {
-                advance(); let fname = expect("IDENTIFIER"); expect("LPAREN"); let p = parse_params(); expect("RPAREN"); expect("LBRACE"); let b = parse_block();
-                push(members, ["Function", fname, p, b]);
+                advance(); let fname = expect("IDENTIFIER");
+                let tp = parse_optional_type_params();
+                expect("LPAREN"); let p = parse_params(); expect("RPAREN"); expect("LBRACE"); let b = parse_block();
+                push(members, ["Function", fname, p, b, tp]);
             } else {
                 push(members, parse_statement());
             }
         }
         expect("RBRACE");
-        return ["ClassDeclaration", cname, ["BlockStatement", members], base, impls];
+        return ["ClassDeclaration", cname, ["BlockStatement", members], base, impls, type_params];
+    }
+
+    # v0.4.1: try to parse `<T, U, ...>` type parameter list (in class/fn declarations).
+    # Unlike type args, these are unconditionally `<ident, ident, ...>` (no `(` required after).
+    # Returns list of type param names (empty list if no `<` present; nullptr if `<` is comparison).
+    # For declarations, ambiguity is rare: `class Foo<...>` / `fn name<...>(` — `<` after the
+    # declared name is always type params. We still disambiguate to be safe.
+    fn parse_optional_type_params() {
+        if (peek_type() != "LT") { return []; }
+        let save = __pos;
+        advance();  # consume `<`
+        let tparams = [];
+        if (peek_type() != "IDENTIFIER") { __pos = save; return []; }
+        push(tparams, peek_val()); advance();
+        while (peek_type() == "COMMA") {
+            advance();
+            if (peek_type() != "IDENTIFIER") { __pos = save; return []; }
+            push(tparams, peek_val()); advance();
+        }
+        if (peek_type() != "GT") { __pos = save; return []; }
+        advance();
+        return tparams;
     }
 
     fn parse_interface() {
@@ -445,7 +517,118 @@ fn parse(tokens) {
         if (peek_type() == "NOT") { advance(); let operand = parse_unary(); return ["UnaryOp", "NOT", operand]; }
         if (peek_type() == "PTR") { advance(); let operand = parse_unary(); return ["PointerDereference", operand]; }
         if (peek_type() == "TILDE") { advance(); let operand = parse_unary(); return ["UnaryOp", "TILDE", operand]; }
+        # v0.4.1: await expression (prefix, binds tighter than binary ops)
+        if (peek_type() == "AWAIT") { advance(); let operand = parse_unary(); return ["AwaitExpression", operand]; }
         return parse_primary();
+    }
+
+    # v0.4.1: parse a match pattern (one arm's LHS, before `=>`)
+    # Returns a pattern node: ["WildcardPat"] / ["BindingPat", name] /
+    # ["LiteralPat", valueNode] / ["TypePat", typename, bindname_or_null] /
+    # ["VariantPat", variantName, bindingList] / ["ChanPat", mode, innerPat_or_null]
+    fn parse_match_pattern() {
+        let t = peek_type();
+        # wildcard _
+        if (t == "IDENTIFIER" and peek_val() == "_") {
+            advance();
+            return ["WildcardPat"];
+        }
+        # is <type> [as <name>]
+        if (t == "IS") {
+            advance();
+            let typename = expect("IDENTIFIER");
+            let bindname = nullptr;
+            if (peek_type() == "AS") {
+                advance();
+                bindname = expect("IDENTIFIER");
+            }
+            return ["TypePat", typename, bindname];
+        }
+        # chan send(_) / chan recv(v) / chan close
+        if (t == "CHAN") {
+            advance();
+            let mode = expect("IDENTIFIER");  # "send" / "recv" / "close"
+            if (mode == "close") {
+                return ["ChanPat", "close", nullptr];
+            }
+            expect("LPAREN");
+            let inner = nullptr;
+            if (peek_type() == "IDENTIFIER" and peek_val() == "_") {
+                advance();
+                inner = ["WildcardPat"];
+            } else if (peek_type() == "IDENTIFIER") {
+                let nm = peek_val(); advance();
+                inner = ["BindingPat", nm];
+            }
+            expect("RPAREN");
+            return ["ChanPat", mode, inner];
+        }
+        # literal patterns: number / string / bool / null
+        if (t == "NUMBER") { let v = peek_val(); advance(); return ["LiteralPat", ["NumberLiteral", v]]; }
+        if (t == "STRING") { let v = peek_val(); advance(); return ["LiteralPat", ["StringLiteral", v]]; }
+        if (t == "BOOL") { let v = peek_val(); advance(); return ["LiteralPat", ["BooleanLiteral", v]]; }
+        if (t == "NULL") { advance(); return ["LiteralPat", ["NullLiteral"]]; }
+        # variant pattern: Identifier(...)  — parenthesised form is a variant pattern
+        # Bare Identifier is a binding pattern (NOT a variant match), per t11 quirks.
+        if (t == "IDENTIFIER") {
+            let name = peek_val(); advance();
+            if (peek_type() == "LPAREN") {
+                advance();
+                let bindings = [];
+                if (peek_type() != "RPAREN") {
+                    if (peek_type() == "IDENTIFIER" and peek_val() == "_") {
+                        advance(); push(bindings, ["WildcardPat"]);
+                    } else if (peek_type() == "IDENTIFIER") {
+                        push(bindings, ["BindingPat", peek_val()]); advance();
+                    }
+                    while (peek_type() == "COMMA") {
+                        advance();
+                        if (peek_type() == "IDENTIFIER" and peek_val() == "_") {
+                            advance(); push(bindings, ["WildcardPat"]);
+                        } else if (peek_type() == "IDENTIFIER") {
+                            push(bindings, ["BindingPat", peek_val()]); advance();
+                        }
+                    }
+                }
+                expect("RPAREN");
+                return ["VariantPat", name, bindings];
+            }
+            # bare identifier is a binding pattern (matches anything, binds name)
+            return ["BindingPat", name];
+        }
+        return ["WildcardPat"];
+    }
+
+    # v0.4.1: parse a full match arm:  pat [if cond] => body
+    # Returns ["MatchArm", pattern, guard_or_null, bodyExpr]
+    fn parse_match_arm() {
+        let pat = parse_match_pattern();
+        let guard = nullptr;
+        if (peek_type() == "IF") {
+            advance();
+            guard = parse_expression();
+        }
+        expect("ARROW");
+        let body = parse_expression();
+        return ["MatchArm", pat, guard, body];
+    }
+
+    # v0.4.1: parse a match expression:  match scrutinee { arm, arm, ... }
+    fn parse_match() {
+        advance();  # consume MATCH
+        let scrutinee = parse_primary();
+        expect("LBRACE");
+        let arms = [];
+        if (peek_type() != "RBRACE") {
+            push(arms, parse_match_arm());
+            while (peek_type() == "COMMA") {
+                advance();
+                if (peek_type() == "RBRACE") { break; }
+                push(arms, parse_match_arm());
+            }
+        }
+        expect("RBRACE");
+        return ["MatchExpression", scrutinee, arms];
     }
 
     fn parse_primary() {
@@ -455,15 +638,18 @@ fn parse(tokens) {
         if (t == "BOOL") { let v = peek_val(); advance(); return ["BooleanLiteral", v]; }
         if (t == "NULL") { advance(); return ["NullLiteral"]; }
         if (t == "ASM") { let v = peek_val(); advance(); return ["AsmBlock", v]; }
-        # NEW expression
+        # v0.4.1: match expression
+        if (t == "MATCH") { return parse_match(); }
+        # NEW expression (with optional generic type args: new Box<int>(args))
         if (t == "NEW") {
             advance();
             let cname = expect("IDENTIFIER");
+            let type_args = parse_optional_type_args();
             expect("LPAREN");
             let args = [];
             if (peek_type() != "RPAREN") { push(args, parse_expression()); while (peek_type() == "COMMA") { advance(); push(args, parse_expression()); } }
             expect("RPAREN");
-            return ["NewExpression", ["Identifier", cname], args];
+            return ["NewExpression", ["Identifier", cname], args, type_args];
         }
         # SUPER expression
         if (t == "SUPER") {
@@ -508,7 +694,7 @@ fn parse(tokens) {
             expect("RBRACE");
             return ["DictLiteral", pairs];
         }
-        # Identifier (and call/index/member chains)
+        # Identifier (and call/index/member/union-construct/?/generic-call chains)
         if (t == "IDENTIFIER") {
             let name = peek_val(); advance();
             let node = ["Identifier", name];
@@ -517,13 +703,55 @@ fn parse(tokens) {
                     advance(); let args = [];
                     if (peek_type() != "RPAREN") { push(args, parse_expression()); while (peek_type() == "COMMA") { advance(); push(args, parse_expression()); } }
                     expect("RPAREN");
-                    node = ["CallExpression", node, args];
+                    node = ["CallExpression", node, args, []];
+                } else if (peek_type() == "LT") {
+                    # v0.4.1: possible generic call name<T>(args). Disambiguate via lookahead.
+                    let targs = parse_optional_type_args();
+                    if (targs != nullptr and len(targs) > 0 and peek_type() == "LPAREN") {
+                        advance(); let args = [];
+                        if (peek_type() != "RPAREN") { push(args, parse_expression()); while (peek_type() == "COMMA") { advance(); push(args, parse_expression()); } }
+                        expect("RPAREN");
+                        node = ["CallExpression", node, args, targs];
+                    } else { break; }
                 } else if (peek_type() == "LBRACKET") {
                     advance(); let idx = parse_expression(); expect("RBRACKET");
                     node = ["IndexExpression", node, idx];
                 } else if (peek_type() == "DOT") {
                     advance(); let mname = expect("IDENTIFIER");
                     node = ["MemberExpression", node, mname];
+                } else if (peek_type() == "LBRACE") {
+                    # v0.4.1: union construction Type{Variant: values} or Type{Variant}
+                    # Only consume if pattern matches: { IDENTIFIER (":" values)? "}"
+                    let save = __pos;
+                    advance();  # consume LBRACE
+                    if (peek_type() == "IDENTIFIER") {
+                        let vname = peek_val(); advance();
+                        let values = [];
+                        let is_union = false;
+                        if (peek_type() == "COLON") {
+                            is_union = true;
+                            advance();
+                            push(values, parse_expression());
+                            while (peek_type() == "COMMA") { advance(); push(values, parse_expression()); }
+                        } else if (peek_type() == "RBRACE") {
+                            is_union = true;
+                        }
+                        if (is_union and peek_type() == "RBRACE") {
+                            advance();
+                            node = ["UnionConstructExpression", node, vname, values];
+                        } else {
+                            # Not a union construction — restore and break
+                            __pos = save;
+                            break;
+                        }
+                    } else {
+                        __pos = save;
+                        break;
+                    }
+                } else if (peek_type() == "QUESTION") {
+                    # v0.4.1: error propagation postfix `expr?`
+                    advance();
+                    node = ["PropagateExpression", node];
                 } else { break; }
             }
             return node;
@@ -535,11 +763,41 @@ fn parse(tokens) {
                 advance(); let args = [];
                 if (peek_type() != "RPAREN") { push(args, parse_expression()); while (peek_type() == "COMMA") { advance(); push(args, parse_expression()); } }
                 expect("RPAREN");
-                expr = ["CallExpression", expr, args];
+                expr = ["CallExpression", expr, args, []];
+            }
+            # v0.4.1: parenthesized expr can also be postfixed with `?`
+            while (peek_type() == "QUESTION") {
+                advance();
+                expr = ["PropagateExpression", expr];
             }
             return expr;
         }
         return nullptr;
+    }
+
+    # v0.4.1: try to parse `<T1, T2, ...>` type argument list.
+    # Returns list of type names on success, or nullptr if `<` is comparison.
+    # Disambiguation: `<` ident (`,` ident)* `>` must be followed by `(` to be type args.
+    # Handles optional spaces between `<` / `>` and identifiers (tokenized ignores spaces).
+    fn parse_optional_type_args() {
+        if (peek_type() != "LT") { return []; }
+        let save = __pos;
+        advance();  # consume `<`
+        let targs = [];
+        # Expect at least one identifier
+        if (peek_type() != "IDENTIFIER") { __pos = save; return nullptr; }
+        push(targs, peek_val()); advance();
+        while (peek_type() == "COMMA") {
+            advance();
+            if (peek_type() != "IDENTIFIER") { __pos = save; return nullptr; }
+            push(targs, peek_val()); advance();
+        }
+        # Expect closing `>`
+        if (peek_type() != "GT") { __pos = save; return nullptr; }
+        advance();
+        # Must be followed by `(` to qualify as a type-arg list (call/new context)
+        if (peek_type() != "LPAREN") { __pos = save; return nullptr; }
+        return targs;
     }
 
     return parse_program();

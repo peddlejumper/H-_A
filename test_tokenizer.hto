@@ -1,0 +1,115 @@
+# Mini tokenizer in H# - demonstrates self-hosting concepts
+
+fn is_digit(ch) {
+    return ch >= "0" and ch <= "9";
+}
+
+fn is_alpha(ch) {
+    return (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or ch == "_";
+}
+
+fn is_alnum(ch) {
+    return is_alpha(ch) or is_digit(ch);
+}
+
+fn tokenize(src) {
+    let i = 0;
+    let n = len(src);
+    let tokens = [];
+    
+    while (i < n) {
+        let ch = src[i];
+        # skip whitespace
+        if (ch == " " or ch == "\t" or ch == "\n" or ch == "\r") {
+            i = i + 1;
+            continue;
+        }
+        # skip comments
+        if (ch == "#") {
+            while (i < n and src[i] != "\n") {
+                i = i + 1;
+            }
+            continue;
+        }
+        # numbers
+        if (is_digit(ch)) {
+            let num = "";
+            while (i < n and is_digit(src[i])) {
+                num = num + src[i];
+                i = i + 1;
+            }
+            push(tokens, {"type": "NUMBER", "value": num});
+            continue;
+        }
+        # identifiers / keywords
+        if (is_alpha(ch)) {
+            let word = "";
+            while (i < n and is_alnum(src[i])) {
+                word = word + src[i];
+                i = i + 1;
+            }
+            if (word == "let") {
+                push(tokens, {"type": "LET", "value": word});
+            } else if (word == "print") {
+                push(tokens, {"type": "PRINT", "value": word});
+            } else if (word == "fn") {
+                push(tokens, {"type": "FN", "value": word});
+            } else if (word == "return") {
+                push(tokens, {"type": "RETURN", "value": word});
+            } else {
+                push(tokens, {"type": "IDENT", "value": word});
+            }
+            continue;
+        }
+        # operators and punctuation
+        if (ch == "=") {
+            push(tokens, {"type": "ASSIGN", "value": "="});
+            i = i + 1;
+            continue;
+        }
+        if (ch == "+") {
+            push(tokens, {"type": "PLUS", "value": "+"});
+            i = i + 1;
+            continue;
+        }
+        if (ch == ";") {
+            push(tokens, {"type": "SEMI", "value": ";"});
+            i = i + 1;
+            continue;
+        }
+        if (ch == "(") {
+            push(tokens, {"type": "LPAREN", "value": "("});
+            i = i + 1;
+            continue;
+        }
+        if (ch == ")") {
+            push(tokens, {"type": "RPAREN", "value": ")"});
+            i = i + 1;
+            continue;
+        }
+        if (ch == "{") {
+            push(tokens, {"type": "LBRACE", "value": "{"});
+            i = i + 1;
+            continue;
+        }
+        if (ch == "}") {
+            push(tokens, {"type": "RBRACE", "value": "}"});
+            i = i + 1;
+            continue;
+        }
+        # unknown char - skip
+        i = i + 1;
+    }
+    push(tokens, {"type": "EOF", "value": ""});
+    return tokens;
+}
+
+# Test the tokenizer
+let src = "let x = 42; print(x);";
+let toks = tokenize(src);
+let i = 0;
+while (i < len(toks)) {
+    let t = toks[i];
+    print(t["type"] + ": " + t["value"]);
+    i = i + 1;
+}

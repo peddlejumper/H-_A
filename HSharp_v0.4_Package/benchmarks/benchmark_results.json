@@ -1,0 +1,74 @@
+{
+  "hsvm_bench_arith": {
+    "time_ms": 168.788,
+    "output": "sum_of_squares=333333833333500000"
+  },
+  "hsvm_bench_primes": {
+    "time_ms": 744.303,
+    "output": "primes=3245"
+  },
+  "hsvm_bench_string": {
+    "time_ms": 660.005,
+    "output": "len=300000"
+  },
+  "hsvm_bench_list": {
+    "time_ms": 1295.634,
+    "output": "sum=49999995000000"
+  },
+  "hsvm_bench_fib": {
+    "time_ms": 1036.769,
+    "output": "fib(30)=832040"
+  },
+  "hsvm_bench_matrix": {
+    "time_ms": 304.393,
+    "output": "total=283919625000"
+  },
+  "python_bench_arith": {
+    "time_ms": 76.024,
+    "output": "sum_of_squares=333333833333500000"
+  },
+  "python_bench_primes": {
+    "time_ms": 209.462,
+    "output": "primes=3245"
+  },
+  "python_bench_string": {
+    "time_ms": 155.582,
+    "output": "len=300000"
+  },
+  "python_bench_list": {
+    "time_ms": 564.656,
+    "output": "sum=49999995000000"
+  },
+  "python_bench_fib": {
+    "time_ms": 76.86,
+    "output": "fib(30)=832040"
+  },
+  "python_bench_matrix": {
+    "time_ms": 96.974,
+    "output": "total=283919625000"
+  },
+  "cpp_bench_arith": {
+    "time_ms": 4.684,
+    "output": "sum_of_squares=333333833333500000"
+  },
+  "cpp_bench_primes": {
+    "time_ms": 7.049,
+    "output": "primes=3245"
+  },
+  "cpp_bench_string": {
+    "time_ms": 151.838,
+    "output": "len=300000"
+  },
+  "cpp_bench_list": {
+    "time_ms": 2.307,
+    "output": "sum=49999995000000"
+  },
+  "cpp_bench_fib": {
+    "time_ms": 3.23,
+    "output": "fib(30)=832040"
+  },
+  "cpp_bench_matrix": {
+    "time_ms": 1.726,
+    "output": "total=283919625000"
+  }
+}

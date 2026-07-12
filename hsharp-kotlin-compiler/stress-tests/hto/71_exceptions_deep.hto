@@ -1,0 +1,350 @@
+# T71 - 异常处理深度测试
+# 目标：探测 try/catch/throw 在边界场景下的 bug
+# 注：H# 无 finally；catch (e) 是通用 catch（捕获所有异常）
+
+# ============================================================
+# Case 1: throw 各种字面量类型（字符串/数字/null/布尔）
+# ============================================================
+print("== C1 ==");
+try { throw "string err"; } catch (e) { print(e); }
+try { throw 42; } catch (e) { print(e); }
+try { throw null; } catch (e) { print(e); }
+try { throw true; } catch (e) { print(e); }
+
+# ============================================================
+# Case 2: throw 复合对象（列表/字典）
+# ============================================================
+print("== C2 ==");
+try { throw [1, 2, 3]; } catch (e) { print(e); }
+try { throw {"code": 500, "msg": "boom"}; } catch (e) { print(e); }
+try { throw ["a", "b"]; } catch (e) { print(e[0]); }
+
+# ============================================================
+# Case 3: 嵌套 try/catch（内层捕获，外层不触发）
+# ============================================================
+print("== C3 ==");
+try {
+    try {
+        throw "inner";
+    } catch (e) {
+        print("inner caught: " + e);
+    }
+    print("after inner");
+} catch (e) {
+    print("outer caught: " + e);
+}
+
+# ============================================================
+# Case 4: 嵌套 try/catch（内层 catch 中 re-throw，外层捕获）
+# ============================================================
+print("== C4 ==");
+try {
+    try {
+        throw "first";
+    } catch (e) {
+        print("inner got: " + e);
+        throw "second";
+    }
+} catch (e) {
+    print("outer got: " + e);
+}
+
+# ============================================================
+# Case 5: throw 跨函数捕获
+# ============================================================
+print("== C5 ==");
+fn risky(n) {
+    if (n < 0) { throw "negative: " + n; }
+    return n * 2;
+}
+try {
+    let r = risky(-5);
+    print("no throw: " + r);
+} catch (e) {
+    print("caught: " + e);
+}
+try {
+    let r = risky(10);
+    print("ok: " + r);
+} catch (e) {
+    print("should not catch: " + e);
+}
+
+# ============================================================
+# Case 6: 函数调用链中的异常传播（深递归）
+# ============================================================
+print("== C6 ==");
+fn deep(n) {
+    if (n == 0) { throw "bottom"; }
+    return deep(n - 1);
+}
+fn mid(n) { return deep(n); }
+fn top(n) { return mid(n); }
+try {
+    top(3);
+    print("no throw");
+} catch (e) {
+    print("propagated: " + e);
+}
+
+# ============================================================
+# Case 7: try/catch 在 for-in 循环中（捕获后继续循环）
+# ============================================================
+print("== C7 ==");
+for i in range(5) {
+    try {
+        if (i == 2) { throw "skip " + i; }
+        print("iter " + i);
+    } catch (e) {
+        print("caught " + e);
+    }
+}
+
+# ============================================================
+# Case 8: try/catch 在 while 循环中
+# ============================================================
+print("== C8 ==");
+let k = 0;
+while (k < 4) {
+    try {
+        if (k == 1) { throw "bad " + k; }
+        print("w iter " + k);
+    } catch (e) {
+        print("w caught " + e);
+    }
+    k = k + 1;
+}
+
+# ============================================================
+# Case 9: catch 后继续执行（非终止）
+# ============================================================
+print("== C9 ==");
+let x = 0;
+try {
+    x = 1;
+    throw "boom";
+    x = 2;
+} catch (e) {
+    print("caught " + e);
+}
+print("x = " + x);
+
+# ============================================================
+# Case 10: try 中 return（catch 不应执行）
+# ============================================================
+print("== C10 ==");
+fn withReturn() {
+    try {
+        return 100;
+    } catch (e) {
+        return -1;
+    }
+    return 200;
+}
+print(withReturn());
+
+fn withReturnThrow() {
+    try {
+        throw "fail";
+    } catch (e) {
+        return 50;
+    }
+    return 200;
+}
+print(withReturnThrow());
+
+# ============================================================
+# Case 11: throw 在 init 中
+# ============================================================
+print("== C11 ==");
+class Bomb {
+    let code = 0;
+    fn init(c) {
+        code = c;
+        if (c < 0) { throw "bad init " + c; }
+    }
+}
+try {
+    let b = new Bomb();
+    b.init(-1);
+    print("no throw");
+} catch (e) {
+    print("init err: " + e);
+}
+
+# ============================================================
+# Case 12: 空try体、空catch体
+# ============================================================
+print("== C12 ==");
+try {} catch (e) { print("empty try - should not reach"); }
+try { throw "x"; } catch (e) {}
+print("empty catch ok");
+
+# ============================================================
+# Case 13: catch 变量名遮蔽外层变量
+# ============================================================
+print("== C13 ==");
+let e = "outer-val";
+try {
+    throw "inner-val";
+} catch (e) {
+    print("shadowed: " + e);
+}
+print("after: " + e);
+
+# ============================================================
+# Case 14: 隐式异常（KeyError / IndexError / ZeroDivision / AttributeError）
+# ============================================================
+print("== C14 ==");
+try {
+    let d = {"a": 1};
+    let v = d["missing"];
+    print("no key err");
+} catch (e) {
+    print("key err: " + e);
+}
+try {
+    let lst = [10, 20];
+    let v = lst[10];
+    print("no idx err");
+} catch (e) {
+    print("idx err: " + e);
+}
+try {
+    let v = 1 / 0;
+    print("no div err");
+} catch (e) {
+    print("div err: " + e);
+}
+try {
+    let s = "hello";
+    let v = s.missing;
+    print("no attr err");
+} catch (e) {
+    print("attr err: " + e);
+}
+
+# ============================================================
+# Case 15: break/continue 在 try 内（可能泄漏 handler）
+# ============================================================
+print("== C15 ==");
+let sum = 0;
+for i in range(10) {
+    try {
+        if (i == 3) { continue; }
+        if (i == 7) { break; }
+        sum = sum + i;
+    } catch (e) {
+        print("err " + e);
+    }
+}
+print("sum = " + sum);
+
+# ============================================================
+# Case 16: 循环里捕获后 throw 到外层
+# ============================================================
+print("== C16 ==");
+try {
+    for i in range(5) {
+        try {
+            if (i == 2) { throw "inner " + i; }
+        } catch (e) {
+            print("loop caught " + e);
+            throw "rethrow " + i;
+        }
+    }
+    print("loop done");
+} catch (e) {
+    print("outer caught " + e);
+}
+
+# ============================================================
+# Case 17: throw 在内嵌函数（闭包）中，跨闭包捕获
+# ============================================================
+print("== C17 ==");
+fn makeThrower(msg) {
+    fn inner() { throw msg; }
+    return inner;
+}
+let t = makeThrower("from closure");
+try {
+    t();
+    print("no throw");
+} catch (e) {
+    print("closure throw: " + e);
+}
+
+# ============================================================
+# Case 18: throw 在类方法中，跨方法捕获
+# ============================================================
+print("== C18 ==");
+class Processor {
+    let val = 0;
+    fn process(x) {
+        if (x == 0) { throw "zero input"; }
+        val = x;
+        return val * 2;
+    }
+}
+let p = new Processor();
+try {
+    p.process(0);
+    print("no throw");
+} catch (e) {
+    print("method throw: " + e);
+}
+print("p.val after = " + p.val);
+try {
+    let r = p.process(7);
+    print("result: " + r);
+} catch (e) {
+    print("should not catch: " + e);
+}
+
+# ============================================================
+# Case 19: 多层函数调用，每层都有 try/catch（异常被最近层捕获）
+# ============================================================
+print("== C19 ==");
+fn level1() {
+    try {
+        level2();
+    } catch (e) {
+        print("L1 caught: " + e);
+    }
+}
+fn level2() {
+    try {
+        level3();
+    } catch (e) {
+        throw "rethrown from L2: " + e;
+    }
+}
+fn level3() {
+    throw "from L3";
+}
+level1();
+
+# ============================================================
+# Case 20: catch 变量与函数参数同名（参数不应被污染）
+# ============================================================
+print("== C20 ==");
+fn tester(msg) {
+    try {
+        throw "exception value";
+    } catch (msg) {
+        print("catch msg: " + msg);
+    }
+    return msg;
+}
+let r20 = tester("original param");
+print("param after: " + r20);
+
+print("== DONE ==");
+
+# ============================================================
+# Case 21: 未捕获异常 - 程序终止行为
+# (放在 DONE 之后，观察终止行为；预期：打印 throw 信息并终止)
+# ============================================================
+print("== C21 ==");
+throw "uncaught termination";
+print("after uncaught - should NOT print");

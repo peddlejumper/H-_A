@@ -7,41 +7,13 @@ fn str_length(s) {
 }
 
 fn str_uppercase(s) {
-    # Convert string to uppercase
-    # Note: This requires host support for ord/chr functions
-    # For now, return original string as placeholder
-    let result = "";
-    let i = 0;
-    while (i < len(s)) {
-        let ch = s[i];
-        if (ch >= "a" and ch <= "z") {
-            # Placeholder - would need ord/ch r from host
-            result = result + ch;
-        } else {
-            result = result + ch;
-        }
-        i = i + 1;
-    }
-    return result;
+    # Convert string to uppercase using the native string method
+    return s.upper();
 }
 
 fn str_lowercase(s) {
-    # Convert string to lowercase
-    # Note: This requires host support for ord/chr functions
-    # For now, return original string as placeholder
-    let result = "";
-    let i = 0;
-    while (i < len(s)) {
-        let ch = s[i];
-        if (ch >= "A" and ch <= "Z") {
-            # Placeholder - would need ord/chr from host
-            result = result + ch;
-        } else {
-            result = result + ch;
-        }
-        i = i + 1;
-    }
-    return result;
+    # Convert string to lowercase using the native string method
+    return s.lower();
 }
 
 fn str_trim(s) {
@@ -159,8 +131,14 @@ fn str_replace(s, old, replacement) {
     # Replace all occurrences of old with replacement
     let result = "";
     let old_len = len(old);
+    # Guard: an empty pattern would loop forever (i never advances
+    # because i = i + old_len is a no-op), so return the original
+    # string unchanged.
+    if (old_len == 0) {
+        return s;
+    }
     let i = 0;
-    
+
     while (i < len(s)) {
         let found = true;
         if (i + old_len <= len(s)) {
@@ -192,9 +170,20 @@ fn str_split(s, delimiter) {
     # Split string by delimiter into array
     let result = [];
     let delim_len = len(delimiter);
+    # Guard: an empty delimiter would loop forever (found is always
+    # true and i = i + delim_len never advances), so split the string
+    # into its individual characters instead.
+    if (delim_len == 0) {
+        let k = 0;
+        while (k < len(s)) {
+            push(result, s[k]);
+            k = k + 1;
+        }
+        return result;
+    }
     let start = 0;
     let i = 0;
-    
+
     while (i <= len(s) - delim_len) {
         let found = true;
         let j = 0;

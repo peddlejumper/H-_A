@@ -1,0 +1,15 @@
+print("Minimal parse test");
+
+let manual_tokens = [
+    {"type":"LET", "value":nullptr},
+    {"type":"IDENTIFIER", "value":"x"},
+    {"type":"EQ", "value":"="},
+    {"type":"NUMBER", "value":"42"},
+    {"type":"SEMI", "value":";"},
+    {"type":"EOF", "value":nullptr}
+];
+
+print("tokens len: " + str(len(manual_tokens)));
+print("calling parse...");
+let test_ast = parse(manual_tokens);
+print("parse done! ast: " + test_ast[0]);

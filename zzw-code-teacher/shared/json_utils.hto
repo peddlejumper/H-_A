@@ -1,0 +1,85 @@
+# shared/json_utils.hto
+# JSON 序列化/反序列化工具
+# 兼容 H# 内部 list/dict 格式
+
+# ============= 序列化 =============
+
+fn json_stringify(value) {
+    return net_json_stringify(value);
+}
+
+fn json_parse(text) {
+    return net_json_parse(text);
+}
+
+# ============= 便利封装 =============
+
+# 创建空 JSON 对象(dict)
+fn json_object() {
+    return {};
+}
+
+# 向 JSON 对象添加键值对
+fn json_set(obj, key, value) {
+    obj[key] = value;
+    return obj;
+}
+
+# 从 JSON 对象取键值(无值返回 nullptr)
+fn json_get(obj, key) {
+    if (obj == nullptr) {
+        return nullptr;
+    }
+    if (key in obj) {
+        return obj[key];
+    }
+    return nullptr;
+}
+
+# 字符串转义(将 ", \, \n, \r, \t 转义)
+fn json_escape_string(s) {
+    if (s == nullptr) {
+        return "null";
+    }
+    let result = "\"";
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let c = s[i];
+        if (c == "\\") {
+            result = result + "\\\\";
+        } else if (c == "\"") {
+            result = result + "\\\"";
+        } else if (c == "\n") {
+            result = result + "\\n";
+        } else if (c == "\r") {
+            result = result + "\\r";
+        } else if (c == "\t") {
+            result = result + "\\t";
+        } else {
+            result = result + c;
+        }
+        i = i + 1;
+    }
+    result = result + "\"";
+    return result;
+}
+
+# ============= 响应构造 =============
+
+# 构造标准 API 响应 {"ok": bool, "data": ..., "error": "..."}
+fn json_response_ok(data) {
+    return {"ok": true, "data": data, "error": ""};
+}
+
+fn json_response_err(msg) {
+    return {"ok": false, "data": nullptr, "error": msg};
+}
+
+# HTTP 响应包
+fn http_response(status, body, content_type) {
+    if (content_type == nullptr) {
+        content_type = "application/json; charset=utf-8";
+    }
+    return {"status": status, "body": body, "content_type": content_type};
+}

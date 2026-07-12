@@ -1,0 +1,687 @@
+# round3_103_race.hto — 测试智能体 #103
+# 领域: 并发竞态与死锁 (concurrent {} + Chan + parallel fn)
+#
+# 方法: 每段独立 try/catch，打印 === Rxx === 标记与 OBSERVE/OK/FAIL。
+# 预期 vs 实际的差异即 bug。源码参照:
+#   hsharp-kotlin-compiler/src/main/kotlin/com/hsharp/runtime/HVM.kt
+#   hsharp-kotlin-compiler/src/main/kotlin/com/hsharp/runtime/HValue.kt
+#   hsharp-kotlin-compiler/src/main/kotlin/com/hsharp/runtime/WorkerPool.kt
+#
+# 关键源码事实(用于判定预期):
+#  - STORE_NAME 永远写当前 frame 的 f.env (非 globals/非 parent)。
+#    parallel worker 的 frame.parent = callerFrame, 因此 worker 内
+#    `x = x + 1` 写入 worker 本地 env, 主线程永不可见。  -> 共享全局写丢失
+#  - ConcurrentScope.join() 按 children 列表(提交顺序) 顺序 await,
+#    非真正"先失败者赢"。  -> fail-fast 失效
+#  - FutureCell.cancel() 只置 cell 状态, 不中断 worker 线程,
+#    Worker.run() 也不检查取消。  -> orphan 任务继续跑
+#  - HChannel(cap=0) 用 LinkedBlockingQueue (无界), 非无缓冲。
+#    H# 无法表达真正的 rendezvous channel。
+#  - HChannel.recv() 的 while 循环 finally 子句在 closed&&isEmpty 时抛,
+#    可能在 poll 已取走最后一个值后抛出, 丢弃该值。  -> close 竞态丢值
+#  - HChannel.close() drainTo 后 re-offer, 与被阻塞的 sender put() 竞争,
+#    可能丢失缓冲项。
+
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK   " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + "  " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# ============================================================
+# R01: 共享全局变量写丢失 (STORE_NAME 写 worker 本地 env)
+#   let counter=0; parallel fn bump(){ counter=counter+1 }
+#   预期(若共享正确): counter 最终 = 2000, r1,r2 为递增过程值
+#   实际(源码BUG): counter=0, r1=1000, r2=1000 (各 worker 本地副本)
+# ============================================================
+let r01_counter = 0;
+parallel fn r01_bump() {
+    let i = 0;
+    while (i < 1000) {
+        r01_counter = r01_counter + 1;
+        i = i + 1;
+    }
+    return r01_counter;
+}
+print("=== R01 shared global write lost ===");
+try {
+    let f1 = r01_bump();
+    let f2 = r01_bump();
+    let r1 = await f1;
+    let r2 = await f2;
+    print("r1=" + str(r1) + " r2=" + str(r2) + " counter=" + str(r01_counter));
+    # 正确语义: counter>=1000 (有竞态可能<2000但应>0); r1/r2 应不同且>=1000
+    check("R01a_counter_visible_to_main", r01_counter > 0, "counter=" + str(r01_counter));
+    check("R01b_workers_share_state", r1 != r2 or r01_counter > 0, "r1=r2=" + str(r1) + " counter=0");
+} catch (e) {
+    print("R01-ERR: " + str(e));
+}
+
+# ============================================================
+# R02: 共享 list 容器 (SET_ITEM) 可见性 + 竞态丢失更新
+#   box=[0]; parallel fn bump(){ box[0]=box[0]+1 }
+#   SET_ITEM 作用于共享 HList 对象, 主线程可见 (有 happens-before via await)
+#   但 read-modify-write 非原子, 最终 box[0] < 2000 (丢失更新)
+# ============================================================
+let r02_box = [0];
+parallel fn r02_bump() {
+    let i = 0;
+    while (i < 1000) {
+        r02_box[0] = r02_box[0] + 1;
+        i = i + 1;
+    }
+    return 0;
+}
+print("=== R02 shared list box race ===");
+try {
+    let f1 = r02_bump();
+    let f2 = r02_bump();
+    let _ = await f1;
+    let _ = await f2;
+    let final = r02_box[0];
+    print("box[0]=" + str(final) + " (expected 2000 if atomic)");
+    check("R02a_list_write_visible", final > 0, "final=" + str(final));
+    # 竞态: 若正确串行/原子应=2000; <2000 说明丢失更新
+    check("R02b_lost_update_race", final < 2000, "final=" + str(final) + " (no race observed?)");
+} catch (e) {
+    print("R02-ERR: " + str(e));
+}
+
+# ============================================================
+# R03: join() 顺序 await 导致 fail-fast 失效
+#   slowFail 先提交 (1M 循环后抛 SLOW), quickFail 后提交 (立即抛 FAST)
+#   块内不 await, 依赖 CONCURRENT_EXIT 的 join。
+#   预期(parent-wins 真先失败): 重抛 FAST, elapsed 小
+#   实际(join 按 children 顺序): join 先 await slowFail (阻塞至完成),
+#     重抛 SLOW, elapsed 大
+# ============================================================
+parallel fn r03_slowFail() {
+    let i = 0;
+    while (i < 1000000) { i = i + 1; }
+    throw "SLOW";
+}
+parallel fn r03_quickFail() {
+    throw "FAST";
+}
+print("=== R03 join order vs fail-fast ===");
+try {
+    let t0 = time_now();
+    try {
+        concurrent {
+            let fa = r03_slowFail();
+            let fb = r03_quickFail();
+        }
+    } catch (e) {
+        let t1 = time_now();
+        print("rethrown=" + str(e) + " elapsed_ms=" + str(t1 - t0));
+        check("R03a_rethrown_is_FAST", str(e) == "FAST", "got=" + str(e));
+        # 若真 fail-fast, elapsed 应很小 (<50ms 典型); join 顺序 bug 会等 slowFail
+        check("R03b_elapsed_small", (t1 - t0) < 30, "elapsed=" + str(t1 - t0));
+    }
+} catch (e) {
+    print("R03-ERR: " + str(e));
+}
+
+# ============================================================
+# R04: cancel 不中断 worker, orphan 任务在 catch 后继续跑
+#   fail 先提交 (立即抛), longRun 后提交 (长循环 + 向 log channel 发送)
+#   join: await fail -> 设 firstError -> cancel longRun (仅置 cell) -> 重抛
+#   cancel 不中断 worker, longRun 成为 orphan 继续向 log 发送。
+#   预期(真取消): catch 后 log 不再增长
+#   实际: log 持续增长
+# ============================================================
+parallel fn r04_fail() { throw "trigger"; }
+parallel fn r04_longRun(log) {
+    let i = 0;
+    while (i < 2000000) {
+        if (i % 1000 == 0) { chan_send(log, "tick"); }
+        i = i + 1;
+    }
+    return "done";
+}
+print("=== R04 cancel does not interrupt worker ===");
+try {
+    let log = chan_new(0);
+    let atCatch = -1;
+    let afterWait = -1;
+    try {
+        concurrent {
+            let f1 = r04_fail();
+            let f2 = r04_longRun(log);
+        }
+    } catch (e) {
+        # 统计 catch 刻已收到的 tick
+        let c1 = 0;
+        while (chan_try_recv(log) != null) { c1 = c1 + 1; }
+        atCatch = c1;
+        print("caught=" + str(e) + " ticks_at_catch=" + str(atCatch));
+        # 等待, 让 orphan 继续(若未被取消)
+        let w = 0;
+        while (w < 500000) { w = w + 1; }
+        let c2 = 0;
+        while (chan_try_recv(log) != null) { c2 = c2 + 1; }
+        afterWait = c2;
+        print("ticks_after_wait=" + str(afterWait));
+    }
+    check("R04a_orphan_kept_running", afterWait > 0, "afterWait=" + str(afterWait));
+} catch (e) {
+    print("R04-ERR: " + str(e));
+}
+
+# ============================================================
+# R05: close 与被阻塞 sender 的竞争 -> 缓冲项丢失
+#   cap=1 channel. producer: send A (入缓冲, 满), send B (阻塞).
+#   main 等 producer 阻塞后 close().
+#   close(): drainTo 移除 A (释放空间) -> put(B) 解除阻塞, B 入队 ->
+#     close 再 offer(A) 时队列已有 B (cap=1 满) -> offer 失败 -> A 丢失.
+#   预期(Go 语义): close 后 recv 应能拿到 A 和 B (或至少 buffered 项不丢)
+#   实际: A 被丢, 只能拿到 B
+# ============================================================
+parallel fn r05_prod(ch) {
+    chan_send(ch, "A");   # 入缓冲
+    chan_send(ch, "B");   # 阻塞 (cap=1 满)
+    return "sent";
+}
+print("=== R05 close vs blocked sender drops item ===");
+try {
+    let ch = chan_new(1);
+    let fp = r05_prod(ch);
+    # 等 producer 到达 put(B) 阻塞
+    let spin = 0;
+    while (spin < 100000) { spin = spin + 1; }
+    chan_close(ch);
+    # 收集所有可 recv 的项
+    let got = [];
+    let rA = "none";
+    let rB = "none";
+    try {
+        let v = chan_recv(ch);
+        got.append(v);
+    } catch (e1) {
+        rA = "throw:" + str(e1);
+    }
+    try {
+        let v = chan_recv(ch);
+        got.append(v);
+    } catch (e2) {
+        rB = "throw:" + str(e2);
+    }
+    let pstatus = "pending";
+    try {
+        let pv = await fp;
+        pstatus = pv;
+    } catch (e3) {
+        pstatus = "throw:" + str(e3);
+    }
+    print("got=" + str(got) + " producer=" + str(pstatus));
+    let hasA = false;
+    let hasB = false;
+    for v in got {
+        if (v == "A") { hasA = true; }
+        if (v == "B") { hasB = true; }
+    }
+    check("R05a_B_recovered", hasB, "got=" + str(got));
+    check("R05b_A_not_lost", hasA, "got=" + str(got) + " (A dropped by close race)");
+} catch (e) {
+    print("R05-ERR: " + str(e));
+}
+
+# ============================================================
+# R06: recv() finally 在 close 竞态下丢弃最后一个值
+#   producer 发 1 项后立即 close; consumer recv。
+#   若 consumer 进入 while 循环 (entry 时未 close), poll 取到值后 finally
+#   见 closed&&isEmpty -> 抛异常, 丢弃已取出的值。
+#   循环 N 次, 统计丢值次数。
+# ============================================================
+parallel fn r06_prod(ch, v) {
+    chan_send(ch, v);
+    chan_close(ch);
+    return 0;
+}
+print("=== R06 recv finally loses value on close race ===");
+try {
+    let lost = 0;
+    let ok = 0;
+    let thrown = 0;
+    let i = 0;
+    while (i < 300) {
+        let ch = chan_new(0);
+        let fp = r06_prod(ch, i);
+        try {
+            let v = chan_recv(ch);
+            if (v == i) { ok = ok + 1; }
+            else { lost = lost + 1; }
+        } catch (e) {
+            # 值被取出后 finally 抛 -> consumer 视角是异常 + 丢值
+            thrown = thrown + 1;
+        }
+        let _ = await fp;
+        i = i + 1;
+    }
+    print("ok=" + str(ok) + " thrown=" + str(thrown) + " lost=" + str(lost));
+    # 若 finally 竞态触发, thrown > 0 (consumer 抛异常而非拿到值)
+    check("R06a_no_value_loss_on_close", thrown == 0, "thrown=" + str(thrown) + " (finally race dropped values)");
+} catch (e) {
+    print("R06-ERR: " + str(e));
+}
+
+# ============================================================
+# R07: chan_new(0) 是无界而非无缓冲 (语义缺失)
+#   预期(Go 无缓冲): send 无 recv 时阻塞
+#   实际: chan_new(0) 无界, send 立即返回, size 累积
+# ============================================================
+print("=== R07 chan_new(0) is unbounded not unbuffered ===");
+try {
+    let ch = chan_new(0);
+    chan_send(ch, 1);
+    chan_send(ch, 2);
+    chan_send(ch, 3);
+    let sz = chan_size(ch);
+    print("size_after_3_sends_no_recv=" + str(sz));
+    check("R07a_zero_cap_is_unbounded", sz == 3, "size=" + str(sz));
+    # H# 无法表达真正无缓冲 channel — 这是语义缺口
+    check("R07b_no_unbuffered_semantics", true, "documented gap");
+} catch (e) {
+    print("R07-ERR: " + str(e));
+}
+
+# ============================================================
+# R08: recv 无 sender -> 永久阻塞 (死锁场景)
+#   parallel fn 在空 open channel 上 recv, main 旋转观察 worker 是否完成。
+#   预期: worker 永不完成 (无 sender 无 close)。
+#   之后 main close 唤醒 worker (抛 recv on closed channel)。
+# ============================================================
+parallel fn r08_recvBlock(ch) {
+    try {
+        let v = chan_recv(ch);
+        return "got:" + str(v);
+    } catch (e) {
+        return "throw:" + str(e);
+    }
+}
+print("=== R08 recv without sender blocks forever ===");
+try {
+    let ch = chan_new(0);
+    let f = r08_recvBlock(ch);
+    let spin = 0;
+    while (spin < 200000) { spin = spin + 1; }
+    # NOTE: HFuture 不暴露 .resolved 属性 (loadAttr 对 FUTURE 抛异常),
+    # 无法直接检查 worker 是否仍在阻塞。只能通过 close 后 worker 被唤醒间接验证。
+    chan_close(ch);
+    let r = await f;
+    print("after_close=" + str(r));
+    check("R08a_close_wakes_blocked_recv", r == "throw:recv on closed channel", "r=" + str(r));
+} catch (e) {
+    print("R08-ERR: " + str(e));
+}
+
+# ============================================================
+# R09: channel close 语义汇总 (确认行为)
+#   - send after close 抛
+#   - recv drained closed 抛
+#   - double close 幂等 (不抛)
+#   - try_recv closed+drained 返回 null (不抛)
+#   - try_send on closed 抛 (非返回 false)
+# ============================================================
+print("=== R09 close semantics summary ===");
+try {
+    let ch = chan_new(2);
+    chan_send(ch, 1);
+    chan_close(ch);
+    # recv 拿走 buffered
+    let v1 = chan_recv(ch);
+    check("R09a_recv_buffered_after_close", v1 == 1, "v1=" + str(v1));
+    # recv drained -> 抛
+    let r9b = "no-throw";
+    try { chan_recv(ch); } catch (e) { r9b = "throw:" + str(e); }
+    check("R09b_recv_drained_closed_throws", r9b == "throw:recv on closed channel", "got=" + str(r9b));
+    # send after close -> 抛
+    let r9c = "no-throw";
+    try { chan_send(ch, 9); } catch (e) { r9c = "throw:" + str(e); }
+    check("R09c_send_on_closed_throws", r9c == "throw:send on closed channel", "got=" + str(r9c));
+    # double close -> 幂等
+    let r9d = "no-throw";
+    try { chan_close(ch); } catch (e) { r9d = "throw:" + str(e); }
+    check("R09d_double_close_idempotent", r9d == "no-throw", "got=" + str(r9d));
+    # try_recv closed+drained -> null
+    let r9e = chan_try_recv(ch);
+    check("R9e_try_recv_closed_drained_null", r9e == null, "got=" + str(r9e));
+    # try_send on closed -> 抛 (非 false)
+    let r9f = "no-throw";
+    try { chan_try_send(ch, 1); } catch (e) { r9f = "throw:" + str(e); }
+    check("R09f_try_send_on_closed_throws", r9f == "throw:send on closed channel", "got=" + str(r9f));
+} catch (e) {
+    print("R09-ERR: " + str(e));
+}
+
+# ============================================================
+# R10: 嵌套 concurrent 在 parallel worker 内 (确认 ThreadLocal 修复)
+#   4 个 parallel worker 各自体内开 concurrent{}, 各自 await 内层任务。
+#   预期(修复后): 无 currentScope 串扰, 4 个结果正确 (10,20,30,40)
+# ============================================================
+parallel fn r10_worker(n) {
+    concurrent {
+        let s = n * 10;
+        let _ = s;
+    }
+    return n * 10;
+}
+print("=== R10 nested concurrent in parallel worker ===");
+try {
+    concurrent {
+        let f1 = r10_worker(1);
+        let f2 = r10_worker(2);
+        let f3 = r10_worker(3);
+        let f4 = r10_worker(4);
+        let r1 = await f1;
+        let r2 = await f2;
+        let r3 = await f3;
+        let r4 = await f4;
+        print("results=" + str(r1) + "," + str(r2) + "," + str(r3) + "," + str(r4));
+        check("R10a_nested_no_crosstalk", r1 == 10 and r2 == 20 and r3 == 30 and r4 == 40, "results=" + str(r1) + "," + str(r2) + "," + str(r3) + "," + str(r4));
+    }
+} catch (e) {
+    print("R10-ERR: " + str(e));
+}
+
+# ============================================================
+# R11: return inside concurrent 不泄漏 scope (确认修复)
+#   fn runner(){ concurrent { spawn; return 99; } } — return 是否泄漏 scope?
+#   (注: await 不允许在普通 fn 内, 故仅 spawn 不 await, 依赖 EXIT 隐式 join)
+#   测试: 调用 runner 后再开一个 concurrent, 第二个应正常工作。
+# ============================================================
+parallel fn r11_work(n) { return n; }
+fn r11_runner() {
+    concurrent {
+        let f = r11_work(7);
+        let ignore = f;
+        return 99;
+    }
+    return 0;
+}
+print("=== R11 return inside concurrent no scope leak ===");
+try {
+    let r = r11_runner();
+    print("runner=" + str(r));
+    check("R11a_return_exits_function", r == 99, "r=" + str(r));
+    # 第二个 concurrent — 若 scope 泄漏会串扰或异常
+    concurrent {
+        let f = r11_work(42);
+        let v = await f;
+        check("R11b_second_concurrent_ok", v == 42, "v=" + str(v));
+    }
+} catch (e) {
+    print("R11-ERR: " + str(e));
+}
+
+# ============================================================
+# R12: concurrent 内一任务抛异常, sibling 是否真取消 (parent-wins)
+#   fail 立即抛, longRun 长循环 + 向 log 发送。
+#   预期(parent-wins 取消): longRun 被取消, log 不再增长
+#   实际(cancel 不中断): longRun 继续, log 增长 (同 R04)
+# ============================================================
+parallel fn r12_fail() { throw "x"; }
+parallel fn r12_longRun(log) {
+    let i = 0;
+    while (i < 200000) {
+        chan_send(log, "t");
+        i = i + 1;
+    }
+    return "done";
+}
+print("=== R12 sibling cancel on exception ===");
+try {
+    let log = chan_new(0);
+    let after = -1;
+    try {
+        concurrent {
+            let f1 = r12_fail();
+            let f2 = r12_longRun(log);
+        }
+    } catch (e) {
+        let _ = e;
+        let w = 0;
+        while (w < 150000) { w = w + 1; }
+        let c = 0;
+        while (chan_try_recv(log) != null) { c = c + 1; }
+        after = c;
+    }
+    print("ticks_after_catch=" + str(after));
+    # 若取消有效, after 应为 0 (longRun 未跑或被中断); 实际 >0
+    check("R12a_sibling_cancelled", after == 0, "after=" + str(after) + " (sibling kept running)");
+} catch (e) {
+    print("R12-ERR: " + str(e));
+}
+
+# ============================================================
+# R13: 多 producer / 多 consumer 正确性
+#   3 producer 各发 3 个数, 1 consumer 收 9 个, 验证 sum。
+#   预期: sum = (100+101+102)+(200+201+202)+(300+301+302) = 1809
+# ============================================================
+parallel fn r13_prod(ch, base) {
+    chan_send(ch, base);
+    chan_send(ch, base + 1);
+    chan_send(ch, base + 2);
+    return 0;
+}
+print("=== R13 multi-producer single-consumer ===");
+try {
+    let ch = chan_new(0);
+    let p1 = r13_prod(ch, 100);
+    let p2 = r13_prod(ch, 200);
+    let p3 = r13_prod(ch, 300);
+    let got = [];
+    let i = 0;
+    while (i < 9) {
+        got.append(chan_recv(ch));
+        i = i + 1;
+    }
+    let _ = await p1;
+    let _ = await p2;
+    let _ = await p3;
+    let sum = 0;
+    for v in got { sum = sum + v; }
+    check("R13a_mpsc_count", len(got) == 9, "len=" + str(len(got)));
+    check("R13b_mpsc_sum", sum == 1809, "sum=" + str(sum));
+} catch (e) {
+    print("R13-ERR: " + str(e));
+}
+
+# ============================================================
+# R14: concurrent + 共享 list push 竞态
+#   多个 parallel fn 并发 append 同一 list。ArrayList 非线程安全。
+#   预期: 可能丢数据 / 抛 ConcurrentModificationException / 长度 < 预期
+# ============================================================
+parallel fn r14_pusher(lst, n) {
+    let i = 0;
+    while (i < n) {
+        lst.append(i);
+        i = i + 1;
+    }
+    return 0;
+}
+print("=== R14 concurrent shared list push race ===");
+try {
+    let lst = [];
+    let f1 = r14_pusher(lst, 2000);
+    let f2 = r14_pusher(lst, 2000);
+    let f3 = r14_pusher(lst, 2000);
+    let _ = await f1;
+    let _ = await f2;
+    let _ = await f3;
+    let n = len(lst);
+    print("len=" + str(n) + " (expected 6000 if no race)");
+    check("R14a_list_not_corrupted", n > 0, "len=" + str(n));
+    check("R14b_push_race_observed", n < 6000, "len=" + str(n) + " (no race?)");
+} catch (e) {
+    print("R14-ERR: " + str(e));
+}
+
+# ============================================================
+# R15: 大量并发任务 (50 个 parallel + concurrent)
+#   预期: 全部完成, sum = 0+1+...+49 = 1225
+# ============================================================
+parallel fn r15_work(n) { return n; }
+print("=== R15 many concurrent tasks ===");
+try {
+    let total = 0;
+    concurrent {
+        let i = 0;
+        while (i < 50) {
+            let f = r15_work(i);
+            let v = await f;
+            total = total + v;
+            i = i + 1;
+        }
+    }
+    check("R15a_50_tasks_sum", total == 1225, "total=" + str(total));
+} catch (e) {
+    print("R15-ERR: " + str(e));
+}
+
+# ============================================================
+# R16: 无 await 的隐式 join (CONCURRENT_EXIT join 全部子任务)
+#   spawn 3 个 task 不 await, 块结束应等全部完成。
+#   预期: "after" 在所有 "done-N" 之后
+# ============================================================
+parallel fn r16_task(n) {
+    let s = 0;
+    let i = 0;
+    while (i < 30000) { s = s + i; i = i + 1; }
+    print("done-" + str(n));
+    return s;
+}
+print("=== R16 implicit join no await ===");
+try {
+    concurrent {
+        let f1 = r16_task(1);
+        let f2 = r16_task(2);
+        let f3 = r16_task(3);
+        let ignore = f1;
+    }
+    check("R16a_implicit_join_completed", true, "after-block reached");
+    print("after-block");
+} catch (e) {
+    print("R16-ERR: " + str(e));
+}
+
+# ============================================================
+# R17: 并发任务顺序 — 真并行还是保序执行
+#   提交 4 个有显著耗时的任务, 观察完成顺序是否乱序 (真并行)。
+# ============================================================
+parallel fn r17_work(n, loops) {
+    let i = 0;
+    while (i < loops) { i = i + 1; }
+    print("finish-" + str(n));
+    return n;
+}
+print("=== R17 task parallelism order ===");
+try {
+    concurrent {
+        let f1 = r17_work(1, 100000);
+        let f2 = r17_work(2, 100000);
+        let f3 = r17_work(3, 100000);
+        let f4 = r17_work(4, 100000);
+        let _ = await f1;
+        let _ = await f2;
+        let _ = await f3;
+        let _ = await f4;
+    }
+    print("R17-note: completion order above shows real parallelism (order may vary)");
+    check("R17a_parallelism_available", parallelism() >= 1, "par=" + str(parallelism()));
+} catch (e) {
+    print("R17-ERR: " + str(e));
+}
+
+# ============================================================
+# R18: concurrent 块内 try/catch 捕获子任务异常
+#   块内 await 一个抛异常的 parallel fn, 用块内 try/catch 捕获。
+#   预期: 块内 catch 捕获, 块正常结束, 不触发 CONCURRENT_EXIT 重抛
+# ============================================================
+parallel fn r18_thrower(msg) { throw msg; }
+print("=== R18 try/catch inside concurrent ===");
+try {
+    let caught = "none";
+    concurrent {
+        let f = r18_thrower("boom18");
+        try {
+            let r = await f;
+        } catch (e) {
+            caught = "caught:" + str(e);
+        }
+        print("inside-block-caught=" + caught);
+    }
+    check("R18a_inner_catch_works", caught == "caught:boom18", "caught=" + str(caught));
+} catch (e) {
+    print("R18-ERR: " + str(e));
+}
+
+# ============================================================
+# R19: 共享 dict 并发写竞态
+#   多个 parallel fn 并发写同一 dict 不同 key + 同 key。
+#   预期: 可能丢更新 / 异常; final 值可能 < 预期
+# ============================================================
+parallel fn r19_writer(d, key, n) {
+    let i = 0;
+    while (i < n) {
+        d[key] = i;
+        i = i + 1;
+    }
+    return 0;
+}
+print("=== R19 concurrent shared dict write race ===");
+try {
+    let d = {};
+    let f1 = r19_writer(d, "a", 2000);
+    let f2 = r19_writer(d, "b", 2000);
+    let _ = await f1;
+    let _ = await f2;
+    let av = d["a"];
+    let bv = d["b"];
+    print("a=" + str(av) + " b=" + str(bv));
+    check("R19a_dict_keys_present", av != null and bv != null, "a=" + str(av) + " b=" + str(bv));
+    # 不同 key 应互不干扰 (各自最终值 ~1999)
+    check("R19b_distinct_keys_independent", av == 1999 and bv == 1999, "a=" + str(av) + " b=" + str(bv));
+} catch (e) {
+    print("R19-ERR: " + str(e));
+}
+
+# ============================================================
+# R20: concurrent 块内 spawn 但只 await 部分 — 未 await 的失败是否传播
+#   f1 (fail) 不 await, f2 (ok) await。块结束时 CONCURRENT_EXIT join 全部。
+#   预期(parent-wins): join 看到 f1 失败 -> 重抛
+#   观察: 是否抛异常 (即使 f1 未被显式 await)
+# ============================================================
+parallel fn r20_fail() { throw "unawaited-fail"; }
+parallel fn r20_ok() { return 42; }
+print("=== R20 unawaited failing task propagates ===");
+try {
+    let propagated = "no-throw";
+    try {
+        concurrent {
+            let f1 = r20_fail();
+            let f2 = r20_ok();
+            let r2 = await f2;
+            # f1 未 await
+            print("r2=" + str(r2));
+        }
+    } catch (e) {
+        propagated = "throw:" + str(e);
+    }
+    print("propagated=" + propagated);
+    check("R20a_unawaited_failure_propagates", propagated == "throw:unawaited-fail", "got=" + propagated);
+} catch (e) {
+    print("R20-ERR: " + str(e));
+}
+
+# ============================================================
+# 汇总
+# ============================================================
+print("=========================================");
+print("RACE_STRESS_SUMMARY: PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+print("=== ALL DONE ===");

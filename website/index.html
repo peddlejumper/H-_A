@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>H# — The Next-Gen Programming Language</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;700&family=Syne:wght@400;600;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;700&family=Syne:wght@400;600;800&display=swap"></noscript>
+    <style>
+        :root{--bg:#050506;--bg2:#0a0a0d;--bg3:#0f0f12;--txt:#fafafa;--muted:#a0a0a5;--accent:#00ffaa;--purple:#6644ff}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:var(--txt);line-height:1.6;overflow-x:hidden}
+        .noise-overlay{position:fixed;inset:0;opacity:.03;pointer-events:none;z-index:1}
+        .navigation{position:fixed;top:0;left:0;width:100%;display:flex;justify-content:space-between;align-items:center;padding:2rem 3rem;z-index:100;background:linear-gradient(to bottom,rgba(5,5,6,.9),rgba(5,5,6,.5) 70%,transparent);backdrop-filter:blur(10px)}
+        .nav-logo{font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:800;letter-spacing:-.05em;color:var(--accent)}
+        .nav-right{display:flex;align-items:center;gap:2rem}
+        .nav-links{display:flex;gap:2rem}
+        .nav-links a{color:var(--muted);text-decoration:none;font-size:.95rem;transition:color .3s}
+        .nav-links a:hover{color:var(--txt)}
+        .lang-switch{display:flex;gap:.5rem}
+        .lang-btn{padding:.4rem .8rem;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);border-radius:4px;cursor:pointer;font-size:.85rem;transition:all .3s}
+        .lang-btn:hover{border-color:var(--accent);color:var(--accent)}
+        .lang-btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+        .hero{min-height:100vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:0 2rem}
+        .hero-bg{position:absolute;inset:0;overflow:hidden;z-index:0}
+        .geo{position:absolute;border-radius:50%;filter:blur(80px);opacity:.4}
+        .geo-1{width:40vw;height:40vw;background:radial-gradient(circle,var(--accent),transparent 70%);top:-10%;right:-10%;animation:f 20s ease-in-out}
+        .geo-2{width:30vw;height:30vw;background:radial-gradient(circle,var(--purple),transparent 70%);bottom:-5%;left:-5%;animation:f 20s ease-in-out -5s}
+        .geo-3{width:20vw;height:20vw;background:radial-gradient(circle,#ff44aa,transparent 70%);top:40%;left:50%;animation:f 20s ease-in-out -10s}
+        .geo-4{width:15vw;height:15vw;background:radial-gradient(circle,#ffaa00,transparent 70%);bottom:30%;right:15%;animation:f 20s ease-in-out -15s}
+        @keyframes f{0%,100%{transform:translate(0) scale(1)}25%{transform:translate(50px,-50px) scale(1.1)}50%{transform:translate(-30px,40px) scale(.9)}75%{transform:translate(-50px,-30px) scale(1.05)}}
+        .hero-content{position:relative;z-index:2;text-align:left;max-width:1200px;width:100%}
+        .title-line{display:block;font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(8rem,25vw,16rem);line-height:.8;letter-spacing:-.1em}
+        .line-1{animation:slideL 1s ease-out forwards;opacity:0}
+        .line-2{text-align:right;color:var(--accent);animation:slideR 1s ease-out forwards;opacity:0;animation-delay:.3s}
+        @keyframes slideL{to{transform:translateX(0);opacity:1}from{transform:translateX(-10%)}}
+        @keyframes slideR{to{transform:translateX(0);opacity:1}from{transform:translateX(10%)}}
+        .subtitle-text{font-size:clamp(1.2rem,3vw,1.8rem);color:var(--muted);animation:fadeU .8s ease-out forwards;opacity:0}
+        .subtitle-text:nth-child(1){animation-delay:.8s}.subtitle-text:nth-child(2){animation-delay:.9s}.subtitle-text:nth-child(3){animation-delay:1s}
+        @keyframes fadeU{to{opacity:1;transform:translateY(0)}from{opacity:0;transform:translateY(20px)}}
+        .scroll-indicator{position:absolute;bottom:3rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:1rem;opacity:.5;animation:bounce 2s infinite}
+        .scroll-indicator span{font-size:.8rem;text-transform:uppercase;letter-spacing:.2em}
+        .scroll-line{width:1px;height:4rem;background:linear-gradient(to bottom,transparent,var(--txt))}
+        @keyframes bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(10px)}}
+        .about{padding:10rem 3rem;background:var(--bg2)}
+        .about-container{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr;gap:6rem;align-items:start}
+        .about-text h2{font-family:'Syne',sans-serif;font-size:3rem;margin-bottom:2rem;letter-spacing:-.03em}
+        .accent{color:var(--accent)}
+        .about-text p{font-size:1.2rem;color:var(--muted);margin-bottom:1.5rem;line-height:1.8}
+        .about-stats{display:flex;flex-direction:column;gap:3rem}
+        .stat-item{border-left:2px solid var(--accent);padding-left:2rem}
+        .stat-number{display:block;font-family:'Syne',sans-serif;font-size:3.5rem;font-weight:800;line-height:1;margin-bottom:.5rem;color:var(--txt)}
+        .stat-number span{font-size:1.5rem;color:var(--accent)}
+        .stat-label{color:var(--muted);font-size:.95rem;text-transform:uppercase;letter-spacing:.1em}
+        .features{padding:10rem 3rem}
+        .features-heading{max-width:1200px;margin:0 auto 5rem;font-family:'Syne',sans-serif;font-size:3rem;letter-spacing:-.03em}
+        .broken-text{color:var(--accent)}
+        .features-grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:2rem}
+        .feature-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);padding:2.5rem 2rem;border-radius:12px}
+        .feature-card h3{font-family:'Syne',sans-serif;font-size:1.5rem;margin-bottom:1rem;letter-spacing:-.02em}
+        .feature-card p{color:var(--muted);line-height:1.7}
+        .feature-icon{font-size:2.5rem;margin-bottom:1.5rem;color:var(--accent);display:inline-block}
+        .examples{padding:10rem 3rem;background:var(--bg2)}
+        .examples-header{max-width:1200px;margin:0 auto 4rem}
+        .examples-header h2{font-family:'Syne',sans-serif;font-size:3rem;letter-spacing:-.03em;margin-bottom:1rem}
+        .stagger-text{color:var(--accent)}
+        .examples-header p{font-size:1.2rem;color:var(--muted)}
+        .code-display{max-width:1200px;margin:2rem auto;background:#000;border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;position:relative}
+        .code-lines{padding:2rem;font-family:'Space Grotesk',monospace;font-size:1rem;line-height:1.6}
+        .code-line{color:#d4d4d4;padding-left:1rem;border-left:2px solid transparent;transition:all .2s}
+        .code-line:hover{border-left-color:var(--accent);background:rgba(0,255,170,.05);padding-left:1.5rem}
+        .comment{color:#6a9955}.keyword{color:#569cd6}.built_in{color:#dcdcaa}
+        .code-gradient{position:absolute;bottom:0;left:0;width:100%;height:100px;background:linear-gradient(to top,#000,transparent);pointer-events:none}
+        .zzw-ide{padding:10rem 3rem;background:var(--bg)}
+        .zzw-header{max-width:1200px;margin:0 auto 4rem;text-align:center}
+        .zzw-header h2{font-family:'Syne',sans-serif;font-size:3rem;letter-spacing:-.03em;margin-bottom:1rem}
+        .zzw-header p{font-size:1.3rem;color:var(--muted);max-width:700px;margin:0 auto}
+        .zzw-preview{max-width:1100px;margin:0 auto 4rem;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 80px rgba(0,0,0,.5)}
+        .zzw-toolbar{background:#1e1e1e;padding:.8rem 1rem;display:flex;align-items:center;gap:1rem}
+        .zzw-dots{display:flex;gap:.5rem}
+        .zzw-dot{width:12px;height:12px;border-radius:50%}
+        .zzw-dot:nth-child(1){background:#ff5f56}.zzw-dot:nth-child(2){background:#ffbd2e}.zzw-dot:nth-child(3){background:#27ca40}
+        .zzw-title{color:#aaa;font-size:.9rem;margin-left:1rem}
+        .zzw-editor{background:#0e0e0e;min-height:400px;display:grid;grid-template-columns:60px 1fr 280px;height:450px}
+        .zzw-sidebar{background:#1e1e1e;border-right:1px solid #333;padding:1rem 0;display:flex;flex-direction:column;align-items:center;gap:.5rem}
+        .zzw-sidebar-icon{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:1.2rem;cursor:pointer;transition:all .2s}
+        .zzw-sidebar-icon:hover{background:rgba(255,255,255,.1);color:var(--accent)}
+        .zzw-file-tree{padding:1rem}
+        .zzw-file{color:#ccc;padding:.4rem .6rem;border-radius:4px;cursor:pointer;font-size:.9rem;transition:background .2s}
+        .zzw-file:hover{background:rgba(255,255,255,.05)}
+        .zzw-file.active{background:rgba(0,255,170,.15);color:var(--accent)}
+        .zzw-code-area{font-family:'Fira Code','Consolas',monospace;font-size:.95rem;line-height:1.7;padding:1.5rem;overflow:auto;color:#d4d4d4}
+        .zzw-code-area .cm-keyword{color:#569cd6}.zzw-code-area .cm-function{color:#dcdcaa}.zzw-code-area .cm-string{color:#ce9178}.zzw-code-area .cm-comment{color:#6a9955}.zzw-code-area .cm-number{color:#b5cea8}
+        .zzw-ai-panel{background:#1e1e1e;border-left:1px solid #333;padding:1rem;display:flex;flex-direction:column}
+        .zzw-ai-header{color:#888;font-size:.85rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid #333}
+        .zzw-ai-messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:1rem}
+        .zzw-ai-msg{background:rgba(0,255,170,.08);padding:.8rem;border-radius:8px;font-size:.9rem;color:#ccc;line-height:1.5}
+        .zzw-ai-msg.user{background:rgba(102,68,255,.15);align-self:flex-end}
+        .zzw-features{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:2rem}
+        .zzw-feature{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);padding:2rem;border-radius:12px;text-align:center;transition:all .3s}
+        .zzw-feature:hover{border-color:var(--accent);transform:translateY(-4px)}
+        .zzw-feature-icon{font-size:2rem;margin-bottom:1rem;color:var(--accent)}
+        .zzw-feature h3{font-family:'Syne',sans-serif;font-size:1.2rem;margin-bottom:.5rem}
+        .zzw-feature p{color:var(--muted);font-size:.95rem}
+        .zzw-cta{text-align:center;padding:5rem 3rem;background:var(--bg2)}
+        .zzw-cta-content{max-width:600px;margin:0 auto}
+        .zzw-cta h3{font-family:'Syne',sans-serif;font-size:2rem;margin-bottom:1rem}
+        .zzw-cta p{color:var(--muted);margin-bottom:2rem}
+        .download{min-height:70vh;display:flex;align-items:center;justify-content:center;position:relative;padding:6rem 3rem;overflow:hidden}
+        .download-bg{position:absolute;inset:0;background:radial-gradient(circle at 20% 50%,rgba(0,255,170,.15),transparent 50%),radial-gradient(circle at 80% 80%,rgba(102,68,255,.15),transparent 50%);z-index:0}
+        .download-content{position:relative;z-index:2;text-align:center;max-width:800px}
+        .download-content h2{font-family:'Syne',sans-serif;font-size:4rem;margin-bottom:1.5rem;letter-spacing:-.05em}
+        .glitch-text{color:var(--accent);cursor:default}
+        .download-content p{font-size:1.3rem;color:var(--muted);margin-bottom:3rem}
+        .download-buttons{display:flex;gap:2rem;justify-content:center;flex-wrap:wrap}
+        .btn{display:inline-flex;align-items:center;gap:.8rem;padding:1rem 2.5rem;font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:600;text-decoration:none;border-radius:50px;transition:all .3s}
+        .btn-primary{background:var(--accent);color:var(--bg);box-shadow:0 10px 30px rgba(0,255,170,.3)}
+        .btn-primary:hover{transform:translateY(-3px);box-shadow:0 15px 40px rgba(0,255,170,.4)}
+        .btn-secondary{background:transparent;color:var(--txt);border:1px solid rgba(255,255,255,.08)}
+        .btn-secondary:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-3px)}
+        .btn-arrow{transition:transform .3s}
+        .btn:hover .btn-arrow{transform:translateX(4px)}
+        .footer{border-top:1px solid rgba(255,255,255,.08);padding:4rem 3rem 2rem}
+        .footer-content{max-width:1200px;margin:0 auto 3rem;display:flex;justify-content:space-between;align-items:center}
+        .footer-logo{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:var(--accent);margin-bottom:.5rem}
+        .footer-brand p{color:var(--muted)}
+        .footer-links{display:flex;gap:2.5rem}
+        .footer-links a{color:var(--muted);text-decoration:none;transition:color .3s}
+        .footer-links a:hover{color:var(--accent)}
+        .footer-bottom{max-width:1200px;margin:0 auto;padding-top:2rem;border-top:1px solid rgba(255,255,255,.08);text-align:center;color:var(--muted);font-size:.9rem}
+        @media(max-width:968px){.navigation{padding:1.5rem}.nav-links{gap:1.5rem}.about-container{grid-template-columns:1fr;gap:4rem}.download-content h2{font-size:2.5rem}.footer-content{flex-direction:column;gap:2rem;text-align:center}.footer-links{gap:1.5rem}.about,.features,.examples,.zzw-ide,.zzw-cta{padding:5rem 1.5rem}.zzw-editor{grid-template-columns:1fr}.zzw-sidebar,.zzw-ai-panel{display:none}.zzw-features{grid-template-columns:1fr}}
+        @media(max-width:640px){.nav-links,.lang-switch{display:none}.features-grid,.zzw-features{grid-template-columns:1fr}.download-buttons{flex-direction:column}.btn{justify-content:center}}
+        ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:4px}::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+    </style>
+</head>
+<body>
+    <div class="noise-overlay"></div>
+    
+    <nav class="navigation">
+        <div class="nav-logo">H#</div>
+        <div class="nav-right">
+            <div class="nav-links">
+                <a href="#about" data-i18n="nav.about">About</a>
+                <a href="#features" data-i18n="nav.features">Features</a>
+                <a href="#examples" data-i18n="nav.code">Code</a>
+                <a href="zzw.html" data-i18n="nav.zzw">ZZW Code</a>
+                <a href="#download" data-i18n="nav.download">Download</a>
+            </div>
+            <div class="lang-switch">
+                <button class="lang-btn active" data-lang="en">EN</button>
+                <button class="lang-btn" data-lang="zh">中文</button>
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-bg">
+            <div class="geo geo-1"></div>
+            <div class="geo geo-2"></div>
+            <div class="geo geo-3"></div>
+            <div class="geo geo-4"></div>
+        </div>
+        
+        <div class="hero-content">
+            <div class="title-line line-1">H</div>
+            <div class="title-line line-2">#</div>
+            <div class="hero-subtitle">
+                <div class="subtitle-text" data-i18n="hero.sub1">A parallel computing focused</div>
+                <div class="subtitle-text" data-i18n="hero.sub2">functional programming language</div>
+                <div class="subtitle-text" data-i18n="hero.sub3">for the space computing era</div>
+            </div>
+        </div>
+        
+        <div class="scroll-indicator">
+            <span data-i18n="hero.scroll">Scroll</span>
+            <div class="scroll-line"></div>
+        </div>
+    </section>
+
+    <section id="about" class="about">
+        <div class="about-container">
+            <div class="about-text">
+                <h2 data-i18n="about.title">What is <span class="accent">H#</span>?</h2>
+                <p data-i18n="about.desc1">H# is an experimental programming language with a Python-like syntax that compiles to a custom bytecode VM. It's built from scratch with a focus on exploration of new programming paradigms and space computing concepts.</p>
+                <p data-i18n="about.desc2">With built-in D3 system for space operations, coroutine-based concurrency, and an optimizing compiler, H# pushes the boundaries of what's possible in language design.</p>
+            </div>
+            <div class="about-stats">
+                <div class="stat-item">
+                    <span class="stat-number">v<span>0.4</span></span>
+                    <span class="stat-label" data-i18n="about.stat1">Current Version</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">5<span>+</span></span>
+                    <span class="stat-label" data-i18n="about.stat2">Years Development</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">1</span>
+                    <span class="stat-label" data-i18n="about.stat3">Custom VM</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features">
+        <h2 class="features-heading" data-i18n="features.title">Core <span class="broken-text" data-i18n="features.sub">Capabilities</span></h2>
+        <div class="features-grid">
+            <div class="feature-card" data-delay="0">
+                <div class="feature-icon">◙</div>
+                <h3 data-i18n="f1.title">Space Computing</h3>
+                <p data-i18n="f1.desc">Built-in D3 emotional system for spatial computing operations. New paradigm for handling complex geometric relationships.</p>
+            </div>
+            <div class="feature-card" data-delay="2">
+                <div class="feature-icon">◊</div>
+                <h3 data-i18n="f2.title">Parallel Execution</h3>
+                <p data-i18n="f2.desc">Coroutine-based concurrency with custom scheduler. Efficient multi-tasking without the GIL bottleneck.</p>
+            </div>
+            <div class="feature-card" data-delay="4">
+                <div class="feature-icon">◧</div>
+                <h3 data-i18n="f3.title">Optimizing Compiler</h3>
+                <p data-i18n="f3.desc">Multiple optimization passes from AST generation to register allocation. Clean and well-documented compiler pipeline.</p>
+            </div>
+            <div class="feature-card" data-delay="1">
+                <div class="feature-icon">▣</div>
+                <h3 data-i18n="f4.title">Functional First</h3>
+                <p data-i18n="f4.desc">First-class functions, closures, and lexical scoping. Built-in support for functional programming patterns.</p>
+            </div>
+            <div class="feature-card" data-delay="3">
+                <div class="feature-icon">▨</div>
+                <h3 data-i18n="f5.title">Python Interop</h3>
+                <p data-i18n="f5.desc">Seamless integration with Python host functions. Leverage the entire Python ecosystem from H# code.</p>
+            </div>
+            <div class="feature-card" data-delay="5">
+                <div class="feature-icon">◈</div>
+                <h3 data-i18n="f6.title">Extensible</h3>
+                <p data-i18n="f6.desc">Modular standard library design. Easy to add new modules and extend the language capabilities.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="examples" class="examples">
+        <div class="examples-header">
+            <h2 data-i18n="code.title">Sample <span class="stagger-text" data-i18n="code.sub">Code</span></h2>
+            <p data-i18n="code.desc">See H# in action with these examples</p>
+        </div>
+        <div class="code-display">
+            <div class="code-lines">
+                <div class="code-line"><span class="comment">// Fibonacci in H#</span></div>
+                <div class="code-line"><span class="keyword">def</span> fib(n) <span class="keyword">do</span></div>
+                <div class="code-line">  <span class="keyword">if</span> n <= 1 <span class="keyword">do</span></div>
+                <div class="code-line">    n</div>
+                <div class="code-line">  <span class="keyword">else</span></div>
+                <div class="code-line">    fib(n-1) + fib(n-2)</div>
+                <div class="code-line">  <span class="keyword">end</span></div>
+                <div class="code-line"><span class="keyword">end</span></div>
+                <div class="code-line"></div>
+                <div class="code-line"><span class="built_in">print</span>(fib(10))</div>
+            </div>
+            <div class="code-gradient"></div>
+        </div>
+        <div class="code-display">
+            <div class="code-lines">
+                <div class="code-line"><span class="comment">// D3 emotion matrix</span></div>
+                <div class="code-line"><span class="keyword">use</span> d3 <span class="keyword">do</span></div>
+                <div class="code-line"></div>
+                <div class="code-line"><span class="keyword">def</span> create_pattern(size) <span class="keyword">do</span></div>
+                <div class="code-line">  <span class="keyword">var</span> matrix = d3.empty(size)</div>
+                <div class="code-line">  <span class="keyword">for</span> i <span class="keyword">in</span> 0..size <span class="keyword">do</span></div>
+                <div class="code-line">    <span class="keyword">for</span> j <span class="keyword">in</span> 0..size <span class="keyword">do</span></div>
+                <div class="code-line">      matrix[i][j] = (i*j) % d3.phi</div>
+                <div class="code-line">    <span class="keyword">end</span></div>
+                <div class="code-line">  <span class="keyword">end</span></div>
+                <div class="code-line">  matrix</div>
+                <div class="code-line"><span class="keyword">end</span></div>
+            </div>
+            <div class="code-gradient"></div>
+        </div>
+    </section>
+
+    <section id="zzw-ide" class="zzw-ide">
+        <div class="zzw-header">
+            <h2 data-i18n="zzw.title"><span class="accent">ZZW Code</span> — AI-Powered H# IDE</h2>
+            <p data-i18n="zzw.subtitle">A modern development environment with built-in AI assistance, Monaco editor, and seamless H# support</p>
+        </div>
+
+        <div class="zzw-preview">
+            <div class="zzw-toolbar">
+                <div class="zzw-dots">
+                    <div class="zzw-dot"></div>
+                    <div class="zzw-dot"></div>
+                    <div class="zzw-dot"></div>
+                </div>
+                <span class="zzw-title">ZZW Code — H# AI IDE</span>
+            </div>
+            <div class="zzw-editor">
+                <div class="zzw-sidebar">
+                    <div class="zzw-sidebar-icon">📁</div>
+                    <div class="zzw-sidebar-icon">🔍</div>
+                    <div class="zzw-sidebar-icon">💬</div>
+                    <div class="zzw-sidebar-icon">⚙️</div>
+                </div>
+                <div class="zzw-file-tree">
+                    <div class="zzw-file active">📄 main.hto</div>
+                    <div class="zzw-file">📄 utils.hto</div>
+                    <div class="zzw-file">📄 d3_demo.hto</div>
+                </div>
+                <div class="zzw-code-area">
+                    <div class="code-line"><span class="cm-comment">// Welcome to ZZW Code — H# AI IDE</span></div>
+                    <div class="code-line"></div>
+                    <div class="code-line"><span class="cm-keyword">fn</span> <span class="cm-function">main</span>() {</div>
+                    <div class="code-line">    <span class="cm-comment">// D3 space computing demo</span></div>
+                    <div class="code-line">    <span class="cm-keyword">var</span> matrix = d3.<span class="cm-function">create</span>(<span class="cm-number">8</span>)</div>
+                    <div class="code-line">    </div>
+                    <div class="code-line">    <span class="cm-keyword">for</span> i <span class="cm-keyword">in</span> <span class="cm-number">0</span>..<span class="cm-number">8</span> {</div>
+                    <div class="code-line">        matrix[i] = d3.<span class="cm-function">map</span>(i, <span class="cm-keyword">fn</span>(x) {</div>
+                    <div class="code-line">            <span class="cm-keyword">return</span> (x * x) % d3.phi</div>
+                    <div class="code-line">        })</div>
+                    <div class="code-line">    }</div>
+                    <div class="code-line">    </div>
+                    <div class="code-line">    d3.<span class="cm-function">render</span>(matrix)</div>
+                    <div class="code-line">}</div>
+                    <div class="code-line"></div>
+                    <div class="code-line">main()</div>
+                </div>
+                <div class="zzw-ai-panel">
+                    <div class="zzw-ai-header">AI Assistant</div>
+                    <div class="zzw-ai-messages">
+                        <div class="zzw-ai-msg">Your D3 pattern generator looks great! Want me to optimize the phi calculation for better performance?</div>
+                        <div class="zzw-ai-msg user">Yes, show me the optimized version</div>
+                        <div class="zzw-ai-msg">Here's the optimized code with memoization...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="zzw-features">
+            <div class="zzw-feature">
+                <div class="zzw-feature-icon">🤖</div>
+                <h3 data-i18n="zzw.f1.title">AI Code Assistant</h3>
+                <p data-i18n="zzw.f1.desc">Get intelligent code suggestions, refactoring help, and explanations powered by Claude AI</p>
+            </div>
+            <div class="zzw-feature">
+                <div class="zzw-feature-icon">📝</div>
+                <h3 data-i18n="zzw.f2.title">Monaco Editor</h3>
+                <p data-i18n="zzw.f2.desc">Industry-standard code editor with syntax highlighting, auto-completion, and multi-file support</p>
+            </div>
+            <div class="zzw-feature">
+                <div class="zzw-feature-icon">🖥️</div>
+                <h3 data-i18n="zzw.f3.title">Integrated Terminal</h3>
+                <p data-i18n="zzw.f3.desc">Run H# code directly with real-time output, error highlighting, and debugging support</p>
+            </div>
+            <div class="zzw-feature">
+                <div class="zzw-feature-icon">📁</div>
+                <h3 data-i18n="zzw.f4.title">File Explorer</h3>
+                <p data-i18n="zzw.f4.desc">Organize projects with folders, create and manage multiple .hto files with ease</p>
+            </div>
+            <div class="zzw-feature">
+                <div class="zzw-feature-icon">💾</div>
+                <h3 data-i18n="zzw.f5.title">Local Storage</h3>
+                <p data-i18n="zzw.f5.desc">Your files are saved locally in IndexedDB. No cloud dependency, full privacy</p>
+            </div>
+            <div class="zzw-feature">
+                <div class="zzw-feature-icon">🎨</div>
+                <h3 data-i18n="zzw.f6.title">H# Syntax Highlighting</h3>
+                <p data-i18n="zzw.f6.desc">Custom language definition for H# with keywords, functions, and comments beautifully colored</p>
+            </div>
+        </div>
+
+        <div class="zzw-cta">
+            <div class="zzw-cta-content">
+                <h3 data-i18n="zzw.cta.title">Ready to Code?</h3>
+                <p data-i18n="zzw.cta.desc">Launch ZZW Code now and experience the future of H# development</p>
+                <a href="https://github.com/peddlejumper/Hsharp" class="btn btn-primary" target="_blank" rel="noopener">
+                    <span data-i18n="zzw.cta.btn">Open ZZW Code</span>
+                    <span class="btn-arrow">→</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <section id="download" class="download">
+        <div class="download-content">
+            <h2 data-i18n="download.title">Get <span class="glitch-text" data-i18n="download.sub">Started</span></h2>
+            <p data-i18n="download.desc">H# is open source and available on GitHub. Clone it, build it, and explore.</p>
+            <div class="download-buttons">
+                <a href="https://github.com/peddlejumper/Hsharp" class="btn btn-primary" target="_blank" rel="noopener">
+                    <span data-i18n="download.github">GitHub</span>
+                    <span class="btn-arrow">→</span>
+                </a>
+                <a href="https://github.com/peddlejumper/Hsharp" class="btn btn-secondary" target="_blank" rel="noopener">
+                    <span data-i18n="download.docs">Documentation</span>
+                </a>
+            </div>
+        </div>
+        <div class="download-bg"></div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-brand">
+                <div class="footer-logo">H#</div>
+                <p data-i18n="footer.tagline">Parallel computing for the space era</p>
+            </div>
+            <div class="footer-links">
+                <a href="#about" data-i18n="nav.about">About</a>
+                <a href="#features" data-i18n="nav.features">Features</a>
+                <a href="zzw.html" data-i18n="nav.zzw">ZZW Code</a>
+                <a href="#examples" data-i18n="nav.code">Examples</a>
+                <a href="https://github.com/peddlejumper/Hsharp">GitHub</a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>© 2025 H#. Built with curiosity.</p>
+        </div>
+    </footer>
+
+    <script src="script.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# t05_exception.hto
+# concurrent 内 parallel 任务抛出异常 —— 应 parent-wins 重抛第一个错误。
+# 预期：CONCURRENT_EXIT 把异常透传给调用方，被 try/catch 捕获，打印 "caught: boom"。
+parallel fn boom() {
+    throw "boom";
+}
+try {
+    concurrent {
+        let f = boom();
+        let r = await f;
+        print("unreachable");
+    }
+    print("also unreachable");
+} catch (e) {
+    print("caught:");
+    print(e);
+}
+print("after");

@@ -1,0 +1,7 @@
+# test_dict_return.hto
+fn make_dict() {
+    return {"a": 1, "b": 2};
+}
+let d = make_dict();
+print(d["a"]);
+print(d["b"]);

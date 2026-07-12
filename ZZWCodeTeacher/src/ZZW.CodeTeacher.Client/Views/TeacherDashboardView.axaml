@@ -1,0 +1,700 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+             xmlns:cvt="using:ZZW.CodeTeacher.Client.Converters"
+             xmlns:dto="using:ZZW.CodeTeacher.Application.DTOs"
+             x:Class="ZZW.CodeTeacher.Client.Views.TeacherDashboardView"
+             x:DataType="vm:TeacherDashboardViewModel">
+
+  <Grid Background="Transparent">
+    <DockPanel>
+
+      <!-- ═══ 顶栏:返回 + 标题 + 副标题,右 ⋯ 收纳 刷新/导入/导出/返回 ═══ -->
+      <Border DockPanel.Dock="Top" Classes="toolbar" Padding="16,10">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <Button Classes="secondary" Content="返回 IDE" Command="{Binding BackToIdeCommand}" />
+            <Border Classes="title-dot" />
+            <TextBlock Classes="title" Text="教师后台" VerticalAlignment="Center" />
+            <TextBlock Text="题目管理 / 提交管理 / 用户管理 / 班级管理"
+                       Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12"
+                       VerticalAlignment="Center" Margin="4,0,0,0" />
+          </StackPanel>
+          <Button Grid.Column="1" Classes="secondary icon" Content="⋯" ToolTip.Tip="更多">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="刷新全部" Command="{Binding RefreshAllCommand}" />
+                <Separator />
+                <MenuItem Header="导入题目" IsEnabled="False" />
+                <MenuItem Header="导出题目" IsEnabled="False" />
+                <Separator />
+                <MenuItem Header="返回 IDE" Command="{Binding BackToIdeCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- 加载遮罩 -->
+      <Border DockPanel.Dock="Top" Background="{DynamicResource GlassInsetBrush}" Padding="8"
+              IsVisible="{Binding IsLoading}">
+        <TextBlock Text="加载中…" HorizontalAlignment="Center"
+                   Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12" />
+      </Border>
+
+      <!-- 错误横幅 -->
+      <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource ErrorRed}" BorderThickness="0,0,0,2" Padding="10,8"
+              IsVisible="{Binding ErrorMessage, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+        <TextBlock Text="{Binding ErrorMessage}" Foreground="{DynamicResource ErrorRed}" FontSize="12" />
+      </Border>
+
+      <!-- ═══ 三 Tab ═══ -->
+      <TabControl Background="Transparent" Padding="12,8">
+
+        <!-- ───── Tab1:题目管理 ───── -->
+        <TabItem Header="题目管理">
+          <Grid ColumnDefinitions="320,*" Margin="0,4">
+
+            <!-- 左:题目列表 -->
+            <Border Grid.Column="0" Classes="panel" Margin="0,0,4,0" Padding="0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="12,10,12,8">
+                  <TextBlock Classes="section" Text="题目列表" VerticalAlignment="Center" />
+                  <Button Classes="secondary" Content="刷新" Command="{Binding RefreshProblemsCommand}" FontSize="11" Padding="8,3" />
+                </StackPanel>
+                <TextBlock Text="暂无题目" Classes="empty"
+                           IsVisible="{Binding Problems.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}"
+                           Margin="12,4" />
+                <ListBox ItemsSource="{Binding Problems}"
+                         SelectedItem="{Binding SelectedProblem, Mode=TwoWay}"
+                         Background="Transparent" BorderThickness="0" Padding="4,0">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="dto:ProblemListItemDto">
+                      <StackPanel Margin="2,4">
+                        <Grid ColumnDefinitions="*,Auto">
+                          <TextBlock Grid.Column="0" Text="{Binding Title}"
+                                     Foreground="{DynamicResource InkPrimaryBrush}" FontSize="13"
+                                     FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="1"
+                                     Text="{Binding Difficulty, Converter={x:Static cvt:DifficultyToStringConverter.Instance}}"
+                                     Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11"
+                                     VerticalAlignment="Center" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,3,0,0">
+                          <TextBlock Text="{Binding Code}" Foreground="{DynamicResource BrandBlueBrush}"
+                                     FontSize="10" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding TestCaseCount, StringFormat=用例 {0}}"
+                                     Foreground="{DynamicResource InkMutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                          <TextBlock Text="{Binding IsActive, StringFormat={}{0:#已启用;已停用;}}"
+                                     Foreground="{DynamicResource InkMutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </DockPanel>
+            </Border>
+
+            <!-- 右:编辑表单 -->
+            <Border Grid.Column="1" Classes="panel" Margin="4,0,0,0" Padding="0">
+              <DockPanel>
+                <!-- 表单头 -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="12,10,12,8">
+                  <TextBlock Classes="section" Text="题目编辑" VerticalAlignment="Center" />
+                  <Button Classes="secondary" Content="加载选中题" Command="{Binding EditProblemCommand}"
+                          FontSize="11" Padding="8,3" />
+                </StackPanel>
+
+                <!-- 底部操作按钮 -->
+                <Border DockPanel.Dock="Bottom" Padding="12,8"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="0,1,0,0"
+                        Background="{DynamicResource GlassInsetBrush}">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button Classes="secondary" Content="新建" Command="{Binding NewProblemCommand}" />
+                    <Button Classes="primary" Content="保存" Command="{Binding SaveProblemCommand}" />
+                    <Button Classes="secondary danger" Content="删除" Command="{Binding DeleteProblemCommand}" />
+                    <Button Classes="secondary" Content="启用切换" Command="{Binding ToggleProblemActiveCommand}" />
+                    <Button Classes="secondary" Content="添加用例" Command="{Binding AddTestCaseCommand}" />
+                  </StackPanel>
+                </Border>
+
+                <!-- 表单滚动区 -->
+                <ScrollViewer Padding="12">
+                  <StackPanel Spacing="8" IsVisible="{Binding CurrentProblemEditor, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+
+                    <!-- 题号 + 标题 -->
+                    <Grid ColumnDefinitions="80,*" Margin="0,2">
+                      <TextBlock Grid.Column="0" Text="题号" Classes="section" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Text="{Binding CurrentProblemEditor.Code, Mode=TwoWay}"
+                               IsEnabled="{Binding CurrentProblemEditor.IsNew}" Watermark="如 P1001(创建后不可改)" />
+                    </Grid>
+                    <Grid ColumnDefinitions="80,*">
+                      <TextBlock Grid.Column="0" Text="标题" Classes="section" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Text="{Binding CurrentProblemEditor.Title, Mode=TwoWay}" Watermark="题目标题" />
+                    </Grid>
+
+                    <!-- 描述 -->
+                    <Grid ColumnDefinitions="80,*">
+                      <TextBlock Grid.Column="0" Text="描述" Classes="section" VerticalAlignment="Top" Margin="0,6,0,0" />
+                      <TextBox Grid.Column="1" Text="{Binding CurrentProblemEditor.Description, Mode=TwoWay}"
+                               AcceptsReturn="True" TextWrapping="Wrap" Height="110"
+                               Watermark="题目描述(支持 Markdown)" FontFamily="{StaticResource CodeFontFamily}" FontSize="12" />
+                    </Grid>
+
+                    <!-- 难度 / 时限 / 内存 -->
+                    <Grid ColumnDefinitions="80,*,80,*" Margin="0,2">
+                      <TextBlock Grid.Column="0" Text="难度" Classes="section" VerticalAlignment="Center" />
+                      <ComboBox Grid.Column="1" ItemsSource="{Binding DifficultyOptions}"
+                                SelectedItem="{Binding CurrentProblemEditor.Difficulty, Mode=TwoWay}"
+                                HorizontalAlignment="Stretch" Margin="0,0,6,0">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock Text="{Binding ., Converter={x:Static cvt:DifficultyToStringConverter.Instance}}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                      <TextBlock Grid.Column="2" Text="时限(ms)" Classes="section" VerticalAlignment="Center" />
+                      <NumericUpDown Grid.Column="3" Value="{Binding CurrentProblemEditor.TimeLimitMs, Mode=TwoWay}"
+                                     Minimum="100" Maximum="60000" Increment="100" />
+                    </Grid>
+                    <Grid ColumnDefinitions="80,*">
+                      <TextBlock Grid.Column="0" Text="内存(KB)" Classes="section" VerticalAlignment="Center" />
+                      <NumericUpDown Grid.Column="1" Value="{Binding CurrentProblemEditor.MemoryLimitKb, Mode=TwoWay}"
+                                     Minimum="1024" Maximum="1048576" Increment="1024" />
+                    </Grid>
+
+                    <!-- 模板 -->
+                    <Grid ColumnDefinitions="80,*">
+                      <TextBlock Grid.Column="0" Text="模板" Classes="section" VerticalAlignment="Top" Margin="0,6,0,0" />
+                      <TextBox Grid.Column="1" Text="{Binding CurrentProblemEditor.Template, Mode=TwoWay}"
+                               AcceptsReturn="True" TextWrapping="NoWrap" Height="90"
+                               Watermark="代码模板(留空则无)" FontFamily="{StaticResource CodeFontFamily}" FontSize="12" />
+                    </Grid>
+
+                    <!-- 标签 -->
+                    <Grid ColumnDefinitions="80,*">
+                      <TextBlock Grid.Column="0" Text="标签" Classes="section" VerticalAlignment="Center" />
+                      <TextBox Grid.Column="1" Text="{Binding CurrentProblemEditor.Tags, Mode=TwoWay}"
+                               Watermark="逗号分隔,如 数组,动态规划" />
+                    </Grid>
+
+                    <!-- 支持语言(勾选) -->
+                    <Grid ColumnDefinitions="80,*" Margin="0,2">
+                      <TextBlock Grid.Column="0" Text="支持语言" Classes="section" VerticalAlignment="Top" Margin="0,4,0,0" />
+                      <ItemsControl Grid.Column="1" ItemsSource="{Binding CurrentProblemEditor.LanguageOptions}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:LanguageOptionVm">
+                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                      Content="{Binding DisplayName}" Margin="0,2,10,2" FontSize="12" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Grid>
+
+                    <!-- 添加测试用例 -->
+                    <Border Background="{DynamicResource GlassInsetBrush}" Classes="glass-inset"
+                            Padding="10" Margin="0,6,0,0">
+                      <StackPanel Spacing="6">
+                        <TextBlock Classes="section" Text="添加测试用例" />
+                        <TextBox Text="{Binding CurrentProblemEditor.NewTestCaseInput, Mode=TwoWay}"
+                                 AcceptsReturn="True" TextWrapping="NoWrap" Height="56"
+                                 Watermark="用例输入" FontFamily="{StaticResource CodeFontFamily}" FontSize="12" />
+                        <TextBox Text="{Binding CurrentProblemEditor.NewTestCaseExpected, Mode=TwoWay}"
+                                 AcceptsReturn="True" TextWrapping="NoWrap" Height="56"
+                                 Watermark="期望输出" FontFamily="{StaticResource CodeFontFamily}" FontSize="12" />
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                          <CheckBox IsChecked="{Binding CurrentProblemEditor.NewTestCaseIsSample, Mode=TwoWay}"
+                                    Content="样例用例" FontSize="12" />
+                          <TextBlock Text="点击底部「添加用例」提交(需先保存题目)"
+                                     Foreground="{DynamicResource InkMutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+                  </StackPanel>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+          </Grid>
+        </TabItem>
+
+        <!-- ───── Tab2:提交管理 ───── -->
+        <TabItem Header="提交管理">
+          <DockPanel Margin="0,4">
+
+            <!-- 顶部:状态筛选 + 刷新 -->
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,0,6,6">
+              <TextBlock Text="状态筛选:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12"
+                         VerticalAlignment="Center" />
+              <ComboBox ItemsSource="{Binding SubmissionStatusOptions}"
+                        SelectedItem="{Binding SelectedStatusOption, Mode=TwoWay}"
+                        MinWidth="140">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate DataType="vm:SubmissionStatusOptionVm">
+                    <TextBlock Text="{Binding Display}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <Button Classes="secondary" Content="刷新" Command="{Binding RefreshSubmissionsCommand}" />
+              <TextBlock Text="点击任一行 → 重新评测该提交"
+                         Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                         VerticalAlignment="Center" Margin="10,0,0,0" />
+            </StackPanel>
+
+            <!-- 表头 -->
+            <Border DockPanel.Dock="Top" Classes="glass-inset" CornerRadius="8" Padding="12,6" Margin="4,0,4,4">
+              <Grid ColumnDefinitions="90,120,90,110,60,90,150,90">
+                <TextBlock Grid.Column="0" Text="题号" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="1" Text="用户" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="2" Text="语言" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="3" Text="状态" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="4" Text="分数" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="5" Text="用时" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="6" Text="提交时间" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="7" Text="操作" Classes="muted" FontSize="11" HorizontalAlignment="Right" />
+              </Grid>
+            </Border>
+
+            <TextBlock Text="暂无提交记录" Classes="empty"
+                       IsVisible="{Binding Submissions.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}"
+                       Margin="12,6" />
+
+            <ScrollViewer>
+              <ItemsControl ItemsSource="{Binding Submissions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="dto:SubmissionDto">
+                    <Button Classes="text" Padding="10,7"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Command="{Binding $parent[ItemsControl].DataContext.RejudgeCommand}"
+                            CommandParameter="{Binding}">
+                      <Grid ColumnDefinitions="90,120,90,110,60,90,150,90">
+                        <TextBlock Grid.Column="0" Text="{Binding ProblemCode}"
+                                   Foreground="{DynamicResource BrandBlueBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding Username}"
+                                   Foreground="{DynamicResource InkPrimaryBrush}" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="{Binding Language}"
+                                   Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3" Text="{Binding Status}" FontSize="11"
+                                   Foreground="{Binding Status, Converter={x:Static cvt:StatusToColorConverter.Instance}}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="{Binding Score}"
+                                   Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="5" Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center">
+                          <Run Text="{Binding ElapsedMs}" /><Run Text=" ms" />
+                        </TextBlock>
+                        <TextBlock Grid.Column="6" Text="{Binding SubmittedAt, StringFormat={}{0:MM-dd HH:mm}}"
+                                   Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="7" Text="重新评测"
+                                   Foreground="{DynamicResource BrandBlueBrush}" FontSize="11"
+                                   FontWeight="SemiBold" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" />
+                      </Grid>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </DockPanel>
+        </TabItem>
+
+        <!-- ───── Tab3:用户管理 ───── -->
+        <TabItem Header="用户管理">
+          <DockPanel Margin="0,4">
+
+            <!-- 顶部:搜索 -->
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,0,6,6">
+              <TextBox Text="{Binding SearchText, Mode=TwoWay}" Watermark="搜索用户名 / 邮箱(回车)…" MinWidth="260">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding RefreshUsersCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+              <Button Classes="primary" Content="搜索" Command="{Binding RefreshUsersCommand}" />
+              <Button Classes="secondary" Content="刷新" Command="{Binding RefreshUsersCommand}" />
+            </StackPanel>
+
+            <!-- 表头 -->
+            <Border DockPanel.Dock="Top" Classes="glass-inset" CornerRadius="8" Padding="12,6" Margin="4,0,4,4">
+              <Grid ColumnDefinitions="140,140,220,90,80,150">
+                <TextBlock Grid.Column="0" Text="用户名" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="1" Text="显示名" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="2" Text="邮箱" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="3" Text="角色" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="4" Text="状态" Classes="muted" FontSize="11" />
+                <TextBlock Grid.Column="5" Text="创建时间" Classes="muted" FontSize="11" />
+              </Grid>
+            </Border>
+
+            <TextBlock Text="暂无用户" Classes="empty"
+                       IsVisible="{Binding Users.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}"
+                       Margin="12,6" />
+
+            <ScrollViewer>
+              <ItemsControl ItemsSource="{Binding Users}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="dto:UserDto">
+                    <Button Classes="text" Padding="10,7"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                            Command="{Binding $parent[ItemsControl].DataContext.SelectUserCommand}"
+                            CommandParameter="{Binding}">
+                      <Grid ColumnDefinitions="140,140,220,90,80,150">
+                        <TextBlock Grid.Column="0" Text="{Binding Username}"
+                                   Foreground="{DynamicResource InkPrimaryBrush}" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                   Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="{Binding Email}"
+                                   Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3"
+                                   Text="{Binding Role, Converter={x:Static cvt:RoleToStringConverter.Instance}}"
+                                   Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="{Binding IsActive, StringFormat={}{0:#启用;停用;}}"
+                                   Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="5" Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd}}"
+                                   Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                      </Grid>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+
+            <!-- 底部:选中用户的角色切换 -->
+            <Border DockPanel.Dock="Bottom" Classes="toolbar" Padding="12,8"
+                    IsVisible="{Binding SelectedUser, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="已选中:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="{Binding SelectedUser.Username}" Foreground="{DynamicResource InkPrimaryBrush}"
+                           FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="当前角色:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12"
+                           VerticalAlignment="Center" Margin="12,0,0,0" />
+                <TextBlock Text="{Binding SelectedUser.Role, Converter={x:Static cvt:RoleToStringConverter.Instance}}"
+                           Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock Text="切换为:" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12"
+                           VerticalAlignment="Center" Margin="12,0,0,0" />
+                <ComboBox ItemsSource="{Binding RoleOptions}"
+                          SelectedItem="{Binding SelectedUserRole, Mode=TwoWay}"
+                          MinWidth="120">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock Text="{Binding ., Converter={x:Static cvt:RoleToStringConverter.Instance}}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Classes="secondary" Content="查看学习进度" FontSize="11" Padding="8,3" Margin="12,0,0,0"
+                        Command="{Binding ToggleProgressPanelCommand}" />
+              </StackPanel>
+            </Border>
+
+            <!-- 底部:选中用户的学习进度详情(可折叠) -->
+            <Border DockPanel.Dock="Bottom" Classes="glass-inset" CornerRadius="8" Padding="12,10" Margin="4,4,4,4"
+                    IsVisible="{Binding IsProgressPanelOpen}">
+              <DockPanel>
+                <!-- 标题栏 -->
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Classes="section" Text="学习进度详情" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding SelectedUser.Username, StringFormat={}{0} 的学习数据}"
+                               Foreground="{DynamicResource BrandBlueBrush}" FontSize="11" VerticalAlignment="Center"
+                               IsVisible="{Binding SelectedUser, Converter={x:Static cvt:NullToBoolConverter.Instance}}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="secondary" Content="收起" FontSize="10" Padding="6,2"
+                          Command="{Binding ToggleProgressPanelCommand}" />
+                </Grid>
+
+                <!-- 加载中 -->
+                <TextBlock DockPanel.Dock="Top" Text="加载进度中…"
+                           Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11"
+                           IsVisible="{Binding UserProgress.IsLoading}" />
+
+                <!-- 空态/错误(StatusHint 在 Progress 为空时显示) -->
+                <TextBlock DockPanel.Dock="Top" Text="{Binding UserProgress.StatusHint}"
+                           Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                           IsVisible="{Binding UserProgress.Progress, Converter={x:Static cvt:NullToBoolConverter.InvertedInstance}}" />
+
+                <!-- 进度内容(Progress 非 null 时显示) -->
+                <ScrollViewer IsVisible="{Binding UserProgress.Progress, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+                  <StackPanel Spacing="8">
+
+                    <!-- 三个汇总数字:总提交 / 已通过 / 通过率 -->
+                    <Grid ColumnDefinitions="*,*,*" Margin="0,2">
+                      <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding UserProgress.Progress.TotalSubmissions}"
+                                   Foreground="{DynamicResource InkPrimaryBrush}" FontSize="20" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="总提交" Foreground="{DynamicResource InkMutedBrush}" FontSize="10"
+                                   HorizontalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding UserProgress.Progress.Accepted}"
+                                   Foreground="{DynamicResource BrandBlueBrush}" FontSize="20" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="已通过" Foreground="{DynamicResource InkMutedBrush}" FontSize="10"
+                                   HorizontalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding UserProgress.Progress.AcceptanceRate, StringFormat={}{0:F1}%}"
+                                   Foreground="{DynamicResource InkPrimaryBrush}" FontSize="20" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="通过率" Foreground="{DynamicResource InkMutedBrush}" FontSize="10"
+                                   HorizontalAlignment="Center" />
+                      </StackPanel>
+                    </Grid>
+
+                    <!-- 按语言统计 -->
+                    <TextBlock Classes="section" Text="按语言" Margin="0,4,0,0" />
+                    <Border Classes="glass-inset" Padding="10,6"
+                            IsVisible="{Binding UserProgress.Progress.ByLanguage.Count, Converter={x:Static cvt:CountToBoolConverter.InvertedInstance}}">
+                      <ItemsControl ItemsSource="{Binding UserProgress.Progress.ByLanguage}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="dto:LanguageStatDto">
+                            <Grid ColumnDefinitions="*,80,80" Margin="0,2">
+                              <TextBlock Grid.Column="0" Text="{Binding Language}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" />
+                              <TextBlock Grid.Column="1" Text="{Binding Submitted, StringFormat=提交 {0}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                              <TextBlock Grid.Column="2" Text="{Binding Accepted, StringFormat=通过 {0}}" Foreground="{DynamicResource BrandBlueBrush}" FontSize="10" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Border>
+                    <TextBlock Text="暂无语言统计" Classes="empty"
+                               IsVisible="{Binding UserProgress.Progress.ByLanguage.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}" />
+
+                    <!-- 按难度统计 -->
+                    <TextBlock Classes="section" Text="按难度" Margin="0,4,0,0" />
+                    <Border Classes="glass-inset" Padding="10,6"
+                            IsVisible="{Binding UserProgress.Progress.ByDifficulty.Count, Converter={x:Static cvt:CountToBoolConverter.InvertedInstance}}">
+                      <ItemsControl ItemsSource="{Binding UserProgress.Progress.ByDifficulty}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="dto:DifficultyStatDto">
+                            <Grid ColumnDefinitions="*,80,80" Margin="0,2">
+                              <TextBlock Grid.Column="0" Text="{Binding Difficulty, Converter={x:Static cvt:DifficultyToStringConverter.Instance}}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" />
+                              <TextBlock Grid.Column="1" Text="{Binding Submitted, StringFormat=提交 {0}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                              <TextBlock Grid.Column="2" Text="{Binding Accepted, StringFormat=通过 {0}}" Foreground="{DynamicResource BrandBlueBrush}" FontSize="10" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Border>
+                    <TextBlock Text="暂无难度统计" Classes="empty"
+                               IsVisible="{Binding UserProgress.Progress.ByDifficulty.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}" />
+
+                    <!-- 已解题目数 -->
+                    <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11"
+                               Text="{Binding UserProgress.Progress.SolvedProblemIds.Count, StringFormat=已解题目: {0} 道}" />
+                  </StackPanel>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+          </DockPanel>
+        </TabItem>
+
+        <!-- ───── Tab4:班级管理 ───── -->
+        <TabItem Header="班级管理">
+          <Grid ColumnDefinitions="300,*,360" Margin="0,4">
+
+            <!-- 左:班级列表 + 创建表单 -->
+            <Border Grid.Column="0" Classes="panel" Margin="0,0,4,0" Padding="0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="12,10,12,8">
+                  <TextBlock Classes="section" Text="我的班级" VerticalAlignment="Center" />
+                  <Button Classes="secondary" Content="刷新" Command="{Binding Groups.RefreshCommand}" FontSize="11" Padding="8,3" />
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Top" Text="{Binding Groups.StatusHint}"
+                           Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" Margin="12,2,12,4" />
+
+                <!-- 创建班级表单(教师/管理员可见) -->
+                <Expander DockPanel.Dock="Bottom" Header="创建班级" Margin="12,0,12,10" Padding="8,4"
+                          IsVisible="{Binding Groups.IsTeacher}">
+                  <StackPanel Spacing="6" Margin="0,4,0,0">
+                    <TextBox Text="{Binding Groups.NewGroupName, Mode=TwoWay}" Watermark="班级名称" FontSize="12" />
+                    <TextBox Text="{Binding Groups.NewGroupDesc, Mode=TwoWay}" Watermark="班级描述(可选)"
+                             AcceptsReturn="True" TextWrapping="Wrap" Height="50" FontSize="12" />
+                    <Button Classes="primary" Content="创建" HorizontalAlignment="Right" FontSize="11" Padding="10,3"
+                            Command="{Binding Groups.CreateCommand}"
+                            IsEnabled="{Binding !Groups.IsLoading}" />
+                  </StackPanel>
+                </Expander>
+
+                <TextBlock Text="暂无班级" Classes="empty"
+                           IsVisible="{Binding Groups.Groups.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}"
+                           Margin="12,4" />
+                <ScrollViewer>
+                  <ItemsControl ItemsSource="{Binding Groups.Groups}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="dto:GroupDto">
+                        <Button Classes="text" Padding="10,7" Margin="4,2"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Command="{Binding $parent[ItemsControl].DataContext.Groups.SelectGroupCommand}"
+                                CommandParameter="{Binding}">
+                          <StackPanel Spacing="2">
+                            <Grid ColumnDefinitions="*,Auto">
+                              <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="{DynamicResource InkPrimaryBrush}"
+                                         FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="1" Text="{Binding MemberCount, StringFormat={}{0} 人}"
+                                         Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10"
+                                         VerticalAlignment="Center" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="{Binding InviteCode, StringFormat=邀请码: {0}}"
+                                         Foreground="{DynamicResource BrandBlueBrush}" FontSize="10" />
+                              <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:yyyy-MM-dd}}"
+                                         Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding Description}" Foreground="{DynamicResource InkMutedBrush}"
+                                       FontSize="10" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+
+            <!-- 中:成员列表 -->
+            <Border Grid.Column="1" Classes="panel" Margin="4,0,4,0" Padding="0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="12,10,12,8">
+                  <TextBlock Classes="section" Text="成员列表" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Groups.SelectedGroup.Name, StringFormat=「{0}」}"
+                             Foreground="{DynamicResource BrandBlueBrush}" FontSize="11" VerticalAlignment="Center"
+                             IsVisible="{Binding Groups.SelectedGroup, Converter={x:Static cvt:NullToBoolConverter.Instance}}" />
+                </StackPanel>
+                <TextBlock Text="请选择左侧班级以查看成员" Classes="empty"
+                           IsVisible="{Binding Groups.SelectedGroup, Converter={x:Static cvt:NullToBoolConverter.InvertedInstance}}"
+                           Margin="12,4" />
+                <TextBlock Text="暂无成员" Classes="empty"
+                           IsVisible="{Binding Groups.Members.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}"
+                           Margin="12,4" />
+                <ScrollViewer>
+                  <ItemsControl ItemsSource="{Binding Groups.Members}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="dto:GroupMemberDto">
+                        <Grid ColumnDefinitions="*,70,90,70" Margin="10,3">
+                          <StackPanel Grid.Column="0" Spacing="1">
+                            <TextBlock Text="{Binding Username}" Foreground="{DynamicResource InkPrimaryBrush}"
+                                       FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                          </StackPanel>
+                          <TextBlock Grid.Column="1" Text="{Binding Role}" Foreground="{DynamicResource InkTertiaryBrush}"
+                                     FontSize="11" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="2" Text="{Binding JoinedAt, StringFormat={}{0:yyyy-MM-dd}}"
+                                     Foreground="{DynamicResource InkMutedBrush}" FontSize="10" VerticalAlignment="Center" />
+                          <Button Grid.Column="3" Classes="secondary" Content="移除" FontSize="10" Padding="6,2"
+                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                  Command="{Binding $parent[ItemsControl].DataContext.Groups.RemoveMemberCommand}"
+                                  CommandParameter="{Binding}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+
+            <!-- 右:成员进度详情 -->
+            <Border Grid.Column="2" Classes="panel" Margin="4,0,0,0" Padding="0">
+              <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="12,10,12,8">
+                  <TextBlock Classes="section" Text="成员进度" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Groups.SelectedMember.Username, StringFormat={}{0} 的学习进度}"
+                             Foreground="{DynamicResource BrandBlueBrush}" FontSize="11" VerticalAlignment="Center"
+                             IsVisible="{Binding Groups.SelectedMember, Converter={x:Static cvt:NullToBoolConverter.Instance}}" />
+                </StackPanel>
+                <TextBlock Text="选中成员以查看进度" Foreground="{DynamicResource InkMutedBrush}" FontSize="12"
+                           IsVisible="{Binding Groups.SelectedMember, Converter={x:Static cvt:NullToBoolConverter.InvertedInstance}}"
+                           Margin="12,4" />
+
+                <!-- 加载中 -->
+                <TextBlock DockPanel.Dock="Top" Text="加载进度中…"
+                           Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11"
+                           IsVisible="{Binding Groups.MemberProgress.IsLoading}" />
+                <!-- 空态/错误 -->
+                <TextBlock DockPanel.Dock="Top" Text="{Binding Groups.MemberProgress.StatusHint}"
+                           Foreground="{DynamicResource InkMutedBrush}" FontSize="11"
+                           IsVisible="{Binding Groups.MemberProgress.Progress, Converter={x:Static cvt:NullToBoolConverter.InvertedInstance}}" />
+
+                <!-- 进度内容 -->
+                <ScrollViewer IsVisible="{Binding Groups.MemberProgress.Progress, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+                  <StackPanel Spacing="8" Margin="12,4">
+                    <!-- 汇总数字 -->
+                    <Grid ColumnDefinitions="*,*,*" Margin="0,2">
+                      <StackPanel Grid.Column="0" HorizontalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Groups.MemberProgress.Progress.TotalSubmissions}"
+                                   Foreground="{DynamicResource InkPrimaryBrush}" FontSize="18" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="总提交" Foreground="{DynamicResource InkMutedBrush}" FontSize="10"
+                                   HorizontalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" HorizontalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Groups.MemberProgress.Progress.Accepted}"
+                                   Foreground="{DynamicResource BrandBlueBrush}" FontSize="18" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="已通过" Foreground="{DynamicResource InkMutedBrush}" FontSize="10"
+                                   HorizontalAlignment="Center" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" HorizontalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Groups.MemberProgress.Progress.AcceptanceRate, StringFormat={}{0:F1}%}"
+                                   Foreground="{DynamicResource InkPrimaryBrush}" FontSize="18" FontWeight="Bold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="通过率" Foreground="{DynamicResource InkMutedBrush}" FontSize="10"
+                                   HorizontalAlignment="Center" />
+                      </StackPanel>
+                    </Grid>
+
+                    <!-- 按语言 -->
+                    <TextBlock Classes="section" Text="按语言" Margin="0,4,0,0" />
+                    <ItemsControl ItemsSource="{Binding Groups.MemberProgress.Progress.ByLanguage}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="dto:LanguageStatDto">
+                          <Grid ColumnDefinitions="*,70,70" Margin="0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding Language}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" />
+                            <TextBlock Grid.Column="1" Text="{Binding Submitted, StringFormat=提交 {0}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                            <TextBlock Grid.Column="2" Text="{Binding Accepted, StringFormat=通过 {0}}" Foreground="{DynamicResource BrandBlueBrush}" FontSize="10" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- 按难度 -->
+                    <TextBlock Classes="section" Text="按难度" Margin="0,4,0,0" />
+                    <ItemsControl ItemsSource="{Binding Groups.MemberProgress.Progress.ByDifficulty}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="dto:DifficultyStatDto">
+                          <Grid ColumnDefinitions="*,70,70" Margin="0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding Difficulty, Converter={x:Static cvt:DifficultyToStringConverter.Instance}}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" />
+                            <TextBlock Grid.Column="1" Text="{Binding Submitted, StringFormat=提交 {0}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                            <TextBlock Grid.Column="2" Text="{Binding Accepted, StringFormat=通过 {0}}" Foreground="{DynamicResource BrandBlueBrush}" FontSize="10" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11"
+                               Text="{Binding Groups.MemberProgress.Progress.SolvedProblemIds.Count, StringFormat=已解题目: {0} 道}" />
+                  </StackPanel>
+                </ScrollViewer>
+              </DockPanel>
+            </Border>
+          </Grid>
+        </TabItem>
+      </TabControl>
+    </DockPanel>
+  </Grid>
+</UserControl>

@@ -1,0 +1,154 @@
+# 61_parser_edge.hto - Parser boundary stress tests
+#
+# Tests parser edge cases: operator precedence, nested control flow,
+# ternary (?:) / quaternary (?^), call chains, nested literals,
+# destructuring, default+variadic params, empty bodies, and complex
+# sub-expressions in argument / element / value positions.
+#
+# NOTE on ternary syntax: H# uses `cond ?: a : b` (the `?:` is a single
+# token). The C-style `cond ? a : b` is NOT supported — bare `?` is the
+# postfix error-propagation operator, so `a ? b : c` is silently
+# misparsed (see bug report #1).
+#
+# All cases below use the correct `?:` head and produce deterministic
+# output; expected values are shown inline as `# expect`.
+
+# ---------------------------------------------------------------- C1
+# Arithmetic precedence: * / % bind tighter than + -; parentheses override.
+print(1 + 2 * 3);          # expect 7
+print((1 + 2) * 3);        # expect 9
+print(2 + 3 * 4 - 1);      # expect 13
+print(10 - 2 * 3);         # expect 4
+print(20 / 4 + 1);         # expect 6
+print(17 % 5 + 2);         # expect 4
+
+# ---------------------------------------------------------------- C2
+# Unary minus nesting and interaction with * / parentheses.
+print(-(-5));              # expect 5
+print(-(2 + 3));           # expect -5
+print(-2 + 3);             # expect 1
+print(-2 * 3);             # expect -6
+print(2 * -3);             # expect -6
+
+# ---------------------------------------------------------------- C3
+# Nested if / else if / else chain (5-way classification).
+fn classify(n) {
+    if (n < 0) { return "neg"; }
+    else if (n == 0) { return "zero"; }
+    else if (n < 10) { return "small"; }
+    else if (n < 100) { return "mid"; }
+    else { return "big"; }
+}
+print(classify(-5));       # expect neg
+print(classify(0));        # expect zero
+print(classify(7));        # expect small
+print(classify(55));       # expect mid
+print(classify(999));      # expect big
+
+# ---------------------------------------------------------------- C4
+# Nested for/for with break (inner-only) + continue. Demonstrates that
+# `break` exits only the innermost loop; the outer loop keeps going.
+fn sum_even_skip(matrix) {
+    let total = 0;
+    for row in matrix {
+        for x in row {
+            if (x == 99) { break; }
+            if (x % 2 == 1) { continue; }
+            total = total + x;
+        }
+    }
+    return total;
+}
+# rows: [2,4,6]->12  [1,3,5]->0  [2,99,4]->2 (break before 4)  [8,2]->10
+# total = 24
+print(sum_even_skip([[2, 4, 6], [1, 3, 5], [2, 99, 4], [8, 2]]));  # expect 24
+
+# ---------------------------------------------------------------- C5
+# Ternary `?:` nesting (right-associative): a grade ladder.
+fn grade(score) {
+    return score >= 90 ?: "A" : score >= 80 ?: "B" : score >= 70 ?: "C" : "F";
+}
+print(grade(95));          # expect A
+print(grade(85));          # expect B
+print(grade(75));          # expect C
+print(grade(50));          # expect F
+
+# ---------------------------------------------------------------- C6
+# Quaternary `?^` : cond ?^ e1 : cond2 : e2.
+# Semantics: cond true -> e1 ; elif cond2 true -> e2 ; else null.
+fn qgrade(s) {
+    return s >= 90 ?^ "A" : s >= 80 : "B";
+}
+print(qgrade(95));         # expect A
+print(qgrade(85));         # expect B
+print(qgrade(75));         # expect null
+
+# ---------------------------------------------------------------- C7
+# Function call chain f(g(h(x))).
+fn sq(x) { return x * x; }
+fn dbl(x) { return x * 2; }
+fn inc(x) { return x + 1; }
+print(inc(dbl(sq(3))));    # sq(3)=9, dbl=18, inc=19  -> expect 19
+
+# ---------------------------------------------------------------- C8
+# Method call chain obj.m1().m2().m3() (each method returns self).
+class Builder {
+    let v = 0;
+    fn init() { self.v = 0; }
+    fn add(n) { self.v = self.v + n; return self; }
+    fn mul(n) { self.v = self.v * n; return self; }
+    fn get() { return self.v; }
+}
+let b = new Builder();
+print(b.add(3).mul(4).add(2).get());  # ((0+3)*4)+2 = 14  -> expect 14
+
+# ---------------------------------------------------------------- C9
+# Nested array / dict literals and chained index access.
+let mat = [[1, 2], [3, 4]];
+print(mat[0][1]);          # expect 2
+print(mat[1][0]);          # expect 3
+let nested = {"a": {"b": [10, 20, 30]}};
+print(nested["a"]["b"][2]);  # expect 30
+
+# ---------------------------------------------------------------- C10
+# Destructuring let with skip placeholder `_`.
+let [p, _, q] = [100, 200, 300];
+print(p);                  # expect 100
+print(q);                  # expect 300
+
+# ---------------------------------------------------------------- C11
+# Default parameter + variadic parameter mixed.
+# NOTE: relying on the default when a variadic is present is BROKEN in
+# the Kotlin runtime (bug #4): `build_msg("Hi")` raises "expects at
+# least 2 args, got 1" — the default for `suffix` is ignored.  The call
+# only succeeds when every non-variadic arg is supplied explicitly.
+fn build_msg(prefix, suffix = "!", ...parts) {
+    let s = prefix;
+    for part in parts { s = s + part; }
+    return s + suffix;
+}
+print(build_msg("[", "]", "a", "b", "c"));  # expect [abc]
+print(build_msg("Hi", "!"));                # expect Hi!  (suffix supplied)
+print(build_msg("X", "?", "Y"));            # expect XY?
+try {
+    print(build_msg("Hi"));                 # BUG: should be Hi!, raises instead
+} catch (err) {
+    print("bug-caught: " + err);            # expect bug-caught: Function build_msg expects at least 2 args, got 1
+}
+
+# ---------------------------------------------------------------- C12
+# Empty function body / empty class body / empty block, plus complex
+# expressions used as array element, dict value, and function argument.
+fn noop() {}
+class Empty {}
+if (true) {} else {}
+noop();
+print("empty-ok");         # expect empty-ok
+fn mul2(a, b) { return a * b; }
+let arr = [1 + 1, 2 * 2, mul2(3, 4)];
+print(arr[0] + arr[1] + arr[2]);   # 2 + 4 + 12 = 18  -> expect 18
+let dd = {"k": 2 + 3, "v": mul2(2, 5)};
+print(dd["k"] + dd["v"]);          # 5 + 10 = 15  -> expect 15
+print(mul2(1 + 1, 3 + 4));         # 2 * 7 = 14  -> expect 14
+let e = new Empty();
+print("class-ok");         # expect class-ok

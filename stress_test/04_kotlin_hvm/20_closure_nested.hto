@@ -1,0 +1,24 @@
+# 20_closure_nested.hto — LOAD_DEREF/STORE_DEREF 嵌套闭包
+fn outer() {
+    let a = 1;
+    let mid = fn() {
+        let b = 2;
+        let inner = fn() {
+            return a + b;
+        };
+        return inner;
+    };
+    return mid();
+}
+let f = outer();
+print(f());
+
+fn adder(x) {
+    return fn(y) {
+        return x + y;
+    };
+}
+let add5 = adder(5);
+print(add5(3));
+print(add5(10));
+print("done");

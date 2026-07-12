@@ -1,0 +1,216 @@
+# raytracer_math.hto — Vector and ray primitives
+# ─────────────────────────────────────────────────────────────────────
+# Minimal 3D vector math used by the raytracer.  Vectors and rays
+# are represented as length-3 lists `[x, y, z]`; we wrap them in
+# a `Vec3` class only to keep the call sites readable.  No
+# operator overloading is needed; the class is a tagged tuple
+# plus named methods.
+#
+# This module is intentionally pure H# (no native dependencies),
+# so it can be unit-tested in isolation and so that other
+# graphics code in the future can build on it.
+#
+# H# class convention (v0.4.1):
+#   class X {
+#       let field = default;
+#       ...
+#       fn init_x(args) { self.field = ...; return 0; }
+#       fn m() { ... }
+#   }
+#   fn new_x(args) { let x = new X(); x.init_x(args); return x; }
+
+# ─── 1. Vec3 — 3D vector with named ops ──────────────────────────────
+class Vec3 {
+    let x = 0.0;
+    let y = 0.0;
+    let z = 0.0;
+
+    fn init_v3(x, y, z) {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+        return 0;
+    }
+
+    # String form for debug printing.
+    fn dump() {
+        return "(" + str(self.x) + ", " + str(self.y) + ", " + str(self.z) + ")";
+    }
+
+    # Component-wise add.
+    fn add(o) {
+        return new_v3(self.x + o.x, self.y + o.y, self.z + o.z);
+    }
+
+    # Component-wise sub.
+    fn sub(o) {
+        return new_v3(self.x - o.x, self.y - o.y, self.z - o.z);
+    }
+
+    # Scalar mul.
+    fn scale(s) {
+        return new_v3(self.x * s, self.y * s, self.z * s);
+    }
+
+    # Component-wise mul (Hadamard).
+    fn mul(o) {
+        return new_v3(self.x * o.x, self.y * o.y, self.z * o.z);
+    }
+
+    # Negation.
+    fn neg() {
+        return new_v3(0.0 - self.x, 0.0 - self.y, 0.0 - self.z);
+    }
+
+    # Dot product.
+    fn dot(o) {
+        return self.x * o.x + self.y * o.y + self.z * o.z;
+    }
+
+    # Squared length.
+    fn len2() {
+        return self.x * self.x + self.y * self.y + self.z * self.z;
+    }
+
+    # Length.
+    fn len() {
+        return sqrt(self.len2());
+    }
+
+    # Returns a unit-length copy; Vec3.zero() if length is 0.
+    fn norm() {
+        let l = self.len();
+        if (l == 0.0) { return new_v3(0.0, 0.0, 0.0); }
+        return new_v3(fdiv(self.x, l), fdiv(self.y, l), fdiv(self.z, l));
+    }
+
+    # Linear interpolation: a + (b - a) * t
+    fn lerp(o, t) {
+        return new_v3(self.x + (o.x - self.x) * t,
+                      self.y + (o.y - self.y) * t,
+                      self.z + (o.z - self.z) * t);
+    }
+
+    # Reflect around a unit normal.
+    fn reflect(n) {
+        let d = self.dot(n) * 2.0;
+        return new_v3(self.x - n.x * d,
+                      self.y - n.y * d,
+                      self.z - n.z * d);
+    }
+
+    # Convert to a length-3 list (for interop with the
+    # list-shaped helpers used by the renderer).
+    fn to_list() {
+        return [self.x, self.y, self.z];
+    }
+
+    # Cross product.
+    fn cross(o) {
+        return new_v3(self.y * o.z - self.z * o.y,
+                      self.z * o.x - self.x * o.z,
+                      self.x * o.y - self.y * o.x);
+    }
+
+    # Clamp each component to [lo, hi].
+    fn clamp(lo, hi) {
+        let x = self.x; if (x < lo) { x = lo; } if (x > hi) { x = hi; }
+        let y = self.y; if (y < lo) { y = lo; } if (y > hi) { y = hi; }
+        let z = self.z; if (z < lo) { z = lo; } if (z > hi) { z = hi; }
+        return new_v3(x, y, z);
+    }
+}
+
+# Factory + static constructors.
+fn new_v3(x, y, z) {
+    let v = new Vec3();
+    v.init_v3(x, y, z);
+    return v;
+}
+fn v3_zero() { return new_v3(0.0, 0.0, 0.0); }
+fn v3_one()  { return new_v3(1.0, 1.0, 1.0); }
+
+# ─── 2. Ray — origin + direction (pre-normalised) ───────────────────
+class Ray {
+    let ox = 0.0;
+    let oy = 0.0;
+    let oz = 0.0;
+    let dx = 0.0;
+    let dy = 0.0;
+    let dz = 0.0;
+
+    fn init_ray(ox, oy, oz, dx, dy, dz) {
+        self.ox = ox;
+        self.oy = oy;
+        self.oz = oz;
+        self.dx = dx;
+        self.dy = dy;
+        self.dz = dz;
+        return 0;
+    }
+
+    # Point along the ray at parameter `t`.
+    fn at(t) {
+        return new_v3(self.ox + self.dx * t,
+                      self.oy + self.dy * t,
+                      self.oz + self.dz * t);
+    }
+
+    # Convenience constructor that takes a Vec3 origin + direction.
+    fn from(o, d) {
+        return new_ray(o.x, o.y, o.z, d.x, d.y, d.z);
+    }
+
+    fn dump() {
+        return "Ray{(" + str(self.ox) + ", " + str(self.oy) + ", " + str(self.oz)
+             + "), (" + str(self.dx) + ", " + str(self.dy) + ", " + str(self.dz) + ")}";
+    }
+}
+
+fn new_ray(ox, oy, oz, dx, dy, dz) {
+    let r = new Ray();
+    r.init_ray(ox, oy, oz, dx, dy, dz);
+    return r;
+}
+
+# ─── 3. RNG — a tiny deterministic pseudo-random number generator ───
+# Used to add per-pixel jitter for anti-aliasing.  Xorshift32
+# (period 2^32, 32-bit state, no hex literal needed).
+class Rng {
+    let s = 0;
+
+    fn init_rng(seed) {
+        if (seed == 0) { seed = 1; }
+        self.s = seed;
+        return 0;
+    }
+
+    # Return next int in [0, 2^32).
+    fn next() {
+        let x = self.s;
+        x = x ^ (x << 13);
+        x = x ^ (x >> 17);
+        x = x ^ (x << 5);
+        # Mask to 32 bits using the runtime integer wrap (H#
+        # numbers are 64-bit, so we explicitly clamp).
+        x = x & 2147483647;
+        self.s = x;
+        return x;
+    }
+
+    # Return a float in [0, 1).
+    fn unit() {
+        return fdiv(self.next() & 16777215, 16777216.0);
+    }
+
+    # Return a float in [-1, 1).
+    fn sym() {
+        return (self.unit() - 0.5) * 2.0;
+    }
+}
+
+fn new_rng(seed) {
+    let r = new Rng();
+    r.init_rng(seed);
+    return r;
+}

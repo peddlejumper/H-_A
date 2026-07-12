@@ -1,0 +1,13 @@
+# t20_halt_early.hto - HALT 提前
+# 测试程序正常结束后 HALT，以及后续代码不可达
+print("first");
+print("second");
+# 主程序末尾编译器自动发 HALT
+# 测试在函数中提前 return 后剩余语句不应执行
+fn early_return() {
+    print("before return");
+    return 1;
+    print("after return - should not print");
+}
+print(early_return());
+print("done");

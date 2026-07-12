@@ -1,0 +1,220 @@
+# H# Regex Module (v0.4.1)
+# ─────────────────────────────────────────────────────────────────
+# Regular-expression support, layered on the regex_* natives
+# from HNativeBridge (which use java.util.regex.Pattern under
+# the hood).  H# syntax for regex literals is not provided, so
+# patterns are always passed as strings.
+#
+# API surface:
+#   * regex_test(pattern, text)  -> bool
+#   * regex_first(pattern, text) -> first match string or null
+#   * regex_all(pattern, text)   -> list of all match strings
+#   * regex_sub(pattern, text, repl) -> replaced text
+#   * regex_split(pattern, text) -> list of parts
+#   * regex_captures(pattern, text) -> list [whole, g1, g2, ...]
+#   * regex_named(pattern, text) -> dict of named groups
+#   * regex_is_valid(pattern)    -> true if pattern compiles
+#   * regex_escape(s)            -> backslash-escape all regex
+#                                   metacharacters in `s`
+#
+# All pattern arguments are Java-syntax regular expressions.
+
+# `regex_test(pattern, text)` — does `pattern` match anywhere
+# in `text`?  Returns a bool.
+fn regex_test(pattern, text) {
+    return regex_match(pattern, text);
+}
+
+# `regex_first(pattern, text)` — return the first match's text,
+# or `null` if there is no match.
+fn regex_first(pattern, text) {
+    let m = regex_search(pattern, text);
+    if (len(m) == 0) {
+        return null;
+    }
+    return m;
+}
+
+# `regex_all(pattern, text)` — return every non-overlapping
+# match as a list of strings.
+fn regex_all(pattern, text) {
+    return regex_find_all(pattern, text);
+}
+
+# `regex_sub(pattern, text, repl)` — replace all matches of
+# `pattern` in `text` with `repl`.  Back-references like `$1`
+# and `$2` in `repl` are honoured by the underlying engine.
+fn regex_sub(pattern, text, repl) {
+    return regex_replace(pattern, text, repl);
+}
+
+# `regex_split(pattern, text)` is exposed directly by the
+# `regex_split` native.  We do not wrap it here, because the
+# wrapper would shadow the native and recurse forever.
+
+# `regex_captures(pattern, text)` — return a list
+# `[whole, g1, g2, ...]` for the first match.  If there is no
+# match, return the empty list.
+fn regex_captures(pattern, text) {
+    return regex_groups(pattern, text);
+}
+
+# `regex_named(pattern, text)` — return a dict of
+# `{name: capture}` for the first match.  Empty dict if no
+# match.
+fn regex_named(pattern, text) {
+    return regex_named_groups(pattern, text);
+}
+
+# `regex_count(pattern, text)` — number of non-overlapping
+# matches.
+fn regex_count(pattern, text) {
+    return len(regex_all(pattern, text));
+}
+
+# `regex_is_valid(pattern)` — does `pattern` compile?  Wraps
+# the call in a try/catch; returns true if the runtime did
+# not raise.
+fn regex_is_valid(pattern) {
+    let ok = true;
+    try {
+        # Trick: ask for a search of an empty string.  If the
+        # pattern compiles, regex_match will return false; if
+        # the pattern is malformed, the runtime will throw.
+        regex_match(pattern, "");
+    } catch (e) {
+        ok = false;
+    }
+    return ok;
+}
+
+# `regex_escape(s)` — backslash-escape regex metacharacters in
+# `s` so it can be safely embedded in a larger pattern.
+fn regex_escape(s) {
+    # The H# lexer now honours `\\` as the escape for a single
+    # backslash, so we can write the meta list using two
+    # backslashes in the source.  In earlier versions of the
+    # lexer this list was a 21-character string with literal
+    # backslashes; the v0.4.1 lexer fix has made the list
+    # accurate (15 characters: one backslash plus the 14
+    # metacharacters).
+    let meta = "\\^$.|?*+()[]{}";
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let ch = s[i];
+        let is_meta = false;
+        let j = 0;
+        while (j < len(meta) and not is_meta) {
+            if (meta[j] == ch) {
+                is_meta = true;
+            }
+            j = j + 1;
+        }
+        if (is_meta) {
+            # Append a single literal backslash followed by the
+            # metacharacter.  In the H# source we write `\\` to
+            # get a single backslash in the runtime string.
+            out = out + "\\" + ch;
+        } else {
+            out = out + ch;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+# `regex_match_at(pattern, text, offset)` — match starting at
+# `offset`.  Pure-H# wrapper using `substring` + the search
+# primitive.  Returns the matched substring, or null.
+fn regex_match_at(pattern, text, offset) {
+    if (offset > len(text)) {
+        return null;
+    }
+    let rest = substring(text, offset, len(text));
+    let m = regex_first(pattern, rest);
+    if (m == null) {
+        return null;
+    }
+    return m;
+}
+
+# `regex_find_index(pattern, text)` — return the byte index of
+# the first match, or -1 if there is no match.
+fn regex_find_index(pattern, text) {
+    let m = regex_search(pattern, text);
+    if (len(m) == 0) {
+        return 0 - 1;
+    }
+    # Find where `m` occurs in `text`.  The native regex does
+    # not expose ranges, so we use __find_substr.
+    return __find_substr(text, m);
+}
+
+# `__find_substr(haystack, needle)` — return the index of the
+# first occurrence of `needle` in `haystack`, or -1.
+fn __find_substr(haystack, needle) {
+    if (len(needle) == 0) {
+        return 0;
+    }
+    let i = 0;
+    let n = len(haystack) - len(needle);
+    while (i <= n) {
+        let m = true;
+        let j = 0;
+        while (j < len(needle) and m) {
+            if (haystack[i + j] != needle[j]) {
+                m = false;
+            }
+            j = j + 1;
+        }
+        if (m) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return 0 - 1;
+}
+
+# `regex_replace_n(pattern, text, repl, n)` — replace at most
+# `n` matches.  Implemented via a manual loop because the
+# native does not support an occurrence count.
+fn regex_replace_n(pattern, text, repl, n) {
+    let count = regex_count(pattern, text);
+    if (n > count) {
+        n = count;
+    }
+    if (n <= 0) {
+        return text;
+    }
+    # Walk forward, consuming matches and emitting the
+    # replacement up to `n` times.
+    let out = "";
+    let pos = 0;
+    let replaced = 0;
+    let rest = text;
+    while (replaced < n) {
+        let idx = regex_find_index(pattern, rest);
+        if (idx < 0) {
+            break;
+        }
+        # Copy unchanged prefix.
+        if (idx > 0) {
+            out = out + substring(rest, 0, idx);
+        }
+        # Append the replacement (resolved via sub on the
+        # match span).
+        let match_str = regex_first(pattern, rest);
+        out = out + regex_sub(pattern, match_str, repl);
+        replaced = replaced + 1;
+        # Skip past the match.
+        let match_len = len(match_str);
+        if (idx + match_len >= len(rest)) {
+            rest = "";
+        } else {
+            rest = substring(rest, idx + match_len, len(rest));
+        }
+    }
+    out = out + rest;
+    return out;
+}

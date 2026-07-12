@@ -1,0 +1,38 @@
+# ============================================================
+# H# 异常处理演示 (try/catch/throw)
+# 注意：try/catch 仅在字节码 VM 路径中实现。
+# 运行方式：python3 hsharp.py --opt hsharp_trycatch_demo.hto
+# （默认树遍历解释器尚未实现 visit_TryStatement）
+# ============================================================
+
+# 例1：直接抛出与捕获
+try {
+    print("before throw");
+    throw "oops";
+    print("after throw");   # 不会执行
+} catch (e) {
+    print("捕获: " + e);
+}
+print("---");
+
+# 例2：抛出不同类型的值
+try {
+    throw 404;
+} catch (code) {
+    print("错误码: " + str(code));
+}
+print("---");
+
+# 例3：嵌套 try
+try {
+    try {
+        throw "inner";
+    } catch (e1) {
+        print("内层捕获: " + e1);
+        throw "rethrown";
+    }
+} catch (e2) {
+    print("外层捕获: " + e2);
+}
+
+print("=== try/catch 演示完成 ===");

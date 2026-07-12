@@ -1,0 +1,442 @@
+# Round-2 / #85 — List slicing & indexing deep boundary tests
+# Targets: negative indices, slice step semantics (including 0 / negative),
+# out-of-range slices, slice assignment, pop/insert/remove edge cases,
+# sort with custom comparator, reverse semantics, nested-list indexing,
+# list-of-lists destructuring, slice-then-index on a 2D structure.
+#
+# All error-prone ops are wrapped in try/catch so the test runs to
+# completion; the printed text reveals the actual behaviour.
+
+print("=== R2.85 START ===");
+
+# ============================================================
+# T01 — Negative index boundary
+# ============================================================
+print("T01-neg-index");
+let a = [10, 20, 30, 40, 50];
+print(a[-1]);          # 50
+print(a[-5]);          # 10  (first element via negative)
+print(a[-3]);          # 30
+# Out-of-range negative
+let r1 = "no-err";
+try { r1 = "got:" + a[-6]; } catch (e) { r1 = "caught:" + e; }
+print(r1);             # expected: caught (size 5)
+let r2 = "no-err";
+try { r2 = "got:" + a[-100]; } catch (e) { r2 = "caught:" + e; }
+print(r2);             # expected: caught (size 5)
+# Negative zero-ish / huge negative on empty list
+let r3 = "no-err";
+try { let bad = []; let v = bad[-1]; r3 = "got:" + v; } catch (e) { r3 = "caught:" + e; }
+print(r3);             # expected: caught (size 0)
+
+# ============================================================
+# T02 — Negative step slice: [1,2,3,4,5][4:0:-1] -> [5,4,3,2]
+# ============================================================
+print("T02-neg-step");
+let xs = [1, 2, 3, 4, 5];
+print(xs[4:0:-1]);     # expected [5, 4, 3, 2]
+print(xs[::-1]);       # expected [5, 4, 3, 2, 1]
+print(xs[::-2]);       # expected [5, 3, 1]
+print(xs[4::-1]);      # expected [5, 4, 3, 2, 1]
+print(xs[:1:-1]);      # expected [5, 4, 3]
+# Stop beyond start with negative step (empty range)
+print(xs[1:4:-1]);     # expected []
+print(xs[3:3:-1]);     # expected []
+# Negative step larger than length
+print(xs[10:0:-1]);    # expected [5, 4, 3, 2] (start clamped)
+print(xs[4:-10:-1]);   # expected [5, 4, 3, 2, 1] (stop clamped)
+
+# ============================================================
+# T03 — Slice out-of-range should not error
+# ============================================================
+print("T03-slice-oob");
+let s = [1, 2, 3];
+print(s[0:100]);       # [1, 2, 3]
+print(s[5:100]);       # []
+print(s[-100:100]);    # [1, 2, 3]
+print(s[2:1]);         # [] (start > stop, default step 1)
+print(s[-1:100]);      # [3]
+print(s[100:200]);     # []
+
+# ============================================================
+# T04 — Empty list slicing
+# ============================================================
+print("T04-empty-slice");
+let e = [];
+print(e[0:10]);        # []
+print(e[:]);           # []
+print(e[::-1]);        # []
+print(e[::2]);         # []
+print(e[5:0:-1]);      # []
+print(len(e[0:10]));   # 0
+
+# ============================================================
+# T05 — Step zero should error
+# ============================================================
+print("T05-step-zero");
+let z = [1, 2, 3, 4];
+let zr1 = "no-err";
+try { zr1 = "got:" + z[::0]; } catch (e) { zr1 = "caught:" + e; }
+print(zr1);            # expected: caught (slice step 0)
+let zr2 = "no-err";
+try { zr2 = "got:" + z[1:3:0]; } catch (e) { zr2 = "caught:" + e; }
+print(zr2);            # expected: caught (slice step 0)
+# string step 0 too
+let zr3 = "no-err";
+try { zr3 = "got:" + "abc"[::0]; } catch (e) { zr3 = "caught:" + e; }
+print(zr3);
+
+# ============================================================
+# T06 — [::] full copy: shallow vs deep
+# ============================================================
+print("T06-full-copy");
+let orig = [[1, 2], [3, 4], 5];
+let cp = orig[:];
+print(cp);             # [[1, 2], [3, 4], 5]
+print(cp == orig);     # true (value equal)
+# Mutating top-level of copy does not affect orig
+cp[2] = 99;
+print(orig[2]);        # 5 (unchanged)
+print(cp[2]);          # 99
+# Mutating a nested list via the copy SHOULD affect orig if shallow
+cp[0][0] = 777;
+print(orig[0][0]);     # 777 if shallow copy; 1 if deep
+print(cp[0][0]);       # 777
+# Restoring for further tests
+orig[0][0] = 1;
+
+# ============================================================
+# T07 — Slice assignment: l[1:3] = [x, y]
+# ============================================================
+print("T07-slice-assign");
+# NOTE: slice assignment `L[1:3] = [...]` is NOT supported by the
+# Python compiler — `AssignmentIndex` in compiler.py does not handle
+# `SliceExpression` as the index (only plain integer indices).  The
+# lines below would abort compilation, so they are commented out and
+# documented as a compile-time bug.  See the bug report.
+print("slice-assign: unsupported (compiler raises 'Unsupported expression type: SliceExpression')");
+# Verify plain index assignment still works:
+let Lp = [1, 2, 3, 4, 5];
+Lp[1] = 99;
+print(Lp);             # [1, 99, 3, 4, 5]
+Lp[-1] = 55;
+print(Lp);             # [1, 99, 3, 4, 55]
+
+# ============================================================
+# T08 — pop() on empty list
+# ============================================================
+print("T08-pop-empty");
+let ep = [];
+let er1 = "no-err";
+try { let v = ep.pop(); er1 = "got:" + v; } catch (e) { er1 = "caught:" + e; }
+print(er1);            # expected: caught
+# After failed pop, list should still be empty
+print(ep);             # []
+print(len(ep));        # 0
+
+# ============================================================
+# T09 — pop(i) at specified position
+# ============================================================
+print("T09-pop-index");
+let p = [10, 20, 30, 40, 50];
+let pr1 = "no-err";
+try { pr1 = "got:" + p.pop(0); } catch (e) { pr1 = "caught:" + e; }
+print(pr1);            # expected: got:10
+print(p);              # [20, 30, 40, 50]
+let pr2 = "no-err";
+try { pr2 = "got:" + p.pop(2); } catch (e) { pr2 = "caught:" + e; }
+print(pr2);            # expected: got:40
+print(p);              # [20, 30, 50]
+# Negative index pop
+let pr3 = "no-err";
+try { pr3 = "got:" + p.pop(-1); } catch (e) { pr3 = "caught:" + e; }
+print(pr3);            # expected: got:50
+print(p);              # [20, 30]
+# Out-of-range pop
+let pr4 = "no-err";
+try { pr4 = "got:" + p.pop(10); } catch (e) { pr4 = "caught:" + e; }
+print(pr4);            # expected: caught
+let pr5 = "no-err";
+try { pr5 = "got:" + p.pop(-10); } catch (e) { pr5 = "caught:" + e; }
+print(pr5);            # expected: caught
+print(p);              # [20, 30] (unchanged after failures)
+
+# ============================================================
+# T10 — insert at out-of-range position
+# ============================================================
+print("T10-insert-oob");
+let ins = [1, 2, 3];
+let ir1 = "no-err";
+try { ins.insert(0, 99); ir1 = "ok"; } catch (e) { ir1 = "caught:" + e; }
+print(ir1);
+print(ins);            # [99, 1, 2, 3]
+let ir2 = "no-err";
+try { ins.insert(len(ins), 100); ir2 = "ok"; } catch (e) { ir2 = "caught:" + e; }
+print(ir2);
+print(ins);            # [99, 1, 2, 3, 100]
+# Beyond end — should clamp to end
+let ir3 = "no-err";
+try { ins.insert(1000, 999); ir3 = "ok"; } catch (e) { ir3 = "caught:" + e; }
+print(ir3);
+print(ins);            # [99, 1, 2, 3, 100, 999]
+# Negative insert position
+let ir4 = "no-err";
+try { ins.insert(-1, 555); ir4 = "ok"; } catch (e) { ir4 = "caught:" + e; }
+print(ir4);
+print(ins);            # [..., 555, 999] — Python inserts before last
+# Very negative insert — should clamp to front
+let ir5 = "no-err";
+try { ins.insert(-1000, 0); ir5 = "ok"; } catch (e) { ir5 = "caught:" + e; }
+print(ir5);
+print(ins);            # [0, 99, 1, 2, 3, 100, 555, 999]
+print(len(ins));       # 8
+
+# ============================================================
+# T11 — remove non-existent element
+# ============================================================
+print("T11-remove-missing");
+let rm = [1, 2, 3, 2, 1];
+# Remove existing
+let rr1 = "no-err";
+try { rm.remove(2); rr1 = "ok"; } catch (e) { rr1 = "caught:" + e; }
+print(rr1);            # ok
+print(rm);             # [1, 3, 2, 1] (first occurrence removed)
+# Remove element not present
+let rr2 = "no-err";
+try { rm.remove(999); rr2 = "ok"; } catch (e) { rr2 = "caught:" + e; }
+print(rr2);            # expected: caught (value not in list)
+# Remove from empty
+let rr3 = "no-err";
+let emptyRm = [];
+try { emptyRm.remove(0); rr3 = "ok"; } catch (e) { rr3 = "caught:" + e; }
+print(rr3);            # expected: caught
+# Remove type-mismatched element
+let rr4 = "no-err";
+try { rm.remove("2"); rr4 = "ok"; } catch (e) { rr4 = "caught:" + e; }
+print(rr4);            # expected: caught (string "2" not equal to int 2)
+
+# ============================================================
+# T12 — sort with custom comparator (lambda)
+# ============================================================
+print("T12-sort-cmp");
+let u = [3, 1, 4, 1, 5, 9, 2, 6];
+let sr1 = "no-err";
+try { u.sort(); sr1 = "ok"; } catch (e) { sr1 = "caught:" + e; }
+print(sr1);
+print(u);              # [1, 1, 2, 3, 4, 5, 6, 9]
+# Custom comparator: descending
+let u2 = [3, 1, 4, 1, 5, 9, 2, 6];
+let sr2 = "no-err";
+try { u2.sort(fn(a, b) { return b - a; }); sr2 = "ok"; } catch (e) { sr2 = "caught:" + e; }
+print(sr2);
+print(u2);             # [9, 6, 5, 4, 3, 2, 1, 1]
+# Custom comparator: by absolute value
+let u3 = [-5, 3, -1, 4, -2, 0];
+let sr3 = "no-err";
+try {
+    u3.sort(fn(a, b) {
+        let aa = a; if (aa < 0) { aa = -aa; }
+        let bb = b; if (bb < 0) { bb = -bb; }
+        return aa - bb;
+    });
+    sr3 = "ok";
+} catch (e) { sr3 = "caught:" + e; }
+print(sr3);
+print(u3);             # [0, -1, -2, 3, 4, -5]
+# Sort strings
+let u4 = ["banana", "apple", "cherry"];
+let sr4 = "no-err";
+try { u4.sort(); sr4 = "ok"; } catch (e) { sr4 = "caught:" + e; }
+print(sr4);
+print(u4);             # [apple, banana, cherry]
+# Sort empty
+let u5 = [];
+let sr5 = "no-err";
+try { u5.sort(); sr5 = "ok"; } catch (e) { sr5 = "caught:" + e; }
+print(sr5);
+print(u5);             # []
+# Sort single
+let u6 = [42];
+let sr6 = "no-err";
+try { u6.sort(); sr6 = "ok"; } catch (e) { sr6 = "caught:" + e; }
+print(sr6);
+print(u6);             # [42]
+
+# ============================================================
+# T13 — reverse(): in-place vs returns
+# ============================================================
+print("T13-reverse");
+let rv = [1, 2, 3, 4, 5];
+let rrv1 = "no-err";
+let rret = null;
+try { rret = rv.reverse(); rrv1 = "ok"; } catch (e) { rrv1 = "caught:" + e; }
+print(rrv1);
+print(rv);             # [5, 4, 3, 2, 1] (in-place)
+print(rret);           # null if in-place-only; or [5,4,3,2,1] if returns self
+# Verify it's the same object (in-place) by chaining a mutation
+let rv2 = [1, 2, 3];
+let chained = "no-err";
+try {
+    let r2ret = rv2.reverse();
+    # if reverse returns self, rv2 should now be reversed
+    print(rv2);        # [3, 2, 1]
+    print(r2ret);      # [3, 2, 1] or null
+    chained = "ok";
+} catch (e) { chained = "caught:" + e; }
+print(chained);
+# Reverse empty
+let rv3 = [];
+let rrv3 = "no-err";
+try { rv3.reverse(); rrv3 = "ok"; } catch (e) { rrv3 = "caught:" + e; }
+print(rrv3);
+print(rv3);            # []
+# Reverse single
+let rv4 = [42];
+let rrv4 = "no-err";
+try { rv4.reverse(); rrv4 = "ok"; } catch (e) { rrv4 = "caught:" + e; }
+print(rrv4);
+print(rv4);            # [42]
+
+# ============================================================
+# T14 — Nested list indexing l[0][1]
+# ============================================================
+print("T14-nested-index");
+let nest = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+print(nest[0][1]);     # 2
+print(nest[2][0]);     # 7
+print(nest[-1][-1]);   # 9
+print(nest[1][2]);     # 6
+# Triple nesting
+let deep = [[[10, 20], [30, 40]], [[50, 60], [70, 80]]];
+print(deep[0][0][0]);  # 10
+print(deep[1][1][1]);  # 80
+print(deep[-1][-1][-1]); # 80
+# Nested write
+let nm = [[0, 0], [0, 0]];
+nm[0][1] = 7;
+nm[1][0] = 8;
+print(nm);             # [[0, 7], [8, 0]]
+print(nm[0][1]);       # 7
+print(nm[1][0]);       # 8
+# Out-of-range on inner
+let nr1 = "no-err";
+try { nr1 = "got:" + nest[0][5]; } catch (e) { nr1 = "caught:" + e; }
+print(nr1);            # expected: caught
+# Out-of-range on outer (returns inner-list? — should error)
+let nr2 = "no-err";
+try { nr2 = "got:" + nest[5][0]; } catch (e) { nr2 = "caught:" + e; }
+print(nr2);            # expected: caught
+
+# ============================================================
+# T15 — List-of-lists destructuring
+# ============================================================
+print("T15-list-of-lists-destr");
+let pairs = [[1, 2], [3, 4], [5, 6]];
+let [p0, p1, p2] = pairs;
+print(p0);             # [1, 2]
+print(p1);             # [3, 4]
+print(p2);             # [5, 6]
+print(p0[0]);          # 1
+print(p2[1]);          # 6
+# Nested destructure: let [[a, b], [c, d]] = ...
+# NOTE: this fails at PARSE time (parser only supports flat destructure).
+# Documented as a parser limitation — not tested here to keep the
+# rest of the suite runnable.
+print("nested-destructure: skipped (parser does not support nested)");
+# Destructure with rest/_
+let [first, _, last] = [100, 200, 300];
+print(first);          # 100
+print(last);           # 300
+# Destructure with mismatched count (fewer source)
+let dr1 = "no-err";
+try { let [m1, m2, m3] = [1, 2]; } catch (e) { dr1 = "caught:" + e; }
+print(dr1);            # expected: caught
+# Destructure with extra source (extras ignored)
+let [extra1] = [11, 22, 33];
+print(extra1);         # 11
+
+# ============================================================
+# T16 — 2D slice-then-index (matrix[1:3][0])
+#     — matrix[1:3] returns a list-of-lists, [0] indexes into that
+# ============================================================
+print("T16-2d-slice-then-index");
+let mat = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]];
+let sub = mat[1:3];    # [[4,5,6], [7,8,9]]
+print(sub);            # [[4, 5, 6], [7, 8, 9]]
+print(sub[0]);         # [4, 5, 6]
+print(sub[1]);         # [7, 8, 9]
+print(sub[0][2]);      # 6
+print(sub[1][0]);      # 7
+print(sub[-1][-1]);    # 9
+print(mat[1:3][0]);    # [4, 5, 6]  (chained on the literal slice)
+print(mat[1:3][0][1]); # 5
+# Slice of slice
+let ss = mat[:2];      # [[1,2,3],[4,5,6]]
+print(ss);             # [[1, 2, 3], [4, 5, 6]]
+print(ss[1:]);         # [[4, 5, 6]]
+# Empty slice-then-index should error
+let sr16 = "no-err";
+try { sr16 = "got:" + mat[5:10][0]; } catch (e) { sr16 = "caught:" + e; }
+print(sr16);           # expected: caught (empty list index 0)
+# Slice-then-index out of slice range
+let sr16b = "no-err";
+try { sr16b = "got:" + mat[0:1][5]; } catch (e) { sr16b = "caught:" + e; }
+print(sr16b);          # expected: caught
+
+# ============================================================
+# T17 — Bonus: slice with negative indices everywhere
+# ============================================================
+print("T17-neg-slice-mix");
+let mx = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+print(mx[-3:-1]);      # [7, 8]
+print(mx[-5:-1:2]);    # [5, 7]
+print(mx[-1:-5:-1]);   # [9, 8, 7, 6]
+print(mx[-1:-10:-3]);  # [9, 6, 3]
+print(mx[-100:]);      # full list
+# mx[:-100] — end=-100 clamped to 0, should yield [].
+# CRASH: runtime throws uncaught "fromIndex = -90" (Kotlin subList
+# rejects negative fromIndex). Wrap to keep test running.
+let r17a = "no-err";
+try { r17a = "got:" + mx[:-100]; } catch (e) { r17a = "caught:" + e; }
+print(r17a);           # expected [] but observed: uncaught crash
+# mx[:-100:-1] — step -1, stop clamped before start, should yield [9]
+let r17b = "no-err";
+try { r17b = "got:" + mx[:-100:-1]; } catch (e) { r17b = "caught:" + e; }
+print(r17b);
+
+# ============================================================
+# T18 — Bonus: chained slice (slice of a slice via literal)
+# ============================================================
+print("T18-chained-slice");
+let base = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+let cs1 = base[2:8][1:4];   # slice [2..7] then [1..3] of that -> [3,4,5]
+print(cs1);                  # [3, 4, 5]
+let cs2 = base[::2][1:3];   # [0,2,4,6,8] then [1:3] -> [2, 4]
+print(cs2);                  # [2, 4]
+let cs3 = base[2:8:2];      # [2, 4, 6]
+print(cs3);                  # [2, 4, 6]
+let cs4 = base[::-1][:3];   # reversed then first 3 -> [9, 8, 7]
+print(cs4);                  # [9, 8, 7]
+
+# ============================================================
+# T19 — Bonus: large step values
+# ============================================================
+print("T19-large-step");
+let bg = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+print(bg[::100]);      # [0]
+print(bg[0:1:100]);    # [0]
+print(bg[0:10:100]);   # [0]
+print(bg[::-100]);     # [9]
+print(bg[9:0:-100]);   # [9]
+
+# ============================================================
+# T20 — Bonus: index-then-slice (l[i][a:b]) for nested list
+# ============================================================
+print("T20-index-then-slice");
+let grid = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]];
+print(grid[0][1:3]);   # [2, 3]
+print(grid[1][::2]);   # [5, 7]
+print(grid[2][::-1]);  # [12, 11, 10, 9]
+print(grid[-1][:2]);   # [9, 10]
+
+print("=== R2.85 DONE ===");

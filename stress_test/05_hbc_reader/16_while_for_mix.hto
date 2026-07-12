@@ -1,0 +1,28 @@
+# 16 - while + for 混合
+# 目的: while 内嵌 for，for 的 JUMP 修正与 while 的 JUMP 共存
+let outer = 0;
+let total = 0;
+while (outer < 3) {
+    let inner_sum = 0;
+    for i in range(5) {
+        inner_sum = inner_sum + i;
+    }
+    total = total + inner_sum;
+    outer = outer + 1;
+}
+print("total=" + str(total));
+print("expected_total=30");
+print("outer=" + str(outer));
+print("expected_outer=3");
+
+# for 内嵌 while
+let result = 0;
+for x in [1, 2, 3, 4] {
+    let y = x;
+    while (y > 0) {
+        result = result + y;
+        y = y - 1;
+    }
+}
+print("result=" + str(result));
+print("expected_result=20");

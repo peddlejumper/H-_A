@@ -1,0 +1,5 @@
+# _probe144_min.hto — 最小复现
+class C { let x = 1; fn get() { return self.x; } }
+let o = new C();
+print("self.x = " + o.get());
+print("o.x = " + o.x);

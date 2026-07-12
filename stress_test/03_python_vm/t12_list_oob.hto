@@ -1,0 +1,26 @@
+# t12_list_oob.hto - 列表越界访问
+# 访问越界索引应抛出异常（或崩溃）
+let lst = [1, 2, 3];
+print("len=");
+print(len(lst));
+print("valid[0]=");
+print(lst[0]);
+print("valid[2]=");
+print(lst[2]);
+try {
+    let v = lst[3];
+    print("oob3 no throw: ");
+    print(v);
+} catch (e) {
+    print("oob3 caught: ");
+    print(e);
+}
+try {
+    let v = lst[100];
+    print("oob100 no throw: ");
+    print(v);
+} catch (e) {
+    print("oob100 caught: ");
+    print(e);
+}
+print("after");

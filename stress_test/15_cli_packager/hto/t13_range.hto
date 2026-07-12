@@ -1,0 +1,6 @@
+# t13_range.hto - range and sum
+let s = 0;
+for i in range(1, 11) {
+    s = s + i;
+}
+print(s);

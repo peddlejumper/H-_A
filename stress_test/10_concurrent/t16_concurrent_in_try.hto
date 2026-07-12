@@ -1,0 +1,17 @@
+# t16_concurrent_in_try.hto
+# concurrent 块整体被 try/catch 包裹，块内 parallel 抛错。
+# 预期：CONCURRENT_EXIT 重抛首个错误，外层 catch 捕获，打印 "caught: x" 后继续。
+parallel fn fail() {
+    throw "x";
+}
+print("before");
+try {
+    concurrent {
+        let f = fail();
+        let r = await f;
+    }
+} catch (e) {
+    print("caught:");
+    print(e);
+}
+print("after");

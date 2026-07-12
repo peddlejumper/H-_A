@@ -1,0 +1,49 @@
+# 09 — chan_try_recv returns null on empty channel
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Empty unbounded channel
+let ch = chan_new(0);
+let r1 = chan_try_recv(ch);
+check("empty_unbounded_null", r1 == nullptr, "r1=" + str(r1));
+check("empty_unbounded_size", chan_size(ch) == 0, "size=" + str(chan_size(ch)));
+
+# try_recv twice on empty
+let r2 = chan_try_recv(ch);
+let r3 = chan_try_recv(ch);
+check("empty_try_recv_twice", r2 == nullptr and r3 == nullptr,
+      "r2=" + str(r2) + " r3=" + str(r3));
+
+# After send, try_recv returns value
+chan_send(ch, 42);
+let r4 = chan_try_recv(ch);
+check("after_send_value", r4 == 42, "r4=" + str(r4));
+check("after_recv_empty", chan_try_recv(ch) == nullptr, "still had value");
+check("size_0_again", chan_size(ch) == 0, "size=" + str(chan_size(ch)));
+
+# Empty bounded channel
+let chb = chan_new(5);
+check("empty_bounded_null", chan_try_recv(chb) == nullptr, "got value");
+check("empty_bounded_size", chan_size(chb) == 0, "size=" + str(chan_size(chb)));
+
+# Interleaved send/try_recv
+let ch2 = chan_new(0);
+chan_send(ch2, "a");
+chan_send(ch2, "b");
+let a = chan_try_recv(ch2);
+chan_send(ch2, "c");
+let b = chan_try_recv(ch2);
+let c = chan_try_recv(ch2);
+let none = chan_try_recv(ch2);
+check("interleaved", a == "a" and b == "b" and c == "c" and none == nullptr,
+      "a=" + str(a) + " b=" + str(b) + " c=" + str(c) + " none=" + str(none));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

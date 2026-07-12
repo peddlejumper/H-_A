@@ -1,0 +1,25 @@
+# test_ai_client_simple.hto
+let _ai_cfg = {
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "api_key": "",
+    "model": "gpt-4o-mini",
+    "max_tokens": 1024,
+    "temperature": 0.3,
+    "system_prompt": ""
+};
+
+fn ai_configure(cfg) {
+    if (cfg == nullptr) {
+        return;
+    }
+    if ("endpoint" in cfg) { _ai_cfg["endpoint"] = cfg["endpoint"]; }
+    if ("api_key" in cfg) { _ai_cfg["api_key"] = cfg["api_key"]; }
+    if ("model" in cfg) { _ai_cfg["model"] = cfg["model"]; }
+    if ("max_tokens" in cfg) { _ai_cfg["max_tokens"] = cfg["max_tokens"]; }
+    if ("temperature" in cfg) { _ai_cfg["temperature"] = cfg["temperature"]; }
+    if ("system_prompt" in cfg and cfg["system_prompt"] != "") {
+        _ai_cfg["system_prompt"] = cfg["system_prompt"];
+    }
+}
+
+print("ok");

@@ -1,0 +1,20 @@
+# Minimal probe: variadic lambda with freevar at module level
+# Confirms MAKE_CLOSURE drops isVariadic
+try {
+    let f = fn(...xs) { return len(xs); };
+    print("A:" + str(f()));
+} catch (e) { print("A:EXC[" + str(e) + "]"); }
+try {
+    let f = fn(...xs) { return len(xs); };
+    print("B:" + str(f(1, 2, 3)));
+} catch (e) { print("B:EXC[" + str(e) + "]"); }
+# No freevar — should work
+try {
+    let f = fn(...xs) { return xs; };
+    print("C:" + str(len(f(1, 2, 3))));
+} catch (e) { print("C:EXC[" + str(e) + "]"); }
+# Default + variadic lambda with freevar
+try {
+    let f = fn(a, b=5, ...rest) { return [a, b, len(rest)]; };
+    print("D:" + str(f(1)));
+} catch (e) { print("D:EXC[" + str(e) + "]"); }

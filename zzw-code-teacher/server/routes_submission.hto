@@ -1,0 +1,181 @@
+# server/routes_submission.hto
+# 提交 / 评测路由:
+#   POST /api/submissions                   提交代码 -> 评测 -> 返回结果
+#   GET  /api/submissions/:id               查询单次提交详情
+#   GET  /api/submissions                   学员: 我的提交; 管理员: 全部提交
+#   POST /api/submissions/:id/run-sample    仅跑样例(不评分,快速反馈)
+
+import "shared/json_utils.hto";
+import "shared/storage.hto";
+import "shared/models.hto";
+import "shared/judge.hto";
+
+fn register() {
+    route("POST", "/api/submissions", _submit);
+    route("GET", "/api/submissions/:id", _detail);
+    route("GET", "/api/submissions", _list);
+    route("POST", "/api/submissions/:id/run-sample", _run_sample);
+    route("POST", "/api/submissions/:id/run", _submit);
+}
+
+fn _submit(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let body = body_json(req);
+    let problem_id = json_get(body, "problem_id");
+    let code = json_get(body, "code");
+    if (problem_id == nullptr or code == nullptr) {
+        return http_response(400, json_stringify(json_response_err("problem_id/code 必填")), "application/json");
+    }
+    let p = storage_get_by_id("problems", problem_id);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("题目不存在")), "application/json");
+    }
+    let sub = submission_new(req["user"]["id"], problem_id, code);
+    # 评测
+    let cfg = _judge_cfg();
+    judge_submission(sub, p, cfg);
+    # 持久化
+    storage_insert("submissions", sub);
+    # 更新题目统计
+    p["submission_count"] = p["submission_count"] + 1;
+    if (sub["status"] == "accepted") {
+        p["accepted_count"] = p["accepted_count"] + 1;
+    }
+    storage_update("problems", p["id"], p);
+    # 更新用户统计
+    let u = req["user"];
+    u["total_submissions"] = u["total_submissions"] + 1;
+    if (sub["status"] == "accepted") {
+        u["total_accepted"] = u["total_accepted"] + 1;
+    }
+    storage_update("users", u["id"], u);
+    # 更新 progress
+    _update_progress(u["id"], problem_id, sub);
+    return http_response(200, json_stringify(json_response_ok(sub)), "application/json");
+}
+
+fn _detail(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let id = req["params"]["id"];
+    let sub = storage_get_by_id("submissions", id);
+    if (sub == nullptr) {
+        return http_response(404, json_stringify(json_response_err("提交不存在")), "application/json");
+    }
+    if (sub["user_id"] != req["user"]["id"] and req["user"]["role"] != "admin") {
+        return http_response(403, json_stringify(json_response_err("无权查看")), "application/json");
+    }
+    return http_response(200, json_stringify(json_response_ok(sub)), "application/json");
+}
+
+fn _list(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let all = storage_all("submissions");
+    let problem_id = json_get(req["query"], "problem_id");
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        let s = all[i];
+        if (req["user"]["role"] != "admin") {
+            if (s["user_id"] != req["user"]["id"]) {
+                i = i + 1;
+                continue;
+            }
+        }
+        if (problem_id != nullptr and s["problem_id"] != problem_id) {
+            i = i + 1;
+            continue;
+        }
+        # 简化输出(去掉代码全文)
+        out.append({
+            "id": s["id"],
+            "user_id": s["user_id"],
+            "problem_id": s["problem_id"],
+            "status": s["status"],
+            "score": s["score"],
+            "passed": s["passed"],
+            "total": s["total"],
+            "time_ms": s["time_ms"],
+            "created_at": s["created_at"]
+        });
+        i = i + 1;
+    }
+    return http_response(200, json_stringify(json_response_ok(out)), "application/json");
+}
+
+fn _run_sample(req) {
+    if (req["user"] == nullptr) {
+        return http_response(401, json_stringify(json_response_err("未登录")), "application/json");
+    }
+    let id = req["params"]["id"];
+    let body = body_json(req);
+    let stdin = json_get(body, "stdin");
+    if (stdin == nullptr) { stdin = ""; }
+    let sub = storage_get_by_id("submissions", id);
+    if (sub == nullptr) {
+        return http_response(404, json_stringify(json_response_err("提交不存在")), "application/json");
+    }
+    let p = storage_get_by_id("problems", sub["problem_id"]);
+    if (p == nullptr) {
+        return http_response(404, json_stringify(json_response_err("题目不存在")), "application/json");
+    }
+    # 只跑第一个 sample
+    if (len(p["samples"]) == 0) {
+        return http_response(400, json_stringify(json_response_err("无样例")), "application/json");
+    }
+    let sample = p["samples"][0];
+    let source = sub["code"];
+    if ("template" in p and p["template"] != "" and p["template"] != nullptr) {
+        source = source + "\n" + p["template"];
+    }
+    let cfg = _judge_cfg();
+    let r = judge_one(source, stdin, sample["output"], cfg["time_limit_ms"]);
+    return http_response(200, json_stringify(json_response_ok(r)), "application/json");
+}
+
+fn _judge_cfg() {
+    let cfg = storage_load("config");
+    if (cfg != nullptr and "judge" in cfg) {
+        return cfg["judge"];
+    }
+    return {
+        "time_limit_ms": 2000,
+        "memory_limit_kb": 65536,
+        "hsvm_path": "./hsvm"
+    };
+}
+
+fn _update_progress(user_id, problem_id, sub) {
+    let rows = storage_all("progress");
+    let found = nullptr;
+    let i = 0;
+    while (i < len(rows)) {
+        if (rows[i]["user_id"] == user_id and rows[i]["problem_id"] == problem_id) {
+            found = rows[i];
+        }
+        i = i + 1;
+    }
+    if (found == nullptr) {
+        found = progress_new(user_id, problem_id);
+        storage_insert("progress", found);
+    }
+    found["attempts"] = found["attempts"] + 1;
+    found["last_submission"] = time_now();
+    if (sub["score"] > found["best_score"]) {
+        found["best_score"] = sub["score"];
+    }
+    if (sub["status"] == "accepted") {
+        found["status"] = "solved";
+    } else if (found["status"] != "solved") {
+        found["status"] = "attempted";
+    }
+    storage_update("progress", found["user_id"] + ":" + found["problem_id"], found);
+}
+
+# 自动注册
+register();

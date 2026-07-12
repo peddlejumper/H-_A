@@ -1,0 +1,34 @@
+# T17 - union as match scrutinee + variant pattern (match is Kotlin-only;
+# root hsharp.py has no match support)
+union Shape {
+    Circle: r;
+    Rect: w, h;
+    Point;
+}
+
+fn area(s) {
+    return match s {
+        Circle(r) => 3 * r * r,
+        Rect(w, h) => w * h,
+        Point => 0,
+        _ => -1
+    };
+}
+
+let c = Shape{Circle: 5};
+let r = Shape{Rect: 4, 6};
+let p = Shape{Point};
+
+print(area(c));
+print(area(r));
+print(area(p));
+
+# single-payload binding + fallthrough
+fn radius(s) {
+    return match s {
+        Circle(r) => r,
+        _ => -1
+    };
+}
+print(radius(c));
+print(radius(r));

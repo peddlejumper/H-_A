@@ -1,0 +1,568 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# student/student_ide.hto — 学生端 IDE（现代化重设计）
+# 设计：Vercel/Linear 风格，去除"AI"标签，改为"Assistant"
+# 布局：极简标题栏 / 顶部 Tab 导航 / 左侧题目列表 / 中央编辑器 / 右侧助手 / 底部状态
+# 注意：所有函数加 s_ 前缀，避免与 app.hto / teacher 全局函数名冲突
+# ═══════════════════════════════════════════════════════════════════════════
+import "bootstrap/zzw_native.hto";
+import "zzw_code_teacher/common/theme.hto";
+import "zzw_code_teacher/common/widgets.hto";
+import "zzw_code_teacher/common/data_store.hto";
+import "zzw_code_teacher/common/ai_tutor.hto";
+
+# ───────────────────────── 应用状态 ─────────────────────────
+let _state = {
+    "win_id": 0,
+    "win_w": 1320,
+    "win_h": 820,
+    "running": true,
+    "current_user": "alice",
+    "problems": [],
+    "current_problem": nullptr,
+    "current_problem_idx": 0,
+    "code": "",
+    "cursor_line": 0,
+    "cursor_col": 0,
+    # 布局尺寸
+    "sidebar_w": 280,
+    "assistant_w": 340,
+    "panel_h": 180,
+    # 助手对话（不叫 AI）
+    "messages": [],
+    # 输出
+    "output_lines": [],
+    # 鼠标状态
+    "mx": 0,
+    "my": 0,
+    "hover_problem": -1,
+    "hover_nav": -1,
+    "hover_tab": -1,
+    "hover_send": false
+};
+
+# ───────────────────────── 初始化 ─────────────────────────
+fn s_init_problems() {
+    _state["problems"] = problems_all();
+    if (len(_state["problems"]) > 0) {
+        _state["current_problem"] = _state["problems"][0];
+        _state["current_problem_idx"] = 0;
+        _state["code"] = _state["current_problem"]["template"];
+    }
+    return 0;
+}
+
+fn s_add_message(from_user, text) {
+    push(_state["messages"], {"from_user": from_user, "text": text});
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 渲染各区域
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ───────────────────────── 顶部导航栏（极简，无标题栏）─────────────────────────
+fn s_render_topbar(win_id) {
+    let w = _state["win_w"];
+    # 顶部 48px 高的导航栏
+    native_draw_rect(win_id, 0, 0, w, 48, "#0a0a0a", true);
+    native_draw_line(win_id, 0, 48, w, 48, "#1f1f1f", 1);
+
+    # 左侧 Logo（纯文字）
+    native_draw_text(win_id, 20, 15, "Code Teacher", "#ededed", 14, true, "PingFang SC");
+    native_draw_text(win_id, 124, 17, "Student", "#52525b", 11, false, "Menlo");
+
+    # 中间 Tab 导航（题目 / 提交记录 / 排行榜）
+    let tabs = ["题目", "提交记录", "排行榜"];
+    let tab_w = 96;
+    let tab_x = 220;
+    let i = 0;
+    while (i < len(tabs)) {
+        let tx = tab_x + i * tab_w;
+        let active = (i == 0);
+        let fg = active ? "#ededed" : "#71717a";
+        native_draw_text_centered(win_id, tx + tab_w / 2, 24, tabs[i], fg, 13, active);
+        if (active) {
+            native_draw_rect(win_id, tx + 16, 44, tab_w - 32, 2, "#ededed", true);
+        }
+        i = i + 1;
+    }
+
+    # 右侧用户区
+    let avatar_x = w - 56;
+    native_draw_rounded_rect(win_id, avatar_x, 12, 24, 24, 12, "#262626", true);
+    native_draw_text_centered(win_id, avatar_x + 12, 24, "A", "#ededed", 12, true);
+    native_draw_text(win_id, avatar_x - 60, 17, _state["current_user"], "#a1a1aa", 12, false, "PingFang SC");
+    return 0;
+}
+
+# ───────────────────────── 左侧题目列表 ─────────────────────────
+fn s_render_sidebar(win_id) {
+    let sw = _state["sidebar_w"];
+    let y = 48;
+    let h = _state["win_h"] - y;
+    native_draw_rect(win_id, 0, y, sw, h, "#0a0a0a", true);
+    native_draw_line(win_id, sw, y, sw, y + h, "#1f1f1f", 1);
+
+    # 列表标题 + 搜索框
+    native_draw_text(win_id, 20, y + 20, "题目", "#ededed", 14, true, "PingFang SC");
+    native_draw_text(win_id, sw - 60, y + 22, str(len(_state["problems"])) + " 道", "#52525b", 11, false, "Menlo");
+
+    # 搜索框（凹陷）
+    native_draw_rounded_rect(win_id, 16, y + 44, sw - 32, 30, 6, "#0d0d0d", true);
+    native_draw_rounded_rect(win_id, 16, y + 44, sw - 32, 30, 6, "#262626", false);
+    native_draw_text(win_id, 28, y + 52, "搜索题目…", "#52525b", 12, false, "PingFang SC");
+
+    # 题目列表
+    let problems = _state["problems"];
+    let iy = y + 88;
+    let item_h = 56;
+    let i = 0;
+    while (i < len(problems)) {
+        let p = problems[i];
+        let py = iy + i * item_h;
+        if (py + item_h > y + h - 8) { i = len(problems); }
+        else {
+            let is_cur = (i == _state["current_problem_idx"]);
+            let is_hover = (i == _state["hover_problem"]);
+
+            let bg = "#0a0a0a";
+            if (is_hover) { bg = "#111111"; }
+            if (is_cur) { bg = "#1c1c1c"; }
+            native_draw_rect(win_id, 0, py, sw, item_h, bg, true);
+            if (is_cur) {
+                native_draw_rect(win_id, 0, py, 2, item_h, "#ededed", true);
+            }
+
+            # 题号
+            native_draw_text(win_id, 20, py + 12, p["id"], "#52525b", 11, false, "Menlo");
+            # 标题
+            native_draw_text(win_id, 20, py + 30, p["title"],
+                             is_cur ? "#ededed" : "#e4e4e7", 13, false, "PingFang SC");
+
+            # 难度 badge
+            let diff_color = "#10b981";
+            let diff_bg = "#0d3d2e";
+            if (p["difficulty"] == "中等") { diff_color = "#f59e0b"; diff_bg = "#3d2e0d"; }
+            if (p["difficulty"] == "困难") { diff_color = "#ef4444"; diff_bg = "#3d1515"; }
+            let dm = native_measure_text(p["difficulty"], 10, false);
+            native_draw_rounded_rect(win_id, sw - dm[0] - 24, py + 12, dm[0] + 10, 16, 3, diff_bg, true);
+            native_draw_text(win_id, sw - dm[0] - 19, py + 14, p["difficulty"], diff_color, 10, false, "PingFang SC");
+
+            # 通过率
+            let rate = str(p["passed"]) + "/" + str(p["submitted"]);
+            let rm = native_measure_text(rate, 10, false);
+            native_draw_text(win_id, sw - rm[0] - 24, py + 34, rate, "#52525b", 10, false, "Menlo");
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# ───────────────────────── 中央编辑器区 ─────────────────────────
+fn s_render_editor(win_id) {
+    let sw = _state["sidebar_w"];
+    let aw = _state["assistant_w"];
+    let x = sw;
+    let y = 48;
+    let w = _state["win_w"] - x - aw;
+    let panel_h = _state["panel_h"];
+    let editor_h = _state["win_h"] - y - panel_h;
+
+    # 编辑器标签栏
+    native_draw_rect(win_id, x, y, w, 36, "#0a0a0a", true);
+    native_draw_line(win_id, x, y + 36, x + w, y + 36, "#1f1f1f", 1);
+
+    let p = _state["current_problem"];
+    if (p != nullptr) {
+        # 文件名标签（带文件类型图标占位）
+        native_draw_text(win_id, x + 16, y + 11, "●", "#f59e0b", 12, false, "Menlo");
+        native_draw_text(win_id, x + 32, y + 11, "solution.hto", "#e4e4e7", 13, false, "Menlo");
+    }
+
+    # 代码区背景
+    native_draw_rect(win_id, x, y + 36, w, editor_h - 36, "#0d0d0d", true);
+
+    # 代码内容
+    if (p != nullptr) {
+        let code = _state["code"];
+        let line_h = 20;
+        let num_w = 48;
+        # 行号区
+        native_draw_rect(win_id, x, y + 36, num_w, editor_h - 36, "#0a0a0a", true);
+        native_draw_line(win_id, x + num_w, y + 36, x + num_w, y + editor_h, "#1f1f1f", 1);
+
+        let lines = s_split_lines(code);
+        let max_lines = (editor_h - 36) / line_h;
+        let i = 0;
+        while (i < len(lines) and i < max_lines) {
+            let ly = y + 36 + i * line_h;
+            # 当前行高亮（第一行作为光标行示意）
+            if (i == 0) {
+                native_draw_rect(win_id, x + num_w, ly, w - num_w, line_h, "#161616", true);
+            }
+            # 行号
+            let num_str = str(i + 1);
+            native_draw_text(win_id, x + num_w - 12, ly + 4, num_str,
+                             (i == 0) ? "#71717a" : "#3f3f46", 12, false, "Menlo");
+            # 代码行（单色，保持简洁）
+            if (lines[i] != "") {
+                native_draw_text(win_id, x + num_w + 16, ly + 4, lines[i],
+                                 "#e4e4e7", 13, false, "Menlo");
+            }
+            i = i + 1;
+        }
+    }
+
+    # 编辑器底部边线
+    native_draw_line(win_id, x, y + editor_h, x + w, y + editor_h, "#1f1f1f", 1);
+
+    # 底部输出面板
+    let py = y + editor_h;
+    native_draw_rect(win_id, x, py, w, panel_h, "#0a0a0a", true);
+
+    # 面板标签栏
+    native_draw_rect(win_id, x, py, w, 32, "#0d0d0d", true);
+    native_draw_line(win_id, x, py + 32, x + w, py + 32, "#1f1f1f", 1);
+
+    let panel_tabs = ["输出", "终端", "测试结果"];
+    let ptx = x + 16;
+    let i = 0;
+    while (i < len(panel_tabs)) {
+        let active = (i == 0);
+        let fg = active ? "#ededed" : "#71717a";
+        native_draw_text(win_id, ptx, py + 9, panel_tabs[i], fg, 12, active, "PingFang SC");
+        let m = native_measure_text(panel_tabs[i], 12, active);
+        if (active) {
+            native_draw_rect(win_id, ptx, py + 30, m[0], 2, "#ededed", true);
+        }
+        ptx = ptx + m[0] + 24;
+        i = i + 1;
+    }
+
+    # 右上角运行按钮
+    let run_x = x + w - 88;
+    native_draw_rounded_rect(win_id, run_x, py + 6, 72, 22, 4, "#ffffff", true);
+    native_draw_text_centered(win_id, run_x + 36, py + 17, "运行 ▶", "#0a0a0a", 12, true);
+
+    # 输出内容
+    let out = _state["output_lines"];
+    let oy = py + 40;
+    let oi = 0;
+    while (oi < len(out) and oy + oi * 17 < py + panel_h - 4) {
+        native_draw_text(win_id, x + 16, oy + oi * 17, out[oi], "#10b981", 12, false, "Menlo");
+        oi = oi + 1;
+    }
+    if (len(out) == 0) {
+        native_draw_text(win_id, x + 16, oy, "点击「运行」执行代码，输出将显示在此", "#3f3f46", 12, false, "PingFang SC");
+    }
+    return 0;
+}
+
+# ───────────────────────── 右侧助手面板（不叫 AI）─────────────────────────
+fn s_render_assistant(win_id) {
+    let aw = _state["assistant_w"];
+    let x = _state["win_w"] - aw;
+    let y = 48;
+    let h = _state["win_h"] - y;
+    native_draw_rect(win_id, x, y, aw, h, "#0f0f12", true);
+    native_draw_line(win_id, x, y, x, y + h, "#1f1f1f", 1);
+
+    # 助手标题
+    native_draw_text(win_id, x + 20, y + 18, "Assistant", "#a78bfa", 14, true, "PingFang SC");
+    native_draw_text(win_id, x + 20, y + 38, "学习引导 · 不代写代码", "#52525b", 11, false, "PingFang SC");
+
+    # 状态点（在线）
+    native_draw_circle(win_id, x + aw - 24, y + 24, 3, "#10b981", true);
+    native_draw_text(win_id, x + aw - 56, y + 18, "就绪", "#71717a", 11, false, "PingFang SC");
+
+    native_draw_line(win_id, x + 16, y + 56, x + aw - 16, y + 56, "#1f1f1f", 1);
+
+    # 对话消息区
+    let msgs = _state["messages"];
+    let my = y + 68;
+    let i = 0;
+    while (i < len(msgs)) {
+        let msg = msgs[i];
+        let from_user = msg["from_user"];
+        let text = msg["text"];
+        let lines = s_split_lines(text);
+
+        # 计算气泡高度
+        let bubble_w = aw - 32;
+        let bubble_x = x + 16;
+        let bubble_h = len(lines) * 16 + 20;
+
+        # 气泡背景
+        let bg = "#161618";
+        let border = "#262626";
+        if (from_user) {
+            bg = "#1e1e22";
+            border = "#333333";
+        }
+        native_draw_rounded_rect(win_id, bubble_x, my, bubble_w, bubble_h, 8, bg, true);
+        native_draw_rounded_rect(win_id, bubble_x, my, bubble_w, bubble_h, 8, border, false);
+
+        # 发送者标签（小字，置于气泡顶部内）
+        let sender = from_user ? "你" : "Assistant";
+        let sender_color = from_user ? "#a1a1aa" : "#a78bfa";
+        native_draw_text(win_id, bubble_x + 12, my + 8, sender, sender_color, 10, true, "PingFang SC");
+
+        # 消息内容
+        let j = 0;
+        while (j < len(lines)) {
+            native_draw_text(win_id, bubble_x + 12, my + 24 + j * 16, lines[j],
+                             "#e4e4e7", 12, false, "PingFang SC");
+            j = j + 1;
+        }
+
+        my = my + bubble_h + 12;
+        if (my > y + h - 80) { i = len(msgs); }
+        else { i = i + 1; }
+    }
+
+    # 快捷操作按钮（提示 / 反馈 / 概念）
+    let qy = y + h - 132;
+    native_draw_line(win_id, x + 16, qy, x + aw - 16, qy, "#1f1f1f", 1);
+    native_draw_text(win_id, x + 20, qy + 12, "快捷操作", "#52525b", 11, false, "PingFang SC");
+
+    let actions = ["思路提示", "代码反馈", "讲解概念"];
+    let ax = x + 20;
+    let ay = qy + 32;
+    let i = 0;
+    while (i < len(actions)) {
+        let m = native_measure_text(actions[i], 11, false);
+        let bw = m[0] + 16;
+        native_draw_rounded_rect(win_id, ax, ay, bw, 24, 4, "#161616", true);
+        native_draw_rounded_rect(win_id, ax, ay, bw, 24, 4, "#333333", false);
+        native_draw_text(win_id, ax + 8, ay + 6, actions[i], "#a1a1aa", 11, false, "PingFang SC");
+        ax = ax + bw + 8;
+        i = i + 1;
+    }
+
+    # 输入框
+    let input_y = y + h - 68;
+    native_draw_rounded_rect(win_id, x + 16, input_y, aw - 60, 36, 8, "#0d0d0d", true);
+    native_draw_rounded_rect(win_id, x + 16, input_y, aw - 60, 36, 8, "#262626", false);
+    native_draw_text(win_id, x + 28, input_y + 12, "输入问题…", "#52525b", 12, false, "PingFang SC");
+
+    # 发送按钮
+    let send_x = x + aw - 40;
+    let send_bg = "#262626";
+    if (_state["hover_send"]) { send_bg = "#333333"; }
+    native_draw_rounded_rect(win_id, send_x, input_y, 24, 36, 6, send_bg, true);
+    native_draw_text_centered(win_id, send_x + 12, input_y + 18, "↑", "#ededed", 14, true);
+    return 0;
+}
+
+# ───────────────────────── 底部状态栏（极简）─────────────────────────
+fn s_render_statusbar(win_id) {
+    let y = _state["win_h"] - 24;
+    let w = _state["win_w"];
+    native_draw_rect(win_id, 0, y, w, 24, "#0a0a0a", true);
+    native_draw_line(win_id, 0, y, w, y, "#1f1f1f", 1);
+
+    # 左侧：当前题目
+    let p = _state["current_problem"];
+    let left = "就绪";
+    if (p != nullptr) { left = p["id"] + " · " + p["title"]; }
+    native_draw_text(win_id, 16, y + 5, left, "#71717a", 11, false, "PingFang SC");
+
+    # 中间：语言
+    native_draw_text(win_id, w / 2 - 20, y + 5, "H#", "#52525b", 11, false, "Menlo");
+
+    # 右侧：行列
+    let right = "行 " + str(_state["cursor_line"] + 1) + "  列 " + str(_state["cursor_col"] + 1) + "  ·  UTF-8";
+    let m = native_measure_text(right, 11, false);
+    native_draw_text(win_id, w - m[0] - 16, y + 5, right, "#71717a", 11, false, "PingFang SC");
+
+    # 状态点
+    native_draw_circle(win_id, w - m[0] - 28, y + 11, 3, "#10b981", true);
+    return 0;
+}
+
+# ───────────────────────── 主渲染 ─────────────────────────
+fn s_render_all(win_id) {
+    native_clear(win_id, "#0a0a0a");
+    s_render_topbar(win_id);
+    s_render_sidebar(win_id);
+    s_render_editor(win_id);
+    s_render_assistant(win_id);
+    s_render_statusbar(win_id);
+    native_update(win_id);
+    return 0;
+}
+
+# ───────────────────────── 事件处理 ─────────────────────────
+fn s_handle_events(win_id) {
+    let events = native_get_events(win_id);
+    let i = 0;
+    while (i < len(events)) {
+        let evt = events[i];
+        let t = evt["type"];
+        if (t == "close") { _state["running"] = false; }
+        if (t == "resize") {
+            _state["win_w"] = evt["x"];
+            _state["win_h"] = evt["y"];
+        }
+        if (t == "mouse_down") { s_handle_click(evt["x"], evt["y"]); }
+        if (t == "mouse_move") {
+            _state["mx"] = evt["x"];
+            _state["my"] = evt["y"];
+            s_update_hover(evt["x"], evt["y"]);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# ───────────────────────── 悬停状态更新 ─────────────────────────
+fn s_update_hover(px, py) {
+    let sw = _state["sidebar_w"];
+    let y = 48;
+    # 题目列表悬停
+    _state["hover_problem"] = -1;
+    if (px < sw and py >= y + 88) {
+        let idx = (py - y - 88) / 56;
+        if (idx >= 0 and idx < len(_state["problems"])) {
+            _state["hover_problem"] = idx;
+        }
+    }
+    # 发送按钮悬停
+    let aw = _state["assistant_w"];
+    let ax = _state["win_w"] - aw;
+    let input_y = _state["win_h"] - 24 - 68;
+    _state["hover_send"] = (px >= ax + aw - 40 and px < ax + aw - 16 and py >= input_y and py < input_y + 36);
+    return 0;
+}
+
+# ───────────────────────── 点击处理 ─────────────────────────
+fn s_handle_click(px, py) {
+    let sw = _state["sidebar_w"];
+    let y = 48;
+
+    # 题目列表点击
+    if (px < sw and py >= y + 88) {
+        let idx = (py - y - 88) / 56;
+        if (idx >= 0 and idx < len(_state["problems"])) {
+            _state["current_problem_idx"] = idx;
+            _state["current_problem"] = _state["problems"][idx];
+            _state["code"] = _state["current_problem"]["template"];
+            _state["output_lines"] = [];
+            let p = _state["current_problem"];
+            s_add_message(false, "已切换到「" + p["title"] + "」(" + p["id"] + ")。\n\n我会引导你思考，但不会直接给出答案。你可以：\n• 点击「思路提示」获取解题方向\n• 把代码发给我获取学习反馈\n• 询问某个概念的解释\n\n准备好就开始吧。");
+        }
+        return 0;
+    }
+
+    # 助手面板：快捷操作按钮
+    let aw = _state["assistant_w"];
+    let ax = _state["win_w"] - aw;
+    let qy = _state["win_h"] - 24 - 132;
+    if (py >= qy + 32 and py < qy + 56 and px >= ax + 20) {
+        let p = _state["current_problem"];
+        if (p != nullptr) {
+            let actions = ["思路提示", "代码反馈", "讲解概念"];
+            let ax2 = ax + 20;
+            let i = 0;
+            while (i < len(actions)) {
+                let m = native_measure_text(actions[i], 11, false);
+                let bw = m[0] + 16;
+                if (px >= ax2 and px < ax2 + bw) {
+                    if (i == 0) {
+                        s_add_message(true, "请给我一些思路提示");
+                        s_add_message(false, ai_respond("hint", p["id"], nullptr));
+                    }
+                    if (i == 1) {
+                        s_add_message(true, "帮我看看这段代码");
+                        s_add_message(false, ai_respond("review", _state["code"], nullptr));
+                    }
+                    if (i == 2) {
+                        s_add_message(true, "解释一下递归");
+                        s_add_message(false, ai_respond("concept", "递归", nullptr));
+                    }
+                    i = len(actions);
+                }
+                ax2 = ax2 + bw + 8;
+                i = i + 1;
+            }
+        }
+        return 0;
+    }
+
+    # 发送按钮
+    let input_y = _state["win_h"] - 24 - 68;
+    if (px >= ax + aw - 40 and px < ax + aw - 16 and py >= input_y and py < input_y + 36) {
+        let p = _state["current_problem"];
+        if (p != nullptr) {
+            s_add_message(true, "提示 " + p["id"]);
+            s_add_message(false, ai_respond("hint", p["id"], nullptr));
+        }
+        return 0;
+    }
+
+    # 运行按钮
+    let sw2 = _state["sidebar_w"];
+    let aw2 = _state["assistant_w"];
+    let ex = sw2;
+    let ey = 48;
+    let ew = _state["win_w"] - ex - aw2;
+    let editor_h = _state["win_h"] - ey - _state["panel_h"];
+    let run_btn_y = ey + editor_h;
+    if (px >= ex + ew - 88 and px < ex + ew - 16 and py >= run_btn_y + 6 and py < run_btn_y + 28) {
+        # 模拟运行
+        _state["output_lines"] = ["[运行] 执行 solution.hto ...", "[结果] 程序执行完毕（演示）", "[退出码] 0"];
+        s_add_message(false, "代码已运行。如果遇到报错，把错误信息发给我，我帮你分析原因——但修复需要你自己动手。");
+        return 0;
+    }
+    return 0;
+}
+
+# ───────────────────────── 工具：按行拆分 ─────────────────────────
+fn s_split_lines(text) {
+    let lines = [""];
+    let idx = 0;
+    let cur = "";
+    let n = len(text);
+    while (idx < n) {
+        let ch = substring(text, idx, 1);
+        if (ch == "\n") {
+            push(lines, cur);
+            cur = "";
+        } else {
+            cur = cur + ch;
+        }
+        idx = idx + 1;
+    }
+    push(lines, cur);
+    return lines;
+}
+
+# ───────────────────────── 入口 ─────────────────────────
+fn student_main() {
+    s_init_problems();
+
+    # 初始欢迎语
+    s_add_message(false, "你好，我是你的学习助手。\n\n我的职责是引导你思考，而不是替你写代码。你可以让我：\n• 分析报错原因\n• 提供解题思路\n• 讲解编程概念\n• 对你的代码给出学习性反馈\n\n从左侧选一道题目开始练习吧。");
+
+    let wid = native_create_window("Code Teacher — Student", _state["win_w"], _state["win_h"], "#0a0a0a");
+    if (wid <= 0) {
+        print("ERROR: 窗口创建失败");
+        return 0;
+    }
+    _state["win_id"] = wid;
+    print("[student] 窗口已创建，进入事件循环...");
+
+    while (_state["running"]) {
+        s_handle_events(wid);
+        s_render_all(wid);
+        native_poll_events();
+    }
+
+    native_destroy_window(wid);
+    print("[student] 学生端已关闭。");
+    return 0;
+}
+
+fn run_student() {
+    return student_main();
+}

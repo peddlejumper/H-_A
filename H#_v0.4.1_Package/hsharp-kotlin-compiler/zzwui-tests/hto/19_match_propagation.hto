@@ -1,0 +1,286 @@
+# T19 - Pattern matching + Error propagation + Channel match
+# ─────────────────────────────────────────────────────────────────
+# Validates the v0.4.1 third-stage features:
+#
+#   A: `match` expression — wildcard / binding / literal / type /
+#      variant / chan patterns, all 7 pattern kinds.
+#   B: `?` postfix error-propagation — the `?` operator on an
+#      expression that raises returns the exception payload as
+#      the postfix value; on success it returns the normal value.
+#   C: `?` is composable: a `try { f()? }` re-raises the propagated
+#      value and the surrounding `try/catch` sees it.
+#   D: `chan send(v)` / `chan recv(v)` / `chan close` match
+#      patterns select arms by channel state at match time.
+#   E: Match with guards (`if cond`) falls through to the next arm
+#      when the guard is false.
+#   F: Exhaustiveness — a `match` without a wildcard arm raises
+#      "non-exhaustive match" when no arm matches.
+#
+# Conventions: each case prints `OK X/name` or `FAIL X/name`;
+# the summary line `MATCH_PROP_TEST : PASS=N FAIL=M` is parsed by
+# the runner.
+
+# ─── Test framework ────────────────────────────────────────────────
+let __stats = [0, 0, []];
+
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── A1: wildcard pattern ─────────────────────────────────────────
+fn classify(x) {
+    return match x {
+        _ => "any"
+    };
+}
+check("A1/wildcard",   classify(42) == "any" and classify("hi") == "any",
+      "got " + str(classify(42)) + " " + str(classify("hi")));
+
+# ─── A2: binding pattern ──────────────────────────────────────────
+# `h` matches anything and binds the scrutinee to name `h`.
+fn head_or_zero(xs) {
+    return match xs {
+        h => h
+    };
+}
+check("A2/binding",    head_or_zero(99) == 99 and head_or_zero("ab") == "ab",
+      "got " + str(head_or_zero(99)) + " " + str(head_or_zero("ab")));
+
+# ─── A3: literal patterns ─────────────────────────────────────────
+fn name_of(n) {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        "x" => "ex",
+        true => "T",
+        false => "F",
+        null => "N",
+        _ => "other"
+    };
+}
+check("A3/lit_int",    name_of(0) == "zero",      "got " + str(name_of(0)));
+check("A3/lit_int2",   name_of(1) == "one",       "got " + str(name_of(1)));
+check("A3/lit_str",    name_of("x") == "ex",      "got " + str(name_of("x")));
+check("A3/lit_true",   name_of(true) == "T",      "got " + str(name_of(true)));
+check("A3/lit_false",  name_of(false) == "F",     "got " + str(name_of(false)));
+check("A3/lit_null",   name_of(null) == "N",      "got " + str(name_of(null)));
+check("A3/lit_other",  name_of(42) == "other",    "got " + str(name_of(42)));
+
+# ─── A4: type pattern (`is T [as x]`) ─────────────────────────────
+fn describe(x) {
+    return match x {
+        is int as n => "int:" + str(n),
+        is str as s => "str:" + s,
+        is list as l => "list(len=" + str(len(l)) + ")",
+        is dict as d => "dict(keys=" + str(len(d)) + ")",
+        is bool => "bool",
+        is null => "null",
+        _ => "other"
+    };
+}
+check("A4/is_int",     describe(7) == "int:7",         "got " + describe(7));
+check("A4/is_str",     describe("ok") == "str:ok",     "got " + describe("ok"));
+check("A4/is_list",    describe([1, 2, 3]) == "list(len=3)",
+                        "got " + describe([1, 2, 3]));
+check("A4/is_dict",    describe({"a": 1}) == "dict(keys=1)",
+                        "got " + describe({"a": 1}));
+check("A4/is_bool",    describe(true) == "bool",       "got " + describe(true));
+check("A4/is_null",    describe(null) == "null",       "got " + describe(null));
+check("A4/is_other",   describe(3.14) == "other",      "got " + describe(3.14));
+
+# ─── A5: union variant pattern ────────────────────────────────────
+union Shape {
+    Circle: r;
+    Rect: w, h;
+    Point;
+}
+
+fn area(s) {
+    return match s {
+        Circle(r) => 3 * r * r,
+        Rect(w, h) => w * h,
+        Point => 0
+    };
+}
+let sa_c = Shape{Circle: 5};
+let sa_r = Shape{Rect: 4, 6};
+let sa_p = Shape{Point};
+check("A5/variant_circle", area(sa_c) == 75, "got " + str(area(sa_c)));
+check("A5/variant_rect",   area(sa_r) == 24, "got " + str(area(sa_r)));
+check("A5/variant_point",  area(sa_p) == 0,  "got " + str(area(sa_p)));
+
+# Variant with single payload binding:
+fn radius(s) {
+    return match s {
+        Circle(r) => r,
+        _ => -1
+    };
+}
+check("A5/variant_single_bind", radius(sa_c) == 5,
+      "got " + str(radius(sa_c)));
+check("A5/variant_fallthrough", radius(sa_r) == -1,
+      "got " + str(radius(sa_r)));
+
+# ─── A6: chan send / recv / close patterns ────────────────────────
+fn ch_state(ch) {
+    return match ch {
+        chan send(_) => "sendable",
+        chan recv(v) => "recv:" + str(v),
+        chan close => "closed",
+        _ => "neither"
+    };
+}
+let ch1 = chan_new(0);
+check("A6/empty_sendable", ch_state(ch1) == "sendable",
+      "got " + ch_state(ch1));
+chan_send(ch1, 7);
+check("A6/buffered_recv",  ch_state(ch1) == "recv:7",
+      "got " + ch_state(ch1));
+# Drain it.
+let _x = chan_recv(ch1);
+check("A6/drain_sendable", ch_state(ch1) == "sendable",
+      "got " + ch_state(ch1));
+chan_close(ch1);
+# After close, try_recv/recv on closed+empty raises; match sees
+# the channel as "closed" (not "sendable" because closed=true).
+check("A6/closed_state",   ch_state(ch1) == "closed",
+      "got " + ch_state(ch1));
+
+# Bounded channel: chan send(_) should fail when full.
+let ch2 = chan_new(1);
+chan_send(ch2, 100);
+check("A6/bounded_full",   ch_state(ch2) == "recv:100",
+      "got " + ch_state(ch2));
+
+# ─── B: error-propagation `?` postfix ─────────────────────────────
+fn parse_int_loose(s) {
+    # Returns the int value if s parses, else raises the failure.
+    if (s == "ok") { return 42; }
+    throw "not-an-int:" + s;
+}
+
+fn try_parse(s) {
+    # `?` returns the inner value on success, the exception
+    # payload on raise.  We pattern-match the result to tell
+    # them apart.
+    let v = parse_int_loose(s)?;
+    return match v {
+        42 => "ok-42",
+        _ => "other:" + str(v)
+    };
+}
+check("B/question_success", try_parse("ok") == "ok-42",
+      "got " + try_parse("ok"));
+
+# On raise, `?` yields the exception payload (the string).  A
+# try/catch around the whole thing catches it.
+let caught = "";
+let ok_payload = false;
+try {
+    let payload = parse_int_loose("bad")?;
+    if (payload == "not-an-int:bad") {
+        ok_payload = true;
+    } else {
+        caught = "wrong-payload:" + str(payload);
+    }
+} catch (e) {
+    caught = "raised:" + str(e);
+}
+check("B/question_catch",   ok_payload,
+      "caught=" + caught);
+
+# ─── C: `?` is composable through nested functions ────────────
+# `?` is a try/catch that returns the exception payload as a
+# value rather than re-raising it.  So `inner()?` in `middle()`
+# yields the payload string; `middle()` then returns that value
+# to its caller.  The semantics is therefore
+#     expr? == try { expr } catch (e) { e }
+# at the value level — callers can either re-pattern-match on
+# the result or simply use it as a normal value.
+fn inner() {
+    throw "from-inner";
+}
+fn middle() {
+    # `?` on inner() that raises: returns the payload as a value.
+    return inner()?;
+}
+fn outer() {
+    # middle() returns the payload (no raise), so the `?` here
+    # is a pass-through and `x` is just the payload string.
+    let x = middle()?;
+    return "got:" + str(x);
+}
+check("C/question_yields_payload", outer() == "got:from-inner",
+      "got " + outer());
+
+# ─── D: `?` on a non-raising expression yields the value unchanged
+fn safe_double(x) {
+    return (x + 0)?;
+}
+check("D/question_passthrough", safe_double(21) == 21,
+      "got " + str(safe_double(21)));
+
+# ─── E: guards in match arms ──────────────────────────────────────
+fn sign(x) {
+    return match x {
+        n if n > 0 => "pos",
+        n if n < 0 => "neg",
+        _ => "zero"
+    };
+}
+check("E/guard_pos",   sign(5) == "pos",   "got " + sign(5));
+check("E/guard_neg",   sign(-3) == "neg",  "got " + sign(-3));
+check("E/guard_zero",  sign(0) == "zero",  "got " + sign(0));
+
+# Guard on a variant arm — combine payload-binding with a guard.
+fn big_rect(r) {
+    return match r {
+        Rect(w, h) if w > 0 && h > 0 => "ok",
+        Rect(_, _) => "degenerate",
+        _ => "n/a"
+    };
+}
+let rr_big = Shape{Rect: 3, 4};
+let rr_bad = Shape{Rect: 0, 5};
+check("E/guard_variant_ok", big_rect(rr_big) == "ok",
+      "got " + big_rect(rr_big));
+check("E/guard_variant_bad", big_rect(rr_bad) == "degenerate",
+      "got " + big_rect(rr_bad));
+
+# ─── F: exhaustiveness — no arm matches → raise ──────────────────
+fn strict_only_zero(x) {
+    return match x {
+        0 => "zero",
+        1 => "one"
+    };
+}
+let raised = false;
+let msg = "";
+try {
+    let _r = strict_only_zero(99);
+} catch (e) {
+    raised = true;
+    msg = str(e);
+}
+check("F/non_exhaustive_raises", raised,
+      "msg=" + msg);
+check("F/non_exhaustive_message", msg == "non-exhaustive match",
+      "got '" + msg + "'");
+
+# ─── Summary ─────────────────────────────────────────────────────
+print("MATCH_PROP_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    let failed = __stats[2];
+    while (i < len(failed)) {
+        print("  FAIL: " + failed[i]);
+        i = i + 1;
+    }
+}

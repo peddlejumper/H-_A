@@ -1,0 +1,236 @@
+<Window xmlns="https://github.com/avaloniaui"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="IDE.UI.MainWindow"
+        Title="H# IDE"
+        Width="1200" Height="750">
+
+  <DockPanel>
+    <!-- ── Menu ──────────────────────────────────────────────── -->
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="_Open File..." Click="OpenFile" InputGesture="Ctrl+O"/>
+        <MenuItem Header="_Open Folder..." Click="OpenFolder"/>
+        <MenuItem Header="_Save" Click="SaveFile" InputGesture="Ctrl+S"/>
+        <MenuItem Header="Save _As..." Click="SaveFileAs"/>
+        <Separator/>
+        <MenuItem Header="_Close Tab" Click="CloseCurrentTab" InputGesture="Ctrl+W"/>
+        <Separator/>
+        <MenuItem Header="E_xit" Click="Exit"/>
+      </MenuItem>
+      <MenuItem Header="_Edit">
+        <MenuItem Header="_Undo" InputGesture="Ctrl+Z"/>
+        <MenuItem Header="_Redo" InputGesture="Ctrl+Y"/>
+        <Separator/>
+        <MenuItem Header="Cu_t" InputGesture="Ctrl+X"/>
+        <MenuItem Header="_Copy" InputGesture="Ctrl+C"/>
+        <MenuItem Header="_Paste" InputGesture="Ctrl+V"/>
+      </MenuItem>
+      <MenuItem Header="_View">
+        <MenuItem Header="Toggle _File Tree" Click="ToggleFileTree"/>
+        <MenuItem Header="Toggle _Preview" Click="TogglePreview"/>
+        <MenuItem Header="Toggle _Output" Click="ToggleOutput"/>
+      </MenuItem>
+    </Menu>
+
+    <!-- ── Toolbar ───────────────────────────────────────────── -->
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
+      <Button Content="▶ Run" Click="OnRun" Padding="10,3" MinWidth="60"/>
+      <Button Content="⚙ Build" Click="OnBuild" Padding="10,3" MinWidth="65"/>
+      <Button Content="Qoder" Click="OnQoderBuild" Padding="10,3" MinWidth="55"/>
+      <Button Content="BC" Click="OnRunBc" Padding="8,3" MinWidth="38"/>
+      <Button Content="REPL" Click="OnRepl" Padding="8,3" MinWidth="45"/>
+      <Button Content="■ Stop" Click="OnStop" Padding="10,3" MinWidth="55"/>
+      <Separator Width="6"/>
+      <Button Name="NewFileBtn" Content="+ New" Click="NewFile" Padding="10,3" MinWidth="55"/>
+    </StackPanel>
+
+    <!-- ── Main Body ─────────────────────────────────────────── -->
+    <Grid Name="MainGrid">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="220"/>
+        <ColumnDefinition Width="4"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="320"/>
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="200"/>
+      </Grid.RowDefinitions>
+
+      <!-- ── File Tree Panel ──────────────────────────────────── -->
+      <Border Name="FileTreePanel" Grid.Column="0" Grid.Row="0"
+              Background="#151520" BorderBrush="#2a2a3a" BorderThickness="0,0,0.5,0">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Background="#1e1e2e" Padding="8,6" BorderBrush="#2a2a3a" BorderThickness="0,0,0,0.5">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="📁 Explorer" Foreground="#aaaacc" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+              <Button Name="RefreshFilesBtn" Content="↻ 刷新" Width="50" Height="20"
+                      Background="#2a2a3a" Foreground="#88aacc" FontSize="10"
+                      Click="RefreshFileTree" ToolTip.Tip="刷新文件树"/>
+            </StackPanel>
+          </Border>
+          <Border DockPanel.Dock="Bottom" Background="#1a1a28" Padding="4,6" BorderBrush="#2a2a3a" BorderThickness="0,0.5,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <Button Name="NewFolderBtn" Content="📁 新文件夹" Padding="6,3"
+                      Background="#1a2a3a" Foreground="#88aacc" FontSize="11"
+                      Click="NewFolder" ToolTip.Tip="在已打开的文件夹中创建新文件夹"/>
+              <Button Name="NewFileTreeBtn" Content="📄 新文件" Padding="6,3"
+                      Background="#1a2a3a" Foreground="#88aacc" FontSize="11"
+                      Click="NewFileInTree" ToolTip.Tip="在已打开的文件夹中创建新.hto文件"/>
+            </StackPanel>
+          </Border>
+          <ScrollViewer Name="FileTreeScroll">
+            <TreeView Name="FileTree" Background="Transparent" BorderThickness="0"
+                      SelectionChanged="OnFileTreeSelectionChanged"/>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <!-- ── Splitter ─────────────────────────────────────────── -->
+      <Border Grid.Column="1" Grid.Row="0" Background="#2a2a3a" Cursor="SizeWestEast"
+              PointerPressed="OnFileTreeSplitterDrag"/>
+
+      <!-- ── Editor + Tabs ────────────────────────────────────── -->
+      <Grid Grid.Column="2" Grid.Row="0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Tab bar -->
+        <Border Grid.Row="0" Background="#1e1e2e" BorderBrush="#2a2a3a" BorderThickness="0,0,0,0.5">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Height="32">
+            <StackPanel Name="TabStrip" Orientation="Horizontal" Spacing="1" Margin="2,0"/>
+          </ScrollViewer>
+        </Border>
+
+        <!-- Editor area with completion popup -->
+        <Grid Grid.Row="1">
+          <!-- Tab pages (multi-file editors) -->
+          <ContentControl Name="TabEditorHost">
+            <TextBox Name="Editor"
+              AcceptsReturn="True"
+              AcceptsTab="False"
+              FontFamily="Consolas, 'Courier New', monospace"
+              FontSize="14"
+              TextWrapping="NoWrap"
+              KeyDown="OnEditorKeyDown"
+              TextChanged="OnEditorTextChanged"/>
+          </ContentControl>
+
+          <!-- Code completion popup (overlay) -->
+          <Border Name="CompletionPopup"
+                  IsVisible="False"
+                  Background="#1e1e2e"
+                  BorderBrush="#4a4a6a"
+                  BorderThickness="1"
+                  CornerRadius="4"
+                  Width="300" MaxHeight="200"
+                  HorizontalAlignment="Left"
+                  VerticalAlignment="Top"
+                  ZIndex="1000">
+            <ListBox Name="CompletionList"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     SelectionChanged="OnCompletionSelectionChanged">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal" Spacing="6" Margin="2,1">
+                    <TextBlock Name="CompletionKindText" Foreground="#888" FontSize="11" Width="40"
+                               Text="{Binding Kind}"/>
+                    <TextBlock Foreground="#eee" FontSize="13" FontFamily="Consolas, monospace"
+                               Text="{Binding Label}"/>
+                    <TextBlock Foreground="#666" FontSize="11"
+                               Text="{Binding Detail}"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Border>
+        </Grid>
+      </Grid>
+
+      <!-- ── Right side: Preview + Output + D3 tabs ────────────── -->
+      <TabControl Name="RightPanel" Grid.Column="3" Grid.Row="0">
+        <TabItem Header="Preview">
+          <Border Background="#1e1e1e" Padding="8">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+              <TextBlock Name="HighlightPreview"
+                         FontFamily="Consolas, 'Courier New', monospace"
+                         FontSize="14"
+                         Foreground="White"
+                         TextWrapping="Wrap"/>
+            </ScrollViewer>
+          </Border>
+        </TabItem>
+        <TabItem Header="Output">
+          <Border Padding="6">
+            <TextBox Name="OutputBox" IsReadOnly="True" AcceptsReturn="True"/>
+          </Border>
+        </TabItem>
+        <TabItem Header="D3 Viewer">
+          <Border Background="#0a0a14" Padding="4">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+
+              <!-- Row 0: Camera presets -->
+              <WrapPanel Grid.Row="0" Margin="0,0,0,2">
+                <Button Name="D3RefreshBtn" Content="↻ 刷新" Padding="6,3" Click="OnD3Refresh"
+                        Background="#223344" Foreground="#88aacc" FontSize="10"/>
+                <Button Content="⬆ 俯视" Padding="6,3" Click="OnD3CamTop"
+                        Background="#1a2a3a" Foreground="#88aacc" FontSize="10"/>
+                <Button Content="⏍ 正视" Padding="6,3" Click="OnD3CamFront"
+                        Background="#1a2a3a" Foreground="#88aacc" FontSize="10"/>
+                <Button Content="◫ 侧视" Padding="6,3" Click="OnD3CamSide"
+                        Background="#1a2a3a" Foreground="#88aacc" FontSize="10"/>
+                <Button Content="⟳ 重置" Padding="6,3" Click="OnD3CamReset"
+                        Background="#1a2a3a" Foreground="#ccaa44" FontSize="10"/>
+                <Button Name="D3PopOutBtn" Content="分离" Padding="6,3" Click="OnD3PopOut"
+                        Background="#2a1a1a" Foreground="#ccaa88" FontSize="10"/>
+              </WrapPanel>
+
+              <!-- Row 1: Zoom controls -->
+              <WrapPanel Grid.Row="1" Margin="0,0,0,3">
+                <Button Content="◉ 适应" Padding="6,3" Click="OnD3ZoomFit"
+                        Background="#1a2a3a" Foreground="#88cc88" FontSize="10"
+                        ToolTip.Tip="缩放到适应窗口"/>
+                <Button Content="− 缩小" Padding="6,3" Click="OnD3ZoomOut"
+                        Background="#1a2a3a" Foreground="#88aacc" FontSize="10"/>
+                <Button Content="+ 放大" Padding="6,3" Click="OnD3ZoomIn"
+                        Background="#1a2a3a" Foreground="#88aacc" FontSize="10"/>
+                <TextBlock Name="D3ZoomLabel" Foreground="#88aacc" FontSize="10"
+                           VerticalAlignment="Center" Margin="6,0,0,0"
+                           Text="1.0×"/>
+              </WrapPanel>
+
+              <!-- Row 2: Canvas -->
+              <Canvas Name="D3Canvas" Grid.Row="2" Background="#0a0a14"
+                      PointerPressed="OnD3CanvasMouseDown"
+                      PointerMoved="OnD3CanvasMouseMove"
+                      PointerReleased="OnD3CanvasMouseUp"
+                      PointerWheelChanged="OnD3CanvasMouseWheel"/>
+
+              <!-- Row 3: Status + info -->
+              <Border Grid.Row="3" Background="#0c141e" Padding="4,3" Margin="0,4,0,0" CornerRadius="2">
+                <DockPanel>
+                  <TextBlock Name="D3Info" DockPanel.Dock="Right" Foreground="#88aacc" FontSize="9" VerticalAlignment="Center"/>
+                  <TextBlock Name="D3Status" Foreground="#5588aa" FontSize="9"/>
+                </DockPanel>
+              </Border>
+            </Grid>
+          </Border>
+        </TabItem>
+      </TabControl>
+
+      <!-- ── Bottom output (full width) ────────────────────────── -->
+      <Border Grid.Row="1" Grid.ColumnSpan="4" Background="#111111" Padding="6">
+        <TextBox Name="BottomOutput" IsReadOnly="True" AcceptsReturn="True"/>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

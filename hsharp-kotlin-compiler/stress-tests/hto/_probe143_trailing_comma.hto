@@ -1,0 +1,7 @@
+# _probe143_trailing_comma.hto
+# 探测: 字典字面量尾逗号 {"a":1,} 是否支持 (Python 允许)
+# 预期: H# parser.py dict_literal (line 1500) 逗号后必须跟 key 表达式
+#       -> 编译期 parse 错误 -> 整个文件无法编译
+# 若本文件编译失败, 即确认 bug #143-S13 (P2, 兼容性)
+let d = {"a": 1, "b": 2,};
+print(len(d));

@@ -1,0 +1,653 @@
+# ============================================================
+# round5_141_numeric_precision.hto — 数值精度与边界 (Agent #141, Round 5)
+# 领域: 整数边界 / 浮点精度 / 除法边界 / 混合运算 / 精度丢失 /
+#       特殊值 NaN/Inf / 位运算 / 取模 / 幂运算 / 数值转换 /
+#       比较 / 数值字符串 / range 边界
+# 设计原则: 每个 case 独立编号; try/catch 包裹可能抛错或崩溃的项;
+#           先打印预期注释, 后打印实际结果。
+#
+# 关键实现事实 (来自源码 hsharp-kotlin-compiler):
+#   * HNumber 内部为 Double; toDisplayString 整数值打印 "5" 非 "5.0"
+#   * BINARY_DIV: 两操作数皆为整数值时 floor; 否则真除法; 除 0 抛 "division by zero"
+#   * BINARY_MOD: Python floored modulo (da - db*floor(da/db)); 模 0 抛 "modulo by zero"
+#   * 位运算 &,|,^,<<,>>,~ 通过 toLong; 不支持 0x/0b/0o 字面量
+#   * parser: `**` 幂运算不支持, 抛 SyntaxError; 须用 pow(a,b)
+#   * lexer: 不支持科学计数法字面量 (1e5); 不支持 0x/0b/0o 字面量
+#   * int(x) = toDouble(x).toLong().toDouble(); int(null) 抛错
+#   * float(x) = toDouble(x); float(null) 抛错
+#   * toDouble(HString) 用 Kotlin toDoubleOrNull; 支持 "1e10" 但不支持 "0x1F"
+#   * HValueOps.equals: NaN != NaN (特殊处理); 1==1.0 为 true (皆 HNumber)
+# ============================================================
+
+print("===== R5-141 NUMERIC PRECISION & BOUNDARY =====");
+
+# ---------- 准备特殊值 (lexer 不支持 1e309/科学计数法字面量) ----------
+let POS_INF = pow(10, 309);   # 溢出 -> +Infinity
+let NEG_INF = 0 - POS_INF;    # -Infinity
+let NAN_VAL  = sqrt(0 - 1);   # sqrt(-1) -> NaN
+let NEG_ZERO = (0 - 1) * 0;   # -1 * 0 = -0.0 (IEEE-754 真负零)
+
+# ============================================================
+# S1. 整数边界: 大整数, 整数溢出, 负数边界
+# ============================================================
+print("----- S1. Integer boundaries -----");
+
+# S1.1: 2^53 = 9007199254740992 (Double 精确表示的最大整数)
+print("[S1.1 2^53 literal]            expect=9007199254740992");
+print(9007199254740992);
+
+# S1.2: 2^53+1 字面量 -> Double 丢失精度 -> 9007199254740992
+print("[S1.2 2^53+1 literal]          expect_loss=9007199254740992]");
+print(9007199254740993);
+
+# S1.3: 2^62 = 4611686018427387904 (Double 可精确表示)
+print("[S1.3 2^62 via pow]            expect=4.6116860184273879E18]");
+print(pow(2, 62));
+
+# S1.4: 2^63 = 9223372036854775807 超出 Long, Double 可表示但精度损失
+print("[S1.4 2^63 via pow]            expect=9.223372036854776E18]");
+print(pow(2, 63));
+
+# S1.5: 大整数加法精度丢失 — 2^53 + 1 == 2^53 (Double 精度丢失)
+print("[S1.5 2^53+1==2^53]            expect=true (precision loss)]");
+print(9007199254740992 + 1 == 9007199254740992);
+
+# S1.6: Long.MIN_VALUE 边界 (-9223372036854775808) — toDisplayString 科学计数法
+print("[S1.6 Long.MIN via pow]        expect=-9.223372036854776E18]");
+print(0 - pow(2, 63));
+
+# ============================================================
+# S2. 浮点精度: 0.1+0.2, 1/3, 超大/极小浮点
+# ============================================================
+print("----- S2. Floating-point precision -----");
+
+# S2.1: 0.1 + 0.2 经典精度问题
+print("[S2.1 0.1+0.2]                 expect=0.30000000000000004]");
+print(0.1 + 0.2);
+
+# S2.2: 0.1+0.2 == 0.3 -> false (IEEE-754)
+print("[S2.2 0.1+0.2==0.3]            expect=false]");
+print(0.1 + 0.2 == 0.3);
+
+# S2.3: 1/3 — H# 中 1 和 3 都是整数值 -> floor -> 0 (Python 1//3=0, 1/3=0.333)
+print("[S2.3 1/3]                     expect_py_true=0.333 | expect_impl=0 (floor)]");
+print(1 / 3);
+
+# S2.4: 1.0/3.0 — 两者皆整数值 -> floor -> 0 (BUG: 期望 0.333...)
+print("[S2.4 1.0/3.0]                 expect_py=0.3333 | expect_impl=0 (floor)]");
+print(1.0 / 3.0);
+
+# S2.5: 极小浮点 1e-300 (via pow)
+print("[S2.5 pow(10,-300)]            expect=1.0E-300]");
+print(pow(10, 0 - 300));
+
+# S2.6: 超大浮点 1e300 (via pow)
+print("[S2.6 pow(10,300)]             expect=1.0E300]");
+print(pow(10, 300));
+
+# S2.7: 1.0 - 0.9 精度
+print("[S2.7 1.0-0.9]                 expect=0.09999999999999998]");
+print(1.0 - 0.9);
+
+# ============================================================
+# S3. 除法边界: 整数除法, 除以零, 0/0, 负数除法
+# ============================================================
+print("----- S3. Division boundaries -----");
+
+# S3.1: 7/2 — 两者整数值 -> floor -> 3 (Python 7//2=3)
+print("[S3.1 7/2]                     expect=3 (floor)]");
+print(7 / 2);
+
+# S3.2: 1.0/0.0 — 除以零, 应报错 (IEEE 期望 Inf, H# 抛错)
+print("[S3.2 1.0/0.0]");
+let s32 = "no-err";
+try { let r = 1.0 / 0.0; s32 = r; } catch (e) { s32 = "caught: " + str(e); }
+print(s32);
+
+# S3.3: 0/0 — 除以零, 应报错 (IEEE 期望 NaN, H# 抛错)
+print("[S3.3 0/0]");
+let s33 = "no-err";
+try { let r = 0 / 0; s33 = r; } catch (e) { s33 = "caught: " + str(e); }
+print(s33);
+
+# S3.4: -7/2 — Python floor(-3.5) = -4
+print("[S3.4 -7/2]                    expect_py=-4 | impl: -7 整数,2 整数 -> floor(-3.5)=-4]");
+print((0 - 7) / 2);
+
+# S3.5: 7/-2 — Python floor(-3.5) = -4
+print("[S3.5 7/-2]                    expect_py=-4]");
+print(7 / (0 - 2));
+
+# S3.6: -7/-2 — Python floor(3.5) = 3
+print("[S3.6 -7/-2]                   expect_py=3]");
+print((0 - 7) / (0 - 2));
+
+# S3.7: 10.0/4.0 — 两者皆整数值 -> floor -> 2 (BUG: 期望 2.5)
+print("[S3.7 10.0/4.0]                expect_py=2.5 | expect_impl=2 (floor)]");
+print(10.0 / 4.0);
+
+# S3.8: 7.5/2 — 含小数 -> 真除法 -> 3.75
+print("[S3.8 7.5/2]                   expect=3.75]");
+print(7.5 / 2);
+
+# S3.9: 整数除以浮点零 5/0.0
+print("[S3.9 5/0.0]");
+let s39 = "no-err";
+try { let r = 5 / 0.0; s39 = r; } catch (e) { s39 = "caught: " + str(e); }
+print(s39);
+
+# ============================================================
+# S4. 混合运算: int+float, int*float, float/int, 链式
+# ============================================================
+print("----- S4. Mixed arithmetic -----");
+
+# S4.1: 1 + 2.5 -> 3.5
+print("[S4.1 1+2.5]                   expect=3.5]");
+print(1 + 2.5);
+
+# S4.2: 2 * 3.5 -> 7 (整数值, 打印 "7")
+print("[S4.2 2*3.5]                   expect=7]");
+print(2 * 3.5);
+
+# S4.3: 3.0 / 1.5 — 1.5 非整数 -> 真除法 -> 2.0 (打印 "2")
+print("[S4.3 3.0/1.5]                 expect=2]");
+print(3.0 / 1.5);
+
+# S4.4: 7 / 2.0 — 两者皆整数值 -> floor -> 3 (BUG: 期望 3.5)
+print("[S4.4 7/2.0]                   expect_py=3.5 | expect_impl=3]");
+print(7 / 2.0);
+
+# S4.5: 7.0 / 2 — 两者皆整数值 -> floor -> 3 (BUG: 期望 3.5)
+print("[S4.5 7.0/2]                   expect_py=3.5 | expect_impl=3]");
+print(7.0 / 2);
+
+# S4.6: 链式 1 + 2 * 3.0 - 0.5 -> 6.5
+print("[S4.6 1+2*3.0-0.5]             expect=6.5]");
+print(1 + 2 * 3.0 - 0.5);
+
+# S4.7: 混合链式 10 / 3 + 0.5 — 10/3 floor=3, +0.5=3.5
+print("[S4.7 10/3+0.5]                expect=3.5 (10/3 floor=3)]");
+print(10 / 3 + 0.5);
+
+# ============================================================
+# S5. 精度丢失: 大数减小数, 浮点比较
+# ============================================================
+print("----- S5. Precision loss -----");
+
+# S5.1: 1e16 + 1 - 1e16 -> 0 (精度丢失, 1e16+1 == 1e16)
+let e16 = pow(10, 16);
+print("[S5.1 1e16+1-1e16]            expect_py=0 | impl: 精度丢失]");
+print(e16 + 1 - e16);
+
+# S5.2: 1e16 + 1 == 1e16 -> true (精度丢失)
+print("[S5.2 1e16+1==1e16]            expect=true (precision loss)]");
+print(e16 + 1 == e16);
+
+# S5.3: 1e15 + 1 - 1e15 -> 1 (1e15 仍在精度范围内)
+let e15 = pow(10, 15);
+print("[S5.3 1e15+1-1e15]            expect=1]");
+print(e15 + 1 - e15);
+
+# S5.4: 0.1 + 0.1 + 0.1 == 0.3 -> false (精度累积)
+print("[S5.4 0.1*3==0.3]             expect=false]");
+print(0.1 + 0.1 + 0.1 == 0.3);
+
+# S5.5: 1.0000000000000001 == 1.0 -> true (超出精度)
+print("[S5.5 1+1e-16==1]             expect=true (precision loss)]");
+print(1 + pow(10, 0 - 16) == 1);
+
+# ============================================================
+# S6. 特殊值: NaN, Infinity, -Infinity, 0.0 vs -0.0
+# ============================================================
+print("----- S6. Special values NaN/Inf/-0.0 -----");
+
+# S6.1: str(NaN) -> "NaN"
+print("[S6.1 str(NaN)]                expect=NaN]");
+print(str(NAN_VAL));
+
+# S6.2: str(Infinity) -> "Infinity"
+print("[S6.2 str(Infinity)]           expect=Infinity]");
+print(str(POS_INF));
+
+# S6.3: str(-Infinity) -> "-Infinity"
+print("[S6.3 str(-Infinity)]          expect=-Infinity]");
+print(str(NEG_INF));
+
+# S6.4: -0.0 字面量 (parser: 0-0.0=+0.0)
+print("[S6.4 -0.0 literal]            expect=0 (parser: 0-0.0=+0.0)]");
+print(-0.0);
+
+# S6.5: 真负零 -1*0
+print("[S6.5 real -0.0]               expect=0 (toDisplayString: -0->0)]");
+print(NEG_ZERO);
+
+# S6.6: -0.0 == 0.0 -> true (IEEE)
+print("[S6.6 -0.0==0.0]               expect=true]");
+print(-0.0 == 0.0);
+
+# S6.7: Inf - Inf -> NaN
+print("[S6.7 Inf-Inf]                 expect=NaN]");
+print(POS_INF - POS_INF);
+
+# S6.8: Inf * 0 -> NaN
+print("[S6.8 Inf*0]                   expect=NaN]");
+print(POS_INF * 0);
+
+# S6.9: NaN truthy? -> HNumber: !=0.0 -> true
+print("[S6.9 NaN truthy?]             expect=true]");
+if (NAN_VAL) { print("truthy"); } else { print("falsy"); }
+
+# S6.10: 0.0 truthy? -> false
+print("[S6.10 0.0 truthy?]            expect=falsy]");
+if (0.0) { print("truthy"); } else { print("falsy"); }
+
+# ============================================================
+# S7. 位运算: &, |, ^, ~, <<, >>
+# ============================================================
+print("----- S7. Bitwise ops -----");
+
+# S7.1: 12 & 10 = 8 (0b1100 & 0b1010 = 0b1000)
+print("[S7.1 12 & 10]                 expect=8]");
+print(12 & 10);
+
+# S7.2: 12 | 10 = 14
+print("[S7.2 12 | 10]                 expect=14]");
+print(12 | 10);
+
+# S7.3: 12 ^ 10 = 6
+print("[S7.3 12 ^ 10]                 expect=6]");
+print(12 ^ 10);
+
+# S7.4: ~0 = -1
+print("[S7.4 ~0]                      expect=-1]");
+print(~0);
+
+# S7.5: 1 << 4 = 16
+print("[S7.5 1 << 4]                  expect=16]");
+print(1 << 4);
+
+# S7.6: 256 >> 4 = 16
+print("[S7.6 256 >> 4]                expect=16]");
+print(256 >> 4);
+
+# S7.7: -1 & -1 = -1
+print("[S7.7 -1 & -1]                 expect=-1]");
+print((0 - 1) & (0 - 1));
+
+# S7.8: 1 << 63 — 符号位, 结果为 Long.MIN_VALUE
+print("[S7.8 1 << 63]                 expect=-9223372036854775808]");
+print(1 << 63);
+
+# S7.9: 1 << 64 — Kotlin shl mask 0x3F, 64&0x3F=0 -> 1<<0=1
+print("[S7.9 1 << 64]                 expect=1 (shl masks 0x3F)]");
+print(1 << 64);
+
+# S7.10: 位运算优先级 — 5 & 3 == 3 (== 低于 &): 5 & (3==3) = 5 & true?
+#   toLong(true)=1 -> 5 & 1 = 1
+print("[S7.10 5 & 3 == 3]             expect_impl=1 (== lower than &)]");
+print(5 & 3 == 3);
+
+# ============================================================
+# S8. 取模: 负数取模, 浮点取模, 零取模
+# ============================================================
+print("----- S8. Modulo boundaries -----");
+
+# S8.1: -7 % 3 -> Python floored: 2 (not -1)
+print("[S8.1 -7 % 3]                  expect_py=2]");
+print((0 - 7) % 3);
+
+# S8.2: 7 % -3 -> Python floored: -2
+print("[S8.2 7 % -3]                  expect_py=-2]");
+print(7 % (0 - 3));
+
+# S8.3: -7 % -3 -> Python floored: -1
+print("[S8.3 -7 % -3]                 expect_py=-1]");
+print((0 - 7) % (0 - 3));
+
+# S8.4: 5.5 % 2 -> 1.5
+print("[S8.4 5.5 % 2]                 expect=1.5]");
+print(5.5 % 2);
+
+# S8.5: 5 % 0 -> 抛错 "modulo by zero"
+print("[S8.5 5 % 0]");
+let s85 = "no-err";
+try { let r = 5 % 0; s85 = r; } catch (e) { s85 = "caught: " + str(e); }
+print(s85);
+
+# S8.6: 0 % 5 -> 0
+print("[S8.6 0 % 5]                   expect=0]");
+print(0 % 5);
+
+# S8.7: 5.5 % 0.5 -> 0 (Python 5.5%0.5=0.0)
+print("[S8.7 5.5 % 0.5]               expect=0]");
+print(5.5 % 0.5);
+
+# S8.8: 5.5 % 0 -> 抛错 (浮点模零)
+print("[S8.8 5.5 % 0]");
+let s88 = "no-err";
+try { let r = 5.5 % 0; s88 = r; } catch (e) { s88 = "caught: " + str(e); }
+print(s88);
+
+# ============================================================
+# S9. 幂运算: ** 不支持, pow() 替代, 0^0, 负幂, 大幂
+# ============================================================
+print("----- S9. Power (**) & pow() -----");
+
+# S9.1: pow(2, 3) -> 8
+print("[S9.1 pow(2,3)]                expect=8]");
+print(pow(2, 3));
+
+# S9.2: pow(0, 0) -> 1 (Math.pow 语义, 与 Python 一致)
+print("[S9.2 pow(0,0)]                expect=1]");
+print(pow(0, 0));
+
+# S9.3: pow(2, -1) -> 0.5
+print("[S9.3 pow(2,-1)]               expect=0.5]");
+print(pow(2, 0 - 1));
+
+# S9.4: pow(10, 1000) -> Inf (溢出)
+print("[S9.4 pow(10,1000)]            expect=Infinity]");
+print(pow(10, 1000));
+
+# S9.5: pow(2, 0.5) -> sqrt(2) ≈ 1.4142135623730951
+print("[S9.5 pow(2,0.5)]              expect=1.4142135623730951]");
+print(pow(2, 0.5));
+
+# S9.6: `**` 运算符 — parser 应抛 SyntaxError (不支持)
+# 注: 此测试在编译期失败, 故单独标注; 若编译失败说明 ** 确实不支持
+print("[S9.6 ** operator]             INFO: not tested inline (compile-time error)");
+
+# S9.7: pow(-1, 0.5) -> NaN (负数开方)
+print("[S9.7 pow(-1,0.5)]             expect=NaN]");
+print(pow(0 - 1, 0.5));
+
+# ============================================================
+# S10. 数值转换: int(), float(), int(true), int(null), int("3.14")
+# ============================================================
+print("----- S10. Numeric conversions -----");
+
+# S10.1: int(3.9) -> 3 (截断, 非 floor)
+print("[S10.1 int(3.9)]               expect=3]");
+print(int(3.9));
+
+# S10.2: int(-3.9) -> -3 (截断, 非 floor; Python int(-3.9)=-3)
+print("[S10.2 int(-3.9)]              expect_py=-3 (truncation)]");
+print(int(0 - 3.9));
+
+# S10.3: int("42") -> 42
+print("[S10.3 int('42')]              expect=42]");
+print(int("42"));
+
+# S10.4: int("3.14") -> 3 (via toDouble then toLong)
+print("[S10.4 int('3.14')]            expect=3]");
+print(int("3.14"));
+
+# S10.5: int("abc") -> 抛错
+print("[S10.5 int('abc')]");
+let s105 = "no-err";
+try { let r = int("abc"); s105 = r; } catch (e) { s105 = "caught: " + str(e); }
+print(s105);
+
+# S10.6: int("") -> 抛错
+print("[S10.6 int('')]");
+let s106 = "no-err";
+try { let r = int(""); s106 = r; } catch (e) { s106 = "caught: " + str(e); }
+print(s106);
+
+# S10.7: float("3.14") -> 3.14
+print("[S10.7 float('3.14')]          expect=3.14]");
+print(float("3.14"));
+
+# S10.8: float(5) -> 5 (无法区分 int/float)
+print("[S10.8 float(5)]               expect=5]");
+print(float(5));
+
+# S10.9: float(5) == 5 -> true
+print("[S10.9 float(5)==5]            expect=true]");
+print(float(5) == 5);
+
+# S10.10: int(true) -> 1
+print("[S10.10 int(true)]             expect=1]");
+print(int(true));
+
+# S10.11: int(false) -> 0
+print("[S10.11 int(false)]            expect=0]");
+print(int(false));
+
+# S10.12: int(null) -> 抛错
+print("[S10.12 int(null)]");
+let s1012 = "no-err";
+try { let r = int(null); s1012 = r; } catch (e) { s1012 = "caught: " + str(e); }
+print(s1012);
+
+# S10.13: float(null) -> 抛错
+print("[S10.13 float(null)]");
+let s1013 = "no-err";
+try { let r = float(null); s1013 = r; } catch (e) { s1013 = "caught: " + str(e); }
+print(s1013);
+
+# S10.14: int(Infinity) -> Long.MAX_VALUE (9223372036854775807)
+print("[S10.14 int(Infinity)]         expect=9223372036854775807]");
+print(int(POS_INF));
+
+# S10.15: int(NaN) -> 0 (NaN.toLong()=0)
+print("[S10.15 int(NaN)]              expect=0]");
+print(int(NAN_VAL));
+
+# S10.16: float(true) -> 1
+print("[S10.16 float(true)]           expect=1]");
+print(float(true));
+
+# ============================================================
+# S11. 比较: int vs float, NaN, Infinity
+# ============================================================
+print("----- S11. Comparisons -----");
+
+# S11.1: 1 == 1.0 -> true (皆 HNumber, value 相等)
+print("[S11.1 1==1.0]                 expect=true]");
+print(1 == 1.0);
+
+# S11.2: NaN == NaN -> false (IEEE-754, H# 特殊处理)
+print("[S11.2 NaN==NaN]               expect=false]");
+print(NAN_VAL == NAN_VAL);
+
+# S11.3: NaN != NaN -> true
+print("[S11.3 NaN!=NaN]               expect=true]");
+print(NAN_VAL != NAN_VAL);
+
+# S11.4: Infinity == Infinity -> true
+print("[S11.4 Inf==Inf]               expect=true]");
+print(POS_INF == POS_INF);
+
+# S11.5: -Infinity == -Infinity -> true
+print("[S11.5 -Inf==-Inf]             expect=true]");
+print(NEG_INF == NEG_INF);
+
+# S11.6: Infinity == -Infinity -> false
+print("[S11.6 Inf==-Inf]              expect=false]");
+print(POS_INF == NEG_INF);
+
+# S11.7: NaN < 1 -> false
+print("[S11.7 NaN<1]                  expect=false]");
+print(NAN_VAL < 1);
+
+# S11.8: NaN > 1 -> false
+print("[S11.8 NaN>1]                  expect=false]");
+print(NAN_VAL > 1);
+
+# S11.9: Infinity > 1 -> true
+print("[S11.9 Inf>1]                  expect=true]");
+print(POS_INF > 1);
+
+# S11.10: -Infinity < 1 -> true
+print("[S11.10 -Inf<1]                expect=true]");
+print(NEG_INF < 1);
+
+# S11.11: 2 < 2.5 -> true
+print("[S11.11 2<2.5]                 expect=true]");
+print(2 < 2.5);
+
+# S11.12: 0 == -0.0 -> true
+print("[S11.12 0==-0.0]               expect=true]");
+print(0 == -0.0);
+
+# ============================================================
+# S12. 数值字符串: "1e10", "0x1F", "0o17", "0b101"
+# ============================================================
+print("----- S12. Numeric string conversion -----");
+
+# S12.1: float("1e10") -> 1e10 (Kotlin toDoubleOrNull 支持)
+print("[S12.1 float('1e10')]          expect=10000000000]");
+print(float("1e10"));
+
+# S12.2: int("1e10") -> 10000000000 (via toDouble)
+print("[S12.2 int('1e10')]            expect=10000000000]");
+print(int("1e10"));
+
+# S12.3: float("0x1F") -> 抛错 (toDoubleOrNull 不支持 0x)
+print("[S12.3 float('0x1F')]");
+let s123 = "no-err";
+try { let r = float("0x1F"); s123 = r; } catch (e) { s123 = "caught: " + str(e); }
+print(s123);
+
+# S12.4: int("0x1F") -> 抛错
+print("[S12.4 int('0x1F')]");
+let s124 = "no-err";
+try { let r = int("0x1F"); s124 = r; } catch (e) { s124 = "caught: " + str(e); }
+print(s124);
+
+# S12.5: float("0b101") -> 抛错
+print("[S12.5 float('0b101')]");
+let s125 = "no-err";
+try { let r = float("0b101"); s125 = r; } catch (e) { s125 = "caught: " + str(e); }
+print(s125);
+
+# S12.6: float("0o17") -> 抛错
+print("[S12.6 float('0o17')]");
+let s126 = "no-err";
+try { let r = float("0o17"); s126 = r; } catch (e) { s126 = "caught: " + str(e); }
+print(s126);
+
+# S12.7: float("  3.14  ") -> 3.14 (Kotlin trim)
+print("[S12.7 float('  3.14  ')]      expect=3.14]");
+print(float("  3.14  "));
+
+# S12.8: float("1_000") -> 抛错 (Kotlin 不支持下划线分隔)
+print("[S12.8 float('1_000')]");
+let s128 = "no-err";
+try { let r = float("1_000"); s128 = r; } catch (e) { s128 = "caught: " + str(e); }
+print(s128);
+
+# S12.9: float("-0.0") -> -0.0 (打印 "0")
+print("[S12.9 float('-0.0')]          expect=0]");
+print(float("-0.0"));
+
+# S12.10: int("  42  ") -> 42 (trim)
+print("[S12.10 int('  42  ')]         expect=42]");
+print(int("  42  "));
+
+# ============================================================
+# S13. range 边界: range(0), range(5,2), range(5,5), 负范围, 零步长
+# ============================================================
+print("----- S13. range boundaries -----");
+
+# S13.1: range(0) -> []
+print("[S13.1 range(0)]               expect=[]]");
+print(range(0));
+
+# S13.2: range(5, 2) -> [] (5 until 2 = 空)
+print("[S13.2 range(5,2)]             expect=[]]");
+print(range(5, 2));
+
+# S13.3: range(5, 5) -> []
+print("[S13.3 range(5,5)]             expect=[]]");
+print(range(5, 5));
+
+# S13.4: range(-5, -1) -> [-5,-4,-3,-2]
+print("[S13.4 range(-5,-1)]           expect=[-5, -4, -3, -2]]");
+print(range(0 - 5, 0 - 1));
+
+# S13.5: range(10, 0, -1) -> [10,9,...,1]
+print("[S13.5 range(10,0,-1)]         expect=[10..1]]");
+print(range(10, 0, 0 - 1));
+
+# S13.6: range(0, 10, 2) -> [0,2,4,6,8]
+print("[S13.6 range(0,10,2)]          expect=[0,2,4,6,8]]");
+print(range(0, 10, 2));
+
+# S13.7: range(0, 1, 0) -> 抛错 "step cannot be zero"
+print("[S13.7 range(0,1,0)]");
+let s137 = "no-err";
+try { let r = range(0, 1, 0); s137 = r; } catch (e) { s137 = "caught: " + str(e); }
+print(s137);
+
+# S13.8: range(5, 2, -1) -> [5,4,3]
+print("[S13.8 range(5,2,-1)]          expect=[5, 4, 3]]");
+print(range(5, 2, 0 - 1));
+
+# S13.9: len(range(10)) -> 10
+print("[S13.9 len(range(10))]         expect=10]");
+print(len(range(10)));
+
+# S13.10: range(5, 2, 1) -> [] (正步长但 start>end)
+print("[S13.10 range(5,2,1)]          expect=[]]");
+print(range(5, 2, 1));
+
+# S13.11: range(0, 10, 0) -> 抛错 (正方向零步长)
+print("[S13.11 range(0,10,0)]");
+let s1311 = "no-err";
+try { let r = range(0, 10, 0); s1311 = r; } catch (e) { s1311 = "caught: " + str(e); }
+print(s1311);
+
+# S13.12: range(3) -> [0,1,2]
+print("[S13.12 range(3)]              expect=[0, 1, 2]]");
+print(range(3));
+
+# S13.13: sum(range(0,10)) -> 45
+print("[S13.13 sum(range(0,10))]      expect=45]");
+print(sum(range(0, 10)));
+
+# S13.14: range(0, 5, 0.5) -> 抛错 (step 非整数)
+print("[S13.14 range(0,5,0.5)]");
+let s1314 = "no-err";
+try { let r = range(0, 5, 0.5); s1314 = r; } catch (e) { s1314 = "caught: " + str(e); }
+print(s1314);
+
+# ============================================================
+# S14. 附加: toDisplayString 整数/浮点不可区分, sum 边界
+# ============================================================
+print("----- S14. Display & sum edge -----");
+
+# S14.1: str(3.0) == str(3) -> true (皆 "3")
+print("[S14.1 str(3.0)==str(3)]       expect=true]");
+print(str(3.0) == str(3));
+
+# S14.2: str(3.14) -> "3.14"
+print("[S14.2 str(3.14)]              expect=3.14]");
+print(str(3.14));
+
+# S14.3: sum([]) -> 0
+print("[S14.3 sum([])]                expect=0]");
+print(sum([]));
+
+# S14.4: sum([1.5, 2.5]) -> 4
+print("[S14.4 sum([1.5,2.5])]         expect=4]");
+print(sum([1.5, 2.5]));
+
+# S14.5: abs(-3.5) -> 3.5
+print("[S14.5 abs(-3.5)]              expect=3.5]");
+print(abs(0 - 3.5));
+
+# S14.6: abs(-0.0) -> 0
+print("[S14.6 abs(-0.0)]              expect=0]");
+print(abs(-0.0));
+
+# S14.7: abs(NaN) -> NaN
+print("[S14.7 abs(NaN)]               expect=NaN]");
+print(abs(NAN_VAL));
+
+# S14.8: abs(Infinity) -> Infinity
+print("[S14.8 abs(Infinity)]          expect=Infinity]");
+print(abs(POS_INF));
+
+print("===== R5-141 DONE =====");

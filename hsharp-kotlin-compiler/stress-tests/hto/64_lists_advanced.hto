@@ -1,0 +1,224 @@
+# T64 - Lists / Arrays advanced stress tests
+# Target: comprehensive coverage of list creation, indexing, slicing,
+# mutation, methods, operators, iteration, destructuring, 2D arrays,
+# performance and boundary conditions. Goal: surface bugs.
+
+# ============================================================
+# T01: List creation — empty, single, multi-type, nested
+# ============================================================
+print("T01-list-create");
+let e = [];
+print(len(e));
+print(e);
+let one = [42];
+print(one);
+print(len(one));
+let mixed = [1, "a", true, null, 3.14];
+print(mixed);
+print(len(mixed));
+let nested = [[1, 2], [3, 4], [5, 6]];
+print(nested);
+print(nested[0]);
+print(nested[2][1]);
+print(len(nested));
+
+# ============================================================
+# T02: Indexing — normal, negative, len-1
+# ============================================================
+print("T02-indexing");
+let xs = [10, 20, 30, 40, 50];
+print(xs[0]);
+print(xs[4]);
+print(xs[len(xs) - 1]);
+print(xs[-1]);
+print(xs[-3]);
+print(xs[2]);
+
+# ============================================================
+# T03: Out-of-bounds indexing (should raise)
+# ============================================================
+print("T03-oob");
+let arr = [1, 2, 3];
+let r1 = "no-err";
+try { let bad = arr[5]; r1 = "got:" + bad; } catch (e) { r1 = "caught:" + e; }
+print(r1);
+let r2 = "no-err";
+try { let bad = arr[-10]; r2 = "got:" + bad; } catch (e) { r2 = "caught:" + e; }
+print(r2);
+# empty list index
+let r3 = "no-err";
+let emptyL = [];
+try { let bad = emptyL[0]; } catch (e) { r3 = "caught:" + e; }
+print(r3);
+# NOTE: direct indexing of a list literal like [99][0] fails to parse
+# (parser bug — see report). Worked around by using a variable.
+
+# ============================================================
+# T04: Slicing — basic [1:3], [:2], [2:]
+# ============================================================
+print("T04-slice-basic");
+let s = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+print(s[1:4]);
+print(s[:3]);
+print(s[7:]);
+print(s[:]);
+print(s[2:2]);
+print(s[-3:]);
+print(s[:-2]);
+
+# ============================================================
+# T05: Slicing with step — [::2] and [::-1] (reverse)
+# ============================================================
+print("T05-slice-step");
+let st = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+print(st[::2]);
+print(st[::3]);
+print(st[1::2]);
+# negative-step slices — Python idiom arr[::-1] reverses; H# runtime
+# rejects negative step (BUG). Wrap in try/catch so test continues.
+let rev1 = "no-err";
+try { rev1 = st[::-1]; } catch (e) { rev1 = "caught:" + e; }
+print(rev1);
+let rev2 = "no-err";
+try { rev2 = st[8:1:-1]; } catch (e) { rev2 = "caught:" + e; }
+print(rev2);
+let rev3 = "no-err";
+try { rev3 = st[::-2]; } catch (e) { rev3 = "caught:" + e; }
+print(rev3);
+
+# ============================================================
+# T06: Modification — arr[i] = v, nested matrix[i][j] = v
+# ============================================================
+print("T06-modify");
+let m = [1, 2, 3];
+m[0] = 99;
+m[2] = 77;
+m[-1] = 55;
+print(m);
+# out-of-bounds assignment
+let mr = "no-err";
+try { m[10] = 5; } catch (e) { mr = "caught:" + e; }
+print(mr);
+# 2D matrix write
+let mat = [[0, 0], [0, 0], [0, 0]];
+mat[0][0] = 1;
+mat[1][1] = 2;
+mat[2][0] = 3;
+print(mat);
+print(mat[0][0]);
+print(mat[1][1]);
+print(mat[2][0]);
+
+# ============================================================
+# T07: List methods — push/append/pop/contains/is_empty/clear
+# ============================================================
+print("T07-methods");
+let L = [1, 2, 3];
+L.push(4);
+L.append(5);
+print(L);
+print(L.len());
+print(L.length());
+print(L.is_empty());
+print(L.contains(3));
+print(L.contains(99));
+let popped = L.pop();
+print(popped);
+print(L);
+let empty = [];
+print(empty.is_empty());
+let cc = [7, 8, 9];
+cc.clear();
+print(cc);
+print(cc.is_empty());
+
+# ============================================================
+# T08: Operators — +, *, -, in
+# ============================================================
+print("T08-operators");
+print([1, 2] + [3, 4]);
+print([0] * 4);
+print([1, 2, 3, 4, 5] - 2);
+print(3 in [1, 2, 3]);
+print(9 in [1, 2, 3]);
+print(not (9 in [1, 2, 3]));
+print("a" in ["a", "b", "c"]);
+print([1, 2] in [[1, 2], [3, 4]]);
+
+# ============================================================
+# T09: Iteration — for-in, empty list, nested
+# ============================================================
+print("T09-iterate");
+let total = 0;
+for x in [1, 2, 3, 4, 5] { total = total + x; }
+print(total);
+let collected = [];
+for n in [10, 20, 30] { push(collected, n * 2); }
+print(collected);
+# empty-list iteration is a no-op
+let cnt = 0;
+for z in [] { cnt = cnt + 1; }
+print(cnt);
+# iterate nested
+let flat = [];
+for row in [[1, 2], [3, 4]] {
+    for v in row { push(flat, v); }
+}
+print(flat);
+
+# ============================================================
+# T10: Destructuring — let [a,b]=arr, with _, mismatched length
+# ============================================================
+print("T10-destructure");
+let [a, b, c] = [100, 200, 300];
+print(a);
+print(b);
+print(c);
+let [p, _, q] = [7, 8, 9];
+print(p);
+print(q);
+# fewer source elements than targets (should error)
+let dr = "no-err";
+try { let [x1, x2, x3] = [1, 2]; } catch (e) { dr = "caught:" + e; }
+print(dr);
+# more source elements than targets (extra ignored)
+let [y1] = [11, 22, 33];
+print(y1);
+
+# ============================================================
+# T11: Edge cases — single-element pop, empty pop, min/max
+# ============================================================
+print("T11-edge");
+let single = [42];
+let sp = single.pop();
+print(sp);
+print(single);
+# pop from empty (should raise)
+let ep = "no-err";
+let emptyP = [];
+try { emptyP.pop(); } catch (e) { ep = "caught:" + e; }
+print(ep);
+# min / max
+print(min([3, 1, 4, 1, 5, 9, 2, 6]));
+print(max([3, 1, 4, 1, 5, 9, 2, 6]));
+# min/max on empty (should raise)
+let emin = "no-err";
+try { min([]); } catch (e) { emin = "caught:" + e; }
+print(emin);
+
+# ============================================================
+# T12: Performance — 1000-element list operations
+# ============================================================
+print("T12-perf");
+let big = [];
+for i in range(1000) { push(big, i); }
+print(len(big));
+print(big[0]);
+print(big[999]);
+print(big[-1]);
+let sum = 0;
+for v in big { sum = sum + v; }
+print(sum);
+print(big[100:105]);
+print(len(big[100:105]));
+print(big[::500]);

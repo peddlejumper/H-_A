@@ -1,0 +1,25 @@
+# t11 — file_info() on a directory, on missing path; fs_is_dir/fs_is_file consistency
+print("== t11 file_info ==");
+try {
+    let info = file_info("/tmp");
+    print("file_info(/tmp)=" + str(info));
+} catch (e) {
+    print("file_info(/tmp) ERR: " + str(e));
+}
+try {
+    let info = file_info("/tmp/__definitely_not_here__");
+    print("file_info(missing)=" + str(info));
+} catch (e) {
+    print("file_info(missing) ERR: " + str(e));
+}
+# create a real file and inspect it
+try {
+    write_file("/tmp/__hsharp_fi_test__.txt", "abc");
+    let info = file_info("/tmp/__hsharp_fi_test__.txt");
+    print("file_info(file)=" + str(info));
+} catch (e) {
+    print("file_info(file) ERR: " + str(e));
+}
+# fs_is_dir / fs_is_file on the same dir
+print("fs_is_dir(/tmp)=" + str(fs_is_dir("/tmp")));
+print("fs_is_file(/tmp)=" + str(fs_is_file("/tmp")));

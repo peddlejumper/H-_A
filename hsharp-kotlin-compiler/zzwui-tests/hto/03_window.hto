@@ -1,0 +1,87 @@
+# H# zzwUI Test 03 — ZzwWindow (the root window container)
+# build: hwdui_min.hto,zzw_native.hto,zzw_render_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. init_zw ─────────────────────────────────────────────────────────
+let w = new ZzwWindow();
+w.init_zw("Test App", 800, 600);
+check("w/title",         w.title == "Test App");
+check("w/w",             w.width == 800);
+check("w/h",             w.height == 600);
+check("w/bg",            w.bg_color == "#0f1119");
+check("w/running0",      w.running == false);
+check("w/child_n0",      len(w.children) == 0);
+check("w/renderer_n0",   w.renderer == nullptr);
+check("w/root_n0",       w.root_widget == nullptr);
+check("w/winid_n0",      w.win_id == 0);
+
+# ─── 2. setSize / setTitle / setBgColor ─────────────────────────────────
+w.setSize(1024, 768);
+check("w/w2",            w.width == 1024);
+check("w/h2",            w.height == 768);
+w.setTitle("New Title");
+check("w/title2",        w.title == "New Title");
+w.setBgColor("#ff0000");
+check("w/bg2",           w.bg_color == "#ff0000");
+
+# ─── 3. addWidget ───────────────────────────────────────────────────────
+let b1 = new Button();
+b1.init_btn("A");
+let b2 = new Button();
+b2.init_btn("B");
+w.addWidget(b1);
+w.addWidget(b2);
+check("w/n2",            len(w.children) == 2);
+check("w/c0",            w.children[0] == b1);
+check("w/c1",            w.children[1] == b2);
+
+# ─── 4. setRootWidget — propagates window size onto the widget ─────────
+let root = new Panel();
+root.init_panel("absolute");
+w.setRootWidget(root);
+check("w/root_set",      w.root_widget == root);
+check("w/root_x",        root.x == 0);
+check("w/root_y",        root.y == 0);
+check("w/root_w",        root.width == 1024);
+check("w/root_h",        root.height == 768);
+
+# ─── 5. accessors ───────────────────────────────────────────────────────
+check("w/getw",          w.getWidth() == 1024);
+check("w/geth",          w.getHeight() == 768);
+check("w/getwinid",      w.getWinId() == 0);
+check("w/notrun",        w.isRunning() == false);
+
+# ─── 6. callbacks (setOnClose / setOnResize) ────────────────────────────
+let close_count = [0];
+let resize_count = [0];
+w.setOnClose(fn(win) { close_count[0] = close_count[0] + 1; });
+w.setOnResize(fn(win, nw, nh) { resize_count[0] = resize_count[0] + 1; });
+check("w/onclose_set",   w.on_close != nullptr);
+check("w/onresize_set",  w.on_resize != nullptr);
+
+# ─── 7. stop() does not crash on a non-running window ──────────────────
+w.stop();
+check("w/stopped",       w.running == false);
+
+# ─── 8. render() with no win_id is a no-op (returns 0) ─────────────────
+let r1 = w.render();
+check("w/render_noop",   r1 == 0);
+
+print("03_ZZW_WINDOW : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

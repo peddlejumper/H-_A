@@ -268,6 +268,10 @@ class Lexer:
                 self.advance()
                 return (TokenType.COMMA, ',')
             if self.current_char == '.':
+                # Peek raw text for '...' (ellipsis, used by variadic params)
+                if self.pos + 2 < len(self.text) and self.text[self.pos + 1] == '.' and self.text[self.pos + 2] == '.':
+                    self.advance(); self.advance(); self.advance()
+                    return (TokenType.ELLIPSIS, '...')
                 self.advance()
                 return (TokenType.DOT, '.')
             if self.current_char == '%':

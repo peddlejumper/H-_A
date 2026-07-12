@@ -1,0 +1,16 @@
+# Probe for ** (power) operator — item 5 & 6 of the test domain.
+# H# has NO ** token.  Lexer emits STAR STAR, so `2 ** 3` becomes
+# `2 * (*3)` where the second `*` is the pointer-dereference unary
+# operator.  This likely raises a runtime error (deref of a number).
+# If it parsed cleanly as a power op, we would expect:
+#   2 ** 3 ** 2  →  2 ** (3 ** 2) = 2 ** 9 = 512   (right-assoc, standard)
+#   2 ** 3 ** 2  →  (2 ** 3) ** 2 = 8 ** 2 = 64    (left-assoc)
+#   -2 ** 2      →  -(2 ** 2) = -4  (standard)  or  (-2) ** 2 = 4
+
+let r1 = "no-err";
+try { let v = 2 ** 3 ** 2; r1 = v; } catch (e) { r1 = e; }
+print("probe 2**3**2=");  print(r1);
+
+let r2 = "no-err";
+try { let v = -2 ** 2; r2 = v; } catch (e) { r2 = e; }
+print("probe -2**2=");    print(r2);

@@ -1,0 +1,77 @@
+# Bug 1 regression test:
+# A child failing inside a concurrent { } block, whose failure is caught
+# by a try/catch INSIDE the block, must NOT be re-thrown by CONCURRENT_EXIT.
+#
+# Before fix: scope.join() re-awaited the FAILED cell and re-threw, so
+#   "spurious_rethrow_caught" would be true and the block would abort.
+# After fix:  joinPendingOnly() skips the already-settled (awaited+FAILED)
+#   cell, so the caught exception stays caught and the block returns
+#   normally.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+@parallel fn failer() {
+    throw "boom";
+}
+
+@parallel fn succeeder(x) {
+    return x + 1;
+}
+
+# --- Case 1: await-failure caught inside the block ----------------------
+# The block should complete normally; no exception escapes.
+let escaped1 = false;
+let inner_caught1 = false;
+let after_block1 = false;
+let sum1 = 0;
+try {
+    concurrent {
+        let f = failer();
+        let g = succeeder(10);
+        try {
+            let _r = await f;       # throws "boom"
+        } catch (e) {
+            inner_caught1 = (str(e) == "boom");
+        }
+        # body continues — f's failure was already observed & caught
+        sum1 = await g;             # 11
+        after_block1 = true;
+        # CONCURRENT_EXIT runs here: must NOT re-throw f's "boom"
+    }
+} catch (e) {
+    escaped1 = true;                 # bug: this would be reached
+}
+check("inner_caught", inner_caught1, "inner try did not catch");
+check("no_spurious_rethrow", !escaped1, "CONCURRENT_EXIT re-threw an already-caught exception");
+check("block_completed_normally", after_block1, "body after try/catch did not run");
+check("await_of_good_child_ok", sum1 == 11, "sum1=" + str(sum1));
+
+# --- Case 2: un-caught failure still propagates out of the block --------
+# (regression guard: the fix must not swallow genuine un-caught failures)
+let escaped2 = false;
+let msg2 = "";
+try {
+    concurrent {
+        let f = failer();
+        let _r = await f;            # throws, NOT caught inside -> propagates
+    }
+} catch (e) {
+    escaped2 = true;
+    msg2 = str(e);
+}
+check("uncaught_still_propagates", escaped2, "un-caught failure did not escape the block");
+check("uncaught_payload", msg2 == "boom", "msg2=" + msg2);
+
+# --- Case 3: empty concurrent + good children still works ---------------
+let s3 = 0;
+concurrent {
+    let a = succeeder(3);
+    let b = succeeder(4);
+    s3 = await a + await b;          # 4 + 5 = 9
+}
+check("happy_path_still_works", s3 == 9, "s3=" + str(s3));
+
+print("BUG1_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

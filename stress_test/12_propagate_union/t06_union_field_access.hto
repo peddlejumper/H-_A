@@ -1,0 +1,19 @@
+# T06 - Union field access patterns: dot access, member chain, mutation
+union V {
+    Pair: x, y;
+}
+
+let v = V{Pair: 3, 4};
+# direct field access
+print(v.x);
+print(v.y);
+# member chain through nested
+let v2 = V{Pair: v.x, v.y};
+print(v2.x);
+print(v2.y);
+# field mutation on the produced instance
+v.x = 99;
+print(v.x);
+print(v.y);
+# field used in arithmetic
+print(v.x + v.y);

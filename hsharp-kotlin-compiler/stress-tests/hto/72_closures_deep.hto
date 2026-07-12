@@ -1,0 +1,155 @@
+# T72 - Closures & Functional Programming Deep Tests
+# Tests Lambda closure capture (fn(x){...} via closure_env / MAKE_CLOSURE).
+# Note: H# `fn` statements at module level use late-binding LOAD_NAME (no
+# freevars); only Lambda expressions capture via closure cells.
+
+# ===== T1: Lambda captures outer let (read) =====
+print("==T1==");
+fn makeAdder(x) {
+    return fn(y) { return x + y; };
+}
+print(makeAdder(5)(3));     # expected 8
+print(makeAdder(10)(3));    # expected 13
+print(makeAdder(100)(1));   # expected 101
+
+# ===== T2: Lambda captures and modifies outer variable (cell write) =====
+print("==T2==");
+fn makeCounter() {
+    let n = 0;
+    let inc = fn() { n = n + 1; return n; };
+    return inc;
+}
+let c = makeCounter();
+print(c());   # expected 1
+print(c());   # expected 2
+print(c());   # expected 3
+
+# ===== T3: Multiple closures sharing the SAME variable =====
+# inc and get should share `n`. Expected: 1 2 3 3. BUG if get sees 0.
+print("==T3==");
+fn makePair() {
+    let n = 0;
+    let inc = fn() { n = n + 1; return n; };
+    let get = fn() { return n; };
+    return [inc, get];
+}
+let pair = makePair();
+let incP = pair[0];
+let getP = pair[1];
+print(incP());   # expected 1
+print(incP());   # expected 2
+print(incP());   # expected 3
+print(getP());   # expected 3 (shared); BUG if 0
+
+# ===== T4: Nested lambda / currying =====
+print("==T4==");
+fn curry(a) {
+    return fn(b) {
+        return fn(c) { return a + b + c; };
+    };
+}
+print(curry(1)(2)(3));    # expected 6
+print(curry(10)(20)(30)); # expected 60
+let addTwo = curry(2);
+let addFive = addTwo(3);
+print(addFive(10));       # expected 15
+
+# ===== T5: Higher-order functions: map / filter / reduce =====
+print("==T5==");
+fn map(f, lst) {
+    let out = [];
+    for x in lst { push(out, f(x)); }
+    return out;
+}
+fn filter(f, lst) {
+    let out = [];
+    for x in lst { if (f(x)) { push(out, x); } }
+    return out;
+}
+fn reduce(f, lst, init) {
+    let acc = init;
+    for x in lst { acc = f(acc, x); }
+    return acc;
+}
+let nums = [1, 2, 3, 4, 5];
+print(map(fn(x) { return x * x; }, nums));          # expected [1,4,9,16,25]
+print(filter(fn(x) { return x % 2 == 0; }, nums));  # expected [2,4]
+print(reduce(fn(a, b) { return a + b; }, nums, 0)); # expected 15
+
+# ===== T6: Lambda capturing loop variable =====
+print("==T6==");
+let fns = [];
+for i in [1, 2, 3] {
+    push(fns, fn() { return i; });
+}
+for f in fns { print(f()); }   # expected 1 2 3
+
+# ===== T7: Lambda recursion via `let f = fn(){...f...}` =====
+# f is referenced inside its own defining lambda. Expected 120.
+print("==T7==");
+try {
+    let fact = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * fact(n - 1);
+    };
+    print(fact(5));   # expected 120
+} catch(e) {
+    print("T7-ERROR");
+    print(e);
+}
+
+# ===== T8: Module-level lambda captures module let, then outer reassign =====
+# Proper closure (by reference): second call prints 20. BUG (snapshot): 10.
+print("==T8==");
+let x = 10;
+let fL = fn() { return x; };
+print(fL());    # expected 10
+x = 20;
+print(fL());    # expected 20 (reference); BUG if 10 (snapshot)
+fn getX() { return x; }
+print(getX());  # expected 20 (fn statement, late binding)
+
+# ===== T9: Immediate invocation of lambda (IIFE) =====
+print("==T9==");
+print((fn() { return 1; })());           # expected 1
+print((fn(a, b) { return a + b; })(3, 4));  # expected 7
+let v = (fn(n) { return n * n; })(6);
+print(v);                                  # expected 36
+
+# ===== T10: Closure capturing self in a class method =====
+print("==T10==");
+class Box {
+    fn init(v) { self.v = v; }
+    fn getter() {
+        return fn() { return self.v; };
+    }
+}
+let b = new Box(99);
+let g = b.getter();
+print(g());    # expected 99
+b.v = 77;
+print(g());    # expected 77 (self is same instance reference)
+
+# ===== T11: Closure with throw + try/catch interaction =====
+print("==T11==");
+fn safeCall(f) {
+    try {
+        return f();
+    } catch(e) {
+        return -1;
+    }
+}
+print(safeCall(fn() { throw "boom"; }));   # expected -1
+print(safeCall(fn() { return 42; }));       # expected 42
+
+# ===== T12: Capture function parameter, then modify param after capture =====
+# Proper closure (by reference): prints 100. BUG (snapshot): 1.
+print("==T12==");
+fn capturedThenModify(a) {
+    let g = fn() { return a; };
+    a = 100;
+    return g();
+}
+print(capturedThenModify(1));   # expected 100 (reference); BUG if 1 (snapshot)
+
+print("==DONE==");

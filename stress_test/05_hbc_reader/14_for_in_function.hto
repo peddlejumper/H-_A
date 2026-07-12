@@ -1,0 +1,32 @@
+# 14 - 函数内 for
+# 目的: for 出现在 fn 体内；fixForLoopJumps 也作用于函数 bytecode
+fn sum_list(lst) {
+    let s = 0;
+    for x in lst {
+        s = s + x;
+    }
+    return s;
+}
+
+fn count_chars(s) {
+    let n = 0;
+    for c in s {
+        n = n + 1;
+    }
+    return n;
+}
+
+fn dict_total(d) {
+    let t = 0;
+    for k, v in d {
+        t = t + v;
+    }
+    return t;
+}
+
+print("sum=" + str(sum_list([1, 2, 3, 4, 5])));
+print("expected_sum=15");
+print("chars=" + str(count_chars("hello")));
+print("expected_chars=5");
+print("dsum=" + str(dict_total({"a": 10, "b": 20})));
+print("expected_dsum=30");

@@ -1,0 +1,15 @@
+# Probe S5 — `for k, v in items(d)` using items() as a GLOBAL function.
+# The task spec mentions this form.  In H# `items` is a dict METHOD
+# (`d.items()`), not a global builtin, so `items(d)` should resolve
+# `items` as a name → likely a runtime "name not found" error (or a
+# compile-time error if the compiler does strict name resolution).
+#
+# Expected: COMPILE OK (parser allows any expression after `in`),
+#           RUNTIME ERROR (name 'items' not found) OR wrong behaviour.
+# This probe exists to confirm which.
+
+let d = {"x": 1, "y": 2};
+for k, v in items(d) {
+    print(k);
+    print(v);
+}

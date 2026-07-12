@@ -1,0 +1,281 @@
+# =====================================================================
+# T80 - Round 2: Deep Recursion & Stack / Performance Boundary Tests
+# Agent #80
+# Coverage:
+#   S1  Tail-recursion-style (factorial/fib with accumulator)
+#   S2  Deep recursion (recursive sum 1..n) — safe depths
+#   S3  Mutual recursion (is_even/is_odd)
+#   S4  Recursion + exception (throw at depth, outer catch)
+#   S5  Recursion + closure (lambda recursion via let-binding)
+#   S6  Ackermann (small m,n)
+#   S7  Recursion depth limits (100/500/1000/2000/5000)
+#   S8  Recursion returning large objects (list / dict builders)
+# Each section is wrapped in try/catch so a single failure does not
+# abort the rest of the run — EXCEPT native StackOverflow, which is
+# NOT caught by H# try/catch (documented in S7).
+# =====================================================================
+
+# =====================================================================
+# S1 — Tail-recursion style (accumulator)
+# H# does NOT do TCO, so this still consumes stack — but the
+# computed value must be correct.
+# =====================================================================
+print("== S1 tail-recursion ==");
+
+fn fact_acc(n, acc) {
+    if (n <= 1) { return acc; }
+    return fact_acc(n - 1, n * acc);
+}
+print(fact_acc(5, 1));    # 120
+print(fact_acc(10, 1));   # 3628800
+print(fact_acc(20, 1));   # 2432902008176640000
+
+fn fib_acc(n, a, b) {
+    if (n == 0) { return a; }
+    if (n == 1) { return b; }
+    return fib_acc(n - 1, b, a + b);
+}
+print(fib_acc(10, 0, 1));   # 55
+print(fib_acc(20, 0, 1));   # 6765
+print(fib_acc(30, 0, 1));   # 832040
+
+# =====================================================================
+# S2 — Deep recursion: recursive sum 1..n (safe depths)
+# Kept under the ~700-frame default-stack limit so S3-S8 still run.
+# S7 probes the actual limit.
+# =====================================================================
+print("== S2 deep-recursion sum ==");
+
+fn sumTo(n) {
+    if (n == 0) { return 0; }
+    return n + sumTo(n - 1);
+}
+print(sumTo(100));     # 5050
+print(sumTo(300));     # 45150
+print(sumTo(500));     # 125250
+
+# =====================================================================
+# S3 — Mutual recursion is_even / is_odd
+# =====================================================================
+print("== S3 mutual recursion ==");
+
+fn is_even(n) {
+    if (n == 0) { return true; }
+    return is_odd(n - 1);
+}
+fn is_odd(n) {
+    if (n == 0) { return false; }
+    return is_even(n - 1);
+}
+print(is_even(10));   # true
+print(is_odd(10));    # false
+print(is_even(7));    # false
+print(is_odd(7));     # true
+print(is_even(0));    # true
+print(is_odd(0));     # false
+
+# Mutual recursion across larger depth (stays under ~700)
+print(is_even(100));  # true
+print(is_odd(300));   # false
+
+# =====================================================================
+# S4 — Recursion + exception (throw at depth, outer catch)
+# =====================================================================
+print("== S4 recursion + exception ==");
+
+fn deepThrow(n) {
+    if (n <= 0) { throw "bottom reached"; }
+    return deepThrow(n - 1);
+}
+try {
+    deepThrow(50);
+    print("no-throw (bug)");
+} catch (e) {
+    print("caught d50: " + e);
+}
+
+# Deeper throw — verify stack unwind cleans up (stays under limit)
+try {
+    deepThrow(500);
+    print("no-throw d500 (bug)");
+} catch (e) {
+    print("caught d500: " + e);
+}
+
+# Throw at depth, then continue recursion normally afterward
+fn deepThrow2(n, depth) {
+    if (n == 0) { throw "at depth " + depth; }
+    return deepThrow2(n - 1, depth);
+}
+let caught_at = "none";
+try {
+    deepThrow2(100, 100);
+} catch (e) {
+    caught_at = e;
+}
+print("caught_at: " + caught_at);
+
+# After unwind, a fresh deep recursion should still work (stack restored)
+try {
+    let r = sumTo(200);
+    print("post-throw sumTo(200)=" + r);   # 20100
+} catch (e) {
+    print("post-throw failed: " + e);
+}
+
+# =====================================================================
+# S5 — Recursion + closure: lambda recursion via let binding
+# Probe: `let f = fn(n){... f(n-1) ...}` — historically fails with
+# "Undefined name: f".  Confirm current state.
+# =====================================================================
+print("== S5 lambda recursion via let ==");
+
+try {
+    let fact = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * fact(n - 1);
+    };
+    print("lambda-fact(5)=" + fact(5));     # 120
+    print("lambda-fact(10)=" + fact(10));   # 3628800
+} catch (e) {
+    print("lambda-fact ERR: " + e);
+}
+
+# Lambda recursion that goes moderately deep
+try {
+    let sumL = fn(n) {
+        if (n == 0) { return 0; }
+        return n + sumL(n - 1);
+    };
+    print("lambda-sum(100)=" + sumL(100));  # 5050
+} catch (e) {
+    print("lambda-sum ERR: " + e);
+}
+
+# Mutual lambda recursion via two let bindings (forward-reference probe)
+try {
+    let le = fn(n) {
+        if (n == 0) { return true; }
+        return lo(n - 1);
+    };
+    let lo = fn(n) {
+        if (n == 0) { return false; }
+        return le(n - 1);
+    };
+    print("lambda-mutual-even(10)=" + le(10));   # true
+    print("lambda-mutual-odd(10)=" + lo(10));    # false
+} catch (e) {
+    print("lambda-mutual ERR: " + e);
+}
+
+# =====================================================================
+# S6 — Ackermann (small m,n).  Keep small to avoid timeout.
+# ack(2,3)=9, ack(3,3)=61, ack(3,4)=125
+# =====================================================================
+print("== S6 ackermann ==");
+
+fn ack(m, n) {
+    if (m == 0) { return n + 1; }
+    if (n == 0) { return ack(m - 1, 1); }
+    return ack(m - 1, ack(m, n - 1));
+}
+print(ack(0, 0));   # 1
+print(ack(1, 1));   # 3
+print(ack(2, 3));   # 9
+print(ack(3, 3));   # 61
+print(ack(3, 4));   # 125
+
+# =====================================================================
+# S8 — Recursion returning large objects (list / dict builders)
+# (S7 is left for last because it intentionally crashes the VM.)
+# =====================================================================
+print("== S8 recursion returning big objects ==");
+
+# Recursive list builder: range_list(n) = [0,1,...,n-1]
+fn range_list(n) {
+    if (n <= 0) { return []; }
+    let tail = range_list(n - 1);
+    push(tail, n - 1);
+    return tail;
+}
+let rl = range_list(100);
+print("range_list(100).len=" + len(rl));       # 100
+print("range_list(100).first=" + rl[0]);        # 0
+print("range_list(100).last=" + rl[99]);        # 99
+let rl5 = range_list(5);
+print("range_list(5)=" + rl5);                  # [0,1,2,3,4]
+
+# Recursive dict builder: dict_chain(n) = {"k": {"k": {... {"val": 0} ...}}}
+fn dict_chain(n) {
+    if (n == 0) { return {"val": 0}; }
+    return {"k": dict_chain(n - 1), "n": n};
+}
+let dc = dict_chain(10);
+print("dict_chain(10).n=" + dc["n"]);            # 10
+print("dict_chain(10).k.n=" + dc["k"]["n"]);     # 9
+# Walk to the bottom — use `in` operator since d[k] throws on missing key
+fn walk_dict(d, depth) {
+    if (("val" in d)) { return depth; }
+    return walk_dict(d["k"], depth + 1);
+}
+print("dict_chain(10) depth=" + walk_dict(dc, 0));  # 10
+
+# Recursive list-of-lists builder
+fn nest_list(n) {
+    if (n == 0) { return 0; }
+    return [nest_list(n - 1)];
+}
+let nl = nest_list(50);
+# Unwrap 50 levels
+fn unwrap(x, depth) {
+    if (x == 0) { return depth; }
+    return unwrap(x[0], depth + 1);
+}
+print("nest_list(50) depth=" + unwrap(nl, 0));   # 50
+
+# Build a big list via recursion, then sum it (combines recursion + iteration)
+fn build_big(n) {
+    if (n == 0) { return []; }
+    let r = build_big(n - 1);
+    push(r, n);
+    return r;
+}
+let big = build_big(200);
+let total = 0;
+for v in big { total = total + v; }
+print("build_big(200) sum=" + total);             # 20100
+
+# =====================================================================
+# S7 — Recursion depth limit probe  (LAST — will crash the VM)
+# Native JVM StackOverflowError is NOT caught by H# try/catch and
+# terminates the process with "Error: null" and exit code 1.
+# Default-stack threshold is ~950-1000 frames (non-deterministic at the
+# boundary due to JIT/GC state); -Xss32m raises it past 5000.
+# =====================================================================
+print("== S7 depth-limit probe ==");
+
+fn depth_probe(n) {
+    if (n == 0) { return 0; }
+    return 1 + depth_probe(n - 1);
+}
+
+# 100 and 500 succeed on default stack; 1000+ will crash the VM.
+for d in [100, 500] {
+    try {
+        let r = depth_probe(d);
+        print("depth " + d + " OK -> " + r);
+    } catch (e) {
+        print("depth " + d + " caught: " + e);
+    }
+}
+
+# This one is expected to crash the VM with "Error: null".
+# Wrapped in try/catch to demonstrate that SO is NOT caught.
+print("depth 1000 (expect SO crash):");
+try {
+    let r = depth_probe(1000);
+    print("depth 1000 OK -> " + r);
+} catch (e) {
+    print("depth 1000 caught: " + e);
+}
+print("== DONE ==");

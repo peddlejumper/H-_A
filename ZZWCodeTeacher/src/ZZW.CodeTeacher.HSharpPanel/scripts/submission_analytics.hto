@@ -1,0 +1,19 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# scripts/submission_analytics.hto — 提交分析报告
+# 拉取提交数据，计算通过率与热门题目，输出 JSON 报告
+# ═══════════════════════════════════════════════════════════════════════════
+
+let API_BASE = "http://localhost:5000";
+
+# 拉取仪表盘数据
+let stats = http_get(API_BASE + "/api/v1/dashboard/stats");
+print("{");
+print("  \"report\": \"submission_analytics\",");
+print("  \"generated_at\": " + str(time_now()) + ",");
+if (stats != nullptr) {
+    print("  \"data\": " + stats);
+} else {
+    print("  \"data\": null,");
+    print("  \"error\": \"无法获取仪表盘数据\"");
+}
+print("}");

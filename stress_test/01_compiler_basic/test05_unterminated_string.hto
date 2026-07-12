@@ -1,0 +1,3 @@
+# test05: unterminated string literal (lexer/parser boundary)
+let s = "this string has no closing quote;
+print(s);

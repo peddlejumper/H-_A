@@ -1,0 +1,103 @@
+# server/server.hto
+# 服务端主入口: 初始化 + 注册所有路由 + 启动
+
+import "shared/json_utils.hto";
+import "shared/storage.hto";
+import "shared/auth.hto";
+import "shared/http_server.hto";
+import "shared/ai_client.hto";
+import "shared/judge.hto";
+import "shared/models.hto";
+
+import "server/routes_auth.hto";
+import "server/routes_problem.hto";
+import "server/routes_submission.hto";
+import "server/routes_ai.hto";
+import "server/routes_user.hto";
+import "server/routes_admin.hto";
+
+fn server_init(data_dir) {
+    storage_init(data_dir);
+    # 读取配置
+    let cfg = storage_load("config");
+    if (cfg == nullptr or len(cfg) == 0) {
+        cfg = config_default();
+        storage_save("config", cfg);
+    }
+    # 初始化 auth secret
+    if ("auth" in cfg) {
+        auth_set_secret(cfg["auth"]["secret"]);
+    }
+    # 初始化 AI 配置
+    if ("ai" in cfg) {
+        ai_configure(cfg["ai"]);
+    }
+    return cfg;
+}
+
+fn server_register_routes() {
+    # === 认证 ===
+    routes_auth.register();
+    # === 题目 ===
+    routes_problem.register();
+    # === 提交 / 评测 ===
+    routes_submission.register();
+    # === AI 提示 ===
+    routes_ai.register();
+    # === 学员 ===
+    routes_user.register();
+    # === 管理员 ===
+    routes_admin.register();
+}
+
+fn server_start(cfg) {
+    server_init("./data");
+    server_register_routes();
+    let host = "127.0.0.1";
+    let port = 8765;
+    if (cfg != nullptr) {
+        if ("server" in cfg) {
+            host = cfg["server"]["host"];
+            port = cfg["server"]["port"];
+        }
+    }
+    print("[ZZW Server] 已注册 " + str(len(_routes)) + " 条路由");
+    print("[ZZW Server] 监听: " + host + ":" + str(port));
+    # 真实部署: 启动 socket 监听
+    # 教学/集成环境: 暴露 dispatch_raw_request 给 Python 适配层
+    return {"host": host, "port": port};
+}
+
+# ============= 鉴权中间件 =============
+# 从请求头取 token,挂到 req["user"]
+fn auth_middleware() {
+    fn mw(req) {
+        let h = req["headers"];
+        let auth_h = "";
+        if ("Authorization" in h) { auth_h = h["Authorization"]; }
+        if (auth_h == "") { return nullptr; }
+        let tok = token_from_header(auth_h);
+        let uid = token_verify(tok);
+        if (uid == nullptr) {
+            return {"status": 401, "body": json_stringify(json_response_err("Unauthorized")), "content_type": "application/json"};
+        }
+        let u = storage_find_one("users", "id", uid);
+        if (u == nullptr) {
+            return {"status": 401, "body": json_stringify(json_response_err("User Not Found")), "content_type": "application/json"};
+        }
+        req["user"] = u;
+        return nullptr;
+    }
+    return mw;
+}
+
+# 管理员鉴权中间件
+fn admin_only_middleware() {
+    fn mw(req) {
+        if (req["user"] == nullptr or req["user"]["role"] != "admin") {
+            return {"status": 403, "body": json_stringify(json_response_err("Admin Only")), "content_type": "application/json"};
+        }
+        return nullptr;
+    }
+    return mw;
+}

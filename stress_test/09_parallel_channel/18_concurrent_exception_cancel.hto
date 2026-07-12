@@ -1,0 +1,106 @@
+# 18 — concurrent { } exception: scope leak / cancel propagation
+# Spec (from 17_parallel_channel.hto H comment): exception in a child is
+# re-thrown by the surrounding concurrent { ... } block, aborting any
+# still-pending siblings.  The block should JOIN on every child.
+#
+# We spawn a fast-failing child and a long-running sibling.  We measure
+# the wall time of the concurrent block.  If CONCURRENT_EXIT runs and
+# properly joins, the block should wait for the slow sibling (unless it
+# cancels, in which case the await returns promptly).  If CONCURRENT_EXIT
+# is SKIPPED on exception (bug), the block returns immediately, leaking
+# the scope and leaving the slow sibling running in the background.
+#
+# We then wait and check whether the slow sibling actually completed —
+# if it did, the worker was never cancelled (cancel is just a cell-state
+# change, not a thread interrupt).  We also check that a subsequent
+# concurrent block still works (scope stack not corrupted).
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Shared flag the slow sibling sets when it finishes.
+let done_flag = [0];
+
+@parallel fn fail_fast() {
+    throw "fail";
+}
+
+@parallel fn slow_sibling(flag) {
+    let i = 0;
+    while (i < 2000000) {
+        i = i + 1;
+    }
+    flag[0] = 1;
+    return i;
+}
+
+let t0 = time_ms();
+let caught = false;
+let msg = "";
+try {
+    concurrent {
+        let bf = fail_fast();
+        let sf = slow_sibling(done_flag);
+        let _a = await bf;
+        let _b = await sf;
+    }
+} catch (e) {
+    caught = true;
+    msg = str(e);
+}
+let t1 = time_ms();
+let elapsed = t1 - t0;
+
+check("exception_caught", caught, "not caught");
+check("exception_msg",    msg == "fail", "msg=" + msg);
+print("INFO elapsed_ms=" + str(elapsed));
+
+# Key finding: elapsed_ms should be small (< 1000ms).  If CONCURRENT_EXIT
+# ran and join() awaited the slow sibling (2M iterations, ~0.5s), elapsed
+# would be ~500ms+.  If CONCURRENT_EXIT ran and join() CANCELLED the slow
+# sibling's cell (so await returned immediately), elapsed would be tiny.
+# If CONCURRENT_EXIT was SKIPPED (scope leak bug), elapsed would be tiny.
+# The small elapsed alone can't distinguish "cancel" from "leak", but
+# combined with the code (no try/finally around the body), it's a leak.
+check("concurrent_block_returned_promptly", elapsed < 1000,
+      "elapsed=" + str(elapsed) + "ms (if >1000, CONCURRENT_EXIT ran+joined)");
+
+# Wait long enough for the slow sibling (2M iterations) to finish on its own.
+let t_wait_start = time_ms();
+while (time_ms() - t_wait_start < 5000 and done_flag[0] == 0) {
+    let x = 0;
+    x = x + 1;
+}
+let sibling_completed = done_flag[0] == 1;
+print("INFO sibling_completed_after_wait=" + str(sibling_completed));
+# The sibling should have completed — proving "abort" does NOT actually
+# interrupt the worker thread.  The worker ran to completion in the
+# background, which is a resource leak (and a spec deviation: "aborting
+# any still-pending siblings" is not honoured).
+check("sibling_ran_to_completion", sibling_completed == true,
+      "sibling_completed=" + str(sibling_completed) + " (expected true: cancel doesn't interrupt workers)");
+
+# Verify a subsequent concurrent block still works (scope stack not corrupted).
+@parallel fn w(x) { return x + 1; }
+let subsequent_ok = false;
+try {
+    let s = 0;
+    concurrent {
+        let fa = w(10);
+        let fb = w(20);
+        s = await fa + await fb;
+    }
+    subsequent_ok = (s == 32);
+} catch (e) {
+    subsequent_ok = false;
+}
+check("subsequent_concurrent_works", subsequent_ok, "scope stack may be corrupted");
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

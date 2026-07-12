@@ -1,0 +1,12 @@
+# t14
+print("READY");
+let total = 0;
+while (true) {
+    let line = input();
+    if (line == nullptr) {
+        break;
+    }
+    total = total + 1;
+    print("ECHO: " + line);
+}
+print("DONE total=" + str(total));

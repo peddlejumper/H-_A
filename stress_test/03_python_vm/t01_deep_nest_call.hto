@@ -1,0 +1,16 @@
+# t01_deep_nest_call.hto - 栈深度极限：1000 层嵌套调用
+# 递归到 1000 层，测试 VM 栈帧创建/销毁
+fn depth(n) {
+    if (n <= 0) {
+        return 0;
+    }
+    return 1 + depth(n - 1);
+}
+print("start");
+let r = depth(1000);
+print("depth1000=");
+print(r);
+let r2 = depth(2000);
+print("depth2000=");
+print(r2);
+print("end");

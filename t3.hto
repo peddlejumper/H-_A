@@ -1,0 +1,6 @@
+# t3
+let cfg = {"a": 1};
+if ("a" in cfg) {
+    print("has a");
+}
+print("ok");

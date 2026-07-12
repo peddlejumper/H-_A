@@ -1,0 +1,14 @@
+# t05 - literal float patterns (edge: float literal matching)
+# Tests whether 3.0 literal matches 3 (number equality)
+fn fmatch(x) {
+    return match x {
+        3.0 => "three-float",
+        3 => "three-int",
+        1.5 => "one-half",
+        _ => "other"
+    };
+}
+print("t05_float_3.0:" + fmatch(3.0));
+print("t05_float_3:" + fmatch(3));
+print("t05_float_1.5:" + fmatch(1.5));
+print("t05_float_7:" + fmatch(7));

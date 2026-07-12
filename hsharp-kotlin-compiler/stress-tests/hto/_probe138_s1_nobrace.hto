@@ -1,0 +1,7 @@
+# _probe138_s1_nobrace.hto — 悬空 else 无括号形式
+# 测试: if (a) if (b) print(1) else print(2) — 无 {} 块
+# 预期: H# if 语句体必须是 block() { }，无括号应为语法错误
+# 但 else 绑定行为 (如果编译通过) 应绑定到最近的 if
+
+if (true) if (true) { print(1); } else { print(2); }
+print("probe_s1_nobrace:compiled");

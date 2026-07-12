@@ -1,0 +1,12 @@
+print("start");
+fn inner() { return undefined_x; }
+fn outer(f) {
+    try {
+        let r = f();
+        print("OK: " + str(r));
+    } catch (e) {
+        print("CAUGHT: " + str(e));
+    }
+}
+outer(inner);
+print("end");

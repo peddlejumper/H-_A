@@ -1,0 +1,30 @@
+# r5_150_helper.hto — helper module for round5 #150 import/namespace tests
+# Exports: fn r5_150_double, fn r5_150_get_private, _private_val, public_val,
+#          class r5_150_Point, side-effect print on import.
+
+print("R5_150_HELPER: module top-level code executing");
+
+let public_val = 42;
+let _private_val = 99;
+
+fn r5_150_double(x) {
+    return x * 2;
+}
+
+fn r5_150_get_private() {
+    return _private_val;
+}
+
+fn r5_150_add(a, b) {
+    return a + b;
+}
+
+class r5_150_Point {
+    fn __init__(self, x, y) {
+        self.x = x;
+        self.y = y;
+    }
+    fn magnitude(self) {
+        return self.x * self.x + self.y * self.y;
+    }
+}

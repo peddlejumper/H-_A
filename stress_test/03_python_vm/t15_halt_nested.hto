@@ -1,0 +1,19 @@
+# t15_halt_nested.hto - HALT 在嵌套帧的行为
+# 测试 HALT 指令在嵌套调用帧中是否仅终止当前帧
+fn inner() {
+    print("inner start");
+    # HALT 只能由编译器在顶层 emit；这里测试函数内 return 语义
+    return "inner result";
+}
+fn outer() {
+    print("outer before");
+    let r = inner();
+    print("outer after, got:");
+    print(r);
+    return "outer result";
+}
+print("top before");
+let res = outer();
+print("top after, got:");
+print(res);
+print("top end");

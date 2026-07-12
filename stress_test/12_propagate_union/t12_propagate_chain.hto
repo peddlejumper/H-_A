@@ -1,0 +1,19 @@
+# T12 - chained ?? propagation: a?? = PropagateExpression(PropagateExpression(a))
+# Inner ? catches first throw; if the caught value itself is fine, outer ? is a no-op.
+fn maybe_throw(n) {
+    if (n == 0) { throw "zero"; }
+    return n;
+}
+
+# maybe_throw(0)? -> "zero" (payload).  ("zero")? -> "zero" (no throw).  Result "zero".
+let a = maybe_throw(0)??;
+print(a);
+
+# maybe_throw(5)? -> 5.  (5)? -> 5.  Result 5.
+let b = maybe_throw(5)??;
+print(b);
+
+# chain where inner returns a value, outer wraps non-throwing expr
+fn ret() { return 9; }
+let c = ret()??;
+print(c);

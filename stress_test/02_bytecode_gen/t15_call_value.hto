@@ -1,0 +1,16 @@
+# t15_call_value.hto - CALL_VALUE 路径（调用栈顶可调用对象）
+fn make_fn() {
+    return fn(x) { return x + 1; };
+}
+# 函数返回值是函数，直接调用 -> CALL_VALUE
+print(make_fn()(10));
+
+let fns = [fn(x) { return x; }, fn(x) { return x * 2; }, fn(x) { return x * x; }];
+# 从列表取出函数调用 -> CALL_VALUE
+print(fns[0](5));
+print(fns[1](5));
+print(fns[2](5));
+
+# 变量持有函数后调用（命名函数走 CALL_FUNCTION，但赋值后走 CALL_VALUE）
+let g = fn(x) { return x - 1; };
+print(g(10));

@@ -1,0 +1,749 @@
+# Changelog
+
+All notable changes to the H# programming language project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.4.1] - 2026-06-20
+
+### Added
+
+- **Native GUI bridge (`gui_*` natives)** — 30+ stub functions in
+  `HNativeBridge.kt` covering window management, drawing primitives, the event
+  loop, timers, screen info, clipboard, and color utilities.  The zzwui
+  library can now call `native_draw_rect`, `native_set_clip`,
+  `native_parse_color`, `native_lerp_color`, `native_get_events`, etc. through
+  the Kotlin runtime without `Undefined name` errors.  A `GUIWindows` registry
+  hands out deterministic window ids (1, 2, 3, …) so widget trees can be
+  observed.
+- **`ZzwWindow` and `ZzwRenderer` classes** — full root-window container
+  and rendering engine in `zzw_render_min.hto`, with init/sizing/positioning
+  primitives, a clip stack, theme dictionary, and font management.
+- **`zzwui` UI library** — hand-written `hwdui_min.hto` (541 lines) implementing
+  the widget class hierarchy (`zzwUI`, `Button`, `Label`, `Panel`, `CheckBox`,
+  `TextInput`, `Slider`, `ListBox`, `ProgressBar`, `ImageView`, `Canvas`).
+  Includes `__contains(coll, key)` as a manual replacement for H#'s missing
+  `x in y` operator.
+- **`drawImage(x, y, w, h, color)` method on `ZzwRenderer`** — bridges to
+  `native_draw_image`.
+- **Test suite** — 521 individual `check()` cases across 14 test files:
+  - 8 algorithm/data-structure tests in `lib-tests/hto/`
+  - 7 stress/scaling tests in `stress-tests/hto/`
+  - 14 zzwui tests in `zzwui-tests/hto/`
+- **Test runners** — `run_lib_tests.py`, `stress-tests/run_tests.py`,
+  `zzwui-tests/run_zzwui_tests.py` and their `report.md` + `results.json`
+  outputs.  Each runner parses the `PASS=N FAIL=M` summary line emitted by
+  the H# test bodies and writes a Markdown report.
+- **`build.py` for zzwui tests** — composes per-test dependencies
+  (`hwdui_min.hto`, `zzw_native.hto`, `zzw_render_min.hto`) into a single
+  source file via a `# build:` directive.
+- **`H#_v0.4.1_Package/`** — single-directory distribution of every useful
+  artifact of v0.4.1 (Kotlin compiler source + jars, zzwui, bootstrap, VS Code
+  extension, IDE, launcher, website, docs, CHANGELOG).
+- **`for x in y` syntax** — already supported (class fields, range, list,
+  string, dict, k/v unpacking), but a latent stack-leak bug in the
+  nested-`for` + `break` interaction was fixed.  The compiler now emits
+  a `CLEANUP_FOR` opcode at the for-end position: `break` jumps there
+  and pops the iterator dict that `FOR_ITER` pushed but didn't get to
+  pop; the normal end-of-iteration path skips it because `FOR_ITER`
+  has already set `f.pc` past it.  New test file `15_for_loop.hto`
+  (18 cases) covers list / string / dict / `k, v` / range (1- and
+  2-arg) / break / continue / nested for / empty iterables / state
+  isolation between back-to-back for loops.
+- **Generics / Templates support (`<T>` syntax)** — class and function
+  type-parameter declarations (`class Box<T>`, `class Pair<K, V>`,
+  `fn identity<T>(x)`) and explicit type-argument call sites
+  (`new Box<int>(42)`, `identity<int>(42)`, `Pair<string, int>("k", 7)`).
+  - **AST nodes** — `type_params` field on `ClassDef` and `FunctionDef`,
+    `type_args` field on `Call`, `New`, `MethodCall`, and `CallValue` AST
+    nodes in `h_ast.py`.
+  - **Parser** — new `_parse_type_params()` in `parser.py`; uses lexer
+    `save_state`/`restore_state` plus a `(` lookahead so that `a < b` is
+    never mistaken for a type-parameter list.  The `<T>` syntax is
+    recognized on class declarations, top-level functions, and
+    non-deref function expressions.
+  - **Lexer** — `save_state()` and `restore_state()` added so the parser
+    can speculatively read a `<` and roll back.
+  - **Python compiler (`compiler.py`)** — emits `type_params` (string list)
+    on class/function consts, attaches `type_args` to call-site consts,
+    and introduces four new opcodes:
+      * `CALL_FUNCTION_T` — name lookup with type-arg list
+      * `CALL_VALUE_T`    — value-arg call with type-arg list
+      * `CALL_METHOD_T`   — method call with type-arg list
+      * `CALL_NEW_T`      — constructor call with type-arg list
+    The stack layout for the `*_T` opcodes is
+    `[arg1, ..., argN, type_args_list, callable]`, with the `type_args`
+    list just above the value args and the callable (function / class /
+    self) on top, matching how the Kotlin runtime pops them.
+    `fn init` is now renamed to `__init__` when stored in the class method
+    table so that the Kotlin VM's existing `methods["__init__"]` lookup
+    continues to work.
+  - **Kotlin runtime** — `HClass` and `HFunction` gained a `typeParams:
+    List<String>` field; `HbcReader` parses the new `type_params` key.
+    `HVM` now has `callFunction(name, argc, hasTypeArgs)` /
+    `callValue(argc, hasTypeArgs)` / `callMethod(name, argc, hasTypeArgs)` /
+    `callNew(argc, hasTypeArgs)` overloads that pop the type-arg list
+    (as an `HList`) immediately above the value args, then pass it as
+    `typeArgs` to `invokeCallable`.  When `callNew` is given explicit
+    type arguments, the created `HInstance` receives a `__type_args__`
+    field so the body can introspect them; the `__type_args__` lookup
+    on a non-generic instance yields `HNull` (Python-like).  Reading
+    `Cls.__type_params__` on a class returns the type-parameter name list.
+  - **Test suite** — new `test_generics.hto` covers `class Box<T>`,
+    `class Pair<K, V>`, `class Triple<A, B, C>`, `class Wrapper<T>`,
+    `class Point` (non-generic), `fn identity<T>(x)`, `fn first_of<T>(arr)`;
+    verifies `__type_args__` / `__type_params__` introspection; verifies
+    that `a < b` comparison is not parsed as type-argument syntax; and
+    verifies the rename of `init` → `__init__`.  All **18/18** zzwui
+    test files pass; **687/687** individual `check()` cases pass.
+  - **Compiler fix for `fns[i](v)`-style value calls** — the generic
+    callable-expression path now pushes value args first and the
+    function/cell expression last, so the Kotlin VM's `callValue`
+    (which pops the callable from the top of the stack) sees them in
+    the right order.  This was masked before because most call sites
+    were simple `name(...)` forms that go through `CALL_FUNCTION`.
+  - **`in_function_body` flag in `compiler.py`** — distinguishes
+  compiling a function body from compiling the module top level.
+  Used to decide whether a name referenced inside a function but
+  not bound locally should be treated as a free variable
+  (`LOAD_DEREF` + `CALL_VALUE`) or looked up by name at call time
+  (`CALL_FUNCTION`).  Without this, top-level functions in
+  `zzw_native.hto` were mis-classifying `gui_set_clip` etc. as
+  free variables and failing to find them.
+- **Native `async fn` / `await expr` syntax** — user-level sugar on
+  top of the low-level `coro fn` API.  H# now has a familiar
+  async/await story: declare with `async fn`, receive a
+  `Future<T>` at the call site, unwrap with `await expr`.  This
+  is the user-facing layer; `coro fn` is preserved as the
+  low-level primitive and continues to be the only API that
+  drives a real (lazy / multi-shot) coroutine — `async fn` is
+  purely a static-and-runtime convenience.
+  - **Keywords / tokens** — `async` and `await` added to
+    `tokens.py` and `lexer.py` as reserved words.  `async` is
+    only treated as a keyword when it is immediately followed by
+    `fn` (the parser uses `lexer.save_state` /
+    `lexer.restore_state` so that `async` remains usable as an
+    ordinary identifier in expression contexts).
+  - **AST** — `Function` got an `is_async: bool` field; new
+    `AwaitExpression` node wrapping the awaited expression.
+  - **Parser** — `function_declaration(is_async=True)` sets both
+    `is_coro=True` and `is_async=True` on the function AST,
+    making `async fn` semantically a `coro fn` plus the
+    user-level sugar marker.  `unary()` recognises the
+    `await expr` prefix and builds an `AwaitExpression`.
+  - **Static type check (`compiler.py`)** — the compiler
+    tracks an `in_async` flag while compiling function bodies.
+    `await expr` is rejected at compile time when
+    `in_function_body` is true but `in_async` is false, with the
+    error
+    > Static type error: `await` is only allowed inside an
+    > `async fn` body (or at the top level of a module).  `coro
+    > fn` and plain `fn` do not support `await`.
+    Top-level `await` is permitted because the entry script
+    acts as an implicit async context — there's no enclosing
+    function that could be a non-async one.  This is the
+    "明确哪些函数可 await" requirement: the static pass names
+    exactly the functions that can be awaited, eliminating the
+    callback-chain ambiguity that pure `coro fn` had.
+  - **Bytecode** — `await expr` lowers to a single `AWAIT`
+    opcode.  `async fn` call sites automatically wrap their
+    return value in an `HFuture`, so the user never has to
+    touch the future machinery directly.
+  - **Runtime (`HValue.kt`)** — new `HType.FUTURE` enum value
+    and a corresponding `HFuture(value: HValue, resolved:
+    Boolean = true)` data class.  In this VM the future is
+    single-threaded and eagerly resolved (the body runs to
+    completion on the call, and `await` just unwraps the
+    inner value); the shape is also ready for a future
+    lazy / multi-threaded implementation
+    (`HFuture(resolved = false)` would suspend the frame and
+    the scheduler would resume it) without changing the AST or
+    the surface syntax.
+  - **Runtime (`HVM.kt`)** — new `AWAIT` opcode in the dispatch
+    loop: pops the value, type-checks that it is an `HFuture`
+    (raises `HSharpRuntimeError` otherwise), and pushes the
+    inner value.  `invokeHFunction` wraps the return value in
+    `HFuture(raw, resolved = true)` whenever
+    `func.isAsync == true`; `coro fn` and plain `fn` are
+    unaffected, so `coro fn` remains the low-level API and
+    `async fn` is the user-level sugar layer as the spec
+    requires.
+  - **Runtime (`HbcReader.kt`)** — reads the new `is_async`
+    boolean from the function const map and sets
+    `HFunction.isAsync`.  `MAKE_CLOSURE` preserves the
+    `isAsync` flag when building a closure instance.
+  - **Introspection** — function values now expose
+    `fn.is_async`, `fn.is_coro`, `fn.name`, and `fn.args` as
+    read-only attributes (so a generic decorator can decide
+    whether a callable is async at runtime).
+  - **Test suite** — new `16_async_await.hto` (16 cases):
+    `async fn` declaration, returning a future that `await`
+    unwraps, sequential awaits in one body, nested awaits
+    across two `async fn`s, `await` on a non-future raising
+    at runtime, `coro fn` (low-level) still returning a raw
+    value, `is_async` flag true for `async fn` and false for
+    `coro fn` and plain `fn`, and async fn returning values
+    of different types (number, string, list, bool, null).
+    All **20/20** zzwui test files pass; **721/721**
+    individual `check()` cases pass.
+- **Multi-threaded DZZW scheduler (`@parallel` / `parallel fn`)** — the
+  v0.4 single-threaded M:N coroutine scheduler is replaced by a
+  multi-threaded worker pool with work-stealing.  CPU-bound tasks now
+  run in parallel on N = `Runtime.availableProcessors()` OS threads;
+  throughput improves by **3.2×** on the raytrace benchmark
+  (1835 ms → 567 ms).
+  - **`@parallel` decorator / `parallel fn` keyword form** — two
+    surface-syntax ways to mark a function as parallel-eligible:
+    `let work = @parallel fn(n) { busy(n) };` and
+    `parallel fn work(n) { busy(n) };`.  Both lower to a function
+    whose `isParallel = true` flag is read at the call site and
+    causes the body to be submitted to the worker pool rather than
+    running inline on the caller.  The decorator parser
+    (`@`-decorators in `parser.py`) accepts `parallel` as a name
+    token in addition to identifiers, and the function-decl
+    parser recognises the leading `parallel` keyword form on par
+    with `@parallel`.
+  - **`WorkerPool.kt`** — N workers, each on its own OS thread
+    (named `HSharp-Worker-0` … `HSharp-Worker-N-1`).  Each worker
+    owns a `LinkedBlockingDeque<Runnable>` (LIFO local take for
+    cache locality, FIFO steal-from-tail for fairness).  The pool
+    is process-wide, lazily created on first submit, and shut
+    down on VM exit.  Workers run a long-lived loop that polls
+    the local deque, then falls through to global submitter
+    queue, then yields — keeping CPU usage pegged at the
+    available-cores count without busy-spinning.
+  - **`FutureCell` / `HFuture` / `HSharpCancelException`** — the
+    future is now a *state machine* (`PENDING / RESOLVED /
+    FAILED / CANCELLED`) backed by `synchronized` + `wait` /
+    `notifyAll`.  Calling `await` on a future is now a real
+    blocking wait, not a synchronous eager-resolve.  Cancellable
+    via `FutureCell.cancel()` which propagates the
+    `HSharpCancelException` to the worker thread and observes
+    the result in the awaiter.
+  - **`runOnWorker` parent-frame passing** — parallel tasks
+    are dispatched on a new frame, but the caller's frame is
+    passed as the `parent` so free-variable lookups inside the
+    worker (e.g. a module-level `let W = 80` constant) still
+    fall through to the enclosing module env.  Without this,
+    parallel renders of a raytracer with a module-level
+    `SCENE` constant would raise `Undefined name`.
+  - **Exception transparency** — `FutureCell.throwOrValue()`
+    re-throws the original error so that `catch (e)` in the
+    caller sees the same payload the worker raised.  An
+    `HSharpException` thrown by the worker is unwrapped to its
+    inner value (e.g. `throw "boom"` in the worker surfaces as
+    `e == "boom"` in the catch on the awaiter side, not as
+    `"H# exception: boom"`).
+  - **`current` is now `ThreadLocal`** — the per-thread
+    frame slot means several interpreters can be in flight
+    at the same time (one per worker thread).  The main
+    thread's slot is initialised by `resetEntry` before
+    `run`; worker threads lazily create their own frame
+    from the dispatched function.  `globals` is a
+    `ConcurrentHashMap` so parallel workers can safely
+    read module-level bindings; the documented contract is
+    "parallel tasks are pure: they read args, produce
+    results, and use channels for I/O".
+- **Native Channel type (`chan T`)** — first-class CSP-style
+  channel type instead of the array-as-FIFO shim used in v0.4.
+  - **Parser / AST** — `chan T` (zero-cap = unbounded,
+    `chan T(n)` = bounded to `n`) parses into a `ChanType`
+    AST node; `chan_send` and `chan_recv` lower to dedicated
+    `CHAN_SEND` / `CHAN_RECV` opcodes that operate on an
+    `HChannel` value; `chan_close`, `chan_size`,
+    `chan_try_recv`, `chan_try_send` are native built-ins.
+  - **Runtime (`HValue.kt`)** — new `HType.CHANNEL` enum
+    value and `HChannel(capacity: Int, closed: AtomicBoolean)`
+    data class.  Backed by a `LinkedBlockingQueue` (when
+    `capacity == 0`) or an `ArrayBlockingQueue` (when
+    `capacity > 0`).  `close()` unblocks all pending
+    receivers and causes subsequent `send`s to raise
+    `HSharpException("send on closed channel")`.
+  - **Runtime (`HVM.kt`)** — new `CHAN_SEND` opcode (blocking
+    `put`, wakes one receiver on success) and `CHAN_RECV`
+    opcode (blocking `take`, returns `HNull` if the channel
+    was closed and drained).  Both are fast and lock-free
+    under low contention thanks to the JDK queue impls.
+  - **Built-ins** — `chan_try_send(ch, v)` returns
+    `bool(false)` on a full bounded channel without blocking;
+    `chan_try_recv(ch)` returns `null` on an empty channel
+    without blocking; `chan_size(ch)` returns the current
+    element count.
+  - **Producer/consumer pipelining test** — a producer sends
+    1000 ints, a consumer pulls them; the FIFO ordering
+    invariant is verified end-to-end.  `recv` on a closed
+    channel returns the remaining buffered values then
+    `null` (not an error), matching Go's semantics.
+- **Structured concurrency (`concurrent { ... }` block)** —
+  parent-child task hierarchy with parent-wins join,
+  exception propagation, and cancel propagation.  This is
+  the user-level layer for orchestrating parallel tasks; it
+  composes with `@parallel` and channels.
+  - **Parser / AST** — `concurrent` becomes a soft keyword
+    that turns the following `{ ... }` block into a
+    `ConcurrentBlock` AST node.  Inside the block, calls to
+    `async fn` / `@parallel fn` are tracked as children of
+    the surrounding scope.
+  - **Bytecode** — new `CONCURRENT_ENTER` /
+    `CONCURRENT_EXIT` opcodes push and pop a per-thread
+    `ConcurrentScope`.  Calls to parallel functions in the
+    body of the block register a child `HFuture` with the
+    scope.  On `CONCURRENT_EXIT`, the scope is joined: if
+    any child failed, the block raises the *first* child's
+    error (preserving the original message); if the parent
+    scope is cancelled, all child futures are cancelled
+    (interrupting the worker thread and observing a
+    `CANCELLED` state on the future).
+  - **Runtime (`WorkerPool.kt`)** — `ConcurrentScope` is a
+    small object holding the parent scope, a list of
+    `HFuture` children, a `CountDownLatch` for join, and a
+    `cancelled: AtomicBoolean` for cancel propagation.  The
+    exit-time logic in `HVM` performs the join synchronously
+    and short-circuits on first failure.
+  - **Test coverage** — `concurrent { ... }` join (all
+    children complete before the block exits), nested
+    `concurrent { concurrent { ... } }` (inner scope
+    cancellation does not affect outer scope), child
+    exception propagation (one failing child fails the
+    block with the original message), and inline
+    `await parallel_fn(args)` outside any `concurrent` block
+    (still works, with the implicit single-task scope).
+- **Test suite — parallel / channel / structured concurrency** —
+  two new zzwui tests land alongside the existing 16:
+  - **`17_parallel_channel.hto`** — **27 cases** covering
+    `parallel fn` / `@parallel fn` declaration, `is_parallel`
+    introspection, basic `await` on a parallel future,
+    `concurrent { ... }` join semantics, nested
+    `concurrent`, child-exception propagation, `chan T` /
+    `chan T(N)` construction, `chan_send` / `chan_recv` /
+    `chan_close` / `chan_size` / `chan_try_send` /
+    `chan_try_recv`, send-on-closed-channel error,
+    recv-after-close returning `null`, and `parallelism()`
+    reporting the worker-pool size.
+  - **`18_raytrace_bench.hto`** — **4 cases** validating the
+    multi-threaded raytracer.  240×180 image of 3 spheres
+    with 4 samples/pixel, depth 6; `render_sequential`
+    (single-threaded baseline) vs `render_parallel` (async
+    fn that submits 10 tiles to a `concurrent { ... }`
+    block).  Asserts the two bitmaps are pixel-identical
+    and that parallel is at least **2× faster** than
+    sequential; observed on the dev machine is **3.2×
+    speedup** (1835 ms → 567 ms on 10 workers).
+  - All **24/24** zzwui test files pass; **752/752**
+    individual `check()` cases pass; total wall time
+    ≈12.4 s.
+- **Pattern matching (`match expr { pat => body, ... }`)** — first-class
+  pattern matching expression.  Compiles to a `MATCH_CASE` byte
+  sequence that walks 7 pattern kinds against the scrutinee, binds
+  payload variables into the local frame, and picks the matching
+  arm's body.  If no arm matches, the whole expression raises
+  `"non-exhaustive match"` — by design, users add a `_` arm to
+  make the match total.
+  - **7 pattern kinds**:
+    - `_` (wildcard — matches anything, no binding)
+    - `name` (binding — matches anything, binds to the name)
+    - `42 | "x" | true | false | null` (literal — structural equality)
+    - `is T as x` (type — matches a value of H# type `T`, optionally
+      binding it to `x`.  The runtime recognises the primitive
+      type names `int`, `str`, `bool`, `null`, `list`, `dict`,
+      `channel`, `future` and any user-defined class name.)
+    - `Variant(x, y, …)` (union variant — matches a `Union{…}`
+      instance with the named variant and binds the named payload
+      fields)
+    - `chan send(_)` / `chan send(v)` (channel can-send — matches
+      a non-closed channel with room for another send; the
+      binding is set to `true` if you ask for it)
+    - `chan recv(v)` (channel can-recv — matches a channel with a
+      queued value, **without** consuming it; binds `v` to the
+      head value via a non-destructive peek)
+    - `chan close` (channel is closed — matches a channel whose
+      `closed` flag is set)
+  - **Guards** — `pattern if cond => body` falls through to the
+    next arm if `cond` is false.  Implemented as a separate
+    `JUMP_IF_FALSE` between the pattern match and the body.
+  - **Soft keyword** — `match` is only a keyword when it is
+    immediately followed by an expression.  An `IDENTIFIER
+    "match"` token in expression position (e.g. on the right
+    side of a `let` or as a function argument) still parses as a
+    normal identifier, so `let match = 7` is a valid binding.
+  - **Lexer / tokens** — added `MATCH` and `FAT_ARROW` (`=>`).
+    The ternary ambiguity (`cond ? a : b` vs. `cond? a:b` aka
+    `cond?:`) is resolved by recognising `?:` as a single
+    `QMARK_COLON` token.
+  - **Compiler (`compiler.py`)** — `MatchExpression` lowers to
+    `DUP / LOAD_CONST <pattern> / MATCH_CASE / JUMP_IF_FALSE
+    <next-arm>` per arm, then a default `RAISE "non-exhaustive
+    match"`, then a `SWAP / POP` to dispose of the leftover
+    scrutinee at the end.  The pattern dict is a stable contract
+    (`{"kind": ..., ...}`) the Kotlin VM interprets.
+  - **Compiler fix — bool-aware const-pool dedup** — Python's
+    `True == 1` would otherwise cause `add_const` to merge
+    `{kind: literal, literal: True}` with `{kind: literal,
+    literal: 1}`, breaking literal-`true` arms.  Added
+    `_bool_aware_eq()` and routed `add_const` through it.
+  - **Runtime (`HVM.kt`)** — new `matchPattern()` helper does
+    the 7-way dispatch.  `MATCH_CASE` pops the pattern
+    dictionary off the stack, pops the duplicated scrutinee,
+    and pushes a bool.  `SWAP` opcode added so the post-match
+    `body / leftover-scrutinee → body / discarded` rearrangement
+    compiles cleanly.  `HChannel.peek()` added so `chan recv(v)`
+    can bind the head value without consuming it.
+  - **Parser (`parser.py`)** — `parse_pattern` accepts the
+    `NULL` / `BOOL` token kinds as a `is T` type-name (so
+    `is null` and `is bool` work).  `match_expression` accepts
+    either the reserved `MATCH` token or the soft-keyword
+    `IDENTIFIER "match"`.
+  - **Test coverage** — new `19_match_propagation.hto` (**37
+    cases**) exercises every pattern kind, every primitive
+    type binding, chan `send` / `recv` / `close` patterns
+    (including unbuffered, bounded-full, and closed states),
+    variant payload binding, fall-through to wildcard, guards
+    on bare-name and variant patterns, and non-exhaustive
+    raising with the correct error message.  All **26/26**
+    zzwui test files pass; **821/821** individual `check()`
+    cases pass; total wall time ≈11.2 s.
+- **Error-propagation postfix (`expr?`)** — a Rust-style `?`
+  operator that unwraps an exception to its payload value.  At
+  the call site, `expr?` is semantically equivalent to
+  `try { expr } catch (e) { e }` — the postfix evaluates to the
+  expression's normal value, or to the exception payload if
+  `expr` raised.  Callers can either use the value as a normal
+  H# value or chain another `?` over it.
+  - **Tokens / parser** — `?` continues to be a normal token,
+    but `_additive_unit()` in `parser.py` peels off zero or
+    more `?` postfixes after a factor, so the postfix binds
+    tighter than `+`/`-` (so `a + b?` parses as `a + (b?)`,
+    not `(a + b)?`).
+  - **AST** — new `PropagateExpression(expr)` node in `h_ast.py`.
+  - **Compiler** — `PropagateExpression` lowers to
+    `SETUP_PROPAGATE <catch> / compile expr / POP_PROPAGATE /
+    JUMP <end> / <catch>: <end>:`.  The catch block just falls
+    through; the exception payload is left on the stack as the
+    postfix's value.
+  - **Runtime (`HVM.kt`)** — three new opcodes:
+    - `SETUP_PROPAGATE <catch>` — pushes a `__propagate__`
+      handler (target PC + current stack size) on the frame's
+      handler chain.
+    - `POP_PROPAGATE` — pops the last `__propagate__` handler.
+    - `dispatchException` — when raising, walks the handler
+      chain; `__propagate__` handlers capture the exception,
+      truncate the stack to the saved size (discarding the
+      partial expression's values), and jump to the catch
+      target, leaving the payload on the stack.
+  - **Test coverage** — `?` on a value that returns normally
+    (pass-through), on a value that raises (yields the payload
+    as a value), chained through nested functions, on a
+    non-raising arithmetic expression.  See
+    `19_match_propagation.hto` sections B / C / D.
+- **Four new H# v0.4.1 standard library modules** (in
+  `zzwui-tests/hto/_libs/`, loaded into a test via the
+  `# build:` directive):
+  - **`assert_module.hto`** — a self-contained test/assertion
+    framework that does *not* depend on the `zzwui` test
+    convention.  Provides 15 `assert_*` functions
+    (`assert_eq` / `assert_ne` / `assert_true` / `assert_false`
+    / `assert_lt` / `assert_le` / `assert_gt` / `assert_ge` /
+    `assert_in` / `assert_raises` / `assert_raises_with` /
+    `assert_none` / `assert_some` / `assert_almost_eq` /
+    `assert_approx`) and a 6-call test-driver API
+    (`test_register` / `test_register_module` / `test_reset` /
+    `test_set_quiet` / `test_run` / `test_run_and_exit` /
+    `test_summary` / `test_count`).  The runner prints a
+    `ASSERT_TEST : PASS=N FAIL=M` summary line that the
+    existing zzwui runner parses.
+  - **`path_module.hto`** — a path-algebra and file-system
+    module that layers on top of the existing `fs_*` natives
+    and adds 40+ functions: `path_sep`, `path_list_sep`,
+    `path_is_absolute`, `path_normalize`, `path_split`,
+    `path_dirname`, `path_basename`, `path_extension`,
+    `path_stem`, `path_components`, `path_join`,
+    `path_join_many`, `path_with_extension`,
+    `path_relative_to`, `file_exists`, `file_size`,
+    `file_mtime`, `file_atime`, `file_is_readable`,
+    `file_is_writable`, `file_is_hidden`, `file_info`,
+    `file_read`, `file_write`, `file_append`,
+    `file_read_lines`, `file_write_lines`, `file_rename`,
+    `file_copy`, `file_delete`, `file_remove_recursive`,
+    `dir_exists`, `dir_create`, `dir_ensure`, `dir_list`,
+    `dir_list_files`, `dir_list_dirs`, `dir_walk`,
+    `dir_walk_with_type`, `dir_copy_tree`, `dir_size`,
+    `dir_is_empty`, `dir_clear`, `fnmatch_path`, `dir_glob`,
+    `temp_file`, `temp_dir`, `format_size`, `format_mtime`.
+  - **`regex_module.hto`** — a regular-expression module
+    backed by 7 new JVM `regex_*` natives.  Provides
+    `regex_test`, `regex_first`, `regex_all`, `regex_sub`,
+    `regex_split`, `regex_captures`, `regex_named`,
+    `regex_count`, `regex_is_valid`, `regex_escape`,
+    `regex_match_at`, `regex_find_index`, `regex_replace_n`.
+  - **`crypto_module.hto`** — a combined pure-H# + JVM-backed
+    crypto module extending the v0.4 `crypto_module.hto`.
+    Adds `crypto_sha256`, `crypto_hmac_sha256`,
+    `crypto_pbkdf2`, `crypto_random_bytes`, `crypto_random_int`,
+    `crypto_random_token`, `crypto_uuid_v4`, `crypto_secure_eq`,
+    `crypto_crc32`, `crypto_crc32_hex`, `crypto_base64_encode`,
+    `crypto_base64_decode`, `crypto_url_encode`,
+    `crypto_url_decode`, `crypto_caesar_encrypt`,
+    `crypto_caesar_decrypt`, `crypto_rot13`,
+    `crypto_password_hash`, `crypto_password_verify`,
+    `crypto_generate_salt`, `crypto_xor_bytes`,
+    `crypto_xor_cipher`, plus the pure-H# `crypto_hash_djb2`,
+    `crypto_hash_sdbm`, `crypto_hash_loselose`,
+    `crypto_hash_to_hex`, `crypto_to_hex`, `crypto_from_hex`,
+    `crypto_is_hex`.
+  - **Integration test** — new `20_stdlib_modules.hto`
+    (**32 cases**) registers all four modules via
+    `# build: _libs/assert_module.hto, _libs/path_module.hto,
+    _libs/regex_module.hto, _libs/crypto_module.hto`, then
+    exercises every section (A: assert, B: path, C: regex,
+    D: crypto, E: smoke).
+- **Real-time image / raytracer pipeline demo** — a single-file
+  H# demo (`30_raytracer_pipeline.hto`, 22 cases) that
+  stitches together the v0.4.1 feature set end-to-end:
+  classes with the new `init_x` factory pattern, `chan T`
+  producer/consumer, `parallel fn` workers, `await expr`
+  futures, `match` for state dispatch, and `?` for error
+  propagation.  The demo is a tile-based parallel raytracer
+  with three reference scenes (`three_spheres`, `glass_ball`,
+  `mirror_corridor`), a state-machine-driven zzwui dashboard
+  (start / cancel / progress / preview), and a P6-PPM
+  exporter.  All 22/22 cases pass.
+  - **Five new `raytracer_*.hto` modules** under
+    `zzwui-tests/hto/_libs/`:
+    - **`raytracer_math.hto`** — `Vec3` (with `add` / `sub` /
+      `scale` / `dot` / `cross` / `len` / `norm` / `lerp` /
+      `reflect` / `clamp`), `Ray` (`ox,oy,oz,dx,dy,dz` + `at`),
+      and a Xorshift32 `Rng` (deterministic, integer-only state
+      so it stays testable).
+    - **`raytracer_scene.hto`** — `Material` (matte / glossy /
+      mirror / glass / emissive), `Sphere` / `Plane` / `Light`
+      (point / directional / ambient), `Camera` (with
+      `look_at` factory), and `Scene` (with `add_*` helpers).
+      Ships the three reference scenes.
+    - **`raytracer_core.hto`** — `intersect_sphere` (quadratic
+      closed-form), `intersect_plane` (single division),
+      `closest_hit` (any-hit returns `t, normal, material`),
+      `background_color` (sky gradient), `in_shadow` (point
+      + directional shadow rays), `shade` (Phong with
+      ambient + diffuse + specular + shadows), `trace`
+      (recursive reflection up to depth 3), `primary_ray`
+      (pinhole with optional anti-aliasing jitter), and
+      `to_rgb8` (clamp + gamma-style `*255`).
+    - **`raytracer_pipeline.hto`** — `make_tiles` (cover the
+      image with 16x16 tiles and a small per-tile overlap),
+      `render_tile_worker` (`parallel fn` that consumes a
+      tile-coord channel, renders, sends back an
+      `[tile_id, [rgb_bytes]]` envelope, and emits progress
+      events on an optional second channel), the
+      `IDLE → RUNNING → DONE / CANCELLED / FAILED` state
+      machine (idempotent `start` / `cancel` with the right
+      short-circuit), `pipeline_run_sync` (driver that
+      spawns N workers, dispatches every tile, joins, and
+      re-assembles), and `write_ppm` (uses `io_append_bytes`
+      so the binary P6 body never round-trips through
+      UTF-8).
+    - **`raytracer_gui.hto`** — `dashboard_create` builds a
+      zzwui window with a render-configurable scene
+      selector, an image preview canvas, a progress bar
+      (0..10000 permille), a status label, a stats
+      label, and start / cancel buttons.  `dashboard_apply_*`
+      helpers mutate the live widgets from the pipeline
+      state, with `if / else if / else` chains (instead of
+      `match` arm-blocks) for state dispatch.
+  - **`# build:` wiring** — the test file uses
+    `# build: hwdui_min.hto, zzw_native.hto,
+    zzw_render_min.hto, _libs/assert_module.hto,
+    _libs/raytracer_math.hto, _libs/raytracer_scene.hto,
+    _libs/raytracer_core.hto,
+    _libs/raytracer_pipeline.hto,
+    _libs/raytracer_gui.hto` to pull every module into a
+    single compiled `.hbc`.  (`# build:` overwrites the
+    default `hwdui_min.hto, zzw_native.hto,
+    zzw_render_min.hto` triple, so they must be re-listed
+    when a non-zwui module also needs them — that
+    gotcha bit on the first run.)
+  - **22 integration cases across 8 sections**:
+    - **A** (3) — `Vec3` arithmetic & length / `Ray.at` /
+      `Rng` determinism.
+    - **B** (4) — `scene_three_spheres`,
+      `scene_glass_ball`, `scene_mirror_corridor`,
+      `scene_lookup`.
+    - **C** (5) — `intersect_sphere` (tangent + inside +
+      miss), `intersect_plane` (front + back + parallel),
+      `closest_hit` (multi-object depth), `render_pixel_in_range`
+      (every channel in [0, 255]), `to_rgb8_clamps`.
+    - **D** (2) — `make_tiles_covers_image` (every
+      (x, y) is in exactly one tile) and `state_dump`
+      (idempotent state-machine label updates).
+    - **E** (1) — `write_ppm_creates_file` (P6 header
+      is `P6\n<w> <h>\n255\n`; the body is
+      `H * W * 3` bytes of RGB).
+    - **F** (5) — dashboard wiring:
+      `dashboard_create` (every widget present),
+      `dashboard_state_updates`, `dashboard_start_click`
+      (state goes IDLE → RUNNING), `dashboard_cancel_click`
+      (RUNNING → CANCELLED), `dashboard_config_and_preview`
+      (scene id round-trip + preview set/clear).
+    - **G** (1) — `render_each_scene_sequential` renders
+      all three scenes at 40×30, 1 spp, depth 2, and
+      asserts every output pixel is in [0, 255].
+    - **H** (1) — `sync_pipeline` (the full
+      `pipeline_run_sync` over all 3 scenes — including
+      cancelling a long run halfway through — with the
+      assembled bitmap matching the sequential reference
+      tile-for-tile).
+  - **Test results** — **22/22 PASS** when run via
+    `python3 build.py 30_raytracer_pipeline && java -jar
+    build/libs/hsharp-runtime.jar hbc/30_raytracer_pipeline.hbc`.
+- **Five new H# v0.4.1 native bridge functions in
+  `HNativeBridge.kt`** (the Kotlin VM's built-in registry):
+  - **`fdiv(a, b)`** — true IEEE-754 float division.  The
+    `BINARY_DIV` opcode in the Kotlin VM uses
+    `Math.floor(da / db)` so `3.0 / 5.0` becomes `0` (this
+    is a long-standing quirk of v0.4 — useful for
+    integer-style semantics, hostile for graphics).  This
+    new native does the same `da / db` *without* the
+    floor, so `fdiv(3.0, 5.0) == 0.6` and `Vec3.norm()`
+    actually returns a unit vector.  Used throughout
+    `raytracer_core.hto` and `raytracer_math.hto`.
+  - **`file_delete(path)`** — `File.delete()`, returns
+    `null`.
+  - **`file_info(path)`** — returns an `HDict` with
+    `path`, `size`, `is_dir`, `is_file`, `mtime` (or
+    `HNull` if the path doesn't exist).  `path_module.hto`
+    exposes a higher-level wrapper that translates the
+    dict into a typed result.
+  - **`file_read_bytes(path)`** — reads the file and
+    returns the bytes as an `HList` of `[0, 255]` ints
+    (one element per byte).  Used by the raytracer
+    pipeline for the PPM writer.
+  - **`temp_file(prefix)`** — `File.createTempFile` with
+    `deleteOnExit()`, returns the absolute path.  Used
+    by the PPM exporter to drop the rendered image
+    without colliding with prior runs.
+  - **`io_append_bytes(path, bytes)`** — already added
+    in 0.4.1, but `file_read_bytes` is its read-side
+    counterpart.  The raytracer pipeline writes a
+    `P6\n<w> <h>\n255\n` header with `file_write` and
+    then appends the binary body with
+    `io_append_bytes`.
+
+### Changed
+
+- **VS Code extension bumped to 0.4.1** — `package.json` and
+  `extension.vsixmanifest` now report `0.4.1`.  `lib/hsharp-kotlin-compiler.jar`
+  and `lib/hsharp-runtime.jar` replaced with the freshly built jars from
+  `hsharp-kotlin-compiler/build/libs/`.  Re-packaged as
+  `hsharp-language-0.4.1.vsix` (≈ 0.29 MB, 20 files).
+- **`hsharp-kotlin-compiler` runtime now exposes a `gui_*` namespace** — the
+  Kotlin VM's `HNativeBridge.kt` was extended from ~10 primitives to ~40
+  primitives (math + string + array + GUI + color + system).
+- **`run_zzwui_tests.py`** — new test runner modeled on `run_lib_tests.py`,
+  with category aggregation, per-test timing, JSON dump, and a
+  Markdown report generator that includes Findings/Coverage/Failure Detail
+  sections.
+
+### Fixed
+
+- **H# compiler cannot call a field-stored function with `obj.field(args)`.**
+  The Python parser emits `CALL_METHOD` for any `expr.member(args)` form, and
+  the Kotlin VM's `CALL_METHOD` looks the member up in the *class method
+  table only* — it does not fall through to `obj.fields`.  Workaround in
+  `hwdui_min.hto`: rebind the field to a local with `let cb = self.onClick;`
+  and call `cb(self)` (compiles to `CALL_FUNCTION`).
+- **zzw_render.hto cannot be loaded as-is** — its top-level widget renderer
+  functions (`zzwui_render_widget` etc.) cross-reference each other in
+  ways that fail at module-load time.  `zzw_render_min.hto` extracts the
+  two engine classes (no cross-references) for testing.
+- **`MinStack.pop()` let-shadowing bug** in `11_oo_design_lib.hto` —
+  `let i = i + 1` inside a while body shadowed the outer `i`.  Replaced
+  with `i = i + 1`.
+- **`MinStack.top()` test data** in `11_oo_design_lib.hto` — the expected
+  top of `[5,2,8,1]` is `1` (last element pushed), not `8`.
+- **H# lexer `\\` escape now produces a single backslash** —
+  `HSharp_v0.4_Tests/lexer.py` had a bug where the escape
+  sequence `\\` (two backslashes) in an H# string literal
+  was emitted as two literal backslashes in the string,
+  instead of the conventional single backslash.  This was
+  the reason that `regex_captures("(\\w+)@(\\w+)", ...)` (with
+  the H# `\\w` source) failed to match — the pattern reaching
+  the regex engine was `(\\w+)@(\\w+)` (two backslashes + w),
+  not the intended `(\w+)@(\w+)`.  The lexer now correctly
+  maps `\\` to a single backslash, matching the convention
+  used by every other major language.  All 32 cases of
+  `20_stdlib_modules.hto` now pass.
+- **Native regex natives now raise `HSharpRuntimeError` on
+  invalid patterns** — the seven `regex_*` natives
+  (`regex_match`, `regex_search`, `regex_find_all`,
+  `regex_replace`, `regex_split`, `regex_groups`,
+  `regex_named_groups`) used to propagate the raw Java
+  `PatternSyntaxException` out of the VM, which aborted the
+  test runner before all tests could complete.  Each native
+  now catches `PatternSyntaxException` and rethrows it as
+  `HSharpRuntimeError("invalid regex: ...")`, which is
+  properly catchable from H# `try { ... } catch (e) { ... }`.
+- **Two-sum test data** in `08_algorithm_lib.hto` — the two-pointer
+  algorithm on `[1,3,4,5,7,11]` for target `9` returns indices `[2,3]`, not
+  `[0,1]`.
+
+### Test data corrections
+
+- `04_native / n/create` — `native_create_window` returns the first window
+  id `1` (not `0`).  Test now checks `r1 != nullptr and r1 != 0`.
+- `05_layout_stress / l/g_*` — grid cell step is `col_w + spacing (4) = 44`,
+  not `42`.  Updated expected x-positions.
+- `07_widget_tree / t/mass_y29` — `Label.height (20) + Panel.spacing (4) = 24`;
+  `y[29] = 29 * 24 = 696` (was 638).
+- `14_perf / p/dol_y9` — `Button.height (20) + Panel.spacing (4) = 24`;
+  `y[9] = 9 * 24 = 216` (was 198).
+
+## [0.4.0] - 2026-06-19
+
+### Added
+
+- **Initial public release of the H# programming language v0.4.**
+- **H# v0.4 Python implementation** — `HSharp_v0.4_Package/` directory
+  containing the parser, lexer, AST, bytecode emitter, and tree-walking
+  interpreter in pure Python.  Includes the standard library
+  (`array_utils`, `string_utils`, `math_utils`, `datetime_module`, `io_module`,
+  `net_module`, `db_module`, `crypto_module`, `json_serializer`, `formatter`,
+  `linter`, `perf_monitor`).
+- **H# v0.4 IDE** (`hsharp-ide/`) — Avalonia-based .NET 6/7 IDE built around
+  the H# language.  Source-only release; binaries must be built with
+  `dotnet publish`.
+- **H# v0.4 Launcher** (`hsharp-launcher/`) — environment checker and
+  version switcher.
+- **H# v0.4 Website** (`hsharp-site/`) — the marketing site (index, beta,
+  download, guide, pricing, verify pages).
+- **VS Code extension 0.4.0** — `vscode-hsharp/` with syntax highlighting
+  (`hsharp.tmLanguage.json`), language configuration, snippets, the
+  "H#: Run .hto via Kotlin VM" / "H#: Compile .hto to .hbc" / "H#: Package
+  as native app" commands, and bundled `hsharp-kotlin-compiler.jar` +
+  `hsharp-runtime.jar` from the 0.4.0 build.
+- **H# Performance Benchmarks** — `benchmarks/` comparing H# (.htoc) against
+  C, C++, Java, Python3, TypeScript on arithmetic, fib, list, matrix,
+  primes, and string operations.
+- **H# HSpace Computing Paper** — `HSharp_Space_Computing_Paper.md` describing
+  the language's design for distributed / space-constrained execution.
+- **H# Bootstrap (self-hosted compiler)** — `bootstrap/` contains the
+  H#-written lexer, parser, compiler, and interpreter that compile back to
+  H# bytecode, demonstrating self-hosting.
+- **H# Standard Libraries report** — `bootstrap/STANDARD_LIBS_REPORT.md`
+  summarising the standard library surface.
+
+### Known limitations at v0.4.0
+
+- No `for x in y` syntax — only `while` loops.
+- No `x in y` operator — must use a manual scan or the `__contains` helper.
+- `dict[k]` throws on missing keys — must guard with `has_key(dict, k)`.
+- Class instantiation must use `new ClassName()`, not `ClassName()`.
+- No `import` statement in the Python compiler — modules are concatenated
+  by `build.py` instead.
+- `obj.field(args)` (where `field` is a runtime function value) compiles to
+  `CALL_METHOD` and only works for true class methods, not field-stored
+  functions.
+
+## [0.3.x] and earlier
+
+See `docs/HSharp-Guide.md` for the design history of the H# language
+prior to v0.4.

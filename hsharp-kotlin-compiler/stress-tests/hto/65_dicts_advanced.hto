@@ -1,0 +1,204 @@
+# T65 - Dicts Advanced (高强度字典测试)
+# 测试领域：字典创建、键类型、访问、修改、方法、迭代、嵌套、边界、性能
+
+# ============================================================
+# 用例 1: 空字典与基础创建/访问/修改
+# ============================================================
+print("=== T65.01 empty & basic ===");
+let e = {};
+print(len(e));           # 0
+print(e.is_empty());     # true
+let d = {"a": 1, "b": 2, "c": 3};
+print(d["a"]);           # 1
+print(d["c"]);           # 3
+print(len(d));           # 3
+d["a"] = 99;
+print(d["a"]);           # 99
+d["d"] = 4;
+print(d["d"]);           # 4
+print(len(d));           # 4
+
+# ============================================================
+# 用例 2: 嵌套字典访问与赋值 d["a"]["b"]["c"]
+# ============================================================
+print("=== T65.02 nested access ===");
+let nest = {"a": {"b": {"c": 42}}};
+print(nest["a"]["b"]["c"]);          # 42
+nest["a"]["b"]["c"] = 100;
+print(nest["a"]["b"]["c"]);          # 100
+nest["a"]["b"]["new"] = "x";
+print(nest["a"]["b"]["new"]);        # x
+print(nest["a"]["b"].size());        # 2
+
+# ============================================================
+# 用例 3: 混合值类型 (数字/字符串/列表/字典/null/bool)
+# ============================================================
+print("=== T65.03 mixed value types ===");
+let mix = {"n": 10, "s": "hi", "l": [1, 2, 3], "d": {"x": 1}, "z": null, "b": true};
+print(mix["n"]);          # 10
+print(mix["s"]);          # hi
+print(mix["l"][1]);       # 2
+print(mix["d"]["x"]);     # 1
+print(mix["z"]);          # null
+print(mix["b"]);          # true
+print(len(mix));          # 6
+
+# ============================================================
+# 用例 4: 整数键 - get/has_key/contains/in 与 [] 一致性
+# 预期: d[1] 设置后, d.get(1), 1 in d, d.has_key(1) 都应能找到
+# ============================================================
+print("=== T65.04 int key consistency ===");
+let ik = {};
+ik[1] = "one";
+ik[2] = "two";
+print(ik[1]);             # one  ([] 用 coerceKey -> "1")
+print(ik[2]);             # two
+print(ik.get(1));         # 预期 one; 实际可能 null (dictKeyOf -> "1.0")
+print(ik.has_key(1));     # 预期 true; 实际可能 false
+print(ik.contains(1));    # 预期 true; 实际可能 false
+print(1 in ik);           # 预期 true; 实际可能 false
+print(ik.get(1, "DEF"));  # 预期 one; 实际可能 DEF
+
+# ============================================================
+# 用例 5: 整数字面量键的字典字面量 {1: "a"}
+# ============================================================
+print("=== T65.05 int key literal ===");
+let ikl = {1: "a", 2: "b"};
+print(ikl[1]);            # a
+print(ikl.get(1));        # 预期 a; 实际可能 null
+print(1 in ikl);          # 预期 true; 实际可能 false
+print(ikl.has_key(1));    # 预期 true; 实际可能 false
+
+# ============================================================
+# 用例 6: 浮点键 / bool键 / null键
+# ============================================================
+print("=== T65.06 float/bool/null keys ===");
+let fk = {};
+fk[1.5] = "f";
+print(fk[1.5]);           # f
+print(fk.get(1.5));       # f
+print(1.5 in fk);         # true
+fk[true] = "yes";
+fk[false] = "no";
+print(fk[true]);          # yes
+print(fk[false]);         # no
+print(fk.get(true));      # yes
+print(true in fk);        # true
+fk[null] = "nil";
+print(fk[null]);          # nil
+print(fk.get(null));      # nil
+print(null in fk);        # true
+print(len(fk));           # 4
+
+# ============================================================
+# 用例 7: 不存在的键访问 (应抛错) 与 get 默认值
+# ============================================================
+print("=== T65.07 missing key & get default ===");
+let mk = {"a": 1};
+print(mk.get("missing"));          # null
+print(mk.get("missing", "DEF"));   # DEF
+print(mk.get("a", "DEF"));         # 1
+let caught = 0;
+try { let x = mk["nope"]; } catch (e) { caught = 1; }
+print(caught);           # 1 (访问不存在的键应抛错)
+
+# ============================================================
+# 用例 8: 删除键 (用 remove() 方法; del 语句单独验证为编译期 bug)
+#   注: `del d["b"];` 会导致 CompileError: Unsupported expression type:
+#   DeleteStatement —— 编译器 compile_stmt 未处理 DeleteStatement,
+#   落入 compile_expr 抛错。此处用 remove() 作为对照。
+# ============================================================
+print("=== T65.08 remove key ===");
+let dk = {"a": 1, "b": 2, "c": 3};
+print(len(dk));           # 3
+dk.remove("b");
+print(len(dk));           # 2
+print(dk.has_key("b"));   # false
+print(dk["a"]);           # 1
+print(dk["c"]);           # 3
+let del_caught = 0;
+try { dk.remove("b"); } catch (e) { del_caught = 1; }
+print(del_caught);        # 0 (remove 不存在的键不抛错, 返回 null)
+
+# ============================================================
+# 用例 9: 字典方法 keys/values/items/len/clear/remove
+# ============================================================
+print("=== T65.09 dict methods ===");
+let m = {"x": 10, "y": 20, "z": 30};
+print(m.size());          # 3
+print(len(m));            # 3
+print(m.keys().len());    # 3
+print(m.values().len());  # 3
+print(m.items().len());   # 3
+print(m.items()[0][0]);   # x
+print(m.items()[0][1]);   # 10
+m.remove("y");
+print(m.size());          # 2
+print(m.has_key("y"));    # false
+m.clear();
+print(m.size());          # 0
+print(m.is_empty());      # true
+
+# ============================================================
+# 用例 10: 字典迭代 for k in d 和 for k,v in d 及空字典迭代
+# ============================================================
+print("=== T65.10 iteration ===");
+let it = {"a": 1, "b": 2, "c": 3};
+let kc = 0;
+let vsum = 0;
+for k in it { kc = kc + 1; }
+print(kc);                # 3
+for k, v in it { vsum = vsum + v; }
+print(vsum);              # 6
+let empty = {};
+let ec = 0;
+for k in empty { ec = ec + 1; }
+print(ec);                # 0
+for k, v in empty { ec = ec + 1; }
+print(ec);                # 0
+
+# ============================================================
+# 用例 11: 字典作为函数参数与返回值
+# ============================================================
+print("=== T65.11 dict as param/return ===");
+fn addPair(dict, key, val) {
+    dict[key] = val;
+    return dict;
+}
+fn makeDict(a, b) {
+    return {"a": a, "b": b};
+}
+let p = {"a": 1};
+let pr = addPair(p, "b", 2);
+print(pr["a"]);           # 1
+print(pr["b"]);           # 2
+print(p["b"]);            # 2 (引用语义, 原字典也被修改)
+let md = makeDict(10, 20);
+print(md["a"]);           # 10
+print(md["b"]);           # 20
+
+# ============================================================
+# 用例 12: 100 键字典性能 + dict + dict 合并
+# ============================================================
+print("=== T65.12 perf 100 keys & merge ===");
+let big = {};
+for i in range(100) { big["k" + str(i)] = i * i; }
+print(len(big));          # 100
+print(big["k0"]);         # 0
+print(big["k50"]);        # 2500
+print(big["k99"]);        # 9801
+let vtotal = 0;
+for k, v in big { vtotal = vtotal + v; }
+print(vtotal);            # 328350
+
+# dict + dict 合并 (若不支持应抛错)
+let m1 = {"a": 1};
+let m2 = {"b": 2};
+let merged_ok = 0;
+try {
+    let merged = m1 + m2;
+    merged_ok = len(merged);
+} catch (e) { merged_ok = -1; }
+print(merged_ok);         # 预期 2 (若支持合并); 实际可能 -1
+
+print("=== T65 DONE ===");

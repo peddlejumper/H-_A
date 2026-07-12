@@ -1,0 +1,134 @@
+# main_server_dispatch.hto
+# ZZW Code Teacher — 服务端 dispatch 模式
+# 通过 stdin/stdout 与 Python 适配层通信
+# 协议:
+#   等待 stdin 收到一行 JSON: {"id": 1, "method": "GET", "path": "/api/health", "headers": {}, "body": ""}
+#   处理后向 stdout 写一行 JSON: {"id": 1, "status": 200, "body": "..."}
+#   收到 EOF 则退出
+
+import "shared/json_utils.hto";
+import "shared/storage.hto";
+import "shared/auth.hto";
+import "shared/http_server.hto";
+import "shared/ai_client.hto";
+import "shared/judge.hto";
+import "shared/models.hto";
+
+import "server/server.hto";
+import "server/routes_auth.hto";
+import "server/routes_problem.hto";
+import "server/routes_submission.hto";
+import "server/routes_ai.hto";
+import "server/routes_user.hto";
+import "server/routes_admin.hto";
+
+fn main() {
+    # 初始化
+    server_init("./data");
+    let cfg = storage_load("config");
+    if (cfg == nullptr or len(cfg) == 0) {
+        cfg = config_default();
+        storage_save("config", cfg);
+    }
+    if ("auth" in cfg) {
+        auth_set_secret(cfg["auth"]["secret"]);
+    }
+    if ("ai" in cfg) {
+        ai_configure(cfg["ai"]);
+    }
+    # 加载种子题
+    let probs = storage_load("problems");
+    if (len(probs) == 0) {
+        if (fs_exists("./data/problems.json")) {
+            let raw = read_file("./data/problems.json");
+            let p = json_parse(raw);
+            if (p != nullptr and len(p) > 0) {
+                storage_save("problems", p);
+            }
+        }
+    }
+    # 路由由各 routes_xxx.hto 在 import 时自动注册
+    # 就绪信号
+    print("READY");
+    # 主循环(收到 EXIT 行才退出,避免依赖 EOF 处理)
+    while (true) {
+        let line = input();
+        if (line == nullptr) {
+            break;
+        }
+        if (line == "EXIT") {
+            break;
+        }
+        if (line == "") {
+            continue;
+        }
+        let req = json_parse(line);
+        if (req == nullptr) {
+            print("RESP {\"id\":0,\"status\":400,\"body\":\"bad json\"}");
+            continue;
+        }
+        let resp = _handle(req);
+        # attach request id for the bridge to dispatch
+        let req_id = 0;
+        if ("id" in req) { req_id = req["id"]; }
+        resp["id"] = req_id;
+        let resp_str = json_stringify(resp);
+        print("RESP " + resp_str);
+    }
+}
+
+fn _handle(req) {
+    let method = req["method"];
+    let path = req["path"];
+    let headers = req["headers"];
+    let body = req["body"];
+    # 鉴权
+    let user = nullptr;
+    let public_paths = ["/api/auth/login", "/api/auth/register", "/api/health"];
+    let is_public = false;
+    let i = 0;
+    while (i < len(public_paths)) {
+        if (path == public_paths[i]) { is_public = true; }
+        i = i + 1;
+    }
+    if (is_public == false) {
+        let auth_h = "";
+        if ("Authorization" in headers) { auth_h = headers["Authorization"]; }
+        if (auth_h == "") {
+            return {"status": 401, "body": json_stringify(json_response_err("缺少 Authorization 头"))};
+        }
+        let tok = token_from_header(auth_h);
+        let uid = token_verify(tok);
+        if (uid == nullptr) {
+            return {"status": 401, "body": json_stringify(json_response_err("Token 无效或过期"))};
+        }
+        user = storage_find_one("users", "id", uid);
+        if (user == nullptr) {
+            return {"status": 401, "body": json_stringify(json_response_err("用户不存在"))};
+        }
+        if (user["status"] == "banned") {
+            return {"status": 403, "body": json_stringify(json_response_err("账号已停用"))};
+        }
+    }
+    # 构造内部 req
+    let q = "";
+    if (str_index_of(path, "?") >= 0) {
+        let qi = str_index_of(path, "?");
+        q = str_substring(path, qi + 1, len(path));
+        path = str_substring(path, 0, qi);
+    }
+    let internal_req = {
+        "method": method,
+        "path": path,
+        "query": q,
+        "headers": headers,
+        "body": body,
+        "user": user
+    };
+    # 路由分发
+    let r = handle_request(internal_req);
+    return r;
+}
+
+# ============= 启动 =============
+main();

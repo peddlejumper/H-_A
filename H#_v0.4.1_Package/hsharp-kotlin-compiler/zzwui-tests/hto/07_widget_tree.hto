@@ -1,0 +1,109 @@
+# H# zzwUI Test 07 — Widget tree operations
+# build: hwdui_min.hto
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ─── 1. Build a 4-level tree of mixed types ───────────────────────────
+let root = new Panel();
+root.init_panel("absolute");
+root.set_pos(0, 0);
+root.set_size(800, 600);
+
+let sub1 = new Panel();
+sub1.init_panel("absolute");
+sub1.set_pos(0, 0);
+sub1.set_size(400, 600);
+
+let sub2 = new Panel();
+sub2.init_panel("absolute");
+sub2.set_pos(0, 0);
+sub2.set_size(200, 600);
+
+let btn1 = new Button();
+btn1.init_btn("B1");
+let btn2 = new Button();
+btn2.init_btn("B2");
+let lbl1 = new Label();
+lbl1.init_label("L1");
+
+sub2.add_child(btn1);
+sub2.add_child(btn2);
+sub2.add_child(lbl1);
+sub1.add_child(sub2);
+root.add_child(sub1);
+
+check("t/l4_btn1_p",     btn1.parent == sub2);
+check("t/l4_btn2_p",     btn2.parent == sub2);
+check("t/l4_lbl_p",      lbl1.parent == sub2);
+check("t/l4_sub2_p",     sub2.parent == sub1);
+check("t/l4_sub1_p",     sub1.parent == root);
+check("t/l4_grand_gp",   btn1.parent.parent == sub1);
+check("t/l4_grand_ggp",  btn1.parent.parent.parent == root);
+
+# ─── 2. get_child_at index access ─────────────────────────────────────
+check("t/gca0",          sub2.get_child_at(0) == btn1);
+check("t/gca1",          sub2.get_child_at(1) == btn2);
+check("t/gca2",          sub2.get_child_at(2) == lbl1);
+check("t/gca_neg",       sub2.get_child_at(-1) == nullptr);
+check("t/gca_oob",       sub2.get_child_at(99) == nullptr);
+
+# ─── 3. contains(px, py) for widgets ───────────────────────────────────
+let w = new Button();
+w.init_btn("W");
+w.set_pos(10, 20);
+w.set_size(50, 30);
+check("t/contains_in",   w.contains(30, 30) == true);
+check("t/contains_corner", w.contains(10, 20) == true);
+check("t/contains_out",  w.contains(0, 0) == false);
+check("t/contains_far",  w.contains(100, 100) == false);
+check("t/contains_edge", w.contains(60, 50) == true);
+
+# ─── 4. Mass add/remove cycle ─────────────────────────────────────────
+let mroot = new Panel();
+mroot.init_panel("vbox");
+let m_i = 0;
+while (m_i < 50) {
+    let b = new Button();
+    b.init_btn(str(m_i));
+    mroot.add_child(b);
+    m_i = m_i + 1;
+}
+check("t/mass_add",      len(mroot.children) == 50);
+# Remove all
+m_i = 0;
+while (m_i < 50) {
+    mroot.remove_child(mroot.children[0]);
+    m_i = m_i + 1;
+}
+check("t/mass_rm",       len(mroot.children) == 0);
+
+# Re-add a fresh batch
+m_i = 0;
+while (m_i < 30) {
+    let lbl = new Label();
+    lbl.init_label("L" + str(m_i));
+    mroot.add_child(lbl);
+    m_i = m_i + 1;
+}
+check("t/mass_re",       len(mroot.children) == 30);
+mroot.do_layout();
+check("t/mass_y0",       mroot.children[0].y == 0);
+check("t/mass_y29",      mroot.children[29].y == 696);
+
+print("07_ZZW_TREE : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

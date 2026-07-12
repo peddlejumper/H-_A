@@ -1,0 +1,5 @@
+# test_only.hto
+fn json_object() {
+    return {};
+}
+print(json_object());

@@ -1,0 +1,36 @@
+# t16 - non-exhaustive match: should raise "non-exhaustive match"
+fn only_zero(x) {
+    return match x {
+        0 => "zero",
+        1 => "one"
+    };
+}
+# matching 0 and 1 should work
+print("t16_zero:" + only_zero(0));
+print("t16_one:" + only_zero(1));
+# non-exhaustive: 99 should raise
+let raised = false;
+let msg = "";
+try {
+    let _r = only_zero(99);
+} catch (e) {
+    raised = true;
+    msg = str(e);
+}
+print("t16_raised:" + str(raised));
+print("t16_msg:" + msg);
+
+# non-exhaustive with type patterns (is int, is str — not truly exhaustive)
+fn typed(x) {
+    return match x {
+        is int => "int",
+        is str => "str"
+    };
+}
+let raised2 = false;
+try {
+    let _r = typed(true);
+} catch (e) {
+    raised2 = true;
+}
+print("t16_type_nonexhaustive:" + str(raised2));

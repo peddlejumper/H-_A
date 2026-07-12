@@ -1,0 +1,943 @@
+# T78 - string_utils & array_utils standard library stress tests
+# Libraries inlined from bootstrap/string_utils.hto (22 funcs) and
+# bootstrap/array_utils.hto (27 funcs) to test actual implementations.
+
+# ============================================================
+# string_utils library (exact copy from bootstrap/string_utils.hto)
+# ============================================================
+
+fn str_length(s) {
+    return len(s);
+}
+
+fn str_uppercase(s) {
+    let result = "";
+    let i = 0;
+    while (i < len(s)) {
+        let ch = s[i];
+        if (ch >= "a" and ch <= "z") {
+            result = result + ch;
+        } else {
+            result = result + ch;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_lowercase(s) {
+    let result = "";
+    let i = 0;
+    while (i < len(s)) {
+        let ch = s[i];
+        if (ch >= "A" and ch <= "Z") {
+            result = result + ch;
+        } else {
+            result = result + ch;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_trim(s) {
+    let start = 0;
+    let end = len(s) - 1;
+    while (start <= end and (s[start] == " " or s[start] == "\t" or s[start] == "\n" or s[start] == "\r")) {
+        start = start + 1;
+    }
+    while (end >= start and (s[end] == " " or s[end] == "\t" or s[end] == "\n" or s[end] == "\r")) {
+        end = end - 1;
+    }
+    if (start > end) {
+        return "";
+    }
+    return substring(s, start, end - start + 1);
+}
+
+fn str_trim_left(s) {
+    let start = 0;
+    while (start < len(s) and (s[start] == " " or s[start] == "\t" or s[start] == "\n" or s[start] == "\r")) {
+        start = start + 1;
+    }
+    return substring(s, start, len(s) - start);
+}
+
+fn str_trim_right(s) {
+    let end = len(s) - 1;
+    while (end >= 0 and (s[end] == " " or s[end] == "\t" or s[end] == "\n" or s[end] == "\r")) {
+        end = end - 1;
+    }
+    return substring(s, 0, end + 1);
+}
+
+fn str_contains(s, substr) {
+    return str_index_of(s, substr) != -1;
+}
+
+fn str_index_of(s, substr) {
+    let substr_len = len(substr);
+    let s_len = len(s);
+    if (substr_len == 0) {
+        return 0;
+    }
+    if (substr_len > s_len) {
+        return -1;
+    }
+    let i = 0;
+    while (i <= s_len - substr_len) {
+        let found = true;
+        let j = 0;
+        while (j < substr_len) {
+            if (s[i + j] != substr[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn str_last_index_of(s, substr) {
+    let substr_len = len(substr);
+    let s_len = len(s);
+    if (substr_len == 0) {
+        return s_len;
+    }
+    if (substr_len > s_len) {
+        return -1;
+    }
+    let i = s_len - substr_len;
+    while (i >= 0) {
+        let found = true;
+        let j = 0;
+        while (j < substr_len) {
+            if (s[i + j] != substr[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            return i;
+        }
+        i = i - 1;
+    }
+    return -1;
+}
+
+fn str_replace(s, old, replacement) {
+    let result = "";
+    let old_len = len(old);
+    let i = 0;
+    while (i < len(s)) {
+        let found = true;
+        if (i + old_len <= len(s)) {
+            let j = 0;
+            while (j < old_len) {
+                if (s[i + j] != old[j]) {
+                    found = false;
+                    break;
+                }
+                j = j + 1;
+            }
+        } else {
+            found = false;
+        }
+        if (found) {
+            result = result + replacement;
+            i = i + old_len;
+        } else {
+            result = result + s[i];
+            i = i + 1;
+        }
+    }
+    return result;
+}
+
+fn str_split(s, delimiter) {
+    let result = [];
+    let delim_len = len(delimiter);
+    let start = 0;
+    let i = 0;
+    while (i <= len(s) - delim_len) {
+        let found = true;
+        let j = 0;
+        while (j < delim_len) {
+            if (s[i + j] != delimiter[j]) {
+                found = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (found) {
+            push(result, substring(s, start, i - start));
+            i = i + delim_len;
+            start = i;
+        } else {
+            i = i + 1;
+        }
+    }
+    push(result, substring(s, start, len(s) - start));
+    return result;
+}
+
+fn str_join(arr, separator) {
+    if (len(arr) == 0) {
+        return "";
+    }
+    let result = str(arr[0]);
+    let i = 1;
+    while (i < len(arr)) {
+        result = result + separator + str(arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_starts_with(s, prefix) {
+    let prefix_len = len(prefix);
+    if (prefix_len > len(s)) {
+        return false;
+    }
+    let i = 0;
+    while (i < prefix_len) {
+        if (s[i] != prefix[i]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn str_ends_with(s, suffix) {
+    let suffix_len = len(suffix);
+    let s_len = len(s);
+    if (suffix_len > s_len) {
+        return false;
+    }
+    let i = 0;
+    while (i < suffix_len) {
+        if (s[s_len - suffix_len + i] != suffix[i]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn str_repeat(s, count) {
+    if (count <= 0) {
+        return "";
+    }
+    let result = "";
+    let i = 0;
+    while (i < count) {
+        result = result + s;
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_pad_left(s, length, pad_char) {
+    if (pad_char == nullptr) {
+        pad_char = " ";
+    }
+    let current_len = len(s);
+    if (current_len >= length) {
+        return s;
+    }
+    let padding = str_repeat(pad_char, length - current_len);
+    return padding + s;
+}
+
+fn str_pad_right(s, length, pad_char) {
+    if (pad_char == nullptr) {
+        pad_char = " ";
+    }
+    let current_len = len(s);
+    if (current_len >= length) {
+        return s;
+    }
+    let padding = str_repeat(pad_char, length - current_len);
+    return s + padding;
+}
+
+fn str_reverse(s) {
+    let result = "";
+    let i = len(s) - 1;
+    while (i >= 0) {
+        result = result + s[i];
+        i = i - 1;
+    }
+    return result;
+}
+
+fn str_substring(s, start, length) {
+    return substring(s, start, length);
+}
+
+fn str_char_at(s, index) {
+    if (index < 0 or index >= len(s)) {
+        return nullptr;
+    }
+    return s[index];
+}
+
+fn str_to_array(s) {
+    let result = [];
+    let i = 0;
+    while (i < len(s)) {
+        push(result, s[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn str_from_array(arr) {
+    let result = "";
+    let i = 0;
+    while (i < len(arr)) {
+        result = result + arr[i];
+        i = i + 1;
+    }
+    return result;
+}
+
+# ============================================================
+# array_utils library (exact copy from bootstrap/array_utils.hto)
+# ============================================================
+
+fn arr_map(arr, func) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(result, func(arr[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_filter(arr, predicate) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_reduce(arr, reducer, initial_value) {
+    let accumulator = initial_value;
+    let i = 0;
+    while (i < len(arr)) {
+        accumulator = reducer(accumulator, arr[i]);
+        i = i + 1;
+    }
+    return accumulator;
+}
+
+fn arr_for_each(arr, func) {
+    let i = 0;
+    while (i < len(arr)) {
+        func(arr[i]);
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn arr_find(arr, predicate) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            return arr[i];
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn arr_find_index(arr, predicate) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn arr_every(arr, predicate) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (not predicate(arr[i])) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn arr_some(arr, predicate) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn arr_includes(arr, value) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] == value) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn arr_index_of(arr, value) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] == value) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn arr_last_index_of(arr, value) {
+    let i = len(arr) - 1;
+    while (i >= 0) {
+        if (arr[i] == value) {
+            return i;
+        }
+        i = i - 1;
+    }
+    return -1;
+}
+
+fn arr_slice(arr, start, end) {
+    if (end == nullptr) {
+        end = len(arr);
+    }
+    if (start < 0) {
+        start = len(arr) + start;
+    }
+    if (end < 0) {
+        end = len(arr) + end;
+    }
+    let result = [];
+    let i = start;
+    while (i < end and i < len(arr)) {
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_splice(arr, start, delete_count, items) {
+    if (delete_count == nullptr) {
+        delete_count = len(arr) - start;
+    }
+    if (items == nullptr) {
+        items = [];
+    }
+    let deleted = arr_slice(arr, start, start + delete_count);
+    let before = arr_slice(arr, 0, start);
+    let after = arr_slice(arr, start + delete_count, len(arr));
+    let result = [];
+    let i = 0;
+    while (i < len(before)) {
+        push(result, before[i]);
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(items)) {
+        push(result, items[i]);
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(after)) {
+        push(result, after[i]);
+        i = i + 1;
+    }
+    let j = 0;
+    while (j < len(arr)) {
+        pop(arr);
+    }
+    i = 0;
+    while (i < len(result)) {
+        push(arr, result[i]);
+        i = i + 1;
+    }
+    return deleted;
+}
+
+fn arr_concat(arr1, arr2) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr1)) {
+        push(result, arr1[i]);
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(arr2)) {
+        push(result, arr2[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_flatten(arr, depth) {
+    if (depth == nullptr) {
+        depth = 1;
+    }
+    if (depth <= 0) {
+        return arr;
+    }
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (is_array(arr[i])) {
+            let flattened = arr_flatten(arr[i], depth - 1);
+            let j = 0;
+            while (j < len(flattened)) {
+                push(result, flattened[j]);
+                j = j + 1;
+            }
+        } else {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_unique(arr) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (not arr_includes(result, arr[i])) {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_chunk(arr, size) {
+    if (size <= 0) {
+        return [];
+    }
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        let chunk = arr_slice(arr, i, i + size);
+        push(result, chunk);
+        i = i + size;
+    }
+    return result;
+}
+
+fn arr_zip(arrays) {
+    if (len(arrays) == 0) {
+        return [];
+    }
+    let min_len = len(arrays[0]);
+    let i = 1;
+    while (i < len(arrays)) {
+        if (len(arrays[i]) < min_len) {
+            min_len = len(arrays[i]);
+        }
+        i = i + 1;
+    }
+    let result = [];
+    let j = 0;
+    while (j < min_len) {
+        let group = [];
+        i = 0;
+        while (i < len(arrays)) {
+            push(group, arrays[i][j]);
+            i = i + 1;
+        }
+        push(result, group);
+        j = j + 1;
+    }
+    return result;
+}
+
+fn arr_reverse(arr) {
+    let left = 0;
+    let right = len(arr) - 1;
+    while (left < right) {
+        let temp = arr[left];
+        arr[left] = arr[right];
+        arr[right] = temp;
+        left = left + 1;
+        right = right - 1;
+    }
+    return arr;
+}
+
+fn arr_sort(arr, comparator) {
+    if (comparator == nullptr) {
+        comparator = fn(a, b) {
+            return a - b;
+        };
+    }
+    let n = len(arr);
+    let swapped = true;
+    while (swapped) {
+        swapped = false;
+        let i = 0;
+        while (i < n - 1) {
+            if (comparator(arr[i], arr[i + 1]) > 0) {
+                let temp = arr[i];
+                arr[i] = arr[i + 1];
+                arr[i + 1] = temp;
+                swapped = true;
+            }
+            i = i + 1;
+        }
+        n = n - 1;
+    }
+    return arr;
+}
+
+fn arr_min(arr) {
+    if (len(arr) == 0) {
+        return nullptr;
+    }
+    let min_val = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        if (arr[i] < min_val) {
+            min_val = arr[i];
+        }
+        i = i + 1;
+    }
+    return min_val;
+}
+
+fn arr_max(arr) {
+    if (len(arr) == 0) {
+        return nullptr;
+    }
+    let max_val = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        if (arr[i] > max_val) {
+            max_val = arr[i];
+        }
+        i = i + 1;
+    }
+    return max_val;
+}
+
+fn arr_sum(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        total = total + arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fn arr_average(arr) {
+    if (len(arr) == 0) {
+        return 0;
+    }
+    return arr_sum(arr) / len(arr);
+}
+
+fn arr_range(start, end, step) {
+    if (step == nullptr) {
+        step = 1;
+    }
+    let result = [];
+    if (step > 0) {
+        let i = start;
+        while (i < end) {
+            push(result, i);
+            i = i + step;
+        }
+    } else {
+        let i = start;
+        while (i > end) {
+            push(result, i);
+            i = i + step;
+        }
+    }
+    return result;
+}
+
+fn arr_fill(arr, value, start, end) {
+    if (start == nullptr) {
+        start = 0;
+    }
+    if (end == nullptr) {
+        end = len(arr);
+    }
+    let i = start;
+    while (i < end and i < len(arr)) {
+        arr[i] = value;
+        i = i + 1;
+    }
+    return arr;
+}
+
+fn is_array(value) {
+    return value != nullptr and len(value) != nullptr;
+}
+
+# ============================================================
+# Test infrastructure
+# ============================================================
+
+let __stats = [0, 0, []];
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# ============================================================
+# Case 1: str_uppercase / str_lowercase
+# ============================================================
+check("upper/basic",      str_uppercase("hello") == "HELLO");
+check("upper/mixed",      str_uppercase("Hello World") == "HELLO WORLD");
+check("upper/empty",      str_uppercase("") == "");
+check("upper/already",    str_uppercase("ABC") == "ABC");
+check("upper/digits",     str_uppercase("123abc") == "123ABC");
+check("lower/basic",      str_lowercase("HELLO") == "hello");
+check("lower/mixed",      str_lowercase("Hello World") == "hello world");
+check("lower/empty",      str_lowercase("") == "");
+check("lower/already",    str_lowercase("xyz") == "xyz");
+
+# ============================================================
+# Case 2: str_trim / str_trim_left / str_trim_right
+# ============================================================
+check("trim/both",        str_trim("  hello  ") == "hello");
+check("trim/left_only",   str_trim("hello  ") == "hello");
+check("trim/right_only",  str_trim("  hello") == "hello");
+check("trim/none",        str_trim("hello") == "hello");
+check("trim/empty",       str_trim("") == "");
+check("trim/all_ws",      str_trim("   ") == "");
+check("trim/tabs",        str_trim("\thello\t") == "hello");
+check("ltrim/basic",      str_trim_left("  hello  ") == "hello  ");
+check("ltrim/empty",      str_trim_left("") == "");
+check("rtrim/basic",      str_trim_right("  hello  ") == "  hello");
+check("rtrim/empty",      str_trim_right("") == "");
+
+# ============================================================
+# Case 3: str_split
+# ============================================================
+let parts = str_split("a,b,c", ",");
+check("split/count",      len(parts) == 3);
+check("split/0",          parts[0] == "a");
+check("split/1",          parts[1] == "b");
+check("split/2",          parts[2] == "c");
+check("split/no_match",   len(str_split("hello", ",")) == 1);
+check("split/no_match_v", str_split("hello", ",")[0] == "hello");
+check("split/empty_str",  len(str_split("", ",")) == 1);
+check("split/delim_ends", len(str_split(",a,", ",")) == 3);
+check("split/multi_char", len(str_split("a::b::c", "::")) == 3);
+
+# ============================================================
+# Case 4: str_join
+# ============================================================
+check("join/empty",       str_join([], ",") == "");
+check("join/single",      str_join(["a"], ",") == "a");
+check("join/multi",       str_join(["a", "b", "c"], ",") == "a,b,c");
+check("join/non_str",     str_join([1, 2, 3], "-") == "1-2-3");
+check("join/space_sep",   str_join(["hello", "world"], " ") == "hello world");
+
+# ============================================================
+# Case 5: str_replace
+# ============================================================
+check("replace/all",      str_replace("hello", "l", "L") == "heLLo");
+check("replace/word",     str_replace("Hello World", "World", "H#") == "Hello H#");
+check("replace/none",     str_replace("hello", "z", "Y") == "hello");
+check("replace/multi_ch", str_replace("aaa", "aa", "b") == "ba");
+check("replace/overlap",  str_replace("aaa", "a", "b") == "bbb");
+
+# ============================================================
+# Case 6: str_contains / str_starts_with / str_ends_with
+# ============================================================
+check("contains/yes",     str_contains("hello world", "world") == true);
+check("contains/no",      str_contains("hello", "xyz") == false);
+check("contains/empty",   str_contains("hello", "") == true);
+check("contains/exact",   str_contains("hello", "hello") == true);
+check("starts/yes",       str_starts_with("hello", "he") == true);
+check("starts/no",        str_starts_with("hello", "lo") == false);
+check("starts/empty",     str_starts_with("hello", "") == true);
+check("ends/yes",         str_ends_with("hello", "lo") == true);
+check("ends/no",          str_ends_with("hello", "he") == false);
+check("ends/empty",       str_ends_with("hello", "") == true);
+
+# ============================================================
+# Case 7: str_reverse / str_repeat / str_pad_left / str_pad_right
+# ============================================================
+check("reverse/basic",    str_reverse("abc") == "cba");
+check("reverse/empty",    str_reverse("") == "");
+check("reverse/single",   str_reverse("x") == "x");
+check("repeat/0",         str_repeat("ab", 0) == "");
+check("repeat/3",         str_repeat("ab", 3) == "ababab");
+check("repeat/1",         str_repeat("x", 1) == "x");
+check("pad_left/basic",   str_pad_left("42", 5, "0") == "00042");
+check("pad_right/basic",  str_pad_right("42", 5, "0") == "42000");
+check("pad_left/noop",    str_pad_left("hello", 3, " ") == "hello");
+
+# ============================================================
+# Case 8: str_index_of / str_last_index_of
+# ============================================================
+check("index/found",      str_index_of("hello world", "world") == 6);
+check("index/begin",      str_index_of("hello", "he") == 0);
+check("index/end",        str_index_of("hello", "lo") == 3);
+check("index/not_found",  str_index_of("hello", "xyz") == -1);
+check("index/empty",      str_index_of("hello", "") == 0);
+check("last_index/found", str_last_index_of("hello world", "o") == 7);
+check("last_index/begin", str_last_index_of("hello", "l") == 3);
+check("last_index/no",    str_last_index_of("hello", "z") == -1);
+
+# ============================================================
+# Case 9: arr_sum / arr_min / arr_max / arr_average
+# ============================================================
+check("sum/empty",        arr_sum([]) == 0);
+check("sum/basic",        arr_sum([1, 2, 3, 4, 5]) == 15);
+check("sum/neg",          arr_sum([-1, 1, -2, 2]) == 0);
+check("sum/single",       arr_sum([42]) == 42);
+check("min/basic",        arr_min([3, 1, 4, 1, 5]) == 1);
+check("min/single",       arr_min([42]) == 42);
+check("min/neg",          arr_min([-1, -5, -3]) == -5);
+check("max/basic",        arr_max([3, 1, 4, 1, 5]) == 5);
+check("max/single",       arr_max([42]) == 42);
+check("avg/exact",        arr_average([10, 20, 30]) == 20);
+check("avg/floor_bug",    arr_average([10, 21]) == 15.5);
+
+# ============================================================
+# Case 10: arr_map / arr_filter / arr_reduce
+# ============================================================
+let doubled = arr_map([1, 2, 3], fn(x) { return x * 2; });
+check("map/double",       doubled[0] == 2 and doubled[1] == 4 and doubled[2] == 6);
+check("map/empty",        len(arr_map([], fn(x) { return x; })) == 0);
+let sq = arr_map([1, 2, 3, 4], fn(x) { return x * x; });
+check("map/sq",           sq[0] == 1 and sq[3] == 16);
+let evens = arr_filter([1, 2, 3, 4, 5, 6], fn(x) { return x - int(x / 2) * 2 == 0; });
+check("filter/even",      len(evens) == 3 and evens[0] == 2 and evens[2] == 6);
+check("filter/empty_r",   len(arr_filter([1, 3, 5], fn(x) { return x > 10; })) == 0);
+let sum_r = arr_reduce([1, 2, 3, 4, 5], fn(a, b) { return a + b; }, 0);
+check("reduce/sum",       sum_r == 15);
+check("reduce/empty",     arr_reduce([], fn(a, b) { return a + b; }, 100) == 100);
+let prod_r = arr_reduce([1, 2, 3, 4], fn(a, b) { return a * b; }, 1);
+check("reduce/prod",      prod_r == 24);
+
+# ============================================================
+# Case 11: arr_sort (numeric + string)
+# ============================================================
+let sorted_nums = arr_sort([3, 1, 4, 1, 5, 9, 2, 6], nullptr);
+check("sort/numeric",     sorted_nums[0] == 1 and sorted_nums[1] == 1 and sorted_nums[7] == 9);
+let str_sort_ok = false;
+try {
+    let s = arr_sort(["banana", "apple", "cherry"], nullptr);
+    if (s[0] == "apple" and s[1] == "banana" and s[2] == "cherry") {
+        str_sort_ok = true;
+    }
+} catch (e) {
+    str_sort_ok = false;
+}
+check("sort/str_default", str_sort_ok);
+let sorted_strs = arr_sort(["banana", "apple", "cherry"], fn(a, b) {
+    if (a > b) { return 1; }
+    if (a < b) { return -1; }
+    return 0;
+});
+check("sort/str_custom",  sorted_strs[0] == "apple" and sorted_strs[1] == "banana" and sorted_strs[2] == "cherry");
+let sorted_desc = arr_sort([1, 3, 2], fn(a, b) { return b - a; });
+check("sort/desc",        sorted_desc[0] == 3 and sorted_desc[1] == 2 and sorted_desc[2] == 1);
+
+# ============================================================
+# Case 12: arr_unique / arr_reverse / arr_concat / arr_chunk / arr_slice / arr_zip
+# ============================================================
+let uq = arr_unique([1, 2, 2, 3, 3, 3]);
+check("unique/basic",     len(uq) == 3 and uq[0] == 1 and uq[2] == 3);
+check("unique/all_same",  len(arr_unique([1, 1, 1])) == 1);
+check("unique/empty",     len(arr_unique([])) == 0);
+let rv = arr_reverse([1, 2, 3]);
+check("reverse/basic",    rv[0] == 3 and rv[1] == 2 and rv[2] == 1);
+let cat = arr_concat([1, 2], [3, 4]);
+check("concat/basic",     len(cat) == 4 and cat[2] == 3 and cat[3] == 4);
+let chunks = arr_chunk([1, 2, 3, 4, 5], 2);
+check("chunk/count",      len(chunks) == 3);
+check("chunk/0",          chunks[0][0] == 1 and chunks[0][1] == 2);
+check("chunk/last",       len(chunks[2]) == 1 and chunks[2][0] == 5);
+check("slice/basic",      len(arr_slice([1, 2, 3, 4, 5], 1, 3)) == 2);
+check("slice/vals",       arr_slice([1, 2, 3, 4, 5], 1, 3)[0] == 2);
+let zipped = arr_zip([[1, 2, 3], [4, 5, 6]]);
+check("zip/basic",        zipped[0][0] == 1 and zipped[0][1] == 4 and zipped[1][0] == 2);
+check("zip/uneven",       len(arr_zip([[1, 2, 3], [4, 5]])) == 2);
+
+# ============================================================
+# Case 13: arr_flatten (BUG: is_array crashes on non-array elements)
+# ============================================================
+let flat_nested = arr_flatten([[1, 2], [3, 4]], 1);
+check("flatten/nested",   len(flat_nested) == 4 and flat_nested[0] == 1 and flat_nested[3] == 4);
+let flatten_mixed_ok = false;
+try {
+    let flat = arr_flatten([1, [2, 3]], 1);
+    if (len(flat) == 3 and flat[0] == 1 and flat[1] == 2 and flat[2] == 3) {
+        flatten_mixed_ok = true;
+    }
+} catch (e) {
+    flatten_mixed_ok = false;
+}
+check("flatten/mixed",    flatten_mixed_ok);
+
+# ============================================================
+# Case 14: str_to_array / str_from_array / str_char_at / str_includes
+# ============================================================
+let chars = str_to_array("abc");
+check("to_array/basic",   len(chars) == 3 and chars[0] == "a" and chars[2] == "c");
+check("to_array/empty",   len(str_to_array("")) == 0);
+check("from_array/basic", str_from_array(["a", "b", "c"]) == "abc");
+check("from_array/empty", str_from_array([]) == "");
+check("char_at/valid",    str_char_at("hello", 1) == "e");
+check("char_at/oob",      str_char_at("hello", 10) == nullptr);
+check("char_at/neg",      str_char_at("hello", -1) == nullptr);
+check("includes/yes",     arr_includes([1, 2, 3], 2) == true);
+check("includes/no",      arr_includes([1, 2, 3], 5) == false);
+check("idx_of/yes",       arr_index_of([1, 2, 3], 2) == 1);
+check("last_idx/yes",     arr_last_index_of([1, 2, 1, 3], 1) == 2);
+
+# ============================================================
+# Report
+# ============================================================
+print("STDLIB_STR_ARR: PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    print("  failed tests:");
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("    - " + __stats[2][i]);
+        i = i + 1;
+    }
+}

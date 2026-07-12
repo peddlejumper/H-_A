@@ -1,0 +1,151 @@
+# Round 5 / Test #140 — String Methods Edge (Boundary Stress)
+# Goal: probe every string-method boundary listed in 12 sub-areas.
+# Each case wrapped in try/catch; output format: S1.xxx:result or S1.xxx:EXC[error]
+# Reference semantics: Python 3 unless H# explicitly documents otherwise.
+#
+# NOTE on naming: H# uses snake_case method names:
+#   starts_with / ends_with / is_empty / find (=Python find/indexOf)
+# substring(s, start, len) is a builtin function (not a method).
+# Slicing uses s[a:b:c]; indexing uses s[i].
+
+# =============================================================
+# S1: substring 边界 (builtin substring(s, start, len))
+# =============================================================
+try { print("S1.01 neg-start: [" + substring("hello", -2, 4) + "]"); } catch (e) { print("S1.01 neg-start:EXC[" + e + "]"); }
+try { print("S1.02 len-over: [" + substring("hello", 0, 100) + "]"); } catch (e) { print("S1.02 len-over:EXC[" + e + "]"); }
+try { print("S1.03 start-over: [" + substring("hello", 10, 3) + "]"); } catch (e) { print("S1.03 start-over:EXC[" + e + "]"); }
+try { print("S1.04 start-eq-end: [" + substring("hello", 2, 0) + "]"); } catch (e) { print("S1.04 start-eq-end:EXC[" + e + "]"); }
+try { print("S1.05 single-char: [" + substring("hello", 2, 1) + "]"); } catch (e) { print("S1.05 single-char:EXC[" + e + "]"); }
+try { print("S1.06 empty-str: [" + substring("", 0, 5) + "]"); } catch (e) { print("S1.06 empty-str:EXC[" + e + "]"); }
+try { print("S1.07 neg-len: [" + substring("hello", 3, -1) + "]"); } catch (e) { print("S1.07 neg-len:EXC[" + e + "]"); }
+try { print("S1.08 at-end: [" + substring("hello", 5, 3) + "]"); } catch (e) { print("S1.08 at-end:EXC[" + e + "]"); }
+# Unicode: emoji is a supplementary code point (2 UTF-16 code units).
+# Python: substring semantics on code points -> "😀😀"[1:2] == "😀"
+try { print("S1.09 emoji-cp: [" + substring("😀😀", 1, 1) + "]"); } catch (e) { print("S1.09 emoji-cp:EXC[" + e + "]"); }
+try { print("S1.10 cn-bmp: [" + substring("你好世界", 1, 2) + "]"); } catch (e) { print("S1.10 cn-bmp:EXC[" + e + "]"); }
+
+# =============================================================
+# S2: replace 边界
+# =============================================================
+try { print("S2.01 empty-old: [" + "abc".replace("", "X") + "]"); } catch (e) { print("S2.01 empty-old:EXC[" + e + "]"); }
+try { print("S2.02 empty-new: [" + "abc".replace("b", "") + "]"); } catch (e) { print("S2.02 empty-new:EXC[" + e + "]"); }
+try { print("S2.03 both-empty: [" + "abc".replace("", "") + "]"); } catch (e) { print("S2.03 both-empty:EXC[" + e + "]"); }
+try { print("S2.04 overlap: [" + "aaaa".replace("aa", "b") + "]"); } catch (e) { print("S2.04 overlap:EXC[" + e + "]"); }
+try { print("S2.05 multi: [" + "aaa".replace("a", "bb") + "]"); } catch (e) { print("S2.05 multi:EXC[" + e + "]"); }
+try { print("S2.06 not-found: [" + "hello".replace("z", "Y") + "]"); } catch (e) { print("S2.06 not-found:EXC[" + e + "]"); }
+try { print("S2.07 empty-str-empty-old: [" + "".replace("", "X") + "]"); } catch (e) { print("S2.07 empty-str-empty-old:EXC[" + e + "]"); }
+try { print("S2.08 whole-match: [" + "abc".replace("abc", "Z") + "]"); } catch (e) { print("S2.08 whole-match:EXC[" + e + "]"); }
+
+# =============================================================
+# S3: strip / lstrip / rstrip 边界
+# =============================================================
+try { print("S3.01 empty: [" + "".strip() + "]"); } catch (e) { print("S3.01 empty:EXC[" + e + "]"); }
+try { print("S3.02 all-ws: [" + "   ".strip() + "]"); } catch (e) { print("S3.02 all-ws:EXC[" + e + "]"); }
+try { print("S3.03 mixed-ws: [" + " \t\nhi \t\n".strip() + "]"); } catch (e) { print("S3.03 mixed-ws:EXC[" + e + "]"); }
+try { print("S3.04 no-change: [" + "hello".strip() + "]"); } catch (e) { print("S3.04 no-change:EXC[" + e + "]"); }
+try { print("S3.05 cr-ws: [" + "\rhi\r".strip() + "]"); } catch (e) { print("S3.05 cr-ws:EXC[" + e + "]"); }
+try { print("S3.06 lstrip-mixed: [" + " \t\nhi".lstrip() + "]"); } catch (e) { print("S3.06 lstrip-mixed:EXC[" + e + "]"); }
+try { print("S3.07 rstrip-mixed: [" + "hi \t\n".rstrip() + "]"); } catch (e) { print("S3.07 rstrip-mixed:EXC[" + e + "]"); }
+try { print("S3.08 all-ws-lstrip: [" + "   ".lstrip() + "]"); } catch (e) { print("S3.08 all-ws-lstrip:EXC[" + e + "]"); }
+
+# =============================================================
+# S4: split 边界
+# =============================================================
+try { print("S4.01 multi-sep: " + str("a::b::c".split("::"))); } catch (e) { print("S4.01 multi-sep:EXC[" + e + "]"); }
+try { print("S4.02 sep-at-start: " + str(",a,b".split(","))); } catch (e) { print("S4.02 sep-at-start:EXC[" + e + "]"); }
+try { print("S4.03 sep-at-end: " + str("a,b,".split(","))); } catch (e) { print("S4.03 sep-at-end:EXC[" + e + "]"); }
+try { print("S4.04 consec-sep: " + str("a,,b".split(","))); } catch (e) { print("S4.04 consec-sep:EXC[" + e + "]"); }
+try { print("S4.05 empty-sep: " + str("abc".split(""))); } catch (e) { print("S4.05 empty-sep:EXC[" + e + "]"); }
+try { print("S4.06 single-char: " + str("a".split(","))); } catch (e) { print("S4.06 single-char:EXC[" + e + "]"); }
+try { print("S4.07 empty-str: " + str("".split(","))); } catch (e) { print("S4.07 empty-str:EXC[" + e + "]"); }
+try { print("S4.08 all-sep: " + str(",,".split(","))); } catch (e) { print("S4.08 all-sep:EXC[" + e + "]"); }
+
+# =============================================================
+# S5: case 转换 边界
+# =============================================================
+try { print("S5.01 empty-upper: [" + "".upper() + "]"); } catch (e) { print("S5.01 empty-upper:EXC[" + e + "]"); }
+try { print("S5.02 already-upper: [" + "HELLO".upper() + "]"); } catch (e) { print("S5.02 already-upper:EXC[" + e + "]"); }
+try { print("S5.03 accent-upper: [" + "héllo".upper() + "]"); } catch (e) { print("S5.03 accent-upper:EXC[" + e + "]"); }
+try { print("S5.04 german-esszet: [" + "ß".upper() + "]"); } catch (e) { print("S5.04 german-esszet:EXC[" + e + "]"); }
+try { print("S5.05 umlaut-lower: [" + "ÜBUNG".lower() + "]"); } catch (e) { print("S5.05 umlaut-lower:EXC[" + e + "]"); }
+try { print("S5.06 mixed-alnum: [" + "a1B2c3".upper() + "]"); } catch (e) { print("S5.06 mixed-alnum:EXC[" + e + "]"); }
+try { print("S5.07 cn-unchanged: [" + "中文".upper() + "]"); } catch (e) { print("S5.07 cn-unchanged:EXC[" + e + "]"); }
+
+# =============================================================
+# S6: contains / find (indexOf) 边界
+# =============================================================
+try { print("S6.01 empty-sub: " + str("hello".contains(""))); } catch (e) { print("S6.01 empty-sub:EXC[" + e + "]"); }
+try { print("S6.02 not-found: " + str("hello".contains("z"))); } catch (e) { print("S6.02 not-found:EXC[" + e + "]"); }
+try { print("S6.03 at-start: " + str("hello".contains("he"))); } catch (e) { print("S6.03 at-start:EXC[" + e + "]"); }
+try { print("S6.04 at-end: " + str("hello".contains("lo"))); } catch (e) { print("S6.04 at-end:EXC[" + e + "]"); }
+try { print("S6.05 find-empty: " + str("hello".find(""))); } catch (e) { print("S6.05 find-empty:EXC[" + e + "]"); }
+try { print("S6.06 find-miss: " + str("hello".find("z"))); } catch (e) { print("S6.06 find-miss:EXC[" + e + "]"); }
+try { print("S6.07 find-emoji: " + str("a😀b".find("😀"))); } catch (e) { print("S6.07 find-emoji:EXC[" + e + "]"); }
+try { print("S6.08 contains-empty-in-empty: " + str("".contains(""))); } catch (e) { print("S6.08 contains-empty-in-empty:EXC[" + e + "]"); }
+
+# =============================================================
+# S7: starts_with / ends_with 边界
+# =============================================================
+try { print("S7.01 empty-prefix: " + str("hello".starts_with(""))); } catch (e) { print("S7.01 empty-prefix:EXC[" + e + "]"); }
+try { print("S7.02 full-match: " + str("hello".starts_with("hello"))); } catch (e) { print("S7.02 full-match:EXC[" + e + "]"); }
+try { print("S7.03 partial-match: " + str("hello".starts_with("hel"))); } catch (e) { print("S7.03 partial-match:EXC[" + e + "]"); }
+try { print("S7.04 longer-than-self: " + str("hi".starts_with("hello"))); } catch (e) { print("S7.04 longer-than-self:EXC[" + e + "]"); }
+try { print("S7.05 end-full-match: " + str("hello".ends_with("hello"))); } catch (e) { print("S7.05 end-full-match:EXC[" + e + "]"); }
+try { print("S7.06 end-longer: " + str("hi".ends_with("hello"))); } catch (e) { print("S7.06 end-longer:EXC[" + e + "]"); }
+try { print("S7.07 empty-empty: " + str("".starts_with(""))); } catch (e) { print("S7.07 empty-empty:EXC[" + e + "]"); }
+
+# =============================================================
+# S8: 字符串拼接 边界
+# =============================================================
+try { print("S8.01 big-concat: [" + "a" + "b" + "c" + "d" + "e" + "f" + "]"); } catch (e) { print("S8.01 big-concat:EXC[" + e + "]"); }
+try { print("S8.02 concat-null: [" + ("x" + null) + "]"); } catch (e) { print("S8.02 concat-null:EXC[" + e + "]"); }
+try { print("S8.03 concat-int: [" + ("x" + 1) + "]"); } catch (e) { print("S8.03 concat-int:EXC[" + e + "]"); }
+try { print("S8.04 concat-bool: [" + ("x" + true) + "]"); } catch (e) { print("S8.04 concat-bool:EXC[" + e + "]"); }
+try { print("S8.05 concat-list: [" + ("x" + [1, 2]) + "]"); } catch (e) { print("S8.05 concat-list:EXC[" + e + "]"); }
+try { print("S8.06 concat-float: [" + ("x" + 3.14) + "]"); } catch (e) { print("S8.06 concat-float:EXC[" + e + "]"); }
+
+# =============================================================
+# S9: 字符串索引 s[i] 边界
+# =============================================================
+try { print("S9.01 idx-0: [" + "hello"[0] + "]"); } catch (e) { print("S9.01 idx-0:EXC[" + e + "]"); }
+try { print("S9.02 idx-neg-1: [" + "hello"[-1] + "]"); } catch (e) { print("S9.02 idx-neg-1:EXC[" + e + "]"); }
+try { print("S9.03 idx-neg-over: [" + "hello"[-100] + "]"); } catch (e) { print("S9.03 idx-neg-over:EXC[" + e + "]"); }
+try { print("S9.04 idx-over: [" + "hello"[5] + "]"); } catch (e) { print("S9.04 idx-over:EXC[" + e + "]"); }
+try { print("S9.05 idx-empty: [" + ""[0] + "]"); } catch (e) { print("S9.05 idx-empty:EXC[" + e + "]"); }
+try { print("S9.06 idx-last: [" + "hello"[4] + "]"); } catch (e) { print("S9.06 idx-last:EXC[" + e + "]"); }
+
+# =============================================================
+# S10: 字符串切片 s[a:b:c] 边界
+# =============================================================
+try { print("S10.01 neg-step: [" + "hello"[::-1] + "]"); } catch (e) { print("S10.01 neg-step:EXC[" + e + "]"); }
+try { print("S10.02 step-2: [" + "hello"[::2] + "]"); } catch (e) { print("S10.02 step-2:EXC[" + e + "]"); }
+try { print("S10.03 reverse-section: [" + "hello"[4:0:-1] + "]"); } catch (e) { print("S10.03 reverse-section:EXC[" + e + "]"); }
+try { print("S10.04 empty-slice: [" + "hello"[2:2] + "]"); } catch (e) { print("S10.04 empty-slice:EXC[" + e + "]"); }
+try { print("S10.05 start-gt-end: [" + "hello"[3:1] + "]"); } catch (e) { print("S10.05 start-gt-end:EXC[" + e + "]"); }
+try { print("S10.06 step-0: [" + "hello"[0:5:0] + "]"); } catch (e) { print("S10.06 step-0:EXC[" + e + "]"); }
+try { print("S10.07 neg-step-2: [" + "hello"[::-2] + "]"); } catch (e) { print("S10.07 neg-step-2:EXC[" + e + "]"); }
+try { print("S10.08 empty-reverse: [" + ""[::-1] + "]"); } catch (e) { print("S10.08 empty-reverse:EXC[" + e + "]"); }
+
+# =============================================================
+# S11: 字符串重复 s * n 边界
+# =============================================================
+try { print("S11.01 rep-0: [" + "ab" * 0 + "]"); } catch (e) { print("S11.01 rep-0:EXC[" + e + "]"); }
+try { print("S11.02 rep-neg-1: [" + "ab" * -1 + "]"); } catch (e) { print("S11.02 rep-neg-1:EXC[" + e + "]"); }
+try { print("S11.03 rep-3: [" + "ab" * 3 + "]"); } catch (e) { print("S11.03 rep-3:EXC[" + e + "]"); }
+try { print("S11.04 rep-big: " + str(len("a" * 1000))); } catch (e) { print("S11.04 rep-big:EXC[" + e + "]"); }
+try { print("S11.05 rep-neg-big: [" + "ab" * -100 + "]"); } catch (e) { print("S11.05 rep-neg-big:EXC[" + e + "]"); }
+try { print("S11.06 rep-empty: [" + "" * 5 + "]"); } catch (e) { print("S11.06 rep-empty:EXC[" + e + "]"); }
+
+# =============================================================
+# S12: 字符串比较 ==, <, > 边界
+# =============================================================
+try { print("S12.01 eq-same: " + str("abc" == "abc")); } catch (e) { print("S12.01 eq-same:EXC[" + e + "]"); }
+try { print("S12.02 eq-diff: " + str("abc" == "abd")); } catch (e) { print("S12.02 eq-diff:EXC[" + e + "]"); }
+try { print("S12.03 lt-empty: " + str("" < "a")); } catch (e) { print("S12.03 lt-empty:EXC[" + e + "]"); }
+try { print("S12.04 gt-nonempty: " + str("a" > "")); } catch (e) { print("S12.04 gt-nonempty:EXC[" + e + "]"); }
+try { print("S12.05 lt-diff-len: " + str("abc" < "abcd")); } catch (e) { print("S12.05 lt-diff-len:EXC[" + e + "]"); }
+try { print("S12.06 gt-prefix: " + str("abcd" > "abc")); } catch (e) { print("S12.06 gt-prefix:EXC[" + e + "]"); }
+try { print("S12.07 unicode-cmp: " + str("你好" < "你好世界")); } catch (e) { print("S12.07 unicode-cmp:EXC[" + e + "]"); }
+try { print("S12.08 empty-eq-empty: " + str("" == "")); } catch (e) { print("S12.08 empty-eq-empty:EXC[" + e + "]"); }
+
+print("DONE-140");

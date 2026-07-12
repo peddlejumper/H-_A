@@ -1,0 +1,6 @@
+# Minimal test
+fn test() {
+    let x = max_num(0.0, 1.0);
+    return x;
+}
+print(test());

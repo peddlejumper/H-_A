@@ -1,0 +1,12 @@
+# Probe S13 — Unsupported iterable types (runtime errors).
+# forIterFirst's `else` branch throws
+#   "FOR_ITER: unsupported iterable <type>"
+# for any value that is not HList / HString / HDict.  This probe
+# exercises number / null / bool / instance iterables directly
+# (without try/catch, so each must be run separately).
+#
+# Expected: each line throws at runtime.
+
+for x in 5 { print(x); }               # number
+for x in nil { print(x); }             # null
+for x in true { print(x); }            # bool

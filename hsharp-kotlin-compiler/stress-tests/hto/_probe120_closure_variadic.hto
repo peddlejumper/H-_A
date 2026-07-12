@@ -1,0 +1,43 @@
+# probe: confirm MAKE_CLOSURE drops isVariadic flag
+# Lambda with freevar (len) + variadic → MAKE_CLOSURE → isVariadic lost
+# Lambda without freevar + variadic → no MAKE_CLOSURE → isVariadic preserved
+
+# Case 1: variadic lambda WITH freevar (len) — should work but fails
+fn test1() {
+    let f = fn(...xs) { return len(xs); };
+    return f();
+}
+print("probe1 (freevar+variadic, 0 args):");
+try { print(test1()); } catch (e) { print("ERR: " + e); }
+
+# Case 2: variadic lambda WITHOUT freevar — works
+fn test2() {
+    let f = fn(...xs) { return xs; };
+    return len(f(1, 2, 3));
+}
+print("probe2 (no freevar+variadic, 3 args):");
+try { print(test2()); } catch (e) { print("ERR: " + e); }
+
+# Case 3: variadic lambda WITH freevar, called with exact param count
+fn test3() {
+    let f = fn(...xs) { return len(xs); };
+    return f(99);
+}
+print("probe3 (freevar+variadic, 1 arg):");
+try { print(test3()); } catch (e) { print("ERR: " + e); }
+
+# Case 4: nested variadic function with freevar
+fn outer() {
+    fn inner(...args) { return len(args); }
+    return inner();
+}
+print("probe4 (nested fn freevar+variadic, 0 args):");
+try { print(outer()); } catch (e) { print("ERR: " + e); }
+
+# Case 5: default+variadic lambda with freevar — both flags lost
+fn test5() {
+    let f = fn(a, b=10, ...rest) { return [a, b, len(rest)]; };
+    return f(1);
+}
+print("probe5 (freevar+default+variadic, 1 arg):");
+try { print(test5()); } catch (e) { print("ERR: " + e); }

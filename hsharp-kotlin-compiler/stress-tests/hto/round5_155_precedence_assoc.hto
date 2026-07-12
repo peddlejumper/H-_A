@@ -1,0 +1,173 @@
+# Round-5 #155 — 运算符优先级与结合性 (Operator precedence & associativity)
+#
+# H# parser 优先级链 (高 → 低), 源自 HSharp_v0.4_Tests/parser.py:
+#   postfix (. [] ())  >  unary(- not ~ * await match)  >  factor(* / %)
+#   >  term(+ -)  >  comparison(< > <= >= in is as)  >  bitwise(& | ^ << >> 同级)
+#   >  equality(== !=)  >  logical_and(and)  >  logical_or(or)  >  ternary(?:)
+#
+# Python 优先级 (高 → 低):
+#   ** > unary > * / // % > + - > << >> > & > ^ > | > 比较(含 ==) > not > and > or
+#
+# 已知 H# 设计 (非 bug):  (1) / 对整数做 floor   (2) a<b<c 为 C 风格左结合
+# 其余偏离 Python 的行为均为待标记 bug。
+# 每行: print("TAG = " + (EXPR));  — 括号隔离待测表达式。
+
+# ============================================================
+# 1. 算术优先级 (arithmetic precedence)
+# ============================================================
+print("T1.1 1+2*3 = " + (1 + 2 * 3));            # Py=7   1+(2*3)
+print("T1.2 (1+2)*3 = " + ((1 + 2) * 3));        # Py=9
+print("T1.3 2*3+4*5 = " + (2 * 3 + 4 * 5));      # Py=26  (2*3)+(4*5)
+print("T1.4 10-2-3 = " + (10 - 2 - 3));          # Py=5   左结合 (10-2)-3
+print("T1.5 100/10/2 = " + (100 / 10 / 2));      # Py=5   左结合 floor (已知设计)
+print("T1.6 2+3*4-6/2 = " + (2 + 3 * 4 - 6 / 2));# Py=11  2+12-3
+
+# ============================================================
+# 2. 比较链 (comparison chaining — C 风格左结合, 已知设计)
+# ============================================================
+print("T2.1 1<2<3 = " + (1 < 2 < 3));            # H#=(1<2)<3=1<3=true;  Py=true
+print("T2.2 3<2<1 = " + (3 < 2 < 1));            # H#=(3<2)<1=0<1=true;  Py=false (已知设计差异)
+print("T2.3 1<2==true = " + (1 < 2 == true));     # H#=(1<2)==true=true;  Py=true
+print("T2.4 5>2>1 = " + (5 > 2 > 1));            # H#=(5>2)>1=1>1=false; Py=true  (已知设计差异)
+print("T2.5 1<2==1 = " + (1 < 2 == 1));          # H#=(1<2)==1=true==1=false; Py=true
+
+# ============================================================
+# 3. 逻辑优先级 (logical precedence — not 在 H# 处于 unary 级, 极紧)
+# ============================================================
+print("T3.1 not-true-and-false = " + (not true and false));   # H#=(not true) and false=false; Py=not(true and false)=true  BUG
+print("T3.2 true-or-false-and-false = " + (true or false and false)); # H#=true or (false and false)=true; Py=true
+print("T3.3 not-(true-and-false) = " + (not (true and false)));# H#=not(false)=true; Py=true
+print("T3.4 not-false-or-true = " + (not false or true));     # H#=(not false) or true=true; Py=not(false or true)=false  BUG
+print("T3.5 true-and-not-false = " + (true and not false));   # H#=true and (not false)=true; Py=true
+
+# ============================================================
+# 4. 混合算术与比较 (mixed arithmetic & comparison)
+# ============================================================
+print("T4.1 1+2>3 = " + (1 + 2 > 3));            # H#=(1+2)>3=3>3=false; Py=False
+print("T4.2 2*3==6 = " + (2 * 3 == 6));          # H#=(2*3)==6=true; Py=True
+print("T4.3 1+2==3-and-4>2 = " + (1 + 2 == 3 and 4 > 2));  # H#=true and true=true; Py=True
+print("T4.4 1+2>2-and-3*3<10 = " + (1 + 2 > 2 and 3 * 3 < 10)); # H#=true and true=true; Py=True
+print("T4.5 5-1==4-or-2*2!=4 = " + (5 - 1 == 4 or 2 * 2 != 4)); # H#=true or false=true; Py=True
+
+# ============================================================
+# 5. 字符串拼接优先级 (string concat precedence — + 左结合)
+# ============================================================
+print("T5.1 a+b+c = " + ("a" + "b" + "c"));      # Py="abc"
+print("T5.2 x+1+2 = " + ("x" + 1 + 2));          # H#=("x"+1)+2="x12"; Py="x12"
+print("T5.3 1+2+x = " + (1 + 2 + "x"));          # H#=(1+2)+"x"="3x"; Py="3x"
+print("T5.4 n=+1*2 = " + ("n=" + 1 * 2));        # H#="n="+(1*2)="n=2"; Py="n=2"
+print("T5.5 r=+(1+1) = " + ("r=" + (1 + 1)));    # H#="r=2"; Py="r=2"
+
+# ============================================================
+# 6. 一元负号 (unary minus)
+# ============================================================
+print("T6.1 -5 = " + (-5));                      # Py=-5
+print("T6.2 -5+3 = " + (-5 + 3));                # H#=(-5)+3=-2; Py=-2
+print("T6.3 -(5+3) = " + (-(5 + 3)));            # Py=-8
+print("T6.4 3*-2 = " + (3 * -2));                # H#=3*(-2)=-6; Py=-6
+print("T6.5 --5 = " + (--5));                    # H#=-(-5)=0-(0-5)=5; Py=5
+print("T6.6 -2*-3 = " + (-2 * -3));              # H#=(-2)*(-3)=6; Py=6
+
+# ============================================================
+# 7. not 优先级 (not precedence — H# not 处于 unary 级, 比 * 更紧)
+# ============================================================
+print("T7.1 not-1==2 = " + (not 1 == 2));        # H#=(not 1)==2=false==2=false; Py=not(1==2)=true  BUG
+print("T7.2 not-1==1 = " + (not 1 == 1));        # H#=(not 1)==1=false==1=false; Py=not(1==1)=false (同结果,不同解析)
+print("T7.3 not-not-true = " + (not not true));  # H#=not(not true)=not false=true; Py=true
+print("T7.4 not-0 = " + (not 0));                # H# Kotlin: 非 bool→false; Py=not 0=true  BUG(语义)
+print("T7.5 not-5>3 = " + (not 5 > 3));          # H#=(not 5)>3=false>3=0>3=false; Py=not(5>3)=false (同结果)
+print("T7.6 not-5<3 = " + (not 5 < 3));          # H#=(not 5)<3=false<3=0<3=true; Py=not(5<3)=true (同结果)
+
+# ============================================================
+# 8. in 运算符 (in operator — 处于 comparison 级)
+# ============================================================
+print("T8.1 a-in-[a,b] = " + ("a" in ["a", "b"]));          # Py=true
+print("T8.2 1-in-and-2-in = " + (1 in [1, 2] and 2 in [1, 2])); # H#=(1 in ..) and (2 in ..)=true; Py=true
+print("T8.3 1-in-or-5-in = " + (1 in [1, 2] or 5 in [1, 2]));   # H#=true or false=true; Py=true
+print("T8.4 x-in-xyz = " + ("x" in "xyz"));                 # Py=true
+print("T8.5 5-in-[1,2,3] = " + (5 in [1, 2, 3]));           # Py=false
+print("T8.6 not-(a-in-[a]) = " + (not ("a" in ["a"])));     # H#=not(true)=false; Py=false
+
+# ============================================================
+# 9. is 运算符 (is operator — 处于 comparison 级)
+# ============================================================
+let xi = 5;
+let si = "hi";
+let ni = null;
+let bi = true;
+print("T9.1 x-is-int-and-x>0 = " + (xi is int and xi > 0));  # H#=(xi is int) and (xi>0)=true; Py=true
+print("T9.2 s-is-str-or-s-is-null = " + (si is str or si is null)); # H#=true or false=true; Py=true
+print("T9.3 n-is-null = " + (ni is null));                   # Py=true
+print("T9.4 b-is-bool = " + (bi is bool));                   # Py=true
+print("T9.5 x-is-str = " + (xi is str));                     # Py=false
+
+# ============================================================
+# 10. 赋值优先级 (assignment precedence — = 仅为语句级, 非表达式)
+# ============================================================
+let xa = 1 + 2 * 3;
+print("T10.1 let-x=1+2*3 = " + xa);            # Py x=7
+let xb = 2 * 3 + 4;
+print("T10.2 let-x=2*3+4 = " + xb);            # Py x=10
+let xc = 10 / 2;
+print("T10.3 let-x=10/2 = " + xc);             # H#=5 (floor); Py=5.0 (已知 floor 设计)
+let xd = true and false or true;
+print("T10.4 let-x=true-and-false-or-true = " + xd);  # H#=(true and false) or true=true; Py=true
+# T10.5 let x = y = 5;  — 单独探针文件验证 (应为语法错误)
+
+# ============================================================
+# 11. 三元/条件 (ternary — H# 使用 ?: 而非 C 风格 ? :)
+# ============================================================
+print("T11.1 true?:11:22 = " + (true ?: 11 : 22));         # Py=11
+print("T11.2 false?:11:22 = " + (false ?: 11 : 22));       # Py=22
+print("T11.3 5>3?:100:200 = " + (5 > 3 ?: 100 : 200));     # H#=(5>3)?:100:200=100; Py=100
+print("T11.4 true?:false?:1:2:3 = " + (true ?: false ?: 1 : 2 : 3)); # H#=2 (右结合嵌套)
+# T11.5 C 风格 cond ? a : b — 单独探针文件验证 (应为语法错误)
+
+# ============================================================
+# 12. 幂运算 (exponentiation — H# 不支持 **, 应为语法错误)
+# ============================================================
+# T12.1 2 ** 3 — 单独探针文件验证 (应为语法错误, H# 不支持 **)
+
+# ============================================================
+# 13. 位运算 (bitwise — H# &|^<<>> 全部同级, 且低于 comparison)
+# ============================================================
+print("T13.1 1&2|3 = " + (1 & 2 | 3));          # H#=(1&2)|3=3; Py=(1&2)|3=3 (同)
+print("T13.2 8|5&3 = " + (8 | 5 & 3));          # H#=(8|5)&3=1; Py=8|(5&3)=9  BUG
+print("T13.3 4&1<<2 = " + (4 & 1 << 2));        # H#=(4&1)<<2=0; Py=4&(1<<2)=4  BUG
+print("T13.4 1<<2+3 = " + (1 << 2 + 3));        # H#=1<<(2+3)=32; Py=1<<(2+3)=32 (同, + 高于 <<)
+print("T13.5 1<<2<8 = " + (1 << 2 < 8));        # H#=1<<(2<8)=1<<1=2; Py=(1<<2)<8=4<8=true  BUG
+print("T13.6 5>2&1 = " + (5 > 2 & 1));          # H#=(5>2)&1=true&1=1; Py=5>(2&1)=5>0=true  BUG
+print("T13.7 5&3==1 = " + (5 & 3 == 1));        # H#=(5&3)==1=1==1=true; Py=(5&3)==1=true (同)
+print("T13.8 1<<2|1&3 = " + (1 << 2 | 1 & 3));  # H#=((1<<2)|1)&3=5&3=1; Py=(1<<2)|(1&3)=4|1=5  BUG
+
+# ============================================================
+# 14. 复合表达式 (compound expressions)
+# ============================================================
+print("T14.1 1+2*3-4/2%3 = " + (1 + 2 * 3 - 4 / 2 % 3));   # H#=1+6-(2%3)=5; Py=5.0
+print("T14.2 ((1+2)*(3+4))-5 = " + (((1 + 2) * (3 + 4)) - 5)); # Py=16
+print("T14.3 2+3*4==2+12-and-1<2 = " + (2 + 3 * 4 == 2 + 12 and 1 < 2)); # H#=(14==14) and true=true; Py=true
+print("T14.4 (10-3)*2>10-and-not-false = " + ((10 - 3) * 2 > 10 and not false)); # H#=(14>10) and true=true; Py=true
+print("T14.5 (1+2)*3+4*5-6/2 = " + ((1 + 2) * 3 + 4 * 5 - 6 / 2)); # H#=9+20-3=26; Py=26.0
+
+# ============================================================
+# 15. and/or 返回值 (and/or return values — Python 语义返回原操作数)
+# ============================================================
+print("T15.1 0-and-1 = " + (0 and 1));           # H#=0 (falsy 左, 返回左); Py=0
+print("T15.2 1-or-2 = " + (1 or 2));             # H#=1 (truthy 左, 返回左); Py=1
+print("T15.3 x-and-y = " + ("x" and "y"));       # H#="y" (truthy 左, 返回右); Py="y"
+print("T15.4 empty-or-default = " + ("" or "default")); # H#="default"; Py="default"
+print("T15.5 false-and-5 = " + (false and 5));   # H#=false (falsy 左, 返回左); Py=False
+print("T15.6 0-or-empty = " + (0 or ""));        # H#="" (两者 falsy, 返回右); Py=""
+
+# ============================================================
+# 附加: and/or 左结合性
+# ============================================================
+print("T15.7 true-and-true-and-false = " + (true and true and false)); # H#=false; Py=false
+print("T15.8 false-or-false-or-true = " + (false or false or true));   # H#=true; Py=true
+
+# ============================================================
+# 附加: bool/int 跨类型相等性 (语义探针)
+# ============================================================
+print("T15.9 true==1 = " + (true == 1));         # H#=false (Kotlin 不跨类型); Py=True  BUG(语义)
+print("T15.10 false==0 = " + (false == 0));      # H#=false; Py=True  BUG(语义)
+print("T15.11 1==true = " + (1 == true));        # H#=false; Py=True  BUG(语义)

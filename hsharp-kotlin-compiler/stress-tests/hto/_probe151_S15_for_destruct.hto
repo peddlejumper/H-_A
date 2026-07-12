@@ -1,0 +1,20 @@
+# Probe S15 — Multi-level destructuring in for-loop header.
+# `for [a, b] in [[1,2],[3,4]] { ... }`
+#
+# The task description tags this as "刚修复的嵌套解构" (recently-fixed
+# nested destructuring).  However, the parser's for_statement()
+# only accepts `for IDENT in ...` or `for IDENT, IDENT in ...`:
+#     var1 = self.current_token[1]
+#     self.eat(TokenType.IDENTIFIER)   # <-- requires IDENT, not `[`
+# So a leading `[` should raise a compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR (SyntaxError).  This probe confirms
+# whether the "fix" actually landed.
+#
+# If the parser WAS extended to accept `[a, b]`, the expected
+# runtime output would be: 3 7 11
+
+let pairs = [[1, 2], [3, 4], [5, 6]];
+for [a, b] in pairs {
+    print(a + b);
+}

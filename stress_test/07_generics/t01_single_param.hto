@@ -1,0 +1,15 @@
+# t01_single_param.hto — 单类型参数：class Box<T> + new Box<int>(42)
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Box<T> {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+    fn get() { return self.value; }
+}
+
+let b = new Box<int>(42);
+print("get=" + str(b.get()));
+check("1/get_is_42", b.get() == 42);

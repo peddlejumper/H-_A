@@ -1,0 +1,247 @@
+# shared/http_server.hto
+# 极简 HTTP 服务器(基于 socket 原语)
+# 单线程、阻塞 IO,适合教学 OJ 这种小规模场景
+
+import "shared/string_utils.hto";
+import "shared/json_utils.hto";
+
+# 路由表: [ [method, path_pattern, handler], ... ]
+let _routes = [];
+let _middlewares = [];
+
+# 注册路由
+fn route(method, path_pattern, handler) {
+    _routes.append([method, path_pattern, handler]);
+}
+
+# 中间件:before_request(req) -> req | response(短路)
+fn use_middleware(mw) {
+    _middlewares.append(mw);
+}
+
+# 匹配路径(支持 :param 风格)
+fn _match_path(pattern, path) {
+    let ps = str_split(pattern, "/");
+    let xs = str_split(path, "/");
+    if (len(ps) != len(xs)) {
+        return nullptr;
+    }
+    let params = {};
+    let i = 0;
+    while (i < len(ps)) {
+        if (substring(ps[i], 0, 1) == ":") {
+            let key = substring(ps[i], 1, len(ps[i]) - 1);
+            params[key] = xs[i];
+        } else if (ps[i] != xs[i]) {
+            return nullptr;
+        }
+        i = i + 1;
+    }
+    return params;
+}
+
+# 解析 HTTP 请求 -> {method, path, query, headers, body, params}
+fn _parse_request(raw) {
+    let req = {
+        "method": "GET",
+        "path": "/",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "params": {}
+    };
+    # 用 \r\n\r\n 切分 header 和 body
+    let sep = "\r\n\r\n";
+    let idx = str_index_of(raw, sep);
+    if (idx < 0) {
+        idx = str_index_of(raw, "\n\n");
+    }
+    let head = "";
+    let body = "";
+    if (idx >= 0) {
+        head = substring(raw, 0, idx);
+        body = substring(raw, idx + 4, len(raw) - idx - 4);
+    } else {
+        head = raw;
+        body = "";
+    }
+    # 第一行
+    let nl = str_index_of(head, "\n");
+    let start = "";
+    if (nl >= 0) {
+        start = substring(head, 0, nl);
+    } else {
+        start = head;
+    }
+    # 拆分 method / path / version
+    let parts = str_split(start, " ");
+    if (len(parts) >= 2) {
+        req["method"] = parts[0];
+        let p = parts[1];
+        let q = str_index_of(p, "?");
+        if (q >= 0) {
+            req["path"] = substring(p, 0, q);
+            let qstr = substring(p, q + 1, len(p) - q - 1);
+            req["query"] = _parse_query(qstr);
+        } else {
+            req["path"] = p;
+        }
+    }
+    # 解析 headers
+    let hlines = str_split(head, "\n");
+    let j = 1;
+    while (j < len(hlines)) {
+        let line = hlines[j];
+        let c = str_index_of(line, ":");
+        if (c > 0) {
+            let k = substring(line, 0, c);
+            k = str_trim(k);
+            let v = substring(line, c + 1, len(line) - c - 1);
+            v = str_trim(v);
+            req["headers"][k] = v;
+        }
+        j = j + 1;
+    }
+    req["body"] = body;
+    return req;
+}
+
+fn _parse_query(qstr) {
+    let q = {};
+    if (qstr == nullptr or qstr == "") {
+        return q;
+    }
+    let parts = str_split(qstr, "&");
+    let i = 0;
+    while (i < len(parts)) {
+        let p = parts[i];
+        let eq = str_index_of(p, "=");
+        if (eq > 0) {
+            let k = substring(p, 0, eq);
+            let v = substring(p, eq + 1, len(p) - eq - 1);
+            q[k] = v;
+        } else if (p != "") {
+            q[p] = "";
+        }
+        i = i + 1;
+    }
+    return q;
+}
+
+# 构造 HTTP 响应
+fn _format_response(resp) {
+    if (resp == nullptr) {
+        resp = {"status": 500, "body": "Internal Server Error", "content_type": "text/plain"};
+    }
+    let status = resp["status"];
+    let body = resp["body"];
+    let ct = resp["content_type"];
+    if (ct == nullptr) {
+        ct = "application/json; charset=utf-8";
+    }
+    let reason = _status_reason(status);
+    let head = "HTTP/1.1 " + str(status) + " " + reason + "\r\n";
+    head = head + "Content-Type: " + ct + "\r\n";
+    head = head + "Content-Length: " + str(len(body)) + "\r\n";
+    head = head + "Access-Control-Allow-Origin: *\r\n";
+    head = head + "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n";
+    head = head + "Access-Control-Allow-Headers: Content-Type, Authorization\r\n";
+    head = head + "Connection: close\r\n";
+    head = head + "\r\n";
+    return head + body;
+}
+
+fn _status_reason(s) {
+    if (s == 200) { return "OK"; }
+    if (s == 201) { return "Created"; }
+    if (s == 204) { return "No Content"; }
+    if (s == 400) { return "Bad Request"; }
+    if (s == 401) { return "Unauthorized"; }
+    if (s == 403) { return "Forbidden"; }
+    if (s == 404) { return "Not Found"; }
+    if (s == 405) { return "Method Not Allowed"; }
+    if (s == 409) { return "Conflict"; }
+    if (s == 500) { return "Internal Server Error"; }
+    return "OK";
+}
+
+# 分发一个请求 -> response
+fn handle_request(req) {
+    # 中间件链
+    let k = 0;
+    while (k < len(_middlewares)) {
+        let r = _middlewares[k](req);
+        if (r != nullptr and "status" in r) {
+            return r;
+        }
+        k = k + 1;
+    }
+    # CORS preflight
+    if (req["method"] == "OPTIONS") {
+        return {"status": 204, "body": "", "content_type": "text/plain"};
+    }
+    # 路由匹配
+    let i = 0;
+    while (i < len(_routes)) {
+        let r = _routes[i];
+        if (r[0] == req["method"]) {
+            let params = _match_path(r[1], req["path"]);
+            if (params != nullptr) {
+                req["params"] = params;
+                return r[2](req);
+            }
+        }
+        i = i + 1;
+    }
+    return {"status": 404, "body": json_stringify(json_response_err("Not Found: " + req["path"])), "content_type": "application/json"};
+}
+
+# 启动阻塞式监听(server loop,教学场景)
+# 注:真实部署应使用 host socket API。此处给出基于 thread_spawn 的协作版本。
+# 在没有 socket 原语的环境下,本函数将降级为"测试模式":逐条处理来自管道的请求。
+fn serve_stdin_loop() {
+    print("[http_server] 测试模式:从 stdin 逐条读取 HTTP 请求行(单行 path)");
+    let line = "";
+    while (line != "exit") {
+        line = read_line();
+        if (line == nullptr or line == "exit") {
+            break;
+        }
+        # 期望格式: METHOD PATH
+        let parts = str_split(line, " ");
+        let method = "GET";
+        let path = "/";
+        if (len(parts) >= 1) { method = parts[0]; }
+        if (len(parts) >= 2) { path = parts[1]; }
+        let req = {
+            "method": method,
+            "path": path,
+            "query": {},
+            "headers": {},
+            "body": "",
+            "params": {}
+        };
+        let resp = handle_request(req);
+        let raw_resp = _format_response(resp);
+        print(raw_resp);
+    }
+}
+
+# 让外部(真实 HTTP 适配层)调用入口
+fn dispatch_raw_request(raw_text) {
+    let req = _parse_request(raw_text);
+    let resp = handle_request(req);
+    return _format_response(resp);
+}
+
+# 工具:从 body 取 JSON
+fn body_json(req) {
+    if (req["body"] == nullptr or req["body"] == "") {
+        return {};
+    }
+    let v = json_parse(req["body"]);
+    if (v == nullptr) {
+        return {};
+    }
+    return v;
+}

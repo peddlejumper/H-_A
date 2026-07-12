@@ -1,0 +1,217 @@
+# ============================================================
+# round4_128_mixedops.hto — 混合类型运算 (mixed-type operations)
+# 测试智能体 Round 4 #128
+# H# v0.4.1
+#
+# 目标: 深度测试跨类型/混合类型运算符行为, 包括:
+#   - list+list, list*num, dict+dict
+#   - string + 非字符串 (int/bool/null/list/dict)
+#   - string * num
+#   - 跨类型比较 (<, >, ==)
+#   - 混合列表运算
+#   - 非数字算术 ([]+1, {}*2, true+false, null*0)
+#   - 跨类型相等
+#   - 运算链混合 (优先级 & 结合性)
+#
+# 已知限制 (不是 bug):
+#   - 修复后 list + non-list (list 在左边) 会报错
+#   - string + list 仍保留 (向后兼容)
+#   - 闭包快照, 函数级作用域
+#
+# 每个 probe 用 try/catch 包住, 输出 r128_<name>:<result>。
+# ============================================================
+
+print("=== R4.128 START ===");
+
+# ============================================================
+# 工具: 安全执行包装
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# S1: 列表 + 列表 (拼接)
+# 预期: [1,2] + [3,4] = [1,2,3,4]
+# ============================================================
+print("--- S1: list + list ---");
+safe("r128_s1_basic", fn() { return [1, 2] + [3, 4]; });
+safe("r128_s1_empty_left", fn() { return [] + [1, 2]; });
+safe("r128_s1_empty_right", fn() { return [1, 2] + []; });
+safe("r128_s1_both_empty", fn() { return [] + []; });
+safe("r128_s1_nested", fn() { return [[1, 2]] + [[3, 4]]; });
+safe("r128_s1_chain", fn() { return [1] + [2] + [3]; });
+safe("r128_s1_mixed_types", fn() { return [1, "a"] + [true, null]; });
+
+# ============================================================
+# S2: 列表 * 数字 (重复)
+# 预期: [1,2] * 3 = [1,2,1,2,1,2]
+# ============================================================
+print("--- S2: list * number ---");
+safe("r128_s2_basic", fn() { return [1, 2] * 3; });
+safe("r128_s2_zero", fn() { return [1, 2] * 0; });
+safe("r128_s2_one", fn() { return [1, 2] * 1; });
+safe("r128_s2_negative", fn() { return [1, 2] * -1; });
+safe("r128_s2_reverse", fn() { return 3 * [1, 2]; });
+safe("r128_s2_empty", fn() { return [] * 3; });
+safe("r128_s2_float", fn() { return [1] * 2.5; });
+
+# ============================================================
+# S3: 字典 + 字典 (合并? 报错?)
+# 预期: 未知 — 探测行为
+# ============================================================
+print("--- S3: dict + dict ---");
+safe("r128_s3_basic", fn() { return {"a": 1} + {"b": 2}; });
+safe("r128_s3_empty_left", fn() { return {} + {"a": 1}; });
+safe("r128_s3_empty_right", fn() { return {"a": 1} + {}; });
+safe("r128_s3_both_empty", fn() { return {} + {}; });
+safe("r128_s3_key_collision", fn() { return {"a": 1} + {"a": 2}; });
+safe("r128_s3_chain", fn() { return {"a": 1} + {"b": 2} + {"c": 3}; });
+
+# ============================================================
+# S4: 字符串 + 非字符串
+# 预期: 隐式转换为字符串拼接
+# ============================================================
+print("--- S4: string + non-string ---");
+safe("r128_s4_str_plus_int", fn() { return "x" + 42; });
+safe("r128_s4_str_plus_float", fn() { return "x" + 3.14; });
+safe("r128_s4_str_plus_bool", fn() { return "x" + true; });
+safe("r128_s4_str_plus_null", fn() { return "x" + null; });
+safe("r128_s4_str_plus_list", fn() { return "x" + [1, 2]; });
+safe("r128_s4_str_plus_dict", fn() { return "x" + {"k": "v"}; });
+safe("r128_s4_str_plus_empty_list", fn() { return "x" + []; });
+safe("r128_s4_str_plus_empty_dict", fn() { return "x" + {}; });
+
+# ============================================================
+# S5: 字符串 * 数字 (重复)
+# 预期: "ab" * 3 = "ababab"
+# ============================================================
+print("--- S5: string * number ---");
+safe("r128_s5_basic", fn() { return "ab" * 3; });
+safe("r128_s5_zero", fn() { return "ab" * 0; });
+safe("r128_s5_one", fn() { return "ab" * 1; });
+# NOTE: "ab" * -1 throws an exception that ESCAPES try/catch when thrown
+# inside a lambda passed to safe() (BUG-1, confirmed via _probe128b/c).
+# Direct try/catch DOES catch it. Using direct form here so suite completes.
+try {
+    print("r128_s5_negative:" + ("ab" * -1));
+} catch (e) {
+    print("r128_s5_negative:EXC[" + str(e) + "]");
+}
+safe("r128_s5_reverse", fn() { return 3 * "ab"; });
+safe("r128_s5_empty", fn() { return "" * 3; });
+safe("r128_s5_float", fn() { return "x" * 2.5; });
+
+# ============================================================
+# S6: 跨类型比较 (<, >, <=, >=)
+# 预期: 探测行为 — 列表/字典比较是否支持?
+# ============================================================
+print("--- S6: cross-type comparison ---");
+safe("r128_s6_list_lt", fn() { return [1, 2] < [1, 3]; });
+safe("r128_s6_list_lt_smaller", fn() { return [1, 2] < [1, 1]; });
+safe("r128_s6_list_lt_prefix", fn() { return [1, 2] < [1, 2, 3]; });
+safe("r128_s6_list_gt", fn() { return [1, 3] > [1, 2]; });
+safe("r128_s6_list_eq_cmp", fn() { return [1, 2] <= [1, 2]; });
+safe("r128_s6_str_lt", fn() { return "a" < "b"; });
+safe("r128_s6_str_lt2", fn() { return "abc" < "abd"; });
+safe("r128_s6_str_gt", fn() { return "b" > "a"; });
+safe("r128_s6_dict_lt", fn() { return {"a": 1} < {"b": 2}; });
+safe("r128_s6_dict_gt", fn() { return {"a": 1} > {"b": 2}; });
+safe("r128_s6_int_lt_str", fn() { return 1 < "2"; });
+safe("r128_s6_str_lt_int", fn() { return "1" < 2; });
+safe("r128_s6_int_gt_str", fn() { return 2 > "1"; });
+safe("r128_s6_list_lt_str", fn() { return [1, 2] < "abc"; });
+safe("r128_s6_str_lt_list", fn() { return "abc" < [1, 2]; });
+safe("r128_s6_list_lt_dict", fn() { return [1, 2] < {"a": 1}; });
+
+# ============================================================
+# S7: 混合列表运算 — [1, "a", true, null] 的 +, len, 索引, 比较
+# ============================================================
+print("--- S7: mixed list operations ---");
+let mixed = [1, "a", true, null];
+safe("r128_s7_print", fn() { return mixed; });
+safe("r128_s7_len", fn() { return len(mixed); });
+safe("r128_s7_index_0", fn() { return mixed[0]; });
+safe("r128_s7_index_1", fn() { return mixed[1]; });
+safe("r128_s7_index_2", fn() { return mixed[2]; });
+safe("r128_s7_index_3", fn() { return mixed[3]; });
+safe("r128_s7_concat", fn() { return mixed + [3.14]; });
+safe("r128_s7_eq_self", fn() { return mixed == [1, "a", true, null]; });
+safe("r128_s7_eq_diff", fn() { return mixed == [1, "a", false, null]; });
+safe("r128_s7_in_check", fn() { return "a" in mixed; });
+safe("r128_s7_null_in_check", fn() { return null in mixed; });
+
+# ============================================================
+# S8: 非数字算术 — [] + 1, {} * 2, true + false, null * 0
+# 已知限制: list + non-list (list 在左边) 会报错
+# ============================================================
+print("--- S8: non-numeric arithmetic ---");
+safe("r128_s8_list_plus_int", fn() { return [] + 1; });
+safe("r128_s8_int_plus_list", fn() { return 1 + []; });
+safe("r128_s8_list_plus_str", fn() { return [1] + "x"; });
+safe("r128_s8_dict_mul_int", fn() { return {} * 2; });
+safe("r128_s8_int_mul_dict", fn() { return 2 * {}; });
+safe("r128_s8_dict_plus_int", fn() { return {} + 1; });
+safe("r128_s8_bool_plus_bool", fn() { return true + false; });
+safe("r128_s8_bool_minus_bool", fn() { return true - false; });
+safe("r128_s8_bool_mul_bool", fn() { return true * true; });
+safe("r128_s8_null_mul_zero", fn() { return null * 0; });
+safe("r128_s8_null_plus_null", fn() { return null + null; });
+safe("r128_s8_null_minus_int", fn() { return null - 1; });
+safe("r128_s8_null_div_int", fn() { return null / 2; });
+safe("r128_s8_null_mod_int", fn() { return null % 2; });
+safe("r128_s8_bool_div_bool", fn() { return true / false; });
+safe("r128_s8_int_mod_zero", fn() { return 5 % 0; });
+
+# ============================================================
+# S9: 跨类型相等 ==
+# 预期: 探测 list/dict 值相等, 跨类型不相等
+# ============================================================
+print("--- S9: cross-type equality ---");
+safe("r128_s9_list_eq_same", fn() { return [1, 2] == [1, 2]; });
+safe("r128_s9_list_eq_diff", fn() { return [1, 2] == [1, 3]; });
+safe("r128_s9_list_eq_diff_len", fn() { return [1, 2] == [1, 2, 3]; });
+safe("r128_s9_list_eq_empty", fn() { return [] == []; });
+safe("r128_s9_list_eq_nested", fn() { return [[1, 2]] == [[1, 2]]; });
+safe("r128_s9_dict_eq_same", fn() { return {"a": 1} == {"a": 1}; });
+safe("r128_s9_dict_eq_diff_val", fn() { return {"a": 1} == {"a": 2}; });
+safe("r128_s9_dict_eq_diff_key", fn() { return {"a": 1} == {"b": 1}; });
+safe("r128_s9_dict_eq_diff_size", fn() { return {"a": 1} == {"a": 1, "b": 2}; });
+safe("r128_s9_dict_eq_empty", fn() { return {} == {}; });
+safe("r128_s9_list_eq_int", fn() { return [1] == 1; });
+safe("r128_s9_str_eq_int", fn() { return "1" == 1; });
+safe("r128_s9_empty_list_eq_empty_str", fn() { return [] == ""; });
+safe("r128_s9_empty_dict_eq_empty_list", fn() { return {} == []; });
+safe("r128_s9_int_eq_bool", fn() { return 1 == true; });
+safe("r128_s9_zero_eq_false", fn() { return 0 == false; });
+safe("r128_s9_null_eq_null", fn() { return null == null; });
+safe("r128_s9_null_eq_0", fn() { return null == 0; });
+safe("r128_s9_null_eq_false", fn() { return null == false; });
+safe("r128_s9_list_eq_dict", fn() { return [1, 2] == {"a": 1}; });
+safe("r128_s9_neq_list", fn() { return [1, 2] != [1, 2]; });
+safe("r128_s9_neq_diff", fn() { return [1, 2] != [1, 3]; });
+
+# ============================================================
+# S10: 运算链混合 (优先级 & 结合性)
+# 预期: * 优先于 +, 左结合
+# ============================================================
+print("--- S10: mixed operation chains ---");
+safe("r128_s10_int_plus_int_mul_str", fn() { return 1 + 2 * "3"; });
+safe("r128_s10_list_chain", fn() { return [1] + [2] + [3]; });
+safe("r128_s10_str_plus_int_plus_int", fn() { return "a" + 1 + 2; });
+safe("r128_s10_int_plus_int_plus_str", fn() { return 1 + 2 + "a"; });
+safe("r128_s10_list_mul_plus_list", fn() { return [1, 2] * 2 + [3]; });
+safe("r128_s10_str_mul_plus_str", fn() { return "ab" * 2 + "cd"; });
+safe("r128_s10_paren_str_plus_int_mul", fn() { return ("a" + 1) * 2; });
+safe("r128_s10_int_plus_str_plus_int", fn() { return 1 + "2" + 3; });
+safe("r128_s10_str_plus_str_mul_int", fn() { return "a" + "b" * 2; });
+safe("r128_s10_list_plus_list_mul_int", fn() { return [1] + [2] * 2; });
+safe("r128_s10_mixed_precedence", fn() { return 1 + 2 * 3 + 4; });
+safe("r128_s10_str_chain_multi", fn() { return "a" + 1 + true + null + [1]; });
+
+print("=== R4.128 DONE ===");

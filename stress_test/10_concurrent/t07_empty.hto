@@ -1,0 +1,6 @@
+# t07_empty.hto
+# concurrent 空块 —— 无任何子任务。
+# 预期：CONCURRENT_ENTER 创建空 scope，CONCURRENT_EXIT 对空 children join，立即返回，无异常。
+concurrent {
+}
+print("empty-ok");

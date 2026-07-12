@@ -1,0 +1,61 @@
+# 23 — parallel fn with no explicit return (implicit null)
+# A @parallel fn that doesn't `return` should resolve to HNull (or whatever
+# the VM's implicit-return value is).  Also tests that the future still
+# resolves (doesn't hang).
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+@parallel fn no_return() {
+    let x = 1;
+    let y = 2;
+    # no return statement
+}
+
+let f = no_return();
+let v = await f;
+check("no_return_resolves", v == nullptr or v == 0 or v == null, "v=" + str(v) + " type=" + type(v));
+
+@parallel fn no_return_with_side_effect(ch) {
+    chan_send(ch, 42);
+    # no return
+}
+
+let ch = chan_new(0);
+let f2 = no_return_with_side_effect(ch);
+let _ = await f2;
+let r = chan_recv(ch);
+check("side_effect_executed", r == 42, "r=" + str(r));
+
+# parallel fn that returns early
+@parallel fn early_return(n) {
+    if (n > 0) {
+        return "positive";
+    }
+    return "non-positive";
+}
+
+check("early_return_pos", await early_return(5) == "positive", "got " + str(await early_return(5)));
+check("early_return_neg", await early_return(-5) == "non-positive", "got " + str(await early_return(-5)));
+
+# parallel fn with throw and no return after
+@parallel fn throw_no_return() {
+    throw "err";
+    # no return after throw (dead code)
+}
+let caught = false;
+try {
+    let _ = await throw_no_return();
+} catch (e) {
+    caught = true;
+}
+check("throw_no_return_caught", caught, "not caught");
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

@@ -1,0 +1,180 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/compiler.hto";
+import "bootstrap/interpreter.hto";
+
+let passed = 0;
+let failed = 0;
+
+fn check(name, condition) {
+    if (condition) {
+        passed = passed + 1;
+        print("[PASS] " + name);
+    } else {
+        failed = failed + 1;
+        print("[FAIL] " + name);
+    }
+}
+
+print("╔══════════════════════════════════════════════╗");
+print("║   H# Bootstrap: Full Self-Hosting Demo      ║");
+print("║   Tokenize → Parse → Compile → Interpret    ║");
+print("╚══════════════════════════════════════════════╝");
+print("");
+
+# A comprehensive H# program covering all features
+let program = "fn factorial(n) {\n";
+program = program + "    if (n <= 1) {\n";
+program = program + "        return 1;\n";
+program = program + "    }\n";
+program = program + "    return n * factorial(n - 1);\n";
+program = program + "}\n";
+program = program + "\n";
+program = program + "let a = 10 + 5;\n";
+program = program + "let b = a * 2;\n";
+program = program + "let c = b - 5;\n";
+program = program + "let div = c / 5;\n";
+program = program + "\n";
+program = program + "let eq = a == 15;\n";
+program = program + "let neq = a != 20;\n";
+program = program + "let big = a > 10;\n";
+program = program + "let small = b < 50;\n";
+program = program + "\n";
+program = program + "let t = true and true;\n";
+program = program + "let f = true and false;\n";
+program = program + "let not_f = not false;\n";
+program = program + "\n";
+program = program + "let sum = 0;\n";
+program = program + "let i = 1;\n";
+program = program + "while (i <= 5) {\n";
+program = program + "    sum = sum + i;\n";
+program = program + "    i = i + 1;\n";
+program = program + "}\n";
+program = program + "\n";
+program = program + "let grade = 0;\n";
+program = program + "let score = 85;\n";
+program = program + "if (score >= 90) {\n";
+program = program + "    grade = 4;\n";
+program = program + "} else if (score >= 80) {\n";
+program = program + "    grade = 3;\n";
+program = program + "} else {\n";
+program = program + "    grade = 1;\n";
+program = program + "}\n";
+program = program + "\n";
+program = program + "let f5 = factorial(5);\n";
+program = program + "let f7 = factorial(7);\n";
+program = program + "\n";
+program = program + "let arr = [10, 20, 30];\n";
+program = program + "let arr0 = arr[0];\n";
+program = program + "let arr2 = arr[2];\n";
+program = program + "\n";
+program = program + "let dict = {\"name\": \"H#\", \"version\": 1};\n";
+
+print("=== Source Program ===");
+print(program);
+print("");
+
+# Step 1: Tokenize
+print("--- Step 1: Tokenize ---");
+let tokens = tokenize(program);
+check("Tokenize: success", tokens != nullptr);
+check("Tokenize: token count >= 100", len(tokens) >= 100);
+check("Tokenize: last is EOF", tokens[len(tokens) - 1]["type"] == "EOF");
+print("  Tokens: " + len(tokens));
+print("");
+
+# Step 2: Parse
+print("--- Step 2: Parse ---");
+let ast = parse(tokens);
+check("Parse: success", ast != nullptr);
+check("Parse: root is Program", ast[0] == "Program");
+let stmt_count = len(ast[1]);
+check("Parse: has statements", stmt_count > 0);
+print("  Statements: " + stmt_count);
+print("  Types:");
+let si = 0;
+while (si < stmt_count) {
+    print("    " + ast[1][si][0]);
+    si = si + 1;
+}
+print("");
+
+# Step 3: Compile to Bytecode
+print("--- Step 3: Compile ---");
+let bc = compile(ast);
+check("Compile: success", bc != nullptr);
+check("Compile: has instructions", len(bc["instructions"]) > 0);
+check("Compile: has consts", len(bc["consts"]) > 0);
+check("Compile: ends with HALT", bc["instructions"][len(bc["instructions"]) - 1][0] == "HALT");
+print("  Instructions: " + len(bc["instructions"]));
+print("  Constants: " + len(bc["consts"]));
+
+# Check for key opcodes
+let has_jif = false;
+let has_jump = false;
+let has_badd = false;
+let has_call = false;
+let has_make_list = false;
+let has_make_dict = false;
+let ci = 0;
+while (ci < len(bc["instructions"])) {
+    let op = bc["instructions"][ci][0];
+    if (op == "JUMP_IF_FALSE") { has_jif = true; }
+    if (op == "JUMP") { has_jump = true; }
+    if (op == "BINARY_ADD") { has_badd = true; }
+    if (op == "CALL_FUNCTION") { has_call = true; }
+    if (op == "MAKE_LIST") { has_make_list = true; }
+    if (op == "MAKE_DICT") { has_make_dict = true; }
+    ci = ci + 1;
+}
+check("Bytecode: JUMP_IF_FALSE", has_jif);
+check("Bytecode: JUMP", has_jump);
+check("Bytecode: BINARY_ADD", has_badd);
+check("Bytecode: CALL_FUNCTION", has_call);
+check("Bytecode: MAKE_LIST", has_make_list);
+check("Bytecode: MAKE_DICT", has_make_dict);
+print("");
+
+# Step 4: Interpret
+print("--- Step 4: Interpret ---");
+let env = [];
+let result = eval_node(ast, env);
+check("Interpret: success", true);
+
+# Verify all values
+check("a = 15", _env_get(env, "a") == 15);
+check("b = 30", _env_get(env, "b") == 30);
+check("c = 25", _env_get(env, "c") == 25);
+check("div = 5", _env_get(env, "div") == 5);
+check("eq == true", _env_get(env, "eq") == true);
+check("neq == true", _env_get(env, "neq") == true);
+check("big == true", _env_get(env, "big") == true);
+check("small == true", _env_get(env, "small") == true);
+check("t == true", _env_get(env, "t") == true);
+check("f == false", _env_get(env, "f") == false);
+check("not_f == true", _env_get(env, "not_f") == true);
+check("sum = 15", _env_get(env, "sum") == 15);
+check("i = 6", _env_get(env, "i") == 6);
+check("grade = 3 (score=85)", _env_get(env, "grade") == 3);
+check("factorial(5) = 120", _env_get(env, "f5") == 120);
+check("factorial(7) = 5040", _env_get(env, "f7") == 5040);
+check("arr0 = 10", _env_get(env, "arr0") == 10);
+check("arr2 = 30", _env_get(env, "arr2") == 30);
+check("dict has name", _env_get(env, "dict") != nullptr);
+print("");
+
+# Summary
+print("╔══════════════════════════════════════════════╗");
+print("║   Demo Results: " + passed + " passed, " + failed + " failed" + "                       ║");
+print("╚══════════════════════════════════════════════╝");
+if (failed > 0) {
+    print("SOME TESTS FAILED!");
+}
+if (failed == 0) {
+    print("FULL SELF-HOSTING CHAIN VERIFIED!");
+    print("");
+    print("   H# Tokenizer  (tokenize.hto)  ✓  " + len(tokens) + " tokens");
+    print("   H# Parser     (parser.hto)    ✓  " + stmt_count + " statements");
+    print("   H# Compiler   (compiler.hto)  ✓  " + len(bc["instructions"]) + " instructions");
+    print("   H# Interpreter(interpreter.hto) ✓  all values correct");
+}

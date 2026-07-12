@@ -1,0 +1,13 @@
+# t01 - wildcard `_` pattern
+# Covers: wildcard matches anything (int/str/bool/null/list/dict)
+fn w(x) {
+    return match x {
+        _ => "wild"
+    };
+}
+print("t01_wild_int:" + w(42));
+print("t01_wild_str:" + w("hi"));
+print("t01_wild_bool:" + w(true));
+print("t01_wild_null:" + w(null));
+print("t01_wild_list:" + w([1,2]));
+print("t01_wild_dict:" + w({"a":1}));

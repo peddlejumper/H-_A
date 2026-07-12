@@ -1,0 +1,59 @@
+# shared/http_client.hto
+# HTTP 客户端封装(基于 net_module)
+
+# 发起 GET,返回 response dict {status, body, headers}
+fn hc_get(url, headers) {
+    if (headers == nullptr) {
+        return http_get(url);
+    }
+    return http_get_with_headers(url, headers);
+}
+
+# 发起 POST JSON
+fn hc_post_json(url, data, headers) {
+    if (headers == nullptr) {
+        return http_post_json(url, data);
+    }
+    return http_post_with_headers(url, data, headers);
+}
+
+# 解析 SSE 流(OpenAI 风格 data: {...}\n\n)
+# 返回 list of parsed JSON
+fn hc_parse_sse_chunks(raw_text) {
+    let lines = str_split(raw_text, "\n");
+    let out = [];
+    let i = 0;
+    while (i < len(lines)) {
+        let line = lines[i];
+        if (len(line) > 6 and substring(line, 0, 6) == "data: ") {
+            let payload = substring(line, 6, len(line) - 6);
+            if (payload == "[DONE]") {
+                return out;
+            }
+            let parsed = json_parse(payload);
+            if (parsed != nullptr) {
+                out.append(parsed);
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+# 从 OpenAI 风格 SSE 响应中提取累积文本
+fn hc_sse_to_text(sse_text) {
+    let chunks = hc_parse_sse_chunks(sse_text);
+    let out = "";
+    let i = 0;
+    while (i < len(chunks)) {
+        let c = chunks[i];
+        if ("choices" in c and len(c["choices"]) > 0) {
+            let ch = c["choices"][0];
+            if ("delta" in ch and "content" in ch["delta"]) {
+                out = out + ch["delta"]["content"];
+            }
+        }
+        i = i + 1;
+    }
+    return out;
+}

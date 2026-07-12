@@ -1,0 +1,12 @@
+# Probe for destructure as a function parameter — item 20 of the test
+# domain.  `fn foo([a, b]) { ... }` would let a function accept a
+# 2-element list and bind its slots directly.  The H# parser's
+# `function_declaration` only accepts IDENTIFIER params, so a `[` in
+# the param list should raise a compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.  This probe exists only to confirm that.
+
+fn sum_pair([a, b]) {
+    return a + b;
+}
+print(sum_pair([3, 4]));

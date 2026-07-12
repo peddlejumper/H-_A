@@ -1,0 +1,83 @@
+# ═══════════════════════════════════════════════════════════════
+#  JSON Serializer for H#
+#  用于自举构建系统 — 将字节码序列化为 .hbc JSON 格式
+# ═══════════════════════════════════════════════════════════════
+
+fn json_escape_string(s) {
+    let result = "\"";
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let ch = s[i];
+        if (ch == "\"") { result = result + "\\\""; }
+        else if (ch == "\\") { result = result + "\\\\"; }
+        else if (ch == "\n") { result = result + "\\n"; }
+        else if (ch == "\t") { result = result + "\\t"; }
+        else if (ch == "\r") { result = result + "\\r"; }
+        else { result = result + ch; }
+        i = i + 1;
+    }
+    result = result + "\"";
+    return result;
+}
+
+# 使用 typeof() 进行可靠类型检测
+fn json_serialize(val) {
+    if (val == nullptr) { return "null"; }
+    if (val == true) { return "true"; }
+    if (val == false) { return "false"; }
+    let t = typeof(val);
+    if (t == "nil") { return "null"; }
+    if (t == "int") { return str(val); }
+    if (t == "float") { return str(val); }
+    if (t == "str") { return json_escape_string(val); }
+    if (t == "list") { return json_serialize_list(val); }
+    if (t == "dict") { return json_serialize_dict(val); }
+    return json_escape_string(str(val));
+}
+
+fn json_serialize_list(items) {
+    let result = "[";
+    let i = 0;
+    let n = len(items);
+    while (i < n) {
+        if (i > 0) { result = result + ", "; }
+        result = result + json_serialize(items[i]);
+        i = i + 1;
+    }
+    result = result + "]";
+    return result;
+}
+
+fn json_serialize_dict_keys(d) {
+    # 收集所有可能的 key
+    let keys = [];
+    let candidates = ["args", "bytecode", "consts", "instructions", "name", "methods", "fields", "private", "base", "implements", "__static__"];
+    let i = 0;
+    while (i < len(candidates)) {
+        let k = candidates[i];
+        let v = d[k];
+        if (typeof(v) != "nil") { push(keys, k); }
+        i = i + 1;
+    }
+    return keys;
+}
+
+fn json_serialize_dict(d) {
+    let keys = json_serialize_dict_keys(d);
+    let result = "{";
+    let i = 0;
+    let n = len(keys);
+    while (i < n) {
+        if (i > 0) { result = result + ", "; }
+        let key = keys[i];
+        result = result + json_escape_string(key);
+        result = result + ": ";
+        result = result + json_serialize(d[key]);
+        i = i + 1;
+    }
+    result = result + "}";
+    return result;
+}
+
+print("JSON Serializer v1.0 loaded — typeof() enabled");

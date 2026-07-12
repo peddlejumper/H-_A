@@ -1,0 +1,19 @@
+# 05_get_item_neg.hto — GET_ITEM 负索引 (Kotlin 预期崩溃)
+let arr = [10, 20, 30];
+try {
+    print(arr[-1]);
+} catch (e) {
+    print("caught: " + str(e));
+}
+try {
+    print(arr[-100]);
+} catch (e) {
+    print("caught2: " + str(e));
+}
+let s = "abc";
+try {
+    print(s[-1]);
+} catch (e) {
+    print("caught3: " + str(e));
+}
+print("after");

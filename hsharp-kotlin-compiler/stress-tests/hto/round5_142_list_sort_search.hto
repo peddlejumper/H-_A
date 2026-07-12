@@ -1,0 +1,787 @@
+# T-Round5-142 — 列表排序与搜索 (List Sort & Search)
+# 子领域: S1..S14
+# 策略: 对可能报错或行为未定义的用例用 try/catch 包裹, 保证测试继续
+# Python 语义为对照基准 (Python list.sort/reverse/index/contains/+/* /比较 等)
+
+# ============================================================
+# S1: sort 基本排序 — 整数 / 浮点 / 字符串 / 混合类型
+# ============================================================
+print("=== S1 sort-basic ===");
+
+# S1.1: 整数排序
+let s1a = [3, 1, 4, 1, 5, 9, 2, 6, 0];
+s1a.sort();
+print("S1.1 int-sort=" + str(s1a));
+# 预期(Python): [0, 1, 1, 2, 3, 4, 5, 6, 9]
+
+# S1.2: 浮点排序
+let s1b = [3.14, 1.5, 2.71, 0.5, 9.9];
+s1b.sort();
+print("S1.2 float-sort=" + str(s1b));
+# 预期(Python): [0.5, 1.5, 2.71, 3.14, 9.9]
+
+# S1.3: 负数排序
+let s1c = [-3, -1, -4, 0, 1, 4];
+s1c.sort();
+print("S1.3 neg-sort=" + str(s1c));
+# 预期(Python): [-4, -3, -1, 0, 1, 4]
+
+# S1.4: 字符串排序 (Python 支持字符串排序; H# sort 用 toDouble, 预期报错)
+let s1d = ["banana", "apple", "cherry", "date"];
+let s1d_err = "no-err";
+try {
+    s1d.sort();
+    print("S1.4 str-sort=" + str(s1d));
+} catch (e) { s1d_err = "caught:" + str(e); }
+print("S1.4 err=" + s1d_err);
+# 预期(Python): ["apple", "banana", "cherry", "date"]
+# 预期(H#): caught: cannot coerce STRING ... to number
+
+# S1.5: 混合类型排序 (Python 3 报 TypeError; H# 用 toDouble 可能报错)
+let s1e = [3, "a", 1];
+let s1e_err = "no-err";
+try {
+    s1e.sort();
+    print("S1.5 mixed-sort=" + str(s1e));
+} catch (e) { s1e_err = "caught:" + str(e); }
+print("S1.5 err=" + s1e_err);
+# 预期(Python): TypeError; 预期(H#): caught
+
+# S1.6: 布尔与数字混合排序 (Python: True==1, False==0 可排序)
+let s1f = [true, false, 1, 0, 2];
+let s1f_err = "no-err";
+try {
+    s1f.sort();
+    print("S1.6 bool-mix-sort=" + str(s1f));
+} catch (e) { s1f_err = "caught:" + str(e); }
+print("S1.6 err=" + s1f_err);
+# 预期(Python): [False, 0, True, 1, 2] (稳定排序, False/0 顺序保持)
+
+# ============================================================
+# S2: sort 边界 — 空列表 / 单元素 / 已排序 / 逆序 / 重复
+# ============================================================
+print("=== S2 sort-edge ===");
+
+# S2.1: 空列表排序
+let s2a = [];
+s2a.sort();
+print("S2.1 empty-sort=" + str(s2a) + " len=" + str(len(s2a)));
+# 预期(Python): [] len=0
+
+# S2.2: 单元素排序
+let s2b = [42];
+s2b.sort();
+print("S2.2 single-sort=" + str(s2b));
+# 预期(Python): [42]
+
+# S2.3: 已排序列表
+let s2c = [1, 2, 3, 4, 5];
+s2c.sort();
+print("S2.3 sorted-sort=" + str(s2c));
+# 预期(Python): [1, 2, 3, 4, 5]
+
+# S2.4: 逆序列表
+let s2d = [5, 4, 3, 2, 1];
+s2d.sort();
+print("S2.4 reverse-sort=" + str(s2d));
+# 预期(Python): [1, 2, 3, 4, 5]
+
+# S2.5: 重复元素
+let s2e = [3, 3, 1, 1, 2, 2, 3, 1];
+s2e.sort();
+print("S2.5 dup-sort=" + str(s2e));
+# 预期(Python): [1, 1, 1, 2, 2, 2, 3, 3, 3]
+
+# S2.6: 大量重复
+let s2f = [5, 5, 5, 5, 5, 5, 5];
+s2f.sort();
+print("S2.6 alldup-sort=" + str(s2f));
+# 预期(Python): [5, 5, 5, 5, 5, 5, 5]
+
+# S2.7: sort 返回值 (Python: list.sort() 返回 None)
+let s2g = [3, 1, 2];
+let s2g_ret = s2g.sort();
+print("S2.7 ret=" + str(s2g_ret) + " list=" + str(s2g));
+# 预期(Python): ret=None (H# null), list=[1,2,3]
+
+# ============================================================
+# S3: sort 稳定性 — 相同键的对象排序是否保持原序
+# Python 的 sort 是稳定排序; H# 用 Kotlin sortBy (稳定)
+# ============================================================
+print("=== S3 sort-stability ===");
+
+# S3.1: 对 [num, tag] 对按 num 排序, 检查 tag 顺序
+# H# 没有自定义 key, 只能排序数字本身. 用嵌套列表测试:
+# 嵌套列表排序 -> sort 调 toDouble 会失败. 改为测试纯数字稳定性
+let s3a = [1, 1, 1, 1, 1];
+s3a.sort();
+print("S3.1 stable-int=" + str(s3a));
+# 预期: [1, 1, 1, 1, 1] (无法直接验证稳定性, 但确认不崩溃)
+
+# S3.2: 稳定性验证 — 用对象/字典列表排序 (预期失败因 toDouble)
+let s3b = [{"k": 1, "tag": "a"}, {"k": 1, "tag": "b"}, {"k": 2, "tag": "c"}];
+let s3b_err = "no-err";
+try {
+    s3b.sort();
+    print("S3.2 dict-sort=" + str(s3b));
+} catch (e) { s3b_err = "caught:" + str(e); }
+print("S3.2 err=" + s3b_err);
+# 预期(Python): 按 k 排序稳定 -> [{k:1,tag:a}, {k:1,tag:b}, {k:2,tag:c}]
+# 预期(H#): caught (无法 coerce DICT to number)
+
+# S3.3: 嵌套列表排序 (预期失败)
+let s3c = [[3, 0], [1, 0], [2, 0]];
+let s3c_err = "no-err";
+try {
+    s3c.sort();
+    print("S3.3 nested-sort=" + str(s3c));
+} catch (e) { s3c_err = "caught:" + str(e); }
+print("S3.3 err=" + s3c_err);
+# 预期(Python): [[1,0],[2,0],[3,0]]; 预期(H#): caught
+
+# ============================================================
+# S4: reverse — 空列表 / 单元素 / 偶数 / 奇数 / 已反转
+# ============================================================
+print("=== S4 reverse ===");
+
+# S4.1: 空列表 reverse
+let s4a = [];
+s4a.reverse();
+print("S4.1 empty-rev=" + str(s4a));
+# 预期(Python): []
+
+# S4.2: 单元素 reverse
+let s4b = [42];
+s4b.reverse();
+print("S4.2 single-rev=" + str(s4b));
+# 预期(Python): [42]
+
+# S4.3: 偶数长度 reverse
+let s4c = [1, 2, 3, 4];
+s4c.reverse();
+print("S4.3 even-rev=" + str(s4c));
+# 预期(Python): [4, 3, 2, 1]
+
+# S4.4: 奇数长度 reverse
+let s4d = [1, 2, 3, 4, 5];
+s4d.reverse();
+print("S4.4 odd-rev=" + str(s4d));
+# 预期(Python): [5, 4, 3, 2, 1]
+
+# S4.5: 已反转列表再 reverse
+let s4e = [5, 4, 3, 2, 1];
+s4e.reverse();
+print("S4.5 re-rev=" + str(s4e));
+# 预期(Python): [1, 2, 3, 4, 5]
+
+# S4.6: reverse 返回值 (Python: list.reverse() 返回 None)
+let s4f = [1, 2, 3];
+let s4f_ret = s4f.reverse();
+print("S4.6 ret=" + str(s4f_ret) + " list=" + str(s4f));
+# 预期(Python): ret=None, list=[3,2,1]
+
+# S4.7: 混合类型 reverse
+let s4g = [1, "a", true, null];
+s4g.reverse();
+print("S4.7 mixed-rev=" + str(s4g));
+# 预期(Python): [None, True, 'a', 1]
+
+# ============================================================
+# S5: indexOf / contains / index — 搜索元素
+# H# 列表方法实际为 index(x) 和 contains(x); 任务文档提到 indexOf
+# ============================================================
+print("=== S5 search ===");
+
+# S5.1: index() 不存在元素 (Python 抛 ValueError; H# 返回 -1)
+let s5a = [10, 20, 30, 20, 40];
+let s5a_idx = s5a.index(99);
+print("S5.1 index-99=" + str(s5a_idx));
+# 预期(Python): ValueError; 预期(H#): -1
+
+# S5.2: index() 首元素
+let s5b = s5a.index(10);
+print("S5.2 index-first=" + str(s5b));
+# 预期(Python): 0
+
+# S5.3: index() 末元素
+let s5c = s5a.index(40);
+print("S5.3 index-last=" + str(s5c));
+# 预期(Python): 4
+
+# S5.4: index() 重复元素 (返回第一个出现位置)
+let s5d = s5a.index(20);
+print("S5.4 index-dup=" + str(s5d));
+# 预期(Python): 1
+
+# S5.5: index() null 搜索
+let s5e = [1, null, 3, null];
+let s5e_idx = s5e.index(null);
+print("S5.5 index-null=" + str(s5e_idx));
+# 预期(Python): 1
+
+# S5.6: contains() 不存在
+print("S5.6 contains-99=" + str(s5a.contains(99)));
+# 预期(Python): False
+
+# S5.7: contains() 存在
+print("S5.7 contains-20=" + str(s5a.contains(20)));
+# 预期(Python): True
+
+# S5.8: contains() null
+print("S5.8 contains-null=" + str(s5e.contains(null)));
+# 预期(Python): True
+
+# S5.9: contains() 首元素
+print("S5.9 contains-first=" + str(s5a.contains(10)));
+# 预期(Python): True
+
+# S5.10: contains() 末元素
+print("S5.10 contains-last=" + str(s5a.contains(40)));
+# 预期(Python): True
+
+# S5.11: indexOf (任务文档提到的方法, H# 可能不支持)
+let s5k_err = "no-err";
+try {
+    let s5k = s5a.indexOf(20);
+    print("S5.11 indexOf=" + str(s5k));
+} catch (e) { s5k_err = "caught:" + str(e); }
+print("S5.11 err=" + s5k_err);
+# 预期(H#): caught: Unknown list method 'indexOf'
+
+# S5.12: in 运算符搜索 (与 contains 对照)
+print("S5.12 in-20=" + str(20 in s5a));
+print("S5.12 in-99=" + str(99 in s5a));
+# 预期(Python): True / False
+
+# S5.13: contains 嵌套列表 (结构相等)
+let s5m = [[1, 2], [3, 4], [5, 6]];
+print("S5.13 contains-nested=" + str(s5m.contains([3, 4])));
+# 预期(Python): True
+
+# S5.14: contains 字符串
+let s5n = ["a", "b", "c"];
+print("S5.14 contains-str=" + str(s5n.contains("b")));
+# 预期(Python): True
+
+# ============================================================
+# S6: 列表拼接 — + 运算符 / += / 空列表 / 不同类型
+# ============================================================
+print("=== S6 concat ===");
+
+# S6.1: 基本拼接
+let s6a = [1, 2] + [3, 4];
+print("S6.1 concat=" + str(s6a));
+# 预期(Python): [1, 2, 3, 4]
+
+# S6.2: 拼接空列表 (左)
+let s6b = [] + [1, 2, 3];
+print("S6.2 empty-left=" + str(s6b));
+# 预期(Python): [1, 2, 3]
+
+# S6.3: 拼接空列表 (右)
+let s6c = [1, 2, 3] + [];
+print("S6.3 empty-right=" + str(s6c));
+# 预期(Python): [1, 2, 3]
+
+# S6.4: 双空拼接
+let s6d = [] + [];
+print("S6.4 empty-both=" + str(s6d));
+# 预期(Python): []
+
+# S6.5: 拼接不同类型 (list + int -> 报错)
+let s6e_err = "no-err";
+try {
+    let s6e = [1, 2] + 3;
+    print("S6.5 list+int=" + str(s6e));
+} catch (e) { s6e_err = "caught:" + str(e); }
+print("S6.5 err=" + s6e_err);
+# 预期(Python): TypeError; 预期(H#): caught
+
+# S6.6: 拼接不同类型 (list + string -> 报错)
+let s6f_err = "no-err";
+try {
+    let s6f = [1, 2] + "ab";
+    print("S6.6 list+str=" + str(s6f));
+} catch (e) { s6f_err = "caught:" + str(e); }
+print("S6.6 err=" + s6f_err);
+# 预期(Python): TypeError; 预期(H#): caught
+
+# S6.7: += 运算符 (H# 词法/语法层不支持 +=, 跳过运行时测试; 见 Bug 报告)
+# H# 词法器无 += token, `s6g += [3,4]` 会被解析为 `s6g +` 然后 `=` 触发 SyntaxError
+# 此处改用 push 模拟扩展原列表 (Python: lst += other 等价 lst.extend(other))
+let s6g = [1, 2];
+push(s6g, 3);
+push(s6g, 4);
+print("S6.7 extend=" + str(s6g));
+# 预期(Python extend): [1, 2, 3, 4]
+
+# S6.8: 三列表拼接 ((a+b)+c)
+let s6h = ([1] + [2]) + [3];
+print("S6.8 triple=" + str(s6h));
+# 预期(Python): [1, 2, 3]
+
+# S6.9: 拼接产生新列表 (原列表不变)
+let s6i_orig = [1, 2];
+let s6i_new = s6i_orig + [3];
+print("S6.9 orig=" + str(s6i_orig) + " new=" + str(s6i_new));
+# 预期(Python): orig=[1,2], new=[1,2,3]
+
+# ============================================================
+# S7: 列表重复 — [0]*5 / [1,2]*0 / [1,2]*-1 / [1,2]*3 / 3*[1,2]
+# ============================================================
+print("=== S7 repeat ===");
+
+# S7.1: 基本重复
+let s7a = [0] * 5;
+print("S7.1 [0]*5=" + str(s7a));
+# 预期(Python): [0, 0, 0, 0, 0]
+
+# S7.2: 重复 0 次
+let s7b = [1, 2] * 0;
+print("S7.2 [1,2]*0=" + str(s7b) + " len=" + str(len(s7b)));
+# 预期(Python): [] len=0
+
+# S7.3: 重复负数 (Python 返回空列表)
+let s7c = [1, 2] * -1;
+print("S7.3 [1,2]*-1=" + str(s7c) + " len=" + str(len(s7c)));
+# 预期(Python): [] len=0
+
+# S7.4: 重复 3 次
+let s7d = [1, 2] * 3;
+print("S7.4 [1,2]*3=" + str(s7d));
+# 预期(Python): [1, 2, 1, 2, 1, 2]
+
+# S7.5: 反向 int * list (Python 支持, H# 可能不支持)
+let s7e_err = "no-err";
+try {
+    let s7e = 3 * [1, 2];
+    print("S7.5 3*[1,2]=" + str(s7e));
+} catch (e) { s7e_err = "caught:" + str(e); }
+print("S7.5 err=" + s7e_err);
+# 预期(Python): [1, 2, 1, 2, 1, 2]; 预期(H#): 可能 caught
+
+# S7.6: 重复单元素
+let s7f = ["x"] * 4;
+print("S7.6 [x]*4=" + str(s7f));
+# 预期(Python): ['x', 'x', 'x', 'x']
+
+# S7.7: 重复嵌套列表 (浅拷贝, 内部共享)
+let s7g_inner = [1];
+let s7g = [s7g_inner] * 2;
+print("S7.7 nested=" + str(s7g));
+# 预期(Python): [[1], [1]]
+
+# S7.8: 重复 1 次
+let s7h = [1, 2] * 1;
+print("S7.8 *1=" + str(s7h));
+# 预期(Python): [1, 2]
+
+# S7.9: 重复产生新列表 (原列表不变)
+let s7i_orig = [1, 2];
+let s7i_new = s7i_orig * 2;
+print("S7.9 orig=" + str(s7i_orig) + " new=" + str(s7i_new));
+# 预期(Python): orig=[1,2], new=[1,2,1,2]
+
+# ============================================================
+# S8: 列表比较 — == / < / > 字典序 / 不同长度
+# ============================================================
+print("=== S8 compare ===");
+
+# S8.1: 相等比较
+print("S8.1 [1,2]==[1,2]=" + str([1, 2] == [1, 2]));
+# 预期(Python): True
+
+# S8.2: 不等比较
+print("S8.2 [1,2]==[1,3]=" + str([1, 2] == [1, 3]));
+# 预期(Python): False
+
+# S8.3: 不同长度相等比较
+print("S8.3 [1]==[1,2]=" + str([1] == [1, 2]));
+# 预期(Python): False
+
+# S8.4: 字典序小于 (Python 支持, H# 可能报错)
+let s8d_err = "no-err";
+try {
+    let s8d = [1, 2] < [1, 3];
+    print("S8.4 [1,2]<[1,3]=" + str(s8d));
+} catch (e) { s8d_err = "caught:" + str(e); }
+print("S8.4 err=" + s8d_err);
+# 预期(Python): True; 预期(H#): 可能 caught (cannot coerce LIST to number)
+
+# S8.5: 字典序小于 (前缀)
+let s8e_err = "no-err";
+try {
+    let s8e = [1, 2] < [1, 2, 3];
+    print("S8.5 [1,2]<[1,2,3]=" + str(s8e));
+} catch (e) { s8e_err = "caught:" + str(e); }
+print("S8.5 err=" + s8e_err);
+# 预期(Python): True; 预期(H#): 可能 caught
+
+# S8.6: 字典序大于
+let s8f_err = "no-err";
+try {
+    let s8f = [1, 3] > [1, 2];
+    print("S8.6 [1,3]>[1,2]=" + str(s8f));
+} catch (e) { s8f_err = "caught:" + str(e); }
+print("S8.6 err=" + s8f_err);
+# 预期(Python): True; 预期(H#): 可能 caught
+
+# S8.7: 空列表比较
+print("S8.7 []==[]=" + str([] == []));
+# 预期(Python): True
+
+# S8.8: 嵌套列表相等
+print("S8.8 [[1,2]]==[[1,2]]=" + str([[1, 2]] == [[1, 2]]));
+# 预期(Python): True
+
+# S8.9: != 比较
+print("S8.9 [1,2]!=[1,3]=" + str([1, 2] != [1, 3]));
+# 预期(Python): True
+
+# S8.10: <= 比较 (Python 支持)
+let s8j_err = "no-err";
+try {
+    let s8j = [1, 2] <= [1, 2];
+    print("S8.10 [1,2]<=[1,2]=" + str(s8j));
+} catch (e) { s8j_err = "caught:" + str(e); }
+print("S8.10 err=" + s8j_err);
+# 预期(Python): True; 预期(H#): 可能 caught
+
+# ============================================================
+# S9: 列表嵌套 — [[1,2],[3,4]] / 嵌套排序 / 扁平化
+# ============================================================
+print("=== S9 nested ===");
+
+# S9.1: 创建嵌套列表
+let s9a = [[1, 2], [3, 4], [5, 6]];
+print("S9.1 nested=" + str(s9a));
+print("S9.1 len=" + str(len(s9a)));
+print("S9.1 [0]=" + str(s9a[0]));
+print("S9.1 [2][1]=" + str(s9a[2][1]));
+# 预期(Python): [[1,2],[3,4],[5,6]], 3, [1,2], 6
+
+# S9.2: 嵌套排序 (预期失败, toDouble 不支持 LIST)
+let s9b = [[3], [1], [2]];
+let s9b_err = "no-err";
+try {
+    s9b.sort();
+    print("S9.2 nested-sort=" + str(s9b));
+} catch (e) { s9b_err = "caught:" + str(e); }
+print("S9.2 err=" + s9b_err);
+# 预期(Python): [[1],[2],[3]]; 预期(H#): caught
+
+# S9.3: 手动扁平化
+let s9c = [[1, 2], [3, 4], [5, 6]];
+let s9c_flat = [];
+for row in s9c {
+    for v in row { push(s9c_flat, v); }
+}
+print("S9.3 flatten=" + str(s9c_flat));
+# 预期(Python): [1, 2, 3, 4, 5, 6]
+
+# S9.4: 嵌套列表 reverse
+let s9d = [[1, 2], [3, 4], [5, 6]];
+s9d.reverse();
+print("S9.4 nested-rev=" + str(s9d));
+# 预期(Python): [[5,6],[3,4],[1,2]]
+
+# S9.5: 嵌套列表 contains
+let s9e = [[1, 2], [3, 4]];
+print("S9.5 contains-[1,2]=" + str(s9e.contains([1, 2])));
+print("S9.5 contains-[9,9]=" + str(s9e.contains([9, 9])));
+# 预期(Python): True / False
+
+# S9.6: 深层嵌套访问
+let s9f = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]];
+print("S9.6 deep=" + str(s9f[1][0][1]));
+# 预期(Python): 6
+
+# S9.7: 嵌套列表修改
+let s9g = [[1, 2], [3, 4]];
+s9g[0][0] = 99;
+print("S9.7 nested-mod=" + str(s9g));
+# 预期(Python): [[99,2],[3,4]]
+
+# ============================================================
+# S10: 列表切片赋值 — lst[1:3] = [9,9,9] (如果支持)
+# ============================================================
+print("=== S10 slice-assign ===");
+
+# S10.1/S10.2/S10.3: 切片赋值 lst[1:3]=... 是编译期错误
+# (compiler.py 第952行: raise CompileError("slice assignment not yet supported"))
+# 无法用 try/catch 捕获 (try/catch 是运行时机制), 故仅记录该限制:
+#   s10a[1:3] = [9, 9, 9];  # 预期(Python): [1,9,9,9,4,5] -> H# CompileError
+#   s10b[1:1] = [9, 9];     # 预期(Python): [1,9,9,2,3]   -> H# CompileError
+#   s10c[:] = [0];          # 预期(Python): [0]           -> H# CompileError
+# 改为测试普通索引赋值 (已支持)
+let s10a = [1, 2, 3, 4, 5];
+s10a[1] = 99;
+s10a[3] = 77;
+print("S10.1 index-assign=" + str(s10a));
+# 预期(Python): [1, 99, 3, 77, 5]
+
+# S10.2: 负索引赋值
+let s10b = [1, 2, 3];
+s10b[-1] = 99;
+print("S10.2 neg-index-assign=" + str(s10b));
+# 预期(Python): [1, 2, 99]
+
+# S10.3: 手动用切片+拼接模拟切片替换
+let s10c = [1, 2, 3, 4, 5];
+let s10c_new = s10c[:1] + [9, 9, 9] + s10c[3:];
+print("S10.3 manual-slice-replace=" + str(s10c_new));
+# 预期(Python): [1, 9, 9, 9, 4, 5]
+
+# ============================================================
+# S11: 列表删除 — del lst[0] / del lst[1:3] (如果支持)
+# ============================================================
+print("=== S11 del ===");
+
+# S11.1: del lst[0] (按索引删除)
+let s11a = [1, 2, 3, 4];
+del s11a[0];
+print("S11.1 del-first=" + str(s11a));
+# 预期(Python): [2, 3, 4]
+
+# S11.2: del lst[-1] (按负索引删除)
+let s11b = [1, 2, 3, 4];
+del s11b[-1];
+print("S11.2 del-last=" + str(s11b));
+# 预期(Python): [1, 2, 3]
+
+# S11.3: del lst[1:3] (切片删除, 编译器对 del 的 IndexExpression 走 DELETE_ITEM
+#       但 SliceExpression 作为 index 传入 compile_expr 会失败)
+# 改为手动用切片拼接模拟 del lst[1:3] 的效果
+let s11c = [1, 2, 3, 4, 5];
+let s11c_new = s11c[:1] + s11c[3:];
+print("S11.3 manual-del-slice=" + str(s11c_new));
+# 预期(Python del s11c[1:3]): [1, 4, 5]
+
+# S11.4: del 越界索引
+let s11d = [1, 2, 3];
+let s11d_err = "no-err";
+try {
+    del s11d[10];
+} catch (e) { s11d_err = "caught:" + str(e); }
+print("S11.4 err=" + s11d_err);
+# 预期(Python): IndexError; 预期(H#): caught
+
+# S11.5: del 空列表索引
+let s11e = [];
+let s11e_err = "no-err";
+try {
+    del s11e[0];
+} catch (e) { s11e_err = "caught:" + str(e); }
+print("S11.5 err=" + s11e_err);
+# 预期(Python): IndexError; 预期(H#): caught
+
+# ============================================================
+# S12: 列表迭代修改 — for-in 时 push / pop (安全性)
+# ============================================================
+print("=== S12 iter-modify ===");
+
+# S12.1: 迭代中 push 自身元素 (快照 vs live)
+let s12a = [1, 2, 3];
+let s12a_guard = 0;
+let s12a_iters = 0;
+for x in s12a {
+    s12a_iters = s12a_iters + 1;
+    s12a_guard = s12a_guard + 1;
+    if (s12a_guard > 100) { break; }
+    push(s12a, x);
+}
+print("S12.1 iters=" + str(s12a_iters) + " len=" + str(len(s12a)));
+# 预期(Python): iters=3, len=6 (Python list 迭代器基于索引, push 会扩展)
+# 预期(H# live): iters=101 (guard 触发)
+
+# S12.2: 迭代中 pop (从尾部)
+let s12b = [1, 2, 3, 4, 5];
+let s12b_seen = [];
+let s12b_err = "no-err";
+let s12b_guard = 0;
+try {
+    for x in s12b {
+        s12b_guard = s12b_guard + 1;
+        if (s12b_guard > 100) { break; }
+        push(s12b_seen, x);
+        s12b.pop();
+    }
+} catch (e) { s12b_err = "caught:" + str(e); }
+print("S12.2 err=" + s12b_err + " seen=" + str(s12b_seen) + " len=" + str(len(s12b)));
+# 预期(Python): seen=[1,2,3], len=2 (每轮 pop 后 size 减1, 中途停止)
+
+# S12.3: 迭代副本修改原列表 (安全做法)
+let s12c = [1, 2, 3];
+let s12c_copy = s12c[:];
+for x in s12c_copy { push(s12c, x * 10); }
+print("S12.3 orig=" + str(s12c));
+# 预期(Python): [1, 2, 3, 10, 20, 30]
+
+# S12.4: 迭代中 remove 元素
+let s12d = [1, 2, 3, 4, 5];
+let s12d_seen = [];
+let s12d_err = "no-err";
+let s12d_guard = 0;
+try {
+    for x in s12d {
+        s12d_guard = s12d_guard + 1;
+        if (s12d_guard > 100) { break; }
+        push(s12d_seen, x);
+        if (x > 2) { s12d.remove(x); }
+    }
+} catch (e) { s12d_err = "caught:" + str(e); }
+print("S12.4 err=" + s12d_err + " seen=" + str(s12d_seen) + " list=" + str(s12d));
+# 预期(Python): seen=[1,2,3,4,5], list=[1,2,4] (快照迭代)
+
+# S12.5: 迭代中修改索引赋值 (不增长度)
+let s12e = [1, 2, 3, 4];
+let s12e_idx = 0;
+for x in s12e {
+    if (s12e_idx < len(s12e)) { s12e[s12e_idx] = x * 10; }
+    s12e_idx = s12e_idx + 1;
+}
+print("S12.5 mod-index=" + str(s12e));
+# 预期(Python): [10, 20, 30, 40]
+
+# ============================================================
+# S13: 列表方法链 — lst.sort().reverse() (方法返回值问题)
+# ============================================================
+print("=== S13 method-chain ===");
+
+# S13.1: sort().reverse() 链式调用 (Python: sort() 返回 None, 链式失败)
+let s13a = [3, 1, 2];
+let s13a_err = "no-err";
+try {
+    s13a.sort().reverse();
+    print("S13.1 chain=" + str(s13a));
+} catch (e) { s13a_err = "caught:" + str(e); }
+print("S13.1 err=" + s13a_err);
+# 预期(Python): AttributeError (None.reverse); 预期(H#): caught (sort 返回 null)
+
+# S13.2: reverse().sort() 链式调用
+let s13b = [3, 1, 2];
+let s13b_err = "no-err";
+try {
+    s13b.reverse().sort();
+    print("S13.2 chain=" + str(s13b));
+} catch (e) { s13b_err = "caught:" + str(e); }
+print("S13.2 err=" + s13b_err);
+# 预期(Python/H#): caught (reverse 返回 None/null)
+
+# S13.3: push().pop() 链式 (push 返回 null)
+let s13c = [1, 2];
+let s13c_err = "no-err";
+try {
+    let s13c_ret = s13c.push(3).pop();
+    print("S13.3 ret=" + str(s13c_ret));
+} catch (e) { s13c_err = "caught:" + str(e); }
+print("S13.3 err=" + s13c_err);
+# 预期(H#): caught (push 返回 null)
+
+# S13.4: 正确的非链式用法
+let s13d = [3, 1, 2];
+s13d.sort();
+s13d.reverse();
+print("S13.4 non-chain=" + str(s13d));
+# 预期(Python): [3, 2, 1]
+
+# S13.5: sort 后再 index
+let s13e = [9, 3, 7, 1, 5];
+s13e.sort();
+print("S13.5 sorted=" + str(s13e) + " index-7=" + str(s13e.index(7)));
+# 预期(Python): sorted=[1,3,5,7,9], index-7=3
+
+# ============================================================
+# S14: min / max — 空列表 / 单元素 / 混合类型 / 字符串
+# ============================================================
+print("=== S14 min-max ===");
+
+# S14.1: min 基本用法
+print("S14.1 min=" + str(min([3, 1, 4, 1, 5, 9, 2, 6])));
+# 预期(Python): 1
+
+# S14.2: max 基本用法
+print("S14.2 max=" + str(max([3, 1, 4, 1, 5, 9, 2, 6])));
+# 预期(Python): 9
+
+# S14.3: min 单元素
+print("S14.3 min-single=" + str(min([42])));
+# 预期(Python): 42
+
+# S14.4: max 单元素
+print("S14.4 max-single=" + str(max([42])));
+# 预期(Python): 42
+
+# S14.5: min 空列表 (Python 抛 ValueError)
+let s14e_err = "no-err";
+try {
+    let s14e = min([]);
+} catch (e) { s14e_err = "caught:" + str(e); }
+print("S14.5 err=" + s14e_err);
+# 预期(Python): ValueError; 预期(H#): caught
+
+# S14.6: max 空列表
+let s14f_err = "no-err";
+try {
+    let s14f = max([]);
+} catch (e) { s14f_err = "caught:" + str(e); }
+print("S14.6 err=" + s14f_err);
+# 预期(Python): ValueError; 预期(H#): caught
+
+# S14.7: min 含负数
+print("S14.7 min-neg=" + str(min([-3, -1, -4, 0, 1])));
+# 预期(Python): -4
+
+# S14.8: max 含负数
+print("S14.8 max-neg=" + str(max([-3, -1, -4, 0, 1])));
+# 预期(Python): 1
+
+# S14.9: min 字符串 (Python 支持, H# 用 toDouble 预期报错)
+let s14i_err = "no-err";
+try {
+    let s14i = min(["banana", "apple", "cherry"]);
+    print("S14.9 min-str=" + str(s14i));
+} catch (e) { s14i_err = "caught:" + str(e); }
+print("S14.9 err=" + s14i_err);
+# 预期(Python): apple; 预期(H#): caught
+
+# S14.10: max 字符串
+let s14j_err = "no-err";
+try {
+    let s14j = max(["banana", "apple", "cherry"]);
+    print("S14.10 max-str=" + str(s14j));
+} catch (e) { s14j_err = "caught:" + str(e); }
+print("S14.10 err=" + s14j_err);
+# 预期(Python): cherry; 预期(H#): caught
+
+# S14.11: min 浮点
+print("S14.11 min-float=" + str(min([3.14, 1.5, 2.71])));
+# 预期(Python): 1.5
+
+# S14.12: max 浮点
+print("S14.12 max-float=" + str(max([3.14, 1.5, 2.71])));
+# 预期(Python): 3.14
+
+# S14.13: min 多参数 (非列表)
+let s14m_err = "no-err";
+try {
+    let s14m = min(3, 1, 2);
+    print("S14.13 min-args=" + str(s14m));
+} catch (e) { s14m_err = "caught:" + str(e); }
+print("S14.13 err=" + s14m_err);
+# 预期(Python): 1; 预期(H#): 支持 (HNative min argc=-1)
+
+# S14.14: max 多参数 (非列表)
+let s14n_err = "no-err";
+try {
+    let s14n = max(3, 1, 2);
+    print("S14.14 max-args=" + str(s14n));
+} catch (e) { s14n_err = "caught:" + str(e); }
+print("S14.14 err=" + s14n_err);
+# 预期(Python): 2... 实际 Python max(3,1,2)=3; 预期(H#): 支持
+
+# S14.15: min 含重复
+print("S14.15 min-dup=" + str(min([5, 5, 5, 1, 1, 1])));
+# 预期(Python): 1
+
+print("=== S1..S14 DONE ===");

@@ -1,0 +1,14 @@
+# 09_div_zero.hto — BINARY_DIV 除零
+try {
+    let z = 10 / 0;
+    print("no crash: " + str(z));
+} catch (e) {
+    print("caught: " + str(e));
+}
+try {
+    let z = 5.0 / 0.0;
+    print("float div: " + str(z));
+} catch (e) {
+    print("caught2: " + str(e));
+}
+print("after");

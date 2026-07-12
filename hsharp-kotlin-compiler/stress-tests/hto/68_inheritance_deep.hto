@@ -1,0 +1,208 @@
+# T68 - Inheritance & Polymorphism Deep Tests
+# Tests deep inheritance chains, field inheritance, polymorphism, dynamic dispatch.
+#
+# NOTE: super.method() tests are commented out — see Bug #1 at the bottom.
+# The HSharp_v0.4_Tests compiler.py redefines SuperExpression locally
+# (line 35), shadowing h_ast.SuperExpression, so isinstance() always
+# fails and ANY use of super.m() / super.init() aborts compilation with
+# "Unsupported expression type: <class 'h_ast.SuperExpression'>".
+
+# ============ T1: 3-layer basic field+method inheritance (no override) ============
+class A1 {
+    let x = 10;
+    fn m() { return x; }
+}
+class B1 extends A1 { }
+class C1 extends B1 { }
+let t1 = new C1();
+print("T1: " + t1.m());
+
+# ============ T2: 3-layer method override (no super) ============
+class A2 {
+    fn m() { return "A"; }
+}
+class B2 extends A2 {
+    fn m() { return "B"; }
+}
+class C2 extends B2 {
+    fn m() { return "C"; }
+}
+let t2 = new C2();
+print("T2: " + t2.m());
+
+# ============ T3: 4-layer inheritance chain (field + method) ============
+class A3 {
+    let a = 1;
+    fn who() { return "A"; }
+}
+class B3 extends A3 {
+    let b = 2;
+}
+class C3 extends B3 {
+    let c = 3;
+}
+class D3 extends C3 {
+    let d = 4;
+}
+let t3 = new D3();
+print("T3: " + (t3.a + t3.b + t3.c + t3.d) + t3.who());
+
+# ============ T4: Field inheritance across 3 layers (sum) ============
+class A4 {
+    let a = 100;
+}
+class B4 extends A4 {
+    let b = 20;
+}
+class C4 extends B4 {
+    let c = 3;
+}
+let t4 = new C4();
+print("T4: " + (t4.a + t4.b + t4.c));
+
+# ============ T5: Method resolution (child without method -> parent) ============
+class A5 {
+    fn m() { return "A.m"; }
+}
+class B5 extends A5 { }
+class C5 extends B5 { }
+let t5 = new C5();
+print("T5: " + t5.m());
+
+# ============ T6: Polymorphism (list of mixed sibling types) ============
+class A6 {
+    fn m() { return "A"; }
+}
+class B6 extends A6 {
+    fn m() { return "B"; }
+}
+class C6 extends A6 {
+    fn m() { return "C"; }
+}
+let arr6 = [new A6(), new B6(), new C6()];
+let out6 = "";
+for x in arr6 {
+    out6 = out6 + x.m();
+}
+print("T6: " + out6);
+
+# ============ T7: Dynamic dispatch from parent method (self.m()) ============
+# Parent A7.n() calls self.m(); when invoked on a B7 instance, the
+# runtime must dispatch to B7.m() (the most-derived override), NOT A7.m().
+class A7 {
+    fn m() { return "A.m"; }
+    fn n() { return self.m(); }
+}
+class B7 extends A7 {
+    fn m() { return "B.m"; }
+}
+let t7 = new B7();
+print("T7: " + t7.n());
+
+# ============ T8: Virtual method call in init ============
+# A8.init() calls self.log(); on a B8 instance this must dynamically
+# dispatch to B8.log(), proving virtual dispatch works during construction.
+class A8 {
+    fn init() {
+        print("T8: " + self.log());
+    }
+    fn log() { return "A.log"; }
+}
+class B8 extends A8 {
+    fn log() { return "B.log"; }
+}
+let t8 = new B8();
+
+# ============ T9: Same-name field shadowing ============
+class A9 {
+    let x = 1;
+}
+class B9 extends A9 {
+    let x = 2;
+}
+let ta9 = new A9();
+let tb9 = new B9();
+print("T9: " + ta9.x + "," + tb9.x);
+
+# ============ T10: Type check via match (is pattern) ============
+class A10 { }
+class B10 extends A10 { }
+let x10 = new B10();
+let r10 = match x10 {
+    is B10 => "B",
+    is A10 => "A",
+    _ => "?",
+};
+print("T10: " + r10);
+
+# ============ T11: Sibling subclasses with different implementations ============
+class Animal11 {
+    fn sound() { return "?"; }
+}
+class Dog11 extends Animal11 {
+    fn sound() { return "woof"; }
+}
+class Cat11 extends Animal11 {
+    fn sound() { return "meow"; }
+}
+let d11 = new Dog11();
+let c11 = new Cat11();
+print("T11: " + d11.sound() + " " + c11.sound());
+
+# ============ T12: instanceof via match walks base chain ============
+# A B12 instance should match `is A12` (base class) — verifies the
+# isInstanceOfClass base-chain walk in HVM.kt.
+class A12 { }
+class B12 extends A12 { }
+class C12 extends B12 { }
+let x12 = new C12();
+let r12 = match x12 {
+    is A12 => "is-A",
+    _ => "not-A",
+};
+print("T12: " + r12);
+
+# ============================================================
+# BUG #1 — super.method() / super.init() cannot be compiled.
+#   HSharp_v0.4_Tests/compiler.py line 35 defines a LOCAL class
+#   SuperExpression(AST), which shadows the h_ast.SuperExpression
+#   imported via `from h_ast import *`. The parser produces
+#   h_ast.SuperExpression nodes, but the compiler's isinstance()
+#   check at compiler.py:1268 tests against the LOCAL class, so it
+#   always returns False and compilation aborts at compiler.py:1285
+#   with: "Unsupported expression type: <class 'h_ast.SuperExpression'>".
+#   The main /compiler.py (line 10-13) even warns about this exact
+#   mistake, but HSharp_v0.4_Tests/compiler.py still does it.
+#
+# The following super tests are therefore blocked and commented out.
+# ============================================================
+
+# ---- T13 (BLOCKED): Single-level super.m() ----
+# class A13 {
+#     fn m() { return 1; }
+# }
+# class B13 extends A13 {
+#     fn m() { return super.m() + 1; }
+# }
+# let t13 = new B13();
+# print("T13: " + t13.m());   # Expected: T13: 2
+
+# ---- T14 (BLOCKED): Multi-level super.m() chain (3-level) ----
+# EXPECTED runtime bug (HVM.kt callSuper, lines 925-945): super.m()
+# resolves against inst.klass.base (always the resolved child's base),
+# NOT against the class where the *current* method was defined. So
+# C14.m -> super.m() finds B14.m (correct), but B14.m -> super.m()
+# AGAIN looks up inst.klass.base = "B14" and re-finds B14.m, causing
+# infinite recursion / StackOverflowError instead of reaching A14.m.
+#
+# class A14 {
+#     fn m() { return 1; }
+# }
+# class B14 extends A14 {
+#     fn m() { return super.m() + 1; }
+# }
+# class C14 extends B14 {
+#     fn m() { return super.m() + 1; }
+# }
+# let t14 = new C14();
+# print("T14: " + t14.m());   # Expected: T14: 3 ; Actual: StackOverflowError

@@ -1,0 +1,326 @@
+# raytracer_pipeline.hto — Channel-driven parallel renderer
+# ─────────────────────────────────────────────────────────────────────
+# The pipeline is built on top of H#'s first-class channels and
+# `concurrent { ... }` blocks.  The flow is:
+#
+#   master
+#     ├── chan_new(tile_queue)        # master → workers
+#     ├── chan_new(result_queue)      # workers → master
+#     ├── chan_new(progress_queue)    # workers → GUI consumer
+#     ├── chan_new(cancel_chan)       # GUI → master (1-slot, idempotent)
+#     ├── enqueue N tiles
+#     ├── chan_close(tile_queue)
+#     ├── spawn N worker futures in a `concurrent { ... }` block
+#     ├── collect N results from result_queue
+#     └── assemble final image
+#
+# Each worker runs in `parallel fn` form, so the worker body is
+# submitted to the DZZW worker pool and the call returns a
+# `Future<Tile>` for the master to await.
+#
+# This module also implements the render state machine, used by
+# the GUI to display the current state of the pipeline:
+#
+#   state_t = { kind: ..., ... }
+#   kinds: idle | running | done | cancelled | failed
+#
+# `match state.kind { ... }` is the canonical way to dispatch
+# on the state in user code.
+
+# ─── 1. Tile — descriptor for one image tile ──────────────────────
+# We don't bother with a class; tiles are plain dicts because
+# they have to be passed through channels, and the workers
+# don't need methods on them — just data.
+#
+#   { id, x0, y0, w, h, seed }
+#
+#   id   — unique integer (used for result ordering)
+#   x0,y0 — top-left pixel coordinate in the image
+#   w,h  — tile width and height in pixels
+#   seed — RNG seed (so workers re-rendering the same tile get
+#          the same image — useful for deterministic tests)
+fn make_tile(id, x0, y0, w, h, seed) {
+    return { "id": id, "x0": x0, "y0": y0, "w": w, "h": h, "seed": seed };
+}
+
+# ─── 2. Tile generation ──────────────────────────────────────────
+# Split an image of (img_w, img_h) into `nx * ny` equal tiles.
+# The last tile in each row/column absorbs any leftover pixels.
+# Returns a list of tile descriptors.
+fn make_tiles(img_w, img_h, nx, ny) {
+    let tiles = [];
+    let tile_w = img_w / nx;
+    let tile_h = img_h / ny;
+    let rem_w = img_w - tile_w * nx;
+    let rem_h = img_h - tile_h * ny;
+    let id = 0;
+    let yi = 0;
+    while (yi < ny) {
+        let xi = 0;
+        while (xi < nx) {
+            let w = tile_w;
+            let h = tile_h;
+            if (xi == nx - 1) { w = w + rem_w; }
+            if (yi == ny - 1) { h = h + rem_h; }
+            let x0 = xi * tile_w;
+            let y0 = yi * tile_h;
+            let seed = 74437 + id * 7919;
+            push(tiles, make_tile(id, x0, y0, w, h, seed));
+            id = id + 1;
+            xi = xi + 1;
+        }
+        yi = yi + 1;
+    }
+    return tiles;
+}
+
+# ─── 3. Tile renderer (parallel) ─────────────────────────────────
+# Render one tile into a flat list of 8-bit RGB triplets
+# `[r0, g0, b0, r1, g1, b1, ...]`.  The result is sent back
+# through the result channel.
+parallel fn render_tile_worker(scene, camera, tile, img_w, img_h,
+                                samples, max_depth, result_chan,
+                                progress_chan) {
+    let out = [];
+    let px = tile.x0;
+    let end_x = tile.x0 + tile.w;
+    let py = tile.y0;
+    let end_y = tile.y0 + tile.h;
+    while (py < end_y) {
+        let x = px;
+        while (x < end_x) {
+            let c = render_pixel(scene, camera, x, py,
+                                 img_w, img_h, samples, max_depth, tile.seed + x * 73 + py * 131);
+            let rgb = to_rgb8(c);
+            push(out, rgb[0]);
+            push(out, rgb[1]);
+            push(out, rgb[2]);
+            x = x + 1;
+        }
+        py = py + 1;
+    }
+    # Send the finished tile to the result channel.  We tag
+    # it with the tile id and the tile descriptor (x0, y0, w,
+    # h) so the master can reassemble the image correctly
+    # even when tiles arrive out of order.
+    chan_send(result_chan, {
+        "id": tile.id,
+        "x0": tile.x0,
+        "y0": tile.y0,
+        "w": tile.w,
+        "h": tile.h,
+        "data": out,
+        "size": len(out)
+    });
+    # Push a progress update for the GUI consumer (if one was
+    # provided — tests that don't care about progress pass null).
+    if (progress_chan != null) {
+        chan_send(progress_chan, { "tile_id": tile.id, "w": tile.w, "h": tile.h });
+    }
+    return out;
+}
+
+# ─── 4. Render state machine ─────────────────────────────────────
+# The pipeline exposes its current state as a value of this
+# shape so the GUI can `match` on it.
+fn state_idle()              { return { "kind": "idle" }; }
+fn state_running(done, total) { return { "kind": "running", "done": done, "total": total }; }
+fn state_done(image, ms)      { return { "kind": "done", "image": image, "ms": ms }; }
+fn state_cancelled()          { return { "kind": "cancelled" }; }
+fn state_failed(reason)       { return { "kind": "failed", "reason": reason }; }
+
+# Pretty-print a state for debug output.
+fn state_dump(s) {
+    if (s["kind"] == "idle") { return "IDLE"; }
+    if (s["kind"] == "running") {
+        return "RUNNING " + str(s["done"]) + "/" + str(s["total"]);
+    }
+    if (s["kind"] == "done") {
+        return "DONE (" + str(len(s["image"])) + " bytes in " + str(s["ms"]) + " ms)";
+    }
+    if (s["kind"] == "cancelled") { return "CANCELLED"; }
+    if (s["kind"] == "failed") { return "FAILED: " + s["reason"]; }
+    return "UNKNOWN";
+}
+
+# ─── 5. The master renderer ──────────────────────────────────────
+# `tiles`, `samples`, `max_depth`, `cancel_chan` are all
+# configuration.  Returns the assembled image as a list of
+# bytes, plus the wall-clock time in ms.
+#
+# The master is an `async fn` so the caller can `await render(...)`
+# and continue interacting with the GUI while the workers run.
+async fn render_pipeline(scene, camera, img_w, img_h, tiles,
+                          samples, max_depth, cancel_chan) {
+    let t0 = time_ms();
+    let total = len(tiles);
+
+    # Open the channels.  result_chan is bounded to `total` so
+    # an idle worker doesn't race ahead and fill the buffer;
+    # progress_chan is bounded too so a fast worker can't
+    # drown the GUI.
+    let result_chan = chan_new(total);
+    let progress_chan = chan_new(total);
+
+    # Push all tiles into the tile queue.  We use a separate
+    # channel for that and close it after enqueueing so workers
+    # know when to stop pulling.
+    let tile_queue = chan_new(total);
+    let i = 0;
+    while (i < total) {
+        chan_send(tile_queue, tiles[i]);
+        i = i + 1;
+    }
+    chan_close(tile_queue);
+
+    # Spawn workers.  Each worker is a parallel function that
+    # keeps pulling from `tile_queue` until it's closed and
+    # drained.  We use a `concurrent { ... }` block so all
+    # workers run in parallel and the master is free to collect
+    # results as they arrive.
+    let workers_done = 0;
+    let np = parallelism();
+    if (np < 1) { np = 1; }
+    if (np > total) { np = total; }
+
+    concurrent {
+        let w = 0;
+        while (w < np) {
+            # Each worker loops, pulling tiles until the queue
+            # is closed and empty.
+            let stop = false;
+            while (not stop) {
+                let got = null;
+                # Try to receive a tile; if the queue is closed
+                # and empty, chan_recv raises "send on closed
+                # channel".  We catch that and stop the worker.
+                try {
+                    got = chan_recv(tile_queue);
+                } catch (e) {
+                    stop = true;
+                }
+                if (not stop and got != null) {
+                    let _unused = render_tile_worker(scene, camera, got,
+                                                    img_w, img_h, samples,
+                                                    max_depth, result_chan,
+                                                    progress_chan);
+                }
+            }
+            w = w + 1;
+        }
+    }
+
+    # All workers have exited, so the result_chan and
+    # progress_chan will never see another send.  Close them
+    # so the consumer loops below can drain them.
+    chan_close(result_chan);
+    chan_close(progress_chan);
+
+    # Collect N results in id-order.  Since the workers are
+    # concurrent, results may arrive in any order; we use a
+    # small map to assemble them in tile-id order.
+    let slots = [];
+    let i = 0;
+    while (i < total) {
+        push(slots, null);
+        i = i + 1;
+    }
+    let got = 0;
+    let cancelled = false;
+    let progress_done = 0;
+    while (got < total) {
+        # Drain progress messages opportunistically (non-blocking).
+        let p = chan_try_recv(progress_chan);
+        if (p != null) {
+            progress_done = progress_done + p["w"] * p["h"];
+        }
+        # Cancellation check.
+        let c = chan_try_recv(cancel_chan);
+        if (c != null) {
+            cancelled = true;
+        }
+        # Block until a result is ready.
+        let r = chan_recv(result_chan);
+        if (r == null) { break; }
+        slots[r["id"]] = r["data"];
+        got = got + 1;
+    }
+
+    let t1 = time_ms();
+    if (cancelled) {
+        return { "state": state_cancelled(), "ms": t1 - t0 };
+    }
+    if (got < total) {
+        return { "state": state_failed("only got " + str(got) + "/" + str(total) + " tiles"),
+                 "ms": t1 - t0 };
+    }
+
+    # Assemble the final image in tile-id order.
+    let image = [];
+    let k = 0;
+    while (k < total) {
+        let tile_data = slots[k];
+        let j = 0;
+        while (j < len(tile_data)) {
+            push(image, tile_data[j]);
+            j = j + 1;
+        }
+        k = k + 1;
+    }
+    return { "state": state_done(image, t1 - t0),
+             "ms": t1 - t0,
+             "progress_done": progress_done };
+}
+
+# ─── 6. Pixel indexing helper ────────────────────────────────────
+# Given an assembled image (a flat list of RGB bytes) and a
+# pixel coordinate (x, y) in an image of size (w, h), return
+# the [r, g, b] triplet.
+fn pixel_at(image, x, y, w) {
+    let idx = (y * w + x) * 3;
+    return [image[idx], image[idx + 1], image[idx + 2]];
+}
+
+# ─── 7. Image statistics (for the GUI) ───────────────────────────
+# Return {avg_r, avg_g, avg_b, min_lum, max_lum, mean_lum}.
+fn image_stats(image) {
+    let n_pix = len(image) / 3;
+    if (n_pix == 0) {
+        return { "avg_r": 0, "avg_g": 0, "avg_b": 0,
+                 "min_lum": 0, "max_lum": 0, "mean_lum": 0 };
+    }
+    let sr = 0; let sg = 0; let sb = 0;
+    let mn = 255; let mx = 0;
+    let i = 0;
+    while (i < n_pix) {
+        let r = image[i * 3];
+        let g = image[i * 3 + 1];
+        let b = image[i * 3 + 2];
+        sr = sr + r; sg = sg + g; sb = sb + b;
+        let lum = (r + g + b) / 3;
+        if (lum < mn) { mn = lum; }
+        if (lum > mx) { mx = lum; }
+        i = i + 1;
+    }
+    return {
+        "avg_r": sr / n_pix,
+        "avg_g": sg / n_pix,
+        "avg_b": sb / n_pix,
+        "min_lum": mn,
+        "max_lum": mx,
+        "mean_lum": (sr + sg + sb) / (3 * n_pix)
+    };
+}
+
+# ─── 8. Encode image to PPM (for quick dump) ─────────────────────
+# Portable PixMap; opening in Preview.app or `feh` shows the
+# rendered scene without needing a custom image viewer.  We
+# write the ASCII header with `write_file` and append the raw
+# pixel bytes with `io_append_bytes`.
+fn write_ppm(path, image, w, h) {
+    let h_pix = h;
+    let header = "P6\n" + str(w) + " " + str(h_pix) + "\n255\n";
+    write_file(path, header);
+    io_append_bytes(path, image);
+    return true;
+}

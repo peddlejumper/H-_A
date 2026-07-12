@@ -1,0 +1,13 @@
+# 13a - 最小复现: 嵌套 for + break (内层 break 后内层 iter 泄漏到外层 FOR_ITER)
+# 隔离 test13 第一个循环，确认 break 路径是死循环根因
+let found = "none";
+let outer_iters = 0;
+for x in [1, 2, 3] {
+    outer_iters = outer_iters + 1;
+    for y in [10, 20, 30] {
+        if (x == 2 and y == 20) { found = "x=2,y=20"; break; }
+    }
+}
+print("found=" + found);
+print("outer_iters=" + str(outer_iters));
+print("DONE");

@@ -1,0 +1,15 @@
+# T21 - Quicksort
+fn qsort(arr) {
+    if (len(arr) <= 1) { return arr; }
+    let pivot = arr[0];
+    let less = [];
+    let greater = [];
+    for i in range(1, len(arr)) {
+        if (arr[i] < pivot) { push(less, arr[i]); } else { push(greater, arr[i]); }
+    }
+    return qsort(less) + [pivot] + qsort(greater);
+}
+print(qsort([3, 6, 1, 8, 2, 9, 4, 5]));
+print(qsort([10, 9, 8, 7, 6, 5, 4, 3, 2, 1]));
+print(qsort([1, 2, 3, 4, 5]));
+print(qsort([]));

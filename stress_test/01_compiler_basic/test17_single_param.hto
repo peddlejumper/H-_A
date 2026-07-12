@@ -1,0 +1,5 @@
+# test17: single parameter function
+fn double(x) {
+    return x * 2;
+}
+print(double(21));

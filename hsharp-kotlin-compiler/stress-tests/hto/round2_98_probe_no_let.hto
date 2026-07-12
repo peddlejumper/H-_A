@@ -1,0 +1,14 @@
+# Probe for bare destructure-assignment (no `let`) — item 17 of the
+# test domain.  Languages like Python/JS allow `[a, b] = expr;` to
+# re-bind existing variables.  In H#, the statement parser only
+# recognises destructure when preceded by `let`/`auto`; a bare `[`
+# at statement position is not a valid statement start and should
+# raise a compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.  This probe exists only to confirm that.
+
+let a = 0;
+let b = 0;
+[a, b] = [1, 2];
+print(a);
+print(b);

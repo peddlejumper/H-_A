@@ -1,0 +1,4 @@
+# Probe #155-S — 链式赋值 let x = y = 5 (H# = 仅为语句级, 期望语法错误)
+let y = 0;
+let x = y = 5;
+print(x);

@@ -1,0 +1,25 @@
+# 18 - for + if 条件 (多种控制流交织)
+# 目的: for 体内含 if/elif/else，JUMP 与条件跳转共存
+let log = "";
+for i in range(8) {
+    if (i == 0) {
+        log = log + "Z";
+    } else if (i % 2 == 0) {
+        log = log + "E" + str(i);
+    } else {
+        log = log + "O" + str(i);
+    }
+}
+print("log=" + log);
+print("expected_log=ZO1E2O3E4O5E6O7");
+
+# for 内 if + break + continue 混合
+let acc = 0;
+for i in range(20) {
+    if (i == 15) { break; }
+    if (i % 3 == 0) { continue; }
+    acc = acc + i;
+}
+print("acc=" + str(acc));
+# 0,3,6,9,12 continue; 15 break; 其余累加: 1+2+4+5+7+8+10+11+13+14 = 75
+print("expected_acc=75");

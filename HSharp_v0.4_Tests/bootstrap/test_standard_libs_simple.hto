@@ -1,0 +1,74 @@
+# H# Standard Library Simple Test Suite
+# Basic tests to verify modules load and core functions work
+
+print("=== H# Standard Library Simple Tests ===");
+print("");
+
+let pass_count = 0;
+let fail_count = 0;
+
+fn check(name, condition) {
+    if (condition) {
+        print("PASS: " + name);
+        pass_count = pass_count + 1;
+    } else {
+        print("FAIL: " + name);
+        fail_count = fail_count + 1;
+    }
+}
+
+# DateTime Tests
+print("--- DateTime Tests ---");
+check("datetime_now returns string", len(datetime_now()) > 0);
+check("datetime_timestamp returns number", int(datetime_timestamp()) > 0);
+check("datetime_today returns date", len(datetime_today()) > 0);
+check("datetime_current_time returns time", len(datetime_current_time()) > 0);
+check("is_leap_year(2024)", datetime_is_leap_year(2024) == true);
+check("is_leap_year(2023)", datetime_is_leap_year(2023) == false);
+check("days_in_month Feb 2024", datetime_days_in_month(2024, 2) == 29);
+check("format_duration works", len(datetime_format_duration(3661)) > 0);
+print("");
+
+# FileSystem Tests
+print("--- FileSystem Tests ---");
+check("fs_dir_current returns path", len(fs_dir_current()) > 0);
+check("fs_path_join works", len(fs_path_join("/a", "b")) > 0);
+check("fs_path_filename extracts name", fs_path_filename("/path/file.txt") == "file.txt");
+check("fs_path_extension extracts ext", fs_path_extension("file.txt") == ".txt");
+check("fs_path_is_absolute detects abs", fs_path_is_absolute("/abs") == true);
+check("fs_path_is_absolute detects rel", fs_path_is_absolute("rel") == false);
+check("fs_format_size formats bytes", len(fs_format_size(1024)) > 0);
+check("fs_validate_path valid", fs_validate_path("/good/path") == true);
+check("fs_change_extension works", fs_change_extension("a.txt", ".bak") == "a.bak");
+print("");
+
+# IO Tests
+print("--- IO Tests ---");
+check("io_pad_right pads string", len(io_pad_right("x", 5)) == 5);
+check("io_csv_parse_line splits", len(io_csv_parse_line("a,b,c", ",")) == 3);
+check("str_contains finds substring", str_contains("hello world", "world") == true);
+check("str_contains misses substring", str_contains("hello", "xyz") == false);
+print("");
+
+# File I/O Tests
+print("--- File I/O Tests ---");
+let test_file = "/tmp/hsharp_quick_test.txt";
+io_file_write(test_file, "test content");
+check("file write creates file", fs_file_exists(test_file) == true);
+let content = io_file_read(test_file);
+check("file read gets content", content == "test content");
+fs_file_delete(test_file);
+check("file delete removes file", fs_file_exists(test_file) == false);
+print("");
+
+# Summary
+print("=== Summary ===");
+print("Passed: " + str(pass_count));
+print("Failed: " + str(fail_count));
+print("Total: " + str(pass_count + fail_count));
+
+if (fail_count == 0) {
+    print("All tests passed!");
+} else {
+    print(str(fail_count) + " test(s) failed.");
+}

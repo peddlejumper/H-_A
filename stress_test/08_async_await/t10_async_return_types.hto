@@ -1,0 +1,11 @@
+# t10: async fn returning each primitive type.
+async fn n() { return 42; }
+async fn s() { return "hi"; }
+async fn l() { return [1, 2, 3]; }
+async fn b() { return true; }
+async fn z() { return nullptr; }
+print(await n());
+print(await s());
+print(await l());
+print(await b());
+print(await z());

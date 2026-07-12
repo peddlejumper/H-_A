@@ -1,0 +1,33 @@
+# Bug 5: FOR_ITER "unsupported iterable" error message used the
+# uppercase HType enum name (e.g. "CHANNEL").  It should use lowercase
+# to match the `type()` builtin (which returns "channel").  We trigger
+# the unsupported-iterable branch by iterating a channel (channel
+# iteration is Bug 4, deliberately not implemented), and check that the
+# catchable exception message uses the lowercase type name.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+let ch = chan_new(0);
+
+let caught = false;
+let msg = "";
+try {
+    for x in ch {
+        print("should not iterate");
+    }
+} catch (e) {
+    caught = true;
+    msg = str(e);
+}
+check("for_iter_channel_raises", caught, "no exception raised");
+# Message must use the LOWERCASE type name "channel", not "CHANNEL",
+# matching the `type()` builtin which returns "channel".
+check("for_iter_msg_lowercase", msg == "FOR_ITER: unsupported iterable channel", "msg=" + msg);
+
+# Sanity: type() also reports lowercase for the same value.
+check("type_builtin_lowercase", type(ch) == "channel", "type=" + type(ch));
+
+print("BUG5_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

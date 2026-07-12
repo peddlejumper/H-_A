@@ -1,0 +1,282 @@
+# raytracer_scene.hto — Scene primitives and the Scene container
+# ─────────────────────────────────────────────────────────────────────
+# A scene is a list of geometric objects (sphere, plane, etc.) plus
+# a list of lights.  The renderer dispatches to the per-shape
+# intersect method, so adding a new shape (e.g. box, triangle) is
+# just a matter of adding a class with a matching method.
+#
+# All objects are immutable; the Scene class is the only mutable
+# container (we append during construction).
+
+# ─── 1. Material — colour + reflectance parameters ──────────────────
+class Material {
+    let color     = null;
+    let specular  = 0.0;
+    let shininess = 1.0;
+    let reflect   = 0.0;
+    let emissive  = 0.0;
+
+    fn init_mat(color, specular, shininess, reflect, emissive) {
+        self.color = color;
+        self.specular = specular;
+        self.shininess = shininess;
+        self.reflect = reflect;
+        self.emissive = emissive;
+        return 0;
+    }
+}
+fn new_mat(color, specular, shininess, reflect, emissive) {
+    let m = new Material();
+    m.init_mat(color, specular, shininess, reflect, emissive);
+    return m;
+}
+fn matte(color)              { return new_mat(color, 0.0, 1.0, 0.0, 0.0); }
+fn glossy(color, s, shine)   { return new_mat(color, s, shine, 0.0, 0.0); }
+fn mirror(color)             { return new_mat(color, 1.0, 256.0, 1.0, 0.0); }
+fn glass(color)              { return new_mat(color, 1.0, 256.0, 0.9, 0.0); }
+fn light_mat(color, intensity) {
+    return new_mat(color, 0.0, 1.0, 0.0, intensity);
+}
+
+# ─── 2. Sphere — centre, radius, material ───────────────────────────
+class Sphere {
+    let cx = 0.0;
+    let cy = 0.0;
+    let cz = 0.0;
+    let r = 1.0;
+    let material = null;
+
+    fn init_sphere(cx, cy, cz, r, material) {
+        self.cx = cx;
+        self.cy = cy;
+        self.cz = cz;
+        self.r = r;
+        self.material = material;
+        return 0;
+    }
+
+    # `tag` is a short string used in debug output and in the
+    # GUI to label tiles that are dominated by this object.
+    fn tag() { return "sphere"; }
+
+    # Returns the Vec3 centre.
+    fn center() { return new_v3(self.cx, self.cy, self.cz); }
+}
+fn new_sphere(cx, cy, cz, r, material) {
+    let s = new Sphere();
+    s.init_sphere(cx, cy, cz, r, material);
+    return s;
+}
+
+# ─── 3. Plane — y = h, with a checker pattern ───────────────────────
+class Plane {
+    let h = 0.0;
+    let material = null;
+
+    fn init_plane(h, material) {
+        self.h = h;
+        self.material = material;
+        return 0;
+    }
+
+    fn tag() { return "plane"; }
+}
+fn new_plane(h, material) {
+    let p = new Plane();
+    p.init_plane(h, material);
+    return p;
+}
+
+# ─── 4. Light — point or directional ────────────────────────────────
+# A directional light is just a point light pushed off to
+# infinity in the direction of `pos`.  The renderer treats the
+# position vector as the direction toward the source.
+class Light {
+    let px = 0.0;
+    let py = 0.0;
+    let pz = 0.0;
+    let intensity = 0.0;
+    let color = null;
+
+    fn init_light(px, py, pz, intensity, color) {
+        self.px = px;
+        self.py = py;
+        self.pz = pz;
+        self.intensity = intensity;
+        self.color = color;
+        return 0;
+    }
+}
+fn new_light(px, py, pz, intensity, color) {
+    let l = new Light();
+    l.init_light(px, py, pz, intensity, color);
+    return l;
+}
+
+fn ambient_light(strength) {
+    # Convenience constructor for an ambient term: a "light" at
+    # the camera with very low intensity.  The renderer special-
+    # cases `intensity == 0` as the global ambient contribution
+    # and skips shadow rays for it.
+    return new_light(0.0, 0.0, 0.0, 0.0, new_v3(strength, strength, strength));
+}
+
+fn directional(px, py, pz, intensity, color) {
+    return new_light(px, py, pz, intensity, color);
+}
+
+fn point_light(px, py, pz, intensity, color) {
+    return new_light(px, py, pz, intensity, color);
+}
+
+# ─── 5. Camera — eye, forward, up, fov ──────────────────────────────
+# The camera is parameterised in world space.  The renderer
+# converts (px, py) into a primary ray using `forward` as the
+# +Z direction and `up` to orient the frame.
+class Camera {
+    let ex = 0.0;
+    let ey = 0.0;
+    let ez = 0.0;
+    let fx = 0.0;
+    let fy = 0.0;
+    let fz = 0.0;
+    let ux = 0.0;
+    let uy = 1.0;
+    let uz = 0.0;
+    let fov = 60.0;
+
+    fn init_camera(ex, ey, ez, fx, fy, fz, ux, uy, uz, fov) {
+        self.ex = ex;
+        self.ey = ey;
+        self.ez = ez;
+        self.fx = fx;
+        self.fy = fy;
+        self.fz = fz;
+        self.ux = ux;
+        self.uy = uy;
+        self.uz = uz;
+        self.fov = fov;
+        return 0;
+    }
+
+    fn eye() { return new_v3(self.ex, self.ey, self.ez); }
+    fn fwd() { return new_v3(self.fx, self.fy, self.fz); }
+    fn upv() { return new_v3(self.ux, self.uy, self.uz); }
+}
+fn new_camera(ex, ey, ez, fx, fy, fz, ux, uy, uz, fov) {
+    let c = new Camera();
+    c.init_camera(ex, ey, ez, fx, fy, fz, ux, uy, uz, fov);
+    return c;
+}
+
+fn look_at(ex, ey, ez, tx, ty, tz, fov) {
+    # Build a Camera looking from (ex,ey,ez) toward (tx,ty,tz)
+    # with world-up (0,1,0).  `fov` is in degrees.
+    let fwd = new_v3(tx, ty, tz).sub(new_v3(ex, ey, ez)).norm();
+    let world_up = new_v3(0.0, 1.0, 0.0);
+    let right = fwd.cross(world_up).norm();
+    let up = right.cross(fwd).norm();
+    return new_camera(ex, ey, ez, fwd.x, fwd.y, fwd.z, up.x, up.y, up.z, fov);
+}
+
+# ─── 6. Scene — objects + lights + ambient + background ─────────────
+class Scene {
+    let objects = [];
+    let lights = [];
+    let ambient = 0.1;
+    let background_top = null;
+    let background_bot = null;
+
+    fn init_scene() {
+        self.objects = [];
+        self.lights = [];
+        self.ambient = 0.1;
+        self.background_top = new_v3(0.5, 0.7, 1.0);
+        self.background_bot = new_v3(1.0, 1.0, 1.0);
+        return 0;
+    }
+
+    fn add(o) { push(self.objects, o); }
+    fn add_light(l) { push(self.lights, l); }
+
+    fn set_ambient(a) { self.ambient = a; }
+    fn set_background(top, bot) {
+        self.background_top = top;
+        self.background_bot = bot;
+    }
+
+    fn n_objects() { return len(self.objects); }
+    fn n_lights()  { return len(self.lights); }
+}
+fn new_scene() {
+    let s = new Scene();
+    s.init_scene();
+    return s;
+}
+
+# ─── 7. Three pre-built scenes ─────────────────────────────────────
+# A small library of ready-to-render scenes so the demo can
+# iterate quickly without hand-coding geometry.
+
+fn scene_three_spheres() {
+    # The classic "three coloured spheres on a checker floor"
+    # scene, also used by 18_raytrace_bench.hto.
+    let s = new_scene();
+    s.add(new_sphere( 0.0,  0.0, -3.0, 1.0, matte(new_v3(0.9, 0.2, 0.2))));
+    s.add(new_sphere(-1.7, -0.3, -3.5, 0.8, glossy(new_v3(0.2, 0.9, 0.2), 0.6, 64.0)));
+    s.add(new_sphere( 1.6,  0.4, -3.2, 0.7, mirror(new_v3(0.2, 0.3, 0.9))));
+    s.add(new_plane(-1.0, glossy(new_v3(0.8, 0.8, 0.8), 0.3, 16.0)));
+    s.add_light(directional(-0.4, -0.6, 0.7, 1.0, new_v3(1.0, 1.0, 0.95)));
+    s.set_ambient(0.15);
+    s.set_background(new_v3(0.5, 0.7, 1.0), new_v3(0.9, 0.9, 0.9));
+    return s;
+}
+
+fn scene_glass_ball() {
+    # A single glass ball on a mirror floor, with two coloured
+    # back lights to give the glass something to refract.
+    let s = new_scene();
+    s.add(new_sphere( 0.0,  0.2, -2.5, 0.8, glass(new_v3(0.95, 0.95, 0.95))));
+    s.add(new_sphere(-0.4, -0.5, -1.2, 0.25, light_mat(new_v3(1.0, 0.4, 0.4), 6.0)));
+    s.add(new_sphere( 0.5, -0.5, -1.4, 0.25, light_mat(new_v3(0.3, 0.5, 1.0), 6.0)));
+    s.add(new_plane(-0.7, mirror(new_v3(0.9, 0.9, 0.9))));
+    s.add_light(directional( 0.3, -0.6,  0.5, 0.6, new_v3(1.0, 1.0, 0.9)));
+    s.set_ambient(0.05);
+    s.set_background(new_v3(0.05, 0.05, 0.1), new_v3(0.4, 0.4, 0.5));
+    return s;
+}
+
+fn scene_mirror_corridor() {
+    # Two parallel mirrors facing each other with a ball
+    # bouncing between them; the recursive reflections will
+    # create the classic "infinite tunnel" effect.
+    let s = new_scene();
+    s.add(new_sphere( 0.0,  0.0, -3.0, 0.5, matte(new_v3(0.95, 0.7, 0.2))));
+    s.add(new_plane(-1.5, mirror(new_v3(0.9, 0.95, 0.95))));
+    # We can't add a vertical plane in this minimal version, so
+    # the "corridor" is approximated by two far spheres acting
+    # as mirror walls.
+    s.add(new_sphere(-6.0,  0.0, -3.0, 0.6, mirror(new_v3(0.9, 0.95, 0.95))));
+    s.add(new_sphere( 6.0,  0.0, -3.0, 0.6, mirror(new_v3(0.9, 0.95, 0.95))));
+    s.add_light(directional(0.0, -0.4, 0.5, 0.9, new_v3(1.0, 0.95, 0.9)));
+    s.set_ambient(0.10);
+    s.set_background(new_v3(0.1, 0.1, 0.2), new_v3(0.3, 0.3, 0.5));
+    return s;
+}
+
+# Scene registry: index -> factory
+fn scene_by_index(i) {
+    if (i == 0) { return scene_three_spheres(); }
+    if (i == 1) { return scene_glass_ball(); }
+    if (i == 2) { return scene_mirror_corridor(); }
+    return scene_three_spheres();
+}
+
+fn scene_name(i) {
+    if (i == 0) { return "three spheres"; }
+    if (i == 1) { return "glass ball"; }
+    if (i == 2) { return "mirror corridor"; }
+    return "unknown";
+}
+
+fn scene_count() { return 3; }

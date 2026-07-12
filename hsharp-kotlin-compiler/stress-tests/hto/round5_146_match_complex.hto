@@ -1,0 +1,1019 @@
+# Round 5 / Test #146 — Complex match patterns (高强度边界测试)
+# 测试智能体 #146。聚焦 round3_111 未深入或未覆盖的 match 复杂模式边界。
+# 每个 probe 用 safe() 包装；输出格式: r146_<name>:<result> 或 r146_<name>:EXC[error]
+# 注: H# lambda 须 fn(params){body}，无 expr-body。
+# 注: or 模式 `1 | 2 | 3` 不支持(编译期错误)。
+# 注: match arm body 须为表达式(不能是 break/continue/throw 语句)。
+# 注: print 是语句不是表达式。
+
+# ============================================================
+# 工具: 安全执行包装
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# S1: 字面量模式 — int/float/string/bool/null 边界
+# ============================================================
+fn lit_int(x) {
+    return match x {
+        0 => "zero",
+        42 => "answer",
+        -7 => "neg-seven",
+        _ => "other"
+    };
+}
+safe("r146_s1_int_zero", fn() { return lit_int(0); });
+safe("r146_s1_int_42", fn() { return lit_int(42); });
+safe("r146_s1_int_neg7", fn() { return lit_int(-7); });
+safe("r146_s1_int_other", fn() { return lit_int(99); });
+
+# float 字面量 — 关键: 0.0 与 0 是否区分 (HValueOps.equals 用 a.value==b.value)
+fn lit_float(x) {
+    return match x {
+        0.0 => "zero-float",
+        1.5 => "one-half",
+        3.14 => "pi",
+        _ => "other"
+    };
+}
+safe("r146_s1_flt_00", fn() { return lit_float(0.0); });
+safe("r146_s1_flt_0int", fn() { return lit_float(0); });       # 关键: 0 是否匹配 0.0?
+safe("r146_s1_flt_15", fn() { return lit_float(1.5); });
+safe("r146_s1_flt_pi", fn() { return lit_float(3.14); });
+safe("r146_s1_flt_int1", fn() { return lit_float(1); });        # 1 是否匹配 1.0? (无 1.0 arm)
+
+# string 字面量
+fn lit_str(x) {
+    return match x {
+        "" => "empty",
+        "a" => "a",
+        "hello" => "greeting",
+        _ => "other"
+    };
+}
+safe("r146_s1_str_empty", fn() { return lit_str(""); });
+safe("r146_s1_str_a", fn() { return lit_str("a"); });
+safe("r146_s1_str_hello", fn() { return lit_str("hello"); });
+safe("r146_s1_str_other", fn() { return lit_str("world"); });
+
+# bool 字面量 — true/false 是否与 1/0 混淆
+fn lit_bool(x) {
+    return match x {
+        true => "yes",
+        false => "no",
+        _ => "other"
+    };
+}
+safe("r146_s1_bool_true", fn() { return lit_bool(true); });
+safe("r146_s1_bool_false", fn() { return lit_bool(false); });
+safe("r146_s1_bool_1", fn() { return lit_bool(1); });     # 关键: 1 是否匹配 true?
+safe("r146_s1_bool_0", fn() { return lit_bool(0); });     # 关键: 0 是否匹配 false?
+
+# null 字面量
+fn lit_null(x) {
+    return match x {
+        null => "is-null-lit",
+        _ => "not-null"
+    };
+}
+safe("r146_s1_null_null", fn() { return lit_null(null); });
+safe("r146_s1_null_0", fn() { return lit_null(0); });
+safe("r146_s1_null_false", fn() { return lit_null(false); });
+safe("r146_s1_null_emptystr", fn() { return lit_null(""); });
+
+# 字面量顺序: 0 在 true 之前 — 0 是否"截胡" true?
+fn order_num_bool(x) {
+    return match x {
+        0 => "zero",
+        true => "true",
+        false => "false",
+        _ => "other"
+    };
+}
+safe("r146_s1_ord_true", fn() { return order_num_bool(true); });
+safe("r146_s1_ord_false", fn() { return order_num_bool(false); });
+safe("r146_s1_ord_zero", fn() { return order_num_bool(0); });
+
+# ============================================================
+# S2: 类型模式 — is int/str/list/dict/null/fn/chan (含刚修复的 is chan)
+# ============================================================
+fn typ_basic(x) {
+    return match x {
+        is int => "int",
+        is float => "float",
+        is str => "str",
+        is bool => "bool",
+        is list => "list",
+        is dict => "dict",
+        is null => "null",
+        _ => "other"
+    };
+}
+safe("r146_s2_int", fn() { return typ_basic(42); });
+safe("r146_s2_float", fn() { return typ_basic(3.14); });
+safe("r146_s2_str", fn() { return typ_basic("hi"); });
+safe("r146_s2_bool", fn() { return typ_basic(true); });
+safe("r146_s2_list", fn() { return typ_basic([1, 2]); });
+safe("r146_s2_dict", fn() { return typ_basic({"a": 1}); });
+safe("r146_s2_null", fn() { return typ_basic(null); });
+
+# 关键: is int 匹配整数值浮点 (3.0)
+safe("r146_s2_isint_3.0", fn() { return typ_basic(3.0); });
+# 关键: is float 是否匹配整数? (typeMatch 中 is float 对所有 HNumber 返回 true)
+safe("r146_s2_isfloat_42", fn() { return typ_basic(42); });
+
+# is fn — 函数类型。BUG: parser 不接受 `is fn` (fn 是 FN 关键字, parse_pattern
+# 只接受 IDENTIFIER/NULL/BOOL/CHAN)。但 HVM.isInstance 运行时支持 "fn"/"function"。
+# 此处不嵌入 `is fn` 代码以免阻塞编译。详见 bug 报告 #146-S1。
+# 改用 isInstance 等效判断: 用 type-of 无法直接测, 跳过。
+fn dummy() { return 0; }
+fn typ_fn_check(x) {
+    # 用 binding + guard 间接判断 (x 是函数时调用成功)
+    return match x {
+        is int => "int",
+        is str => "str",
+        _ => "maybe-fn-or-other"
+    };
+}
+safe("r146_s2_isfn_named", fn() { return typ_fn_check(dummy); });
+safe("r146_s2_isfn_lambda", fn() { return typ_fn_check(fn(x) { return x; }); });
+safe("r146_s2_isfn_int", fn() { return typ_fn_check(42); });
+
+# is chan — 刚修复 (parser 现接受 CHAN token)
+fn typ_chan(x) {
+    return match x {
+        is chan => "channel",
+        is int => "int",
+        _ => "other"
+    };
+}
+safe("r146_s2_ischan_chan", fn() { return typ_chan(chan_new(2)); });
+safe("r146_s2_ischan_int", fn() { return typ_chan(42); });
+
+# is int vs is float 顺序 — is int 在前截胡 is float
+fn typ_order(x) {
+    return match x {
+        is int => "int-first",
+        is float => "float-second",
+        _ => "other"
+    };
+}
+safe("r146_s2_ord_int", fn() { return typ_order(42); });
+safe("r146_s2_ord_3.0", fn() { return typ_order(3.0); });       # 整数值浮点命中 is int
+safe("r146_s2_ord_3.14", fn() { return typ_order(3.14); });
+
+# is float 在前 — 是否截胡所有整数?
+fn typ_float_first(x) {
+    return match x {
+        is float => "float-first",
+        is int => "int-second",
+        _ => "other"
+    };
+}
+safe("r146_s2_ff_int", fn() { return typ_float_first(42); });   # 关键: is float 是否匹配 42?
+safe("r146_s2_ff_3.14", fn() { return typ_float_first(3.14); });
+safe("r146_s2_ff_3.0", fn() { return typ_float_first(3.0); });
+
+# ============================================================
+# S3: 类型绑定 — is T as name, 绑定后使用变量
+# ============================================================
+fn typ_bind(x) {
+    return match x {
+        is int as n => "int:" + str(n + 1),
+        is str as s => "str:" + s + "!",
+        is list as l => "list:len=" + str(len(l)),
+        is dict as d => "dict:keys=" + str(len(d)),
+        _ => "other"
+    };
+}
+safe("r146_s3_int", fn() { return typ_bind(10); });
+safe("r146_s3_str", fn() { return typ_bind("xy"); });
+safe("r146_s3_list", fn() { return typ_bind([1, 2, 3]); });
+safe("r146_s3_dict", fn() { return typ_bind({"a": 1, "b": 2}); });
+safe("r146_s3_other", fn() { return typ_bind(3.14); });
+
+# 绑定后参与算术与比较
+fn typ_bind_arith(x) {
+    return match x {
+        is int as n => n * 2,
+        is float as f => f + 0.5,
+        _ => 0
+    };
+}
+safe("r146_s3_arith_int", fn() { return typ_bind_arith(5); });
+safe("r146_s3_arith_float", fn() { return typ_bind_arith(2.5); });
+safe("r146_s3_arith_str", fn() { return typ_bind_arith("x"); });
+
+# 绑定变量在嵌套表达式中
+fn typ_bind_nested(x) {
+    return match x {
+        is list as l => l[0] + l[1],
+        is str as s => s + str(len(s)),
+        _ => "none"
+    };
+}
+safe("r146_s3_nested_list", fn() { return typ_bind_nested([10, 20]); });
+safe("r146_s3_nested_str", fn() { return typ_bind_nested("ab"); });
+
+# ============================================================
+# S4: guard 守卫 — 复杂条件, 方法调用, in 运算符
+# ============================================================
+fn is_prime(n) {
+    if (n < 2) { return false; }
+    let i = 2;
+    while (i * i <= n) {
+        if (n % i == 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+# guard 中函数调用
+fn guard_fn(x) {
+    return match x {
+        n if is_prime(n) => "prime:" + str(n),
+        n if n > 0 => "composite:" + str(n),
+        _ => "small-or-neg"
+    };
+}
+safe("r146_s4_prime", fn() { return guard_fn(7); });
+safe("r146_s4_comp", fn() { return guard_fn(9); });
+safe("r146_s4_neg", fn() { return guard_fn(-3); });
+safe("r146_s4_zero", fn() { return guard_fn(0); });
+
+# guard 中 in 运算符
+fn guard_in(x) {
+    return match x {
+        n if n in [1, 2, 3] => "low",
+        n if n in [4, 5, 6] => "mid",
+        _ => "high-or-other"
+    };
+}
+safe("r146_s4_in_low", fn() { return guard_in(2); });
+safe("r146_s4_in_mid", fn() { return guard_in(5); });
+safe("r146_s4_in_high", fn() { return guard_in(9); });
+
+# guard 中字符串方法调用
+fn guard_str_method(s) {
+    return match s {
+        x if x.starts_with("a") => "starts-a",
+        x if x.ends_with("z") => "ends-z",
+        x if len(x) > 5 => "long",
+        _ => "short-other"
+    };
+}
+safe("r146_s4_gsm_starts", fn() { return guard_str_method("apple"); });
+safe("r146_s4_gsm_ends", fn() { return guard_str_method("buzz"); });
+safe("r146_s4_gsm_long", fn() { return guard_str_method("xyzabc1"); });
+safe("r146_s4_gsm_short", fn() { return guard_str_method("hi"); });
+
+# guard 短路求值 (避免除零)
+fn guard_shortcircuit(x) {
+    return match x {
+        n if n != 0 && 100 / n > 10 => "big-ratio",
+        n if n == 0 => "zero",
+        _ => "small-ratio"
+    };
+}
+safe("r146_s4_sc_5", fn() { return guard_shortcircuit(5); });
+safe("r146_s4_sc_0", fn() { return guard_shortcircuit(0); });
+safe("r146_s4_sc_200", fn() { return guard_shortcircuit(200); });
+safe("r146_s4_sc_1", fn() { return guard_shortcircuit(1); });
+
+# guard 复杂布尔 — 嵌套括号
+fn guard_complex(x) {
+    return match x {
+        n if (n > 0 && n < 10) || n == 100 => "special",
+        n if n < 0 => "negative",
+        _ => "normal"
+    };
+}
+safe("r146_s4_cx_5", fn() { return guard_complex(5); });
+safe("r146_s4_cx_100", fn() { return guard_complex(100); });
+safe("r146_s4_cx_neg", fn() { return guard_complex(-5); });
+safe("r146_s4_cx_50", fn() { return guard_complex(50); });
+
+# guard 引用外层变量
+let limit = 50;
+fn guard_outer(x) {
+    return match x {
+        n if n > limit => "over-limit",
+        n if n == limit => "at-limit",
+        _ => "under-limit"
+    };
+}
+safe("r146_s4_outer_over", fn() { return guard_outer(100); });
+safe("r146_s4_outer_at", fn() { return guard_outer(50); });
+safe("r146_s4_outer_under", fn() { return guard_outer(10); });
+
+# ============================================================
+# S5: _ 通配符 — 作为唯一分支, 作为最后分支, 在前截胡
+# ============================================================
+fn wild_only(x) {
+    return match x {
+        _ => "always"
+    };
+}
+safe("r146_s5_only_int", fn() { return wild_only(1); });
+safe("r146_s5_only_null", fn() { return wild_only(null); });
+safe("r146_s5_only_list", fn() { return wild_only([]); });
+
+fn wild_last(x) {
+    return match x {
+        1 => "one",
+        _ => "catchall"
+    };
+}
+safe("r146_s5_last_1", fn() { return wild_last(1); });
+safe("r146_s5_last_2", fn() { return wild_last(2); });
+
+# _ 在前截胡后续分支 (后续永不执行)
+fn wild_first(x) {
+    return match x {
+        _ => "wild",
+        1 => "one"
+    };
+}
+safe("r146_s5_first_1", fn() { return wild_first(1); });
+safe("r146_s5_first_9", fn() { return wild_first(9); });
+
+# _ 在中间
+fn wild_middle(x) {
+    return match x {
+        1 => "one",
+        _ => "mid-wild",
+        2 => "two"
+    };
+}
+safe("r146_s5_mid_1", fn() { return wild_middle(1); });
+safe("r146_s5_mid_2", fn() { return wild_middle(2); });
+safe("r146_s5_mid_3", fn() { return wild_middle(3); });
+
+# ============================================================
+# S6: 多模式 (or 模式) — `1 | 2 | 3 =>` 是否支持
+# ============================================================
+# 已知: or 模式 `1 | 2 | 3` 不支持, parser 把 `|` 当作 bitwise_or,
+# 导致编译错误 (parse_pattern 不识别 OR 模式)。
+# round3_111 第 5 行已记录此限制。此处不嵌入可执行代码以免阻塞整个文件编译。
+# 结论: or 模式 = 编译期错误 (parser 不支持), 非运行期 bug。
+# 用户须用多个 arm 或 guard 替代: `n if n == 1 || n == 2 || n == 3 => ...`
+fn or_pattern_via_guard(x) {
+    return match x {
+        n if n == 1 || n == 2 || n == 3 => "low",
+        _ => "other"
+    };
+}
+safe("r146_s6_guard_1", fn() { return or_pattern_via_guard(1); });
+safe("r146_s6_guard_2", fn() { return or_pattern_via_guard(2); });
+safe("r146_s6_guard_3", fn() { return or_pattern_via_guard(3); });
+safe("r146_s6_guard_9", fn() { return or_pattern_via_guard(9); });
+
+# ============================================================
+# S7: 嵌套 match — 5 层, match 作为 match 的结果
+# ============================================================
+fn nest5(a, b, c, d, e) {
+    return match a {
+        0 => match b {
+            0 => match c {
+                0 => match d {
+                    0 => match e {
+                        0 => "00000",
+                        _ => "0000x"
+                    },
+                    _ => "000xx"
+                },
+                _ => "00xxx"
+            },
+            _ => "0xxxx"
+        },
+        _ => "xxxxx"
+    };
+}
+safe("r146_s7_n5_all0", fn() { return nest5(0, 0, 0, 0, 0); });
+safe("r146_s7_n5_last", fn() { return nest5(0, 0, 0, 0, 9); });
+safe("r146_s7_n5_first", fn() { return nest5(9, 0, 0, 0, 0); });
+safe("r146_s7_n5_mid", fn() { return nest5(0, 0, 9, 0, 0); });
+
+# match 返回 match (链式)
+fn chain(x) {
+    return match x {
+        1 => match x { 1 => "one-one", _ => "?" },
+        2 => match x { 2 => "two-two", _ => "?" },
+        _ => "other"
+    };
+}
+safe("r146_s7_chain_1", fn() { return chain(1); });
+safe("r146_s7_chain_2", fn() { return chain(2); });
+safe("r146_s7_chain_3", fn() { return chain(3); });
+
+# 嵌套 match 在 arm body 中带 guard
+fn nested_guard(x, y) {
+    return match x {
+        n if n > 0 => match y {
+            m if m > 0 => "both-pos",
+            _ => "x-pos-y-nonpos"
+        },
+        _ => match y {
+            m if m > 0 => "x-nonpos-y-pos",
+            _ => "both-nonpos"
+        }
+    };
+}
+safe("r146_s7_ng_pp", fn() { return nested_guard(1, 1); });
+safe("r146_s7_ng_pn", fn() { return nested_guard(1, -1); });
+safe("r146_s7_ng_np", fn() { return nested_guard(-1, 1); });
+safe("r146_s7_ng_nn", fn() { return nested_guard(-1, -1); });
+
+# ============================================================
+# S8: match 作为表达式 — let 赋值, 算术, 字符串拼接, 函数实参
+# ============================================================
+fn as_let(x) {
+    let v = match x {
+        1 => 100,
+        2 => 200,
+        _ => 0
+    };
+    return v + 1;
+}
+safe("r146_s8_let_1", fn() { return as_let(1); });
+safe("r146_s8_let_2", fn() { return as_let(2); });
+safe("r146_s8_let_9", fn() { return as_let(9); });
+
+# match 在算术中 (需括号)
+fn as_arith(x) {
+    return (match x { 1 => 10, 2 => 20, _ => 0 }) * 2;
+}
+safe("r146_s8_arith_1", fn() { return as_arith(1); });
+safe("r146_s8_arith_9", fn() { return as_arith(9); });
+
+# match 作为函数实参
+fn double_it(x) { return x * 2; }
+fn as_arg(x) {
+    return double_it(match x { 1 => 10, _ => 0 });
+}
+safe("r146_s8_arg_1", fn() { return as_arg(1); });
+safe("r146_s8_arg_9", fn() { return as_arg(9); });
+
+# match 作为 list 元素
+fn as_list_elem(x) {
+    return [match x { 1 => "a", _ => "?" }, match x { 2 => "b", _ => "?" }];
+}
+safe("r146_s8_list_1", fn() { return as_list_elem(1); });
+safe("r146_s8_list_2", fn() { return as_list_elem(2); });
+
+# match 作为 dict 值
+fn as_dict_val(x) {
+    return {"k": match x { 1 => "v1", _ => "v?" }};
+}
+safe("r146_s8_dict_1", fn() { return as_dict_val(1); });
+safe("r146_s8_dict_9", fn() { return as_dict_val(9); });
+
+# match 在字符串拼接中
+fn as_concat(x) {
+    return "r=" + (match x { 1 => "one", _ => "other" }) + "!";
+}
+safe("r146_s8_concat_1", fn() { return as_concat(1); });
+safe("r146_s8_concat_9", fn() { return as_concat(9); });
+
+# ============================================================
+# S9: match 作为语句 — 值被丢弃, 只执行副作用
+# ============================================================
+let s9_ran = false;
+match 5 { _ => 99 };
+s9_ran = true;
+safe("r146_s9_stmt_ran", fn() { return s9_ran; });
+
+# match 语句 + 副作用 (修改外部变量)
+# 注: match arm body 须为表达式, 不能是语句块; 用 helper 函数实现副作用
+let s9_counter = 0;
+fn s9_inc() { s9_counter = s9_counter + 1; return s9_counter; }
+fn s9_dec() { s9_counter = s9_counter - 1; return s9_counter; }
+fn s9_sideeffect(x) {
+    let _ = match x {
+        1 => s9_inc(),
+        _ => s9_dec()
+    };
+    return s9_counter;
+}
+safe("r146_s9_se_1", fn() { return s9_sideeffect(1); });
+safe("r146_s9_se_9", fn() { return s9_sideeffect(9); });
+
+# 两个 match 语句相加
+let s9_two = match 7 { 7 => 1, _ => 0 } + match 8 { 8 => 1, _ => 0 };
+safe("r146_s9_two", fn() { return s9_two; });
+
+# ============================================================
+# S10: 无匹配 — 所有分支都不匹配 (应 RAISE "non-exhaustive match")
+# ============================================================
+fn only_one(x) {
+    return match x {
+        1 => "one"
+    };
+}
+safe("r146_s10_nonex_1", fn() { return only_one(1); });
+safe("r146_s10_nonex_2", fn() { return only_one(2); });
+safe("r146_s10_nonex_str", fn() { return only_one("a"); });
+safe("r146_s10_nonex_null", fn() { return only_one(null); });
+
+# 类型穷尽: 只有 is int 和 is str, 输入 bool
+fn only_int_str(x) {
+    return match x {
+        is int => "int",
+        is str => "str"
+    };
+}
+safe("r146_s10_typ_bool", fn() { return only_int_str(true); });
+safe("r146_s10_typ_list", fn() { return only_int_str([1]); });
+safe("r146_s10_typ_null", fn() { return only_int_str(null); });
+
+# 空 match (无 arm)
+fn empty_match(x) {
+    return match x { };
+}
+safe("r146_s10_empty", fn() { return empty_match(42); });
+safe("r146_s10_empty_null", fn() { return empty_match(null); });
+
+# guard 全部失败 → 非穷尽
+fn all_guard_fail(x) {
+    return match x {
+        n if n > 100 => "big",
+        n if n < 0 => "neg"
+    };
+}
+safe("r146_s10_gf_50", fn() { return all_guard_fail(50); });
+safe("r146_s10_gf_big", fn() { return all_guard_fail(200); });
+safe("r146_s10_gf_neg", fn() { return all_guard_fail(-5); });
+
+# ============================================================
+# S11: 顺序匹配 — 第一个匹配的分支执行, 后续不执行
+# ============================================================
+fn first_wins(x) {
+    return match x {
+        n if n > 0 => "first-pos",
+        n if n > 10 => "second-big",
+        _ => "other"
+    };
+}
+safe("r146_s11_fw_5", fn() { return first_wins(5); });
+safe("r146_s11_fw_20", fn() { return first_wins(20); });   # 命中第一个, 非第二个
+safe("r146_s11_fw_neg", fn() { return first_wins(-3); });
+
+# 重复 arm — 第一个匹配
+fn dup_arm(x) {
+    return match x {
+        5 => "first",
+        5 => "second",
+        5 => "third",
+        _ => "other"
+    };
+}
+safe("r146_s11_dup_5", fn() { return dup_arm(5); });
+safe("r146_s11_dup_7", fn() { return dup_arm(7); });
+
+# 字面量在前, 类型在后 — 字面量优先
+fn lit_before_type(x) {
+    return match x {
+        1 => "literal-one",
+        is int => "type-int",
+        _ => "other"
+    };
+}
+safe("r146_s11_lbt_1", fn() { return lit_before_type(1); });
+safe("r146_s11_lbt_2", fn() { return lit_before_type(2); });
+
+# 类型在前, 字面量在后 — 类型截胡
+fn type_before_lit(x) {
+    return match x {
+        is int => "type-int",
+        1 => "literal-one",
+        _ => "other"
+    };
+}
+safe("r146_s11_tbl_1", fn() { return type_before_lit(1); });   # 命中 is int, 非 1
+
+# ============================================================
+# S12: match null — null 字面量 vs is null, null vs false/0
+# ============================================================
+fn null_lit_vs_type(x) {
+    return match x {
+        null => "null-lit",
+        is null => "null-type",
+        _ => "other"
+    };
+}
+safe("r146_s12_nlt_null", fn() { return null_lit_vs_type(null); });   # 命中 null 字面量
+safe("r146_s12_nlt_0", fn() { return null_lit_vs_type(0); });
+safe("r146_s12_nlt_false", fn() { return null_lit_vs_type(false); });
+
+# is null 在前
+fn null_type_first(x) {
+    return match x {
+        is null => "null-type",
+        null => "null-lit",
+        _ => "other"
+    };
+}
+safe("r146_s12_ntf_null", fn() { return null_type_first(null); });   # 命中 is null
+
+# null 与 false/0/"" 区分
+fn null_distinct(x) {
+    return match x {
+        null => "null",
+        false => "false",
+        0 => "zero",
+        "" => "empty-str",
+        _ => "other"
+    };
+}
+safe("r146_s12_nd_null", fn() { return null_distinct(null); });
+safe("r146_s12_nd_false", fn() { return null_distinct(false); });
+safe("r146_s12_nd_0", fn() { return null_distinct(0); });
+safe("r146_s12_nd_empty", fn() { return null_distinct(""); });
+safe("r146_s12_nd_other", fn() { return null_distinct(42); });
+
+# ============================================================
+# S13: match 复合类型 — is list as lst, is dict as d, 内容访问
+# ============================================================
+fn coll_match(x) {
+    return match x {
+        is list as l if len(l) == 0 => "empty-list",
+        is list as l => "list:" + str(l[0]),
+        is dict as d if len(d) == 0 => "empty-dict",
+        is dict as d => "dict:" + str(len(d)),
+        is str as s if len(s) == 0 => "empty-str",
+        is str as s => "str:" + s,
+        _ => "other"
+    };
+}
+safe("r146_s13_empty_list", fn() { return coll_match([]); });
+safe("r146_s13_list", fn() { return coll_match([10, 20]); });
+safe("r146_s13_empty_dict", fn() { return coll_match({}); });
+safe("r146_s13_dict", fn() { return coll_match({"a": 1, "b": 2}); });
+safe("r146_s13_empty_str", fn() { return coll_match(""); });
+safe("r146_s13_str", fn() { return coll_match("hi"); });
+safe("r146_s13_int", fn() { return coll_match(42); });
+
+# 绑定后修改? (match 绑定应不影响原值)
+# 注: match arm body 须为表达式, 不能是语句块 {...}
+fn coll_no_mutate(x) {
+    return match x {
+        is list as l => len(x),
+        _ => 0
+    };
+}
+safe("r146_s13_nm_list", fn() { return coll_no_mutate([1, 2, 3]); });
+
+# 嵌套: 匹配 list 后对其元素再 match
+fn coll_nested(x) {
+    return match x {
+        is list as l if len(l) > 0 => match l[0] {
+            is int as n => "list-of-int:" + str(n),
+            is str as s => "list-of-str:" + s,
+            _ => "list-of-other"
+        },
+        is list as l => "empty-list",
+        _ => "not-list"
+    };
+}
+safe("r146_s13_cn_intlist", fn() { return coll_nested([5, 6]); });
+safe("r146_s13_cn_strlist", fn() { return coll_nested(["a", "b"]); });
+safe("r146_s13_cn_emptylist", fn() { return coll_nested([]); });
+safe("r146_s13_cn_notlist", fn() { return coll_nested(42); });
+
+# ============================================================
+# S14: guard 中函数调用与方法调用
+# ============================================================
+# guard 调用自定义函数
+fn is_even(n) { return n % 2 == 0; }
+fn guard_method(x) {
+    return match x {
+        n if is_even(n) => "even:" + str(n),
+        n if n > 0 => "odd-pos",
+        _ => "odd-neg"
+    };
+}
+safe("r146_s14_gm_even", fn() { return guard_method(4); });
+safe("r146_s14_gm_oddpos", fn() { return guard_method(3); });
+safe("r146_s14_gm_oddneg", fn() { return guard_method(-3); });
+
+# guard 调用 list 方法 (contains / index)
+fn guard_list_method(x, lst) {
+    return match x {
+        n if lst.contains(n) => "in-list",
+        _ => "not-in-list"
+    };
+}
+safe("r146_s14_glm_in", fn() { return guard_list_method(2, [1, 2, 3]); });
+safe("r146_s14_glm_not", fn() { return guard_list_method(9, [1, 2, 3]); });
+
+# guard 调用字符串 builtin (substring 是 builtin 函数, 不是方法)
+fn guard_strmethod(s) {
+    return match s {
+        x if len(x) > 0 && substring(x, 0, 1) == "A" => "starts-A",
+        _ => "other"
+    };
+}
+safe("r146_s14_gstr_A", fn() { return guard_strmethod("Apple"); });
+safe("r146_s14_gstr_b", fn() { return guard_strmethod("banana"); });
+safe("r146_s14_gstr_empty", fn() { return guard_strmethod(""); });
+
+# guard 中递归调用 (匹配自身)
+fn fib_classify(n) {
+    return match n {
+        x if x < 2 => "base",
+        _ => "recurse"
+    };
+}
+safe("r146_s14_fib_0", fn() { return fib_classify(0); });
+safe("r146_s14_fib_1", fn() { return fib_classify(1); });
+safe("r146_s14_fib_10", fn() { return fib_classify(10); });
+
+# ============================================================
+# S15: match 与继承 — is Foo 匹配子类, is Bar 匹配父类, interface
+# ============================================================
+class Animal { }
+class Mammal extends Animal { }
+class Dog extends Mammal { }
+class Plant { }
+
+interface Drawable { }
+class Circle implements Drawable { }
+class Square implements Drawable { }
+class Triangle { }
+
+# 子类在前: 精确匹配
+fn hier_child_first(x) {
+    return match x {
+        is Dog => "dog",
+        is Mammal => "mammal",
+        is Animal => "animal",
+        _ => "other"
+    };
+}
+let s15_dog = new Dog();
+let s15_mam = new Mammal();
+let s15_ani = new Animal();
+let s15_plant = new Plant();
+safe("r146_s15_cf_dog", fn() { return hier_child_first(s15_dog); });
+safe("r146_s15_cf_mam", fn() { return hier_child_first(s15_mam); });
+safe("r146_s15_cf_ani", fn() { return hier_child_first(s15_ani); });
+safe("r146_s15_cf_plant", fn() { return hier_child_first(s15_plant); });
+
+# 父类在前: 所有子类命中父类
+fn hier_parent_first(x) {
+    return match x {
+        is Animal => "animal",
+        is Mammal => "mammal",
+        is Dog => "dog",
+        _ => "other"
+    };
+}
+safe("r146_s15_pf_dog", fn() { return hier_parent_first(s15_dog); });   # 命中 is Animal
+safe("r146_s15_pf_mam", fn() { return hier_parent_first(s15_mam); });   # 命中 is Animal
+safe("r146_s15_pf_ani", fn() { return hier_parent_first(s15_ani); });
+
+# interface 匹配
+fn iface_match(x) {
+    return match x {
+        is Drawable => "drawable",
+        is Triangle => "triangle",
+        _ => "other"
+    };
+}
+let s15_circle = new Circle();
+let s15_square = new Square();
+let s15_triangle = new Triangle();
+safe("r146_s15_iface_circle", fn() { return iface_match(s15_circle); });
+safe("r146_s15_iface_square", fn() { return iface_match(s15_square); });
+safe("r146_s15_iface_triangle", fn() { return iface_match(s15_triangle); });
+safe("r146_s15_iface_int", fn() { return iface_match(42); });
+
+# 继承 + 类型绑定
+fn hier_bind(x) {
+    return match x {
+        is Dog as d => "dog-bound",
+        is Animal as a => "animal-bound",
+        _ => "other"
+    };
+}
+safe("r146_s15_hb_dog", fn() { return hier_bind(s15_dog); });
+safe("r146_s15_hb_ani", fn() { return hier_bind(s15_ani); });
+
+# 不存在的类名 (运行时行为)
+fn hier_nonexistent(x) {
+    return match x {
+        is NonExistent => "nec",
+        _ => "other"
+    };
+}
+safe("r146_s15_ne_int", fn() { return hier_nonexistent(42); });
+safe("r146_s15_ne_dog", fn() { return hier_nonexistent(s15_dog); });
+
+# ============================================================
+# 附加: scrutinee 求值次数 — 函数调用仅一次
+# ============================================================
+fn make_bumper() {
+    let counter = 0;
+    fn bump() {
+        counter = counter + 1;
+        return counter;
+    }
+    return bump;
+}
+let s15_bumper = make_bumper();
+fn scrut_once(x) {
+    return match s15_bumper() {
+        1 => "first",
+        2 => "second",
+        _ => "later"
+    };
+}
+safe("r146_s15_scrut_1", fn() { return scrut_once(0); });
+safe("r146_s15_scrut_2", fn() { return scrut_once(0); });
+safe("r146_s15_scrut_3", fn() { return scrut_once(0); });
+
+# scrutinee 是方法调用结果
+class Box {
+    let v = 0;
+    fn set(x) { v = x; }
+    fn get() { return v; }
+}
+fn scrut_method() {
+    let b = new Box();
+    b.set(42);
+    return match b.get() {
+        42 => "matched-method-call",
+        _ => "other"
+    };
+}
+safe("r146_s15_scrut_method", fn() { return scrut_method(); });
+
+# scrutinee 是 dict 访问
+fn scrut_dict() {
+    let d = {"key": 99};
+    return match d["key"] {
+        99 => "matched-dict-access",
+        _ => "other"
+    };
+}
+safe("r146_s15_scrut_dict", fn() { return scrut_dict(); });
+
+# scrutinee 是 list 索引
+fn scrut_list() {
+    let l = [10, 20, 30];
+    return match l[1] {
+        20 => "matched-list-idx",
+        _ => "other"
+    };
+}
+safe("r146_s15_scrut_list", fn() { return scrut_list(); });
+
+# ============================================================
+# 附加: 绑定变量作用域 — 跨 arm 不应残留
+# ============================================================
+fn bind_scope(x) {
+    let n = "outer";
+    return match x {
+        is int as n => "int-n=" + str(n),
+        _ => "n=" + str(n)
+    };
+}
+safe("r146_s15_bs_int", fn() { return bind_scope(42); });
+safe("r146_s15_bs_str", fn() { return bind_scope("hi"); });
+
+# 绑定 + guard 失败 — 绑定是否残留到下一个 arm
+fn bind_scope_guard(x) {
+    let n = "outer";
+    return match x {
+        is int as n if n > 100 => "big:" + str(n),
+        is int as n => "int:" + str(n),
+        _ => "n=" + str(n)
+    };
+}
+safe("r146_s15_bsg_big", fn() { return bind_scope_guard(200); });
+safe("r146_s15_bsg_int", fn() { return bind_scope_guard(50); });
+safe("r146_s15_bsg_other", fn() { return bind_scope_guard("hi"); });
+
+# ============================================================
+# 附加: match 返回不同类型
+# ============================================================
+fn mixed_return(x) {
+    return match x {
+        1 => "string",
+        2 => 42,
+        3 => true,
+        4 => null,
+        5 => [1, 2],
+        6 => {"a": 1},
+        _ => 0
+    };
+}
+safe("r146_s15_mr_str", fn() { return mixed_return(1); });
+safe("r146_s15_mr_int", fn() { return mixed_return(2); });
+safe("r146_s15_mr_bool", fn() { return mixed_return(3); });
+safe("r146_s15_mr_null", fn() { return mixed_return(4); });
+safe("r146_s15_mr_list", fn() { return mixed_return(5); });
+safe("r146_s15_mr_dict", fn() { return mixed_return(6); });
+safe("r146_s15_mr_other", fn() { return mixed_return(9); });
+
+# ============================================================
+# 附加: match 返回闭包
+# ============================================================
+fn get_handler(kind) {
+    return match kind {
+        "add" => fn(x, y) { return x + y; },
+        "sub" => fn(x, y) { return x - y; },
+        "mul" => fn(x, y) { return x * y; },
+        _ => fn(x, y) { return 0; }
+    };
+}
+safe("r146_s15_h_add", fn() {
+    let h = get_handler("add");
+    return h(3, 4);
+});
+safe("r146_s15_h_sub", fn() {
+    let h = get_handler("sub");
+    return h(10, 4);
+});
+safe("r146_s15_h_def", fn() {
+    let h = get_handler("xyz");
+    return h(3, 4);
+});
+
+# ============================================================
+# 附加: match 在循环中
+# ============================================================
+fn match_in_loop(xs) {
+    let total = 0;
+    for x in xs {
+        let r = match x {
+            0 => 0,
+            n if n > 0 => n,
+            _ => 0
+        };
+        total = total + r;
+    }
+    return total;
+}
+safe("r146_s15_loop", fn() { return match_in_loop([1, -2, 3, 0, 5]); });
+
+# ============================================================
+# 附加: chan 模式边界
+# ============================================================
+fn chan_close_match() {
+    let ch = chan_new(0);
+    chan_close(ch);
+    return match ch {
+        chan close => "closed",
+        _ => "other"
+    };
+}
+safe("r146_s15_chan_close", fn() { return chan_close_match(); });
+
+fn chan_recv_match() {
+    let ch = chan_new(2);
+    chan_send(ch, "v1");
+    return match ch {
+        chan recv(v) => "recv:" + str(v),
+        _ => "other"
+    };
+}
+safe("r146_s15_chan_recv", fn() { return chan_recv_match(); });
+
+fn chan_send_match() {
+    let ch = chan_new(2);
+    return match ch {
+        chan send(_) => "can-send",
+        _ => "no-send"
+    };
+}
+safe("r146_s15_chan_send", fn() { return chan_send_match(); });
+
+fn chan_empty_recv() {
+    let ch = chan_new(2);
+    return match ch {
+        chan recv(v) => "recv:" + str(v),
+        _ => "no-recv"
+    };
+}
+safe("r146_s15_chan_empty", fn() { return chan_empty_recv(); });
+
+# chan 已满 — send 不应匹配
+fn chan_full_send() {
+    let ch = chan_new(1);
+    chan_send(ch, "first");
+    return match ch {
+        chan send(_) => "can-send",
+        _ => "full-or-closed"
+    };
+}
+safe("r146_s15_chan_full", fn() { return chan_full_send(); });
+
+print("=== r146 done ===");

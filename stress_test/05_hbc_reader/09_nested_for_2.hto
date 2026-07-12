@@ -1,0 +1,14 @@
+# 09 - 嵌套 for 循环 (2 层)
+# 目的: 两层 for 各自的 JUMP 回边都需要 fixForLoopJumps 修正
+let prod = 0;
+let iters = 0;
+for i in [1, 2, 3] {
+    for j in [10, 20] {
+        prod = prod + i * j;
+        iters = iters + 1;
+    }
+}
+print("prod=" + str(prod));
+print("expected_prod=180");
+print("iters=" + str(iters));
+print("expected_iters=6");

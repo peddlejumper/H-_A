@@ -1,0 +1,168 @@
+# 16 — cross-thread ConcurrentScope mutation race
+# Covers: 嵌套 concurrent 跨线程。HVM.currentScope 不是 ThreadLocal（只有
+# scopeStack 是），worker 线程进入/退出 concurrent{} 会改写共享 currentScope。
+#
+# 构造：async fn 内含 concurrent{}（async fn 允许 await）。parallel fn
+# fire-and-forget 调该 async fn —— async fn 在 worker 线程同步执行，
+# 其中的 concurrent{} 会在 worker 线程跑 CONCURRENT_ENTER/EXIT，改写
+# 共享 currentScope。同时主线程也在 concurrent{} 内。验证不崩、不死锁、
+# 结果正确。
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+parallel fn leaf(x) {
+    return x + 1;
+}
+
+# async fn 内含 concurrent{} —— 可被任意线程调用
+async fn async_with_concurrent(base) {
+    let s = 0;
+    concurrent {
+        let a = leaf(base);
+        let b = leaf(base + 10);
+        let c = leaf(base + 20);
+        s = await a + await b + await c;
+    }
+    return s;
+}
+# 顶层直接调（主线程跑 concurrent）
+check("async_concurrent_on_main",
+      await async_with_concurrent(0) == 1 + 11 + 21,
+      "got " + str(await async_with_concurrent(0)));
+
+# ── A: parallel fn fire-and-forget async_with_concurrent ──
+# async_with_concurrent 在 worker 线程同步执行（含 concurrent{}），
+# 触发 worker 改写共享 currentScope。通过 channel 回收结果。
+let res_ch = chan_new(0);
+# 让 async fn 自己把结果 send 到 channel
+async fn async_cc_send(base, ch) {
+    let s = 0;
+    concurrent {
+        let a = leaf(base);
+        let b = leaf(base + 10);
+        s = await a + await b;
+    }
+    chan_send(ch, s);
+    return s;
+}
+parallel fn par_fire_async_cc(base, ch) {
+    let _f = async_cc_send(base, ch);   # worker 线程跑 concurrent{}
+    return base;
+}
+
+# 主线程同时在 concurrent{} 内 —— 制造跨线程 currentScope 竞争
+let main_total = 0;
+concurrent {
+    # 主线程的 4 个 leaf（用主 scope）
+    let m1 = leaf(100);
+    let m2 = leaf(200);
+    let m3 = leaf(300);
+    let m4 = leaf(400);
+
+    # 同时 fire 8 个 parallel fn，每个在 worker 上跑一个 concurrent{}
+    let workers = [];
+    let w = 0;
+    while (w < 8) {
+        push(workers, par_fire_async_cc(w * 10, res_ch));
+        w = w + 1;
+    }
+
+    main_total = await m1 + await m2 + await m3 + await m4;
+
+    # await 所有 parent（它们不等 async fn 的 channel，但 async fn 已同步跑完）
+    let wsum = 0;
+    let q = 0;
+    while (q < 8) {
+        wsum = wsum + await workers[q];
+        q = q + 1;
+    }
+}
+# main_total = 101 + 201 + 301 + 401 = 1004
+check("main_concurrent_during_worker_concurrent",
+      main_total == 1004, "main_total=" + str(main_total));
+
+# 收集 8 个 worker 的 async_cc 结果
+# 每个 async_cc_send(b, ch): leaf(b)+leaf(b+10) = (b+1)+(b+11) = 2b+12
+let w_count = 0;
+let w_sum = 0;
+let r = 0;
+while (r < 8) {
+    let v = chan_recv(res_ch);
+    w_sum = w_sum + v;
+    w_count = w_count + 1;
+    r = r + 1;
+}
+check("worker_concurrent_results_count", w_count == 8, "w_count=" + str(w_count));
+# sum over w=0..7 of 2*(w*10)+12 = sum(20w+12) = 20*28 + 8*12 = 560+96 = 656
+check("worker_concurrent_results_sum", w_sum == 656, "w_sum=" + str(w_sum));
+
+# ── B: 多轮高强度跨线程 concurrent ──
+let ok_rounds = true;
+let round = 0;
+while (round < 5) {
+    let ch2 = chan_new(0);
+    let parents = [];
+    let p = 0;
+    while (p < 10) {
+        push(parents, par_fire_async_cc(p + round * 10, ch2));
+        p = p + 1;
+    }
+    let _ = 0;
+    let q = 0;
+    while (q < 10) {
+        let _ = await parents[q];
+        q = q + 1;
+    }
+    # 收集 10 个结果
+    let rc = 0;
+    let s = 0;
+    let t = 0;
+    while (t < 10) {
+        let v = chan_recv(ch2);
+        s = s + v;
+        rc = rc + 1;
+        t = t + 1;
+    }
+    if (rc != 10) { ok_rounds = false; }
+    # sum over p=0..9 of 2*(p+round*10)+12 = 2*sum(p+10*round)+120
+    # = 2*(45 + 100*round) + 120 = 210 + 200*round
+    if (s != 210 + 200 * round) { ok_rounds = false; }
+    round = round + 1;
+}
+check("five_rounds_cross_thread_concurrent", ok_rounds, "some round mismatched");
+
+# ── C: 一个 worker 内 async fn 的 concurrent 抛异常 ──
+async fn async_cc_throws(base) {
+    concurrent {
+        let a = leaf(base);
+        let _ = await a;
+        throw "cc-boom";
+    }
+    return 0;
+}
+parallel fn par_fire_async_cc_throws(base, ch) {
+    try {
+        let _f = async_cc_throws(base);   # 同步抛出
+    } catch (e) {
+        chan_send(ch, str(e));
+    }
+    return base;
+}
+let tch = chan_new(0);
+let _ = par_fire_async_cc_throws(5, tch);
+# await 它
+let _ = await par_fire_async_cc_throws(6, tch);
+let boom_count = 0;
+let u = 0;
+while (u < 2) {
+    let m = chan_recv(tch);
+    if (m == "cc-boom") { boom_count = boom_count + 1; }
+    u = u + 1;
+}
+check("worker_concurrent_throw_propagates", boom_count == 2,
+      "boom_count=" + str(boom_count));
+
+print("T16_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

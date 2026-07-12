@@ -1,0 +1,495 @@
+# Round 2 / Test #81 - Closure Mutation & Capture Semantics
+# H# v0.4.1 - tests closure capture-by-reference vs snapshot, shared cells,
+# loop-variable capture, nested closures, self-capture, HOF, deferred exec,
+# throw-in-closure, and dict/list reference capture.
+# Each case prints "Cx:" prefix with the actual value; expected in comments.
+
+# ============================================================
+# C1: Closure captures outer let and READS it (basic capture)
+# Expected: C1: 10, C1: 25
+# ============================================================
+print("==C1==");
+fn makeReader() {
+    let v = 10;
+    let r = fn() { return v; };
+    return r;
+}
+let rd = makeReader();
+print("C1: " + rd());
+
+fn makeReader2(start) {
+    let v = start;
+    let r = fn() { return v; };
+    return r;
+}
+let rd2 = makeReader2(25);
+print("C1: " + rd2());
+
+# ============================================================
+# C2: Closure MODIFIES captured variable (counter) - does it affect outer?
+# By-reference semantics (Python/JS): outer n is mutated. Expected 1,2,3,3
+# Snapshot semantics: outer n stays 0.                  Expected 1,2,3,0
+# ============================================================
+print("==C2==");
+fn makeCounter() {
+    let n = 0;
+    let inc = fn() { n = n + 1; return n; };
+    let get = fn() { return n; };
+    return [inc, get];
+}
+let pair = makeCounter();
+let incC = pair[0];
+let getC = pair[1];
+print("C2: " + incC());   # 1
+print("C2: " + incC());   # 2
+print("C2: " + incC());   # 3
+print("C2: " + getC());   # 3 (shared cell); BUG if 0
+
+# ============================================================
+# C3: Multiple closures sharing the SAME variable (counter pattern)
+# inc and dec share n. Expected: 1, 2, 1, 0, -1
+# BUG if dec/get see 0 (independent snapshot per closure)
+# ============================================================
+print("==C3==");
+fn makeCounter3() {
+    let n = 0;
+    let inc = fn() { n = n + 1; return n; };
+    let dec = fn() { n = n - 1; return n; };
+    let get = fn() { return n; };
+    return {"inc": inc, "dec": dec, "get": get};
+}
+let c3 = makeCounter3();
+print("C3: " + c3["inc"]());   # 1
+print("C3: " + c3["inc"]());   # 2
+print("C3: " + c3["dec"]());   # 1
+print("C3: " + c3["dec"]());   # 0
+print("C3: " + c3["get"]());   # 0; BUG if 2 or other
+
+# ============================================================
+# C4: Closure captures loop variable (classic binding vs snapshot trap)
+# Python late-binding: all closures see the LAST value of i (3)
+# Per-iteration binding (JS let, Go): closures see 1, 2, 3
+# H# expected per docs: 1, 2, 3 (per-iteration snapshot)
+# ============================================================
+print("==C4==");
+let fns = [];
+for i in [1, 2, 3] {
+    push(fns, fn() { return i; });
+}
+print("C4: " + fns[0]());   # 1 (snapshot) or 3 (late binding)
+print("C4: " + fns[1]());   # 2 (snapshot) or 3 (late binding)
+print("C4: " + fns[2]());   # 3 (snapshot) or 3 (late binding)
+
+# C4b: closure captures loop var AND modifies outer accumulator
+# Expected: sum=6, captures=[1,2,3]
+print("==C4b==");
+let acc = 0;
+let snaps = [];
+for j in [1, 2, 3] {
+    acc = acc + j;
+    push(snaps, fn() { return j; });
+}
+print("C4b: sum=" + acc);     # 6
+print("C4b: snaps=" + [snaps[0](), snaps[1](), snaps[2]()]);   # [1, 2, 3] or [3, 3, 3]
+
+# ============================================================
+# C5: Nested closures 3+ layers (lambda-in-lambda-in-lambda)
+# Each layer captures its enclosing variable.
+# Expected: C5: 6, C5: 60, C5: 111
+# BUG: "Undefined name: a" if compiler doesn't chain freevars
+# ============================================================
+print("==C5==");
+try {
+    fn outer(a) {
+        let mid = fn(b) {
+            let inner = fn(c) {
+                return a + b + c;
+            };
+            return inner;
+        };
+        return mid;
+    }
+    print("C5: " + outer(1)(2)(3));      # 6
+    print("C5: " + outer(10)(20)(30));   # 60
+    print("C5: " + outer(100)(10)(1));   # 111
+} catch (e) {
+    print("C5-ERR: " + e);
+}
+
+# C5b: 4-layer nested closure (deeper chain)
+print("==C5b==");
+try {
+    fn L1(a) {
+        return fn(b) {
+            return fn(c) {
+                return fn(d) {
+                    return a + b + c + d;
+                };
+            };
+        };
+    }
+    print("C5b: " + L1(1)(2)(3)(4));     # 10
+    print("C5b: " + L1(100)(200)(300)(400));   # 1000
+} catch (e) {
+    print("C5b-ERR: " + e);
+}
+
+# ============================================================
+# C6: Closure captures self (class method returns lambda)
+# Expected: C6: 99, C6: 77 (mutation visible through self)
+# ============================================================
+print("==C6==");
+class Box6 {
+    fn init(v) { self.v = v; }
+    fn getter() {
+        return fn() { return self.v; };
+    }
+    fn setter() {
+        return fn(x) { self.v = x; };
+    }
+}
+let b6 = new Box6(99);
+let g6 = b6.getter();
+print("C6: " + g6());        # 99
+b6.v = 77;
+print("C6: " + g6());        # 77 (self is same instance)
+let s6 = b6.setter();
+s6(42);
+print("C6: " + g6());        # 42 (setter mutated self.v)
+print("C6: " + b6.v);        # 42
+
+# ============================================================
+# C7: Closure as parameter (HOF map/filter/reduce self-implemented)
+# Expected: C7: [1,4,9,16,25], C7: [2,4], C7: 15, C7: 120
+# ============================================================
+print("==C7==");
+fn map7(f, lst) {
+    let out = [];
+    for x in lst { push(out, f(x)); }
+    return out;
+}
+fn filter7(f, lst) {
+    let out = [];
+    for x in lst { if (f(x)) { push(out, x); } }
+    return out;
+}
+fn reduce7(f, lst, init) {
+    let acc = init;
+    for x in lst { acc = f(acc, x); }
+    return acc;
+}
+let nums7 = [1, 2, 3, 4, 5];
+print("C7: " + map7(fn(x) { return x * x; }, nums7));
+print("C7: " + filter7(fn(x) { return x % 2 == 0; }, nums7));
+print("C7: " + reduce7(fn(a, b) { return a + b; }, nums7, 0));
+print("C7: " + reduce7(fn(a, b) { return a * b; }, nums7, 1));
+
+# ============================================================
+# C8: Closure deferred execution (collect first, call later)
+# Closures built in a loop, called after loop ends.
+# Expected: each closure returns its captured i.
+# ============================================================
+print("==C8==");
+let collected = [];
+for k in [10, 20, 30] {
+    push(collected, fn() { return k * 2; });
+}
+let total8 = 0;
+for f in collected {
+    total8 = total8 + f();
+}
+print("C8: " + total8);    # 120 (20+40+60); BUG if 180 (60*3)
+
+# C8b: deferred closure that mutates a captured counter after collection
+print("==C8b==");
+fn makeLate() {
+    let n = 0;
+    let bump = fn() { n = n + 1; return n; };
+    return bump;
+}
+let late = makeLate();
+let delayed = [];
+for idx in [1, 2, 3] {
+    push(delayed, fn() { return late() * 10; });
+}
+print("C8b: " + delayed[0]());   # 10
+print("C8b: " + delayed[1]());   # 20
+print("C8b: " + delayed[2]());   # 30
+
+# ============================================================
+# C9: Closure throws, outer catch intercepts
+# Expected: C9: caught-boom, C9: 42, C9: caught-from-deep
+# ============================================================
+print("==C9==");
+fn safeCall9(f) {
+    try {
+        return f();
+    } catch (e) {
+        return "caught-" + e;
+    }
+}
+print("C9: " + safeCall9(fn() { throw "boom"; }));
+print("C9: " + safeCall9(fn() { return 42; }));
+
+# C9b: throw from a deeply-nested closure
+try {
+    fn deepThrow() {
+        return fn() {
+            return fn() {
+                throw "from-deep";
+            };
+        };
+    }
+    let dt = deepThrow();
+    let inner = dt();
+    print("C9: " + safeCall9(inner));   # caught-from-deep
+} catch (e) {
+    print("C9b-ERR: " + e);
+}
+
+# C9c: closure throw propagates through HOF
+fn forEach9(lst, f) {
+    for x in lst { f(x); }
+}
+try {
+    forEach9([1, 2, 3], fn(x) {
+        if (x == 2) { throw "stop-at-2"; }
+    });
+    print("C9c: no-throw");
+} catch (e) {
+    print("C9: " + e);    # stop-at-2
+}
+
+# ============================================================
+# C10: Closure captures dict/list reference - is mutation visible?
+# Lists and dicts are reference types: mutation through closure
+# should be visible outside. Expected: [1,2,3], {x:1,y:2}
+# ============================================================
+print("==C10==");
+let sharedList = [];
+let pusher = fn(x) { push(sharedList, x); return len(sharedList); };
+pusher(1);
+pusher(2);
+pusher(3);
+print("C10: " + sharedList);   # [1, 2, 3]
+
+let sharedDict = {};
+let setter = fn(k, v) { sharedDict[k] = v; return len(sharedDict); };
+setter("x", 1);
+setter("y", 2);
+print("C10: " + sharedDict);   # {x: 1, y: 2}
+
+# C10b: closure captures list, then REASSIGNS list - snapshot vs ref
+# By-reference: closure sees new list. Snapshot: closure sees old list.
+print("==C10b==");
+let lstB = [1, 2, 3];
+let readerB = fn() { return lstB; };
+print("C10b: " + readerB());   # [1, 2, 3]
+lstB = [99, 100];
+print("C10b: " + readerB());   # [99, 100] (ref); BUG if [1,2,3] (snapshot)
+
+# ============================================================
+# C11: Two INDEPENDENT counters - no cross-contamination
+# Expected: c1 -> 1,2,3 ; c2 -> 1,2 ; c1 -> 4
+# ============================================================
+print("==C11==");
+fn makeCounter11() {
+    let n = 0;
+    return fn() { n = n + 1; return n; };
+}
+let c11a = makeCounter11();
+let c11b = makeCounter11();
+print("C11: " + c11a());   # 1
+print("C11: " + c11a());   # 2
+print("C11: " + c11a());   # 3
+print("C11: " + c11b());   # 1 (independent cell)
+print("C11: " + c11b());   # 2
+print("C11: " + c11a());   # 4 (still its own)
+
+# ============================================================
+# C12: Capture parameter, then REASSIGN parameter after capture
+# By-reference: closure sees new value. Snapshot: sees original.
+# Expected (by-ref): C12: 100 ; Expected (snapshot): C12: 1
+# ============================================================
+print("==C12==");
+fn capturedThenModify(a) {
+    let g = fn() { return a; };
+    a = 100;
+    return g();
+}
+print("C12: " + capturedThenModify(1));   # 100 (ref) or 1 (snapshot)
+
+# ============================================================
+# C13: Module-level let captured by lambda, then outer reassign
+# By-reference: second call sees 20. Snapshot: sees 10.
+# Expected (by-ref): 10, 20, 20
+# ============================================================
+print("==C13==");
+let modX = 10;
+let fMod = fn() { return modX; };
+print("C13: " + fMod());   # 10
+modX = 20;
+print("C13: " + fMod());   # 20 (ref) or 10 (snapshot)
+fn getX13() { return modX; }
+print("C13: " + getX13());  # 20 (fn statement late binding)
+
+# ============================================================
+# C14: Closure capturing ANOTHER closure (higher-order: compose)
+# Expected: C14: 7, C14: 21, C14: 23
+# ============================================================
+print("==C14==");
+fn compose14(f, g) {
+    return fn(x) { return f(g(x)); };
+}
+let add1 = fn(x) { return x + 1; };
+let dbl = fn(x) { return x * 2; };
+let h14 = compose14(add1, dbl);
+print("C14: " + h14(3));    # 7  (1 + 2*3)
+let h14b = compose14(dbl, add1);
+print("C14: " + h14b(10));  # 22 (2 * (10+1))
+# Compose three: add1(dbl(inc(5))) = add1(dbl(6)) = add1(12) = 13
+let triple14 = compose14(add1, compose14(dbl, fn(x) { return x + 1; }));
+print("C14: " + triple14(5));   # 13
+
+# ============================================================
+# C15: Closure that captures a mutable variable and mutates it
+#      via deferred calls collected in a list.
+# Expected: 1, 2, 3, 4, 5 (counter advances with each call)
+# ============================================================
+print("==C15==");
+fn makeSeq() {
+    let n = 0;
+    return fn() { n = n + 1; return n; };
+}
+let seq = makeSeq();
+let calls = [];
+for i in [1, 2, 3, 4, 5] {
+    push(calls, fn() { return seq(); });
+}
+let out15 = [];
+for c in calls {
+    push(out15, c());
+}
+print("C15: " + out15);   # [1, 2, 3, 4, 5]
+
+# ============================================================
+# C16: Closure inside method captures self and outer local
+# Expected: C16: Alice-30, C16: Alice-31
+# ============================================================
+print("==C16==");
+class Person16 {
+    fn init(name, age) { self.name = name; self.age = age; }
+    fn makeGreeter() {
+        let prefix = "Hi";
+        return fn() { return prefix + " " + self.name + "-" + self.age; };
+    }
+}
+let p16 = new Person16("Alice", 30);
+let greet16 = p16.makeGreeter();
+print("C16: " + greet16());    # Hi Alice-30
+p16.age = 31;
+print("C16: " + greet16());    # Hi Alice-31 (self mutated)
+
+# ============================================================
+# C17: Lambda recursion via named variable (KNOWN BUG repro)
+# let fact = fn(n) { ... fact(n-1) ... };
+# Expected: 1, 120, 3628800 ; BUG: "Undefined name: fact"
+# ============================================================
+print("==C17==");
+try {
+    let fact = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * fact(n - 1);
+    };
+    print("C17: " + fact(1));    # 1
+    print("C17: " + fact(5));    # 120
+    print("C17: " + fact(10));   # 3628800
+} catch (e) {
+    print("C17-ERR: " + e);
+}
+
+# ============================================================
+# C18: Closure captures loop var in NESTED loops (matrix)
+# Build a 2x2 matrix of closures, each returns its (i,j)
+# Expected: 11, 12, 21, 22 (snapshot) or 22,22,22,22 (late)
+# ============================================================
+print("==C18==");
+let matrix = [];
+for i in [1, 2] {
+    let row = [];
+    for j in [1, 2] {
+        push(row, fn() { return i * 10 + j; });
+    }
+    push(matrix, row);
+}
+print("C18: " + matrix[0][0]());   # 11 (snapshot) or 22 (late)
+print("C18: " + matrix[0][1]());   # 12 (snapshot) or 22 (late)
+print("C18: " + matrix[1][0]());   # 21 (snapshot) or 22 (late)
+print("C18: " + matrix[1][1]());   # 22
+
+# ============================================================
+# C19: Closure reassigning the captured variable to a NEW list
+# Tests whether list mutation (push) vs variable reassignment differ.
+# Expected: closure push visible, reassignment not visible to old closure
+# ============================================================
+print("==C19==");
+let lst19 = [1];
+let appender = fn(x) { push(lst19, x); return lst19; };
+print("C19: " + appender(2));    # [1, 2]
+print("C19: " + appender(3));    # [1, 2, 3]
+print("C19: " + lst19);          # [1, 2, 3] (same reference)
+
+# ============================================================
+# C20: Closure captures a dict and modifies nested fields
+# Expected: dict deeply mutated through closure
+# ============================================================
+print("==C20==");
+let cfg = {"count": 0, "items": []};
+let cfgMut = fn() {
+    cfg["count"] = cfg["count"] + 1;
+    push(cfg["items"], cfg["count"]);
+    return cfg["count"];
+};
+print("C20: " + cfgMut());    # 1
+print("C20: " + cfgMut());    # 2
+print("C20: " + cfgMut());    # 3
+print("C20: " + cfg);         # {count: 3, items: [1, 2, 3]}
+
+# ============================================================
+# C21: CONFIRM fn-statement vs lambda distinction for nested capture
+# 73 Case 11 used `fn mid(b) { fn inner(c) {...} }` (named fn stmts)
+# and got "Undefined name: a". C5 used `let mid = fn(b){...}` and worked.
+# This case reproduces the fn-statement form to confirm the distinction.
+# Expected (if fn stmts capture): C21: 6 ; BUG: "Undefined name: a"
+# ============================================================
+print("==C21==");
+try {
+    fn outer21(a) {
+        fn mid21(b) {
+            fn inner21(c) {
+                return a + b + c;
+            }
+            return inner21;
+        }
+        return mid21;
+    }
+    print("C21: " + outer21(1)(2)(3));   # 6 if captures; ERR if not
+} catch (e) {
+    print("C21-ERR: " + e);
+}
+
+# C21b: same logic but with let-lambda (should work, mirrors C5)
+try {
+    fn outer21b(a) {
+        let mid21b = fn(b) {
+            let inner21b = fn(c) { return a + b + c; };
+            return inner21b;
+        };
+        return mid21b;
+    }
+    print("C21b: " + outer21b(1)(2)(3));  # 6
+} catch (e) {
+    print("C21b-ERR: " + e);
+}
+
+print("==DONE==");

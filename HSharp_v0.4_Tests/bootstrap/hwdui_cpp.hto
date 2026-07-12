@@ -1,0 +1,3883 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# hwdui_cpp.hto — H# zzwUI ↔ C++ 协同开发库
+# ═══════════════════════════════════════════════════════════════════════════
+# 提供 H# 与 C++ Native 运行时之间的完整互操作基础设施：
+# - 类型映射与值转换
+# - 对象代理与调用代理
+# - 跨运行时事件总线
+# - zzwUI 控件 ↔ Qt/GTK 控件桥接
+# - 双向数据绑定
+# - RPC 远程过程调用
+# - 序列化与反序列化
+# - 异步任务桥接
+# - 诊断与配置
+# - CMake 项目层
+# - Qt/QML 互操作
+# - 资源管理
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/hwdui.hto";
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 1: 核心互操作层 — 类型映射、值包装、调用代理
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppTypeInfo {
+    let type_name = "";
+    let namespace = "";
+    let shared_lib = "";
+    let is_primitive = false;
+    let is_template = false;
+    let template_args = [];
+    let base_class = "";
+    let includes = [];
+    let is_enum = false;
+    let is_pod = false;
+    let is_abstract = false;
+    let modifiers = [];
+    let full_name = "";
+    let mangled_name = "";
+
+    fn init_cpp_type(name, ns, lib) {
+        self.type_name = name;
+        self.namespace = ns;
+        self.shared_lib = lib;
+        self.is_primitive = false;
+        self.is_template = false;
+        self.template_args = [];
+        self.base_class = "";
+        self.includes = [];
+        self.is_enum = false;
+        self.is_pod = false;
+        self.is_abstract = false;
+        self.modifiers = [];
+        if (ns == "") {
+            self.full_name = name;
+        } else {
+            self.full_name = ns + "::" + name;
+        }
+        self.mangled_name = "";
+        return 0;
+    }
+
+    fn setPrimitive(v) { self.is_primitive = v; return 0; }
+    fn setTemplate(v) { self.is_template = v; return 0; }
+    fn setEnum(v) { self.is_enum = v; return 0; }
+    fn setPOD(v) { self.is_pod = v; return 0; }
+    fn setAbstract(v) { self.is_abstract = v; return 0; }
+    fn addTemplateArg(arg) { push(self.template_args, arg); return 0; }
+    fn setBaseClass(cls) { self.base_class = cls; return 0; }
+    fn addInclude(inc) { push(self.includes, inc); return 0; }
+    fn addModifier(mod) { push(self.modifiers, mod); return 0; }
+    fn setMangledName(name) { self.mangled_name = name; return 0; }
+
+    fn getFullName() { return self.full_name; }
+    fn getTypeName() { return self.type_name; }
+    fn getNamespace() { return self.namespace; }
+    fn getSharedLib() { return self.shared_lib; }
+    fn isPrimitive() { return self.is_primitive; }
+    fn isTemplate() { return self.is_template; }
+    fn isEnum() { return self.is_enum; }
+    fn isPOD() { return self.is_pod; }
+    fn isAbstract() { return self.is_abstract; }
+    fn getBaseClass() { return self.base_class; }
+    fn getIncludes() { return self.includes; }
+    fn getTemplateArgs() { return self.template_args; }
+    fn getModifiers() { return self.modifiers; }
+    fn getMangledName() { return self.mangled_name; }
+}
+
+
+class CppTypeMapper {
+    let type_map = {};
+    let reverse_map = {};
+    let primitive_types = [];
+
+    fn init_mapper() {
+        self.type_map = {};
+        self.reverse_map = {};
+        self.primitive_types = [];
+        self._register_defaults();
+        return 0;
+    }
+
+    fn _register_defaults() {
+        self.register("int", "int", true);
+        self.register("float", "double", true);
+        self.register("bool", "bool", true);
+        self.register("string", "std::string", false);
+        self.register("list", "std::vector", false);
+        self.register("dict", "std::map", false);
+        self.register("long", "long", true);
+        self.register("short", "short", true);
+        self.register("char", "char", true);
+        self.register("void", "void", true);
+        self.register("int64", "int64_t", true);
+        self.register("uint64", "uint64_t", true);
+        self.register("int32", "int32_t", true);
+        self.register("float32", "float", true);
+        self.register("size", "size_t", true);
+        self.register("byte", "uint8_t", true);
+        self.register("ptr", "void*", true);
+        return 0;
+    }
+
+    fn register(htype, ctype, prim) {
+        self.type_map[htype] = {"cpp": ctype, "primitive": prim};
+        self.reverse_map[ctype] = htype;
+        if (prim) {
+            push(self.primitive_types, ctype);
+        }
+        return 0;
+    }
+
+    fn unregister(ctype) {
+        let htype = self.reverse_map[ctype];
+        if (htype != nullptr) {
+            self.type_map[htype] = nullptr;
+        }
+        self.reverse_map[ctype] = nullptr;
+        return 0;
+    }
+
+    fn toCpp(htype) {
+        let info = self.type_map[htype];
+        if (info != nullptr) {
+            return info["cpp"];
+        }
+        return "void*";
+    }
+
+    fn toHSharp(ctype) {
+        let htype = self.reverse_map[ctype];
+        if (htype != nullptr) {
+            return htype;
+        }
+        return "object";
+    }
+
+    fn isPrimitive(ctype) {
+        let i = 0;
+        while (i < len(self.primitive_types)) {
+            if (self.primitive_types[i] == ctype) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn getPrimitiveTypes() { return self.primitive_types; }
+
+    fn getMappingCount() {
+        let count = 0;
+        for k in self.type_map {
+            if (self.type_map[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+}
+
+
+class CppValue {
+    let value = nullptr;
+    let type_name = "void*";
+    let is_null = true;
+    let is_primitive = false;
+
+    fn init_value(val, tn) {
+        self.value = val;
+        self.type_name = tn;
+        self.is_null = (val == nullptr);
+        self.is_primitive = false;
+        return 0;
+    }
+
+    fn initFromValue(val) {
+        self.value = val;
+        self.type_name = "auto";
+        self.is_null = (val == nullptr);
+        self.is_primitive = false;
+        return 0;
+    }
+
+    fn setPrimitive(p) { self.is_primitive = p; return 0; }
+    fn setNull() { self.is_null = true; self.value = nullptr; return 0; }
+
+    fn getValue() { return self.value; }
+    fn getTypeName() { return self.type_name; }
+    fn isNull() { return self.is_null; }
+
+    fn asInt() {
+        if (self.is_null) { return 0; }
+        return self.value;
+    }
+
+    fn asFloat() {
+        if (self.is_null) { return 0.0; }
+        return self.value;
+    }
+
+    fn asString() {
+        if (self.is_null) { return ""; }
+        return self.value;
+    }
+
+    fn asBool() {
+        if (self.is_null) { return false; }
+        return self.value;
+    }
+
+    fn asList() {
+        if (self.is_null) { return []; }
+        return self.value;
+    }
+
+    fn asDict() {
+        if (self.is_null) { return {}; }
+        return self.value;
+    }
+
+    fn clone() {
+        let cloned = new CppValue();
+        cloned.init_value(self.value, self.type_name);
+        cloned.is_primitive = self.is_primitive;
+        return cloned;
+    }
+}
+
+
+class CppInvoke {
+    let method_name = "";
+    let args = [];
+    let is_static = false;
+    let timeout = 30000;
+    let is_getter = false;
+    let is_setter = false;
+    let property_name = "";
+    let owner_object = nullptr;
+
+    fn init_invoke(name) {
+        self.method_name = name;
+        self.args = [];
+        self.is_static = false;
+        self.timeout = 30000;
+        self.is_getter = false;
+        self.is_setter = false;
+        self.property_name = "";
+        self.owner_object = nullptr;
+        return 0;
+    }
+
+    fn addArg(arg) { push(self.args, arg); return 0; }
+
+    fn getMethodName() { return self.method_name; }
+    fn getArgCount() { return len(self.args); }
+    fn getArg(index) {
+        if (index >= 0 and index < len(self.args)) {
+            return self.args[index];
+        }
+        return nullptr;
+    }
+    fn isStatic() { return self.is_static; }
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn setTimeout(ms) { self.timeout = ms; return 0; }
+    fn getTimeout() { return self.timeout; }
+    fn setGetter(prop_name) {
+        self.is_getter = true;
+        self.property_name = prop_name;
+        return 0;
+    }
+    fn getPropertyName() { return self.property_name; }
+    fn setSetter(prop_name, value) {
+        self.is_setter = true;
+        self.property_name = prop_name;
+        self.args = [value];
+        return 0;
+    }
+    fn setSetterArgs(args) { self.args = args; return 0; }
+    fn getOwnerObject() { return self.owner_object; }
+    fn setOwnerObject(obj) { self.owner_object = obj; return 0; }
+    fn setArgs(args) { self.args = args; return 0; }
+    fn getArgs() { return self.args; }
+}
+
+
+class CppResult {
+    let value = nullptr;
+    let success = false;
+    let error_message = "";
+    let error_type = "";
+    let stack_trace = "";
+    let call_id = 0;
+    let duration_ms = 0;
+    let is_exception = false;
+
+    fn init_result() {
+        self.value = nullptr;
+        self.success = false;
+        self.error_message = "";
+        self.error_type = "";
+        self.stack_trace = "";
+        self.call_id = 0;
+        self.duration_ms = 0;
+        self.is_exception = false;
+        return 0;
+    }
+
+    fn setSuccess(val) {
+        self.value = val;
+        self.success = true;
+        return 0;
+    }
+
+    fn setError(msg, etype) {
+        self.error_message = msg;
+        self.error_type = etype;
+        self.success = false;
+        self.is_exception = true;
+        return 0;
+    }
+
+    fn setStackTrace(trace) { self.stack_trace = trace; return 0; }
+    fn setCallId(id) { self.call_id = id; return 0; }
+    fn setDuration(ms) { self.duration_ms = ms; return 0; }
+
+    fn isSuccess() { return self.success; }
+    fn isException() { return self.is_exception; }
+    fn getValue() { return self.value; }
+    fn getError() { return self.error_message; }
+    fn getErrorType() { return self.error_type; }
+    fn getCallId() { return self.call_id; }
+    fn getStackTrace() { return self.stack_trace; }
+    fn getDuration() { return self.duration_ms; }
+
+    fn unwrap() {
+        if (self.success == false) {
+            print("CppError: " + self.error_message);
+            return nullptr;
+        }
+        return self.value;
+    }
+
+    fn expect(msg) {
+        if (self.success == false) {
+            print("CppError: " + msg + " - " + self.error_message);
+            return nullptr;
+        }
+        return self.value;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 2: 对象桥接层 — 对象代理、类型描述、共享库
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppObject {
+    let object_id = 0;
+    let type_name = "";
+    let is_disposed = false;
+    let properties = {};
+    let cached_methods = [];
+    let cached_getters = [];
+    let is_remote = false;
+    let remote_endpoint = "";
+    let metadata = {};
+
+    fn init_object(obj_id, tn) {
+        self.object_id = obj_id;
+        self.type_name = tn;
+        self.is_disposed = false;
+        self.properties = {};
+        self.cached_methods = [];
+        self.cached_getters = [];
+        self.is_remote = false;
+        self.remote_endpoint = "";
+        self.metadata = {};
+        return 0;
+    }
+
+    fn setObjectId(id) { self.object_id = id; return 0; }
+    fn getObjectId() { return self.object_id; }
+    fn getTypeName() { return self.type_name; }
+    fn isDisposed() { return self.is_disposed; }
+
+    fn setProperty(name, value) {
+        self.properties[name] = value;
+        return 0;
+    }
+
+    fn getProperty(name) {
+        return self.properties[name];
+    }
+
+    fn hasProperty(name) {
+        return self.properties[name] != nullptr;
+    }
+
+    fn hasMethod(method_name) {
+        let i = 0;
+        while (i < len(self.cached_methods)) {
+            if (self.cached_methods[i] == method_name) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn isRemote() { return self.is_remote; }
+    fn getRemoteEndpoint() { return self.remote_endpoint; }
+    fn setRemoteEndpoint(endpoint) { self.remote_endpoint = endpoint; return 0; }
+
+    fn dispose() {
+        self.is_disposed = true;
+        self.properties = {};
+        self.cached_methods = [];
+        self.cached_getters = [];
+        return 0;
+    }
+
+    fn setMetadata(key, value) {
+        self.metadata[key] = value;
+        return 0;
+    }
+
+    fn getMetadata(key) {
+        return self.metadata[key];
+    }
+
+    fn clearMetadata() {
+        self.metadata = {};
+        return 0;
+    }
+
+    fn addCachedMethod(method_name) {
+        push(self.cached_methods, method_name);
+        return 0;
+    }
+
+    fn addCachedGetter(prop_name) {
+        push(self.cached_getters, prop_name);
+        return 0;
+    }
+
+    fn getCachedMethods() { return self.cached_methods; }
+    fn getCachedGetters() { return self.cached_getters; }
+}
+
+
+class CppObjectCache {
+    let objects = {};
+    let next_id = 0;
+
+    fn init_cache() {
+        self.objects = {};
+        self.next_id = 0;
+        return 0;
+    }
+
+    fn add(obj) {
+        self.next_id = self.next_id + 1;
+        obj.setObjectId(self.next_id);
+        self.objects[self.next_id] = obj;
+        return self.next_id;
+    }
+
+    fn get(id) {
+        return self.objects[id];
+    }
+
+    fn getByType(type_name) {
+        let result = [];
+        for k in self.objects {
+            let obj = self.objects[k];
+            if (obj != nullptr and obj.getTypeName() == type_name) {
+                push(result, obj);
+            }
+        }
+        return result;
+    }
+
+    fn getCount() {
+        let count = 0;
+        for k in self.objects {
+            if (self.objects[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn contains(id) {
+        return self.objects[id] != nullptr;
+    }
+
+    fn remove(id) {
+        let obj = self.objects[id];
+        if (obj != nullptr) {
+            obj.dispose();
+        }
+        self.objects[id] = nullptr;
+        return 0;
+    }
+
+    fn clear() {
+        for k in self.objects {
+            let obj = self.objects[k];
+            if (obj != nullptr) {
+                obj.dispose();
+            }
+        }
+        self.objects = {};
+        self.next_id = 0;
+        return 0;
+    }
+
+    fn getAll() {
+        let result = [];
+        for k in self.objects {
+            if (self.objects[k] != nullptr) {
+                push(result, self.objects[k]);
+            }
+        }
+        return result;
+    }
+
+    fn getNextId() { return self.next_id; }
+}
+
+
+class CppSharedLib {
+    let name = "";
+    let version = "";
+    let path = "";
+    let is_loaded = false;
+    let is_module = false;
+    let module_name = "";
+    let exported_types = [];
+    let dependencies = [];
+
+    fn init_lib(name, ver, path) {
+        self.name = name;
+        self.version = ver;
+        self.path = path;
+        self.is_loaded = false;
+        self.is_module = false;
+        self.module_name = "";
+        self.exported_types = [];
+        self.dependencies = [];
+        return 0;
+    }
+
+    fn getName() { return self.name; }
+    fn getVersion() { return self.version; }
+    fn getPath() { return self.path; }
+    fn isLoaded() { return self.is_loaded; }
+    fn setLoaded(v) { self.is_loaded = v; return 0; }
+    fn isModule() { return self.is_module; }
+    fn getModuleName() { return self.module_name; }
+    fn setModuleName(name) { self.module_name = name; return 0; }
+
+    fn addType(type_info) {
+        push(self.exported_types, type_info);
+        return 0;
+    }
+
+    fn getType(type_name) {
+        let i = 0;
+        while (i < len(self.exported_types)) {
+            let t = self.exported_types[i];
+            if (t.getFullName() == type_name or t.getTypeName() == type_name) {
+                return t;
+            }
+            i = i + 1;
+        }
+        return nullptr;
+    }
+
+    fn getTypeCount() { return len(self.exported_types); }
+
+    fn addDependency(dep_name) {
+        push(self.dependencies, dep_name);
+        return 0;
+    }
+
+    fn getDependencies() { return self.dependencies; }
+    fn getDependencyCount() { return len(self.dependencies); }
+
+    fn removeType(type_name) {
+        let new_types = [];
+        let i = 0;
+        while (i < len(self.exported_types)) {
+            if (self.exported_types[i].getTypeName() != type_name) {
+                push(new_types, self.exported_types[i]);
+            }
+            i = i + 1;
+        }
+        self.exported_types = new_types;
+        return 0;
+    }
+
+    fn clear() {
+        self.exported_types = [];
+        self.dependencies = [];
+        return 0;
+    }
+}
+
+
+class CppLibLoader {
+    let loaded_libs = {};
+    let lib_count = 0;
+
+    fn init_loader() {
+        self.loaded_libs = {};
+        self.lib_count = 0;
+        return 0;
+    }
+
+    fn register(lib) {
+        self.loaded_libs[lib.getName()] = lib;
+        return 0;
+    }
+
+    fn load(name) {
+        let lib = self.loaded_libs[name];
+        if (lib != nullptr) {
+            lib.setLoaded(true);
+            self.lib_count = self.lib_count + 1;
+        }
+        return lib;
+    }
+
+    fn isLoaded(name) {
+        let lib = self.loaded_libs[name];
+        if (lib != nullptr) {
+            return lib.isLoaded();
+        }
+        return false;
+    }
+
+    fn getLoadedCount() { return self.lib_count; }
+
+    fn getLib(name) {
+        return self.loaded_libs[name];
+    }
+
+    fn unload(name) {
+        let lib = self.loaded_libs[name];
+        if (lib != nullptr) {
+            lib.setLoaded(false);
+            self.lib_count = self.lib_count - 1;
+        }
+        return 0;
+    }
+
+    fn clear() {
+        self.loaded_libs = {};
+        self.lib_count = 0;
+        return 0;
+    }
+
+    fn getAllLibs() {
+        let result = [];
+        for k in self.loaded_libs {
+            if (self.loaded_libs[k] != nullptr) {
+                push(result, self.loaded_libs[k]);
+            }
+        }
+        return result;
+    }
+
+    fn getLibCount() {
+        let count = 0;
+        for k in self.loaded_libs {
+            if (self.loaded_libs[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+}
+
+
+class CppConstructor {
+    let param_types = [];
+    let param_names = [];
+    let is_default = false;
+    let is_copy = false;
+    let is_move = false;
+    let is_explicit = false;
+
+    fn init_ctor() {
+        self.param_types = [];
+        self.param_names = [];
+        self.is_default = false;
+        self.is_copy = false;
+        self.is_move = false;
+        self.is_explicit = false;
+        return 0;
+    }
+
+    fn addParam(type, name) {
+        push(self.param_types, type);
+        push(self.param_names, name);
+        return 0;
+    }
+
+    fn addParamType(type) { push(self.param_types, type); return 0; }
+    fn addParamName(name) { push(self.param_names, name); return 0; }
+
+    fn getParamType(index) {
+        if (index >= 0 and index < len(self.param_types)) {
+            return self.param_types[index];
+        }
+        return "";
+    }
+
+    fn getParamTypes() { return self.param_types; }
+    fn getParamNames() { return self.param_names; }
+    fn getParamCount() { return len(self.param_types); }
+
+    fn isDefault() { return self.is_default; }
+    fn setDefault(v) { self.is_default = v; return 0; }
+    fn isCopy() { return self.is_copy; }
+    fn setCopy(v) { self.is_copy = v; return 0; }
+    fn isMove() { return self.is_move; }
+    fn setMove(v) { self.is_move = v; return 0; }
+    fn isExplicit() { return self.is_explicit; }
+    fn setExplicit(v) { self.is_explicit = v; return 0; }
+}
+
+
+class CppMethod {
+    let name = "";
+    let return_type = "void";
+    let param_types = [];
+    let param_names = [];
+    let is_static = false;
+    let is_virtual = false;
+    let is_const = false;
+    let is_noexcept = false;
+    let visibility = "public";
+    let annotations = [];
+
+    fn init_method(name, rtype) {
+        self.name = name;
+        self.return_type = rtype;
+        self.param_types = [];
+        self.param_names = [];
+        self.is_static = false;
+        self.is_virtual = false;
+        self.is_const = false;
+        self.is_noexcept = false;
+        self.visibility = "public";
+        self.annotations = [];
+        return 0;
+    }
+
+    fn addParam(type, name) {
+        push(self.param_types, type);
+        push(self.param_names, name);
+        return 0;
+    }
+
+    fn getName() { return self.name; }
+    fn getReturnType() { return self.return_type; }
+    fn getParamCount() { return len(self.param_types); }
+
+    fn getParamType(index) {
+        if (index >= 0 and index < len(self.param_types)) {
+            return self.param_types[index];
+        }
+        return "";
+    }
+
+    fn getParamTypes() { return self.param_types; }
+    fn getParamNames() { return self.param_names; }
+
+    fn isStatic() { return self.is_static; }
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn isVirtual() { return self.is_virtual; }
+    fn setVirtual(v) { self.is_virtual = v; return 0; }
+    fn isConst() { return self.is_const; }
+    fn setConst(v) { self.is_const = v; return 0; }
+    fn isNoexcept() { return self.is_noexcept; }
+    fn setNoexcept(v) { self.is_noexcept = v; return 0; }
+    fn getVisibility() { return self.visibility; }
+    fn setVisibility(v) { self.visibility = v; return 0; }
+
+    fn addAnnotation(anno) { push(self.annotations, anno); return 0; }
+
+    fn hasAnnotation(name) {
+        let i = 0;
+        while (i < len(self.annotations)) {
+            if (self.annotations[i] == name) {
+                return true;
+            }
+            i = i + 1;
+        }
+        return false;
+    }
+
+    fn getAnnotations() { return self.annotations; }
+}
+
+
+class CppField {
+    let name = "";
+    let type_name = "";
+    let is_static = false;
+    let is_const = false;
+    let is_mutable = false;
+    let is_volatile = false;
+    let default_value = nullptr;
+    let visibility = "public";
+    let is_pointer = false;
+    let is_reference = false;
+
+    fn init_field(name, ftype) {
+        self.name = name;
+        self.type_name = ftype;
+        self.is_static = false;
+        self.is_const = false;
+        self.is_mutable = false;
+        self.is_volatile = false;
+        self.default_value = nullptr;
+        self.visibility = "public";
+        self.is_pointer = false;
+        self.is_reference = false;
+        return 0;
+    }
+
+    fn getName() { return self.name; }
+    fn getType() { return self.type_name; }
+    fn isStatic() { return self.is_static; }
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn isConst() { return self.is_const; }
+    fn setConst(v) { self.is_const = v; return 0; }
+    fn isMutable() { return self.is_mutable; }
+    fn setMutable(v) { self.is_mutable = v; return 0; }
+    fn isVolatile() { return self.is_volatile; }
+    fn setVolatile(v) { self.is_volatile = v; return 0; }
+    fn getDefaultValue() { return self.default_value; }
+    fn setDefaultValue(v) { self.default_value = v; return 0; }
+    fn setVisibility(v) { self.visibility = v; return 0; }
+    fn getVisibility() { return self.visibility; }
+    fn isPointer() { return self.is_pointer; }
+    fn setPointer(v) { self.is_pointer = v; return 0; }
+    fn isReference() { return self.is_reference; }
+    fn setReference(v) { self.is_reference = v; return 0; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 3: 事件桥接层 — 跨运行时事件总线
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppEvent {
+    let event_name = "";
+    let listener_type = "";
+    let listeners = [];
+    let is_static = false;
+    let is_remote = false;
+    let remote_endpoint = "";
+    let is_signal = false;
+
+    fn init_event(name, ltype) {
+        self.event_name = name;
+        self.listener_type = ltype;
+        self.listeners = [];
+        self.is_static = false;
+        self.is_remote = false;
+        self.remote_endpoint = "";
+        self.is_signal = false;
+        return 0;
+    }
+
+    fn getName() { return self.event_name; }
+    fn getListenerType() { return self.listener_type; }
+    fn getListenerCount() { return len(self.listeners); }
+    fn isStatic() { return self.is_static; }
+    fn setStatic(v) { self.is_static = v; return 0; }
+    fn isRemote() { return self.is_remote; }
+    fn setRemote(v) { self.is_remote = v; return 0; }
+    fn getRemoteEndpoint() { return self.remote_endpoint; }
+    fn setRemoteEndpoint(endpoint) { self.remote_endpoint = endpoint; return 0; }
+
+    fn addListener(listener) {
+        push(self.listeners, listener);
+        return 0;
+    }
+
+    fn removeListener(listener) {
+        let new_listeners = [];
+        let i = 0;
+        while (i < len(self.listeners)) {
+            if (self.listeners[i] != listener) {
+                push(new_listeners, self.listeners[i]);
+            }
+            i = i + 1;
+        }
+        self.listeners = new_listeners;
+        return 0;
+    }
+
+    fn getListeners() { return self.listeners; }
+
+    fn clearListeners() {
+        self.listeners = [];
+        return 0;
+    }
+
+    fn isSignal() { return self.is_signal; }
+    fn setSignal(v) { self.is_signal = v; return 0; }
+}
+
+
+class CppEventListener {
+    let listener_id = 0;
+    let event_name = "";
+    let callback = nullptr;
+    let is_oneshot = false;
+    let filter_fn = nullptr;
+    let is_active = true;
+
+    fn init_listener(event_name, cb) {
+        self.event_name = event_name;
+        self.callback = cb;
+        self.is_oneshot = false;
+        self.filter_fn = nullptr;
+        self.is_active = true;
+        self.listener_id = 0;
+        return 0;
+    }
+
+    fn setOneShot(v) { self.is_oneshot = v; return 0; }
+    fn setFilter(filter_fn) { self.filter_fn = filter_fn; return 0; }
+    fn setActive(v) { self.is_active = v; return 0; }
+    fn setId(id) { self.listener_id = id; return 0; }
+
+    fn getId() { return self.listener_id; }
+    fn getEventName() { return self.event_name; }
+    fn isActive() { return self.is_active; }
+    fn isOneShot() { return self.is_oneshot; }
+
+    fn onEvent(sender, args) {
+        if (self.is_active == false) { return 0; }
+        if (self.filter_fn != nullptr) {
+            if (self.filter_fn(sender, args) == false) {
+                return 0;
+            }
+        }
+        if (self.callback != nullptr) {
+            self.callback(sender, args);
+        }
+        if (self.is_oneshot) {
+            self.is_active = false;
+        }
+        return 0;
+    }
+}
+
+
+class CppCrossEventBus {
+    let events = {};
+    let remote_events = {};
+    let listener_counter = 0;
+    let bridge_enabled = false;
+
+    fn init_cross_bus() {
+        self.events = {};
+        self.remote_events = {};
+        self.listener_counter = 0;
+        self.bridge_enabled = false;
+        return 0;
+    }
+
+    fn subscribe(event_name, callback) {
+        let evt = self.events[event_name];
+        if (evt == nullptr) {
+            evt = new CppEvent();
+            evt.init_event(event_name, "CppEventListener");
+            self.events[event_name] = evt;
+        }
+        let listener = new CppEventListener();
+        listener.init_listener(event_name, callback);
+        self.listener_counter = self.listener_counter + 1;
+        listener.setId(self.listener_counter);
+        evt.addListener(listener);
+        return listener;
+    }
+
+    fn unsubscribe(event_name, listener) {
+        let evt = self.events[event_name];
+        if (evt != nullptr) {
+            evt.removeListener(listener);
+        }
+        return 0;
+    }
+
+    fn publish(event_name, sender, args) {
+        let evt = self.events[event_name];
+        if (evt == nullptr) { return 0; }
+        let listeners = evt.getListeners();
+        let i = 0;
+        while (i < len(listeners)) {
+            listeners[i].onEvent(sender, args);
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn getEventCount() {
+        let count = 0;
+        for k in self.events {
+            count = count + 1;
+        }
+        for k in self.remote_events {
+            count = count + 1;
+        }
+        return count;
+    }
+
+    fn clearEvent(event_name) {
+        let new_events = {};
+        for k in self.events {
+            if (k != event_name) {
+                new_events[k] = self.events[k];
+            }
+        }
+        self.events = new_events;
+        let new_remote = {};
+        for k in self.remote_events {
+            if (k != event_name) {
+                new_remote[k] = self.remote_events[k];
+            }
+        }
+        self.remote_events = new_remote;
+        return 0;
+    }
+
+    fn clear() {
+        self.events = {};
+        self.remote_events = {};
+        self.listener_counter = 0;
+        return 0;
+    }
+
+    fn enableBridge() {
+        self.bridge_enabled = true;
+        return 0;
+    }
+
+    fn disableBridge() {
+        self.bridge_enabled = false;
+        return 0;
+    }
+
+    fn isBridgeEnabled() { return self.bridge_enabled; }
+
+    fn getListenerCount() { return self.listener_counter; }
+
+    fn getEvent(event_name) {
+        return self.events[event_name];
+    }
+}
+
+
+class CppUIDispatcher {
+    let invoke_queue = [];
+    let is_processing = false;
+    let main_thread_id = 0;
+    let sync_context = nullptr;
+
+    fn init_dispatcher() {
+        self.invoke_queue = [];
+        self.is_processing = false;
+        self.main_thread_id = 0;
+        self.sync_context = nullptr;
+        return 0;
+    }
+
+    fn invoke(action) {
+        push(self.invoke_queue, {"action": action, "sync": true, "result": nullptr, "done": false});
+        return 0;
+    }
+
+    fn invokeLater(action) {
+        push(self.invoke_queue, {"action": action, "sync": false, "result": nullptr, "done": false});
+        return 0;
+    }
+
+    fn processQueue() {
+        if (self.is_processing) { return 0; }
+        self.is_processing = true;
+        let i = 0;
+        while (i < len(self.invoke_queue)) {
+            let item = self.invoke_queue[i];
+            if (item["done"] == false and item["action"] != nullptr) {
+                item["action"]();
+                item["done"] = true;
+            }
+            i = i + 1;
+        }
+        let new_q = [];
+        i = 0;
+        while (i < len(self.invoke_queue)) {
+            if (self.invoke_queue[i]["done"] == false) {
+                push(new_q, self.invoke_queue[i]);
+            }
+            i = i + 1;
+        }
+        self.invoke_queue = new_q;
+        self.is_processing = false;
+        return 0;
+    }
+
+    fn getQueueSize() { return len(self.invoke_queue); }
+    fn clear() { self.invoke_queue = []; return 0; }
+    fn setMainThread(id) { self.main_thread_id = id; return 0; }
+    fn getMainThread() { return self.main_thread_id; }
+    fn isProcessing() { return self.is_processing; }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 4: UI 桥接层 — zzwUI 控件 ↔ Qt/GTK 控件
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ZzwUICppControlBridge {
+    let hwidget = nullptr;
+    let cpp_control = nullptr;
+    let property_bindings = [];
+    let event_bindings = [];
+    let enabled = true;
+    let sync_direction = "both";
+    let is_syncing = false;
+
+    fn init_bridge(hw, cc) {
+        self.hwidget = hw;
+        self.cpp_control = cc;
+        self.property_bindings = [];
+        self.event_bindings = [];
+        self.enabled = true;
+        self.sync_direction = "both";
+        self.is_syncing = false;
+        return 0;
+    }
+
+    fn bindProperty(hprop, cprop) {
+        push(self.property_bindings, {"hsharp": hprop, "cpp": cprop});
+        return 0;
+    }
+
+    fn bindEvent(hevent, cevent) {
+        push(self.event_bindings, {"hsharp": hevent, "cpp": cevent});
+        return 0;
+    }
+
+    fn getHWidget() { return self.hwidget; }
+    fn getCppControl() { return self.cpp_control; }
+    fn getPropertyBindings() { return self.property_bindings; }
+    fn getEventBindings() { return self.event_bindings; }
+
+    fn syncToCpp() {
+        if (self.enabled == false) { return 0; }
+        if (self.sync_direction == "hsharp_to_cpp" or self.sync_direction == "both") {
+            self.is_syncing = true;
+            let i = 0;
+            while (i < len(self.property_bindings)) {
+                let binding = self.property_bindings[i];
+                let hprop = binding["hsharp"];
+                let cprop = binding["cpp"];
+                let val = self.hwidget[hprop];
+                if (val != nullptr) {
+                    self.cpp_control[cprop] = val;
+                }
+                i = i + 1;
+            }
+            self.is_syncing = false;
+        }
+        return 0;
+    }
+
+    fn syncToHSharp() {
+        if (self.enabled == false) { return 0; }
+        if (self.sync_direction == "cpp_to_hsharp" or self.sync_direction == "both") {
+            self.is_syncing = true;
+            let i = 0;
+            while (i < len(self.property_bindings)) {
+                let binding = self.property_bindings[i];
+                let hprop = binding["hsharp"];
+                let cprop = binding["cpp"];
+                let val = self.cpp_control[cprop];
+                if (val != nullptr) {
+                    self.hwidget[hprop] = val;
+                }
+                i = i + 1;
+            }
+            self.is_syncing = false;
+        }
+        return 0;
+    }
+
+    fn syncBoth() {
+        self.syncToCpp();
+        self.syncToHSharp();
+        return 0;
+    }
+
+    fn unbindProperty(hprop) {
+        let new_bindings = [];
+        let i = 0;
+        while (i < len(self.property_bindings)) {
+            if (self.property_bindings[i]["hsharp"] != hprop) {
+                push(new_bindings, self.property_bindings[i]);
+            }
+            i = i + 1;
+        }
+        self.property_bindings = new_bindings;
+        return 0;
+    }
+
+    fn unbindEvent(hevent) {
+        let new_bindings = [];
+        let i = 0;
+        while (i < len(self.event_bindings)) {
+            if (self.event_bindings[i]["hsharp"] != hevent) {
+                push(new_bindings, self.event_bindings[i]);
+            }
+            i = i + 1;
+        }
+        self.event_bindings = new_bindings;
+        return 0;
+    }
+
+    fn unbindAll() {
+        self.property_bindings = [];
+        self.event_bindings = [];
+        return 0;
+    }
+
+    fn isEnabled() { return self.enabled; }
+    fn setEnabled(v) { self.enabled = v; return 0; }
+    fn setSyncDirection(dir) { self.sync_direction = dir; return 0; }
+    fn getSyncDirection() { return self.sync_direction; }
+
+    fn dispose() {
+        self.unbindAll();
+        self.hwidget = nullptr;
+        self.cpp_control = nullptr;
+        self.enabled = false;
+        return 0;
+    }
+}
+
+
+class CppWindowBridge {
+    let hwindow = nullptr;
+    let cpp_window = nullptr;
+    let title_binding = false;
+    let size_binding = false;
+    let position_binding = false;
+    let visibility_binding = false;
+    let state_binding = false;
+
+    fn init_win_bridge(hw, cw) {
+        self.hwindow = hw;
+        self.cpp_window = cw;
+        self.title_binding = false;
+        self.size_binding = false;
+        self.position_binding = false;
+        self.visibility_binding = false;
+        self.state_binding = false;
+        return 0;
+    }
+
+    fn bindTitle() {
+        self.title_binding = true;
+        return 0;
+    }
+
+    fn bindSize() {
+        self.size_binding = true;
+        return 0;
+    }
+
+    fn bindPosition() {
+        self.position_binding = true;
+        return 0;
+    }
+
+    fn bindVisibility() {
+        self.visibility_binding = true;
+        return 0;
+    }
+
+    fn bindState() {
+        self.state_binding = true;
+        return 0;
+    }
+
+    fn syncTitle() {
+        if (self.title_binding and self.hwindow != nullptr and self.cpp_window != nullptr) {
+            self.hwindow["title"] = self.cpp_window["title"];
+        }
+        return 0;
+    }
+
+    fn syncSize() {
+        if (self.size_binding and self.hwindow != nullptr and self.cpp_window != nullptr) {
+            self.hwindow["width"] = self.cpp_window["width"];
+            self.hwindow["height"] = self.cpp_window["height"];
+        }
+        return 0;
+    }
+
+    fn syncPosition() {
+        if (self.position_binding and self.hwindow != nullptr and self.cpp_window != nullptr) {
+            self.hwindow["x"] = self.cpp_window["x"];
+            self.hwindow["y"] = self.cpp_window["y"];
+        }
+        return 0;
+    }
+
+    fn syncAll() {
+        self.syncTitle();
+        self.syncSize();
+        self.syncPosition();
+        return 0;
+    }
+
+    fn getHWindow() { return self.hwindow; }
+    fn getCppWindow() { return self.cpp_window; }
+    fn isTitleBound() { return self.title_binding; }
+    fn isSizeBound() { return self.size_binding; }
+    fn isPositionBound() { return self.position_binding; }
+    fn isVisibilityBound() { return self.visibility_binding; }
+    fn isStateBound() { return self.state_binding; }
+
+    fn unbindAll() {
+        self.title_binding = false;
+        self.size_binding = false;
+        self.position_binding = false;
+        self.visibility_binding = false;
+        self.state_binding = false;
+        return 0;
+    }
+
+    fn dispose() {
+        self.unbindAll();
+        self.hwindow = nullptr;
+        self.cpp_window = nullptr;
+        return 0;
+    }
+}
+
+
+class CppUIHost {
+    let parent = nullptr;
+    let widgets = [];
+    let is_active = false;
+    let layout_engine = "zzwUI";
+    let renderer = "default";
+
+    fn init_host(parent) {
+        self.parent = parent;
+        self.widgets = [];
+        self.is_active = false;
+        self.layout_engine = "zzwUI";
+        self.renderer = "default";
+        return 0;
+    }
+
+    fn hostWidget(widget, wtype) {
+        push(self.widgets, {"widget": widget, "type": wtype});
+        return 0;
+    }
+
+    fn removeWidget(widget) {
+        let new_widgets = [];
+        let i = 0;
+        while (i < len(self.widgets)) {
+            if (self.widgets[i]["widget"] != widget) {
+                push(new_widgets, self.widgets[i]);
+            }
+            i = i + 1;
+        }
+        self.widgets = new_widgets;
+        return 0;
+    }
+
+    fn getWidgets() { return self.widgets; }
+    fn getWidgetCount() { return len(self.widgets); }
+    fn activate() { self.is_active = true; return 0; }
+    fn deactivate() { self.is_active = false; return 0; }
+    fn isActive() { return self.is_active; }
+    fn setLayoutEngine(engine) { self.layout_engine = engine; return 0; }
+    fn getLayoutEngine() { return self.layout_engine; }
+    fn setRenderer(renderer) { self.renderer = renderer; return 0; }
+    fn getRenderer() { return self.renderer; }
+
+    fn clear() {
+        self.widgets = [];
+        return 0;
+    }
+
+    fn dispose() {
+        self.clear();
+        self.parent = nullptr;
+        self.is_active = false;
+        return 0;
+    }
+}
+
+
+class CppControlFactory {
+    let type_map = {};
+    let widget_types = {};
+
+    fn init_factory() {
+        self.type_map = {};
+        self.widget_types = {};
+        self._register_defaults();
+        return 0;
+    }
+
+    fn _register_defaults() {
+        self.register("Button", "QPushButton", "Qt");
+        self.register("Label", "QLabel", "Qt");
+        self.register("TextBox", "QLineEdit", "Qt");
+        self.register("TextArea", "QTextEdit", "Qt");
+        self.register("CheckBox", "QCheckBox", "Qt");
+        self.register("RadioButton", "QRadioButton", "Qt");
+        self.register("Slider", "QSlider", "Qt");
+        self.register("ProgressBar", "QProgressBar", "Qt");
+        self.register("ListView", "QListView", "Qt");
+        self.register("ComboBox", "QComboBox", "Qt");
+        self.register("ScrollView", "QScrollArea", "Qt");
+        self.register("TabControl", "QTabWidget", "Qt");
+        self.register("TreeView", "QTreeView", "Qt");
+        self.register("Menu", "QMenuBar", "Qt");
+        self.register("ImageView", "QLabel", "Qt");
+        self.register("Pane", "QWidget", "Qt");
+        self.register("Grid", "QGridLayout", "Qt");
+        self.register("HBox", "QHBoxLayout", "Qt");
+        self.register("VBox", "QVBoxLayout", "Qt");
+        self.register("SplitPane", "QSplitter", "Qt");
+        self.register("ToggleButton", "QPushButton", "Qt");
+        self.register("PasswordField", "QLineEdit", "Qt");
+        return 0;
+    }
+
+    fn register(hwtype, cpptype, framework) {
+        self.type_map[hwtype] = {"cpp": cpptype, "framework": framework};
+        self.widget_types[hwtype] = framework;
+        return 0;
+    }
+
+    fn getCppType(hwtype) {
+        let info = self.type_map[hwtype];
+        if (info != nullptr) {
+            return info["cpp"];
+        }
+        return nullptr;
+    }
+
+    fn getFramework(hwtype) {
+        return self.widget_types[hwtype];
+    }
+
+    fn hasType(hwtype) {
+        return self.type_map[hwtype] != nullptr;
+    }
+
+    fn getSupportedTypes() {
+        let types = [];
+        for k in self.type_map {
+            push(types, k);
+        }
+        return types;
+    }
+
+    fn getSupportedFrameworks() {
+        let frameworks = [];
+        for k in self.widget_types {
+            let fw = self.widget_types[k];
+            let found = false;
+            let i = 0;
+            while (i < len(frameworks)) {
+                if (frameworks[i] == fw) {
+                    found = true;
+                }
+                i = i + 1;
+            }
+            if (found == false) {
+                push(frameworks, fw);
+            }
+        }
+        return frameworks;
+    }
+
+    fn createControl(hwtype) {
+        let cpptype = self.getCppType(hwtype);
+        if (cpptype == nullptr) {
+            return nullptr;
+        }
+        return {"__type__": cpptype, "widget_type": hwtype};
+    }
+
+    fn removeType(hwtype) {
+        self.type_map[hwtype] = nullptr;
+        self.widget_types[hwtype] = nullptr;
+        return 0;
+    }
+
+    fn getTypeCount() {
+        let count = 0;
+        for k in self.type_map {
+            if (self.type_map[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn clear() {
+        self.type_map = {};
+        self.widget_types = {};
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 5: 数据绑定层 — 双向绑定
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppBinding {
+    let source = nullptr;
+    let source_path = "";
+    let target = nullptr;
+    let target_path = "";
+    let mode = "twoWay";
+    let converter = nullptr;
+    let converter_param = nullptr;
+    let fallback_value = nullptr;
+    let is_active = true;
+    let property_notifier = nullptr;
+
+    fn init_binding(src, spath, tgt, tpath) {
+        self.source = src;
+        self.source_path = spath;
+        self.target = tgt;
+        self.target_path = tpath;
+        self.mode = "twoWay";
+        self.converter = nullptr;
+        self.converter_param = nullptr;
+        self.fallback_value = nullptr;
+        self.is_active = true;
+        self.property_notifier = nullptr;
+        return 0;
+    }
+
+    fn getSource() { return self.source; }
+    fn getSourcePath() { return self.source_path; }
+    fn getTarget() { return self.target; }
+    fn getTargetPath() { return self.target_path; }
+    fn getMode() { return self.mode; }
+    fn setMode(m) { self.mode = m; return 0; }
+
+    fn updateTarget() {
+        if (self.is_active == false) { return 0; }
+        if (self.mode == "oneWayToSource") { return 0; }
+        let val = self.source[self.source_path];
+        if (val == nullptr) {
+            val = self.fallback_value;
+        }
+        if (self.converter != nullptr) {
+            val = self.converter(val, self.converter_param);
+        }
+        self.target[self.target_path] = val;
+        return 0;
+    }
+
+    fn updateSource() {
+        if (self.is_active == false) { return 0; }
+        if (self.mode == "oneWay") { return 0; }
+        let val = self.target[self.target_path];
+        if (self.converter != nullptr) {
+            val = self.converter(val, self.converter_param);
+        }
+        self.source[self.source_path] = val;
+        return 0;
+    }
+
+    fn setConverter(c) { self.converter = c; return 0; }
+    fn getConverter() { return self.converter; }
+    fn setConverterParam(p) { self.converter_param = p; return 0; }
+    fn setFallbackValue(v) { self.fallback_value = v; return 0; }
+    fn getFallbackValue() { return self.fallback_value; }
+    fn isActive() { return self.is_active; }
+    fn setActive(v) { self.is_active = v; return 0; }
+    fn setPropertyNotifier(notifier) { self.property_notifier = notifier; return 0; }
+    fn getPropertyNotifier() { return self.property_notifier; }
+
+    fn dispose() {
+        self.source = nullptr;
+        self.target = nullptr;
+        self.converter = nullptr;
+        self.is_active = false;
+        return 0;
+    }
+}
+
+
+class CppMultiBinding {
+    let target = nullptr;
+    let target_path = "";
+    let bindings = [];
+    let converter = nullptr;
+    let values = [];
+
+    fn init_multi(target, tpath) {
+        self.target = target;
+        self.target_path = tpath;
+        self.bindings = [];
+        self.converter = nullptr;
+        self.values = [];
+        return 0;
+    }
+
+    fn addBinding(binding) {
+        push(self.bindings, binding);
+        return 0;
+    }
+
+    fn removeBinding(binding) {
+        let new_bindings = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i] != binding) {
+                push(new_bindings, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        self.bindings = new_bindings;
+        return 0;
+    }
+
+    fn getBindings() { return self.bindings; }
+    fn getBindingCount() { return len(self.bindings); }
+    fn setConverter(c) { self.converter = c; return 0; }
+    fn getConverter() { return self.converter; }
+    fn getTarget() { return self.target; }
+    fn getTargetPath() { return self.target_path; }
+
+    fn updateTarget() {
+        self.values = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            let b = self.bindings[i];
+            let val = b.getSource()[b.getSourcePath()];
+            push(self.values, val);
+            i = i + 1;
+        }
+        if (self.converter != nullptr) {
+            let result = self.converter(self.values);
+            self.target[self.target_path] = result;
+        }
+        return 0;
+    }
+
+    fn getValues() { return self.values; }
+
+    fn dispose() {
+        self.bindings = [];
+        self.target = nullptr;
+        self.converter = nullptr;
+        self.values = [];
+        return 0;
+    }
+}
+
+
+class CppBindingManager {
+    let bindings = [];
+    let deferred_updates = [];
+    let is_deferred = false;
+    let update_count = 0;
+
+    fn init_binding_mgr() {
+        self.bindings = [];
+        self.deferred_updates = [];
+        self.is_deferred = false;
+        self.update_count = 0;
+        return 0;
+    }
+
+    fn addBinding(binding) {
+        push(self.bindings, binding);
+        return 0;
+    }
+
+    fn removeBinding(binding) {
+        let new_bindings = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i] != binding) {
+                push(new_bindings, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        self.bindings = new_bindings;
+        return 0;
+    }
+
+    fn updateAll() {
+        if (self.is_deferred) { return 0; }
+        self.update_count = self.update_count + 1;
+        let i = 0;
+        while (i < len(self.bindings)) {
+            self.bindings[i].updateTarget();
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn getBindingsForSource(src) {
+        let result = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i].getSource() == src) {
+                push(result, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    fn getBindingsForTarget(tgt) {
+        let result = [];
+        let i = 0;
+        while (i < len(self.bindings)) {
+            if (self.bindings[i].getTarget() == tgt) {
+                push(result, self.bindings[i]);
+            }
+            i = i + 1;
+        }
+        return result;
+    }
+
+    fn getBindingCount() { return len(self.bindings); }
+
+    fn deferUpdates() {
+        self.is_deferred = true;
+        return 0;
+    }
+
+    fn flushDeferred() {
+        self.is_deferred = false;
+        self.updateAll();
+        return 0;
+    }
+
+    fn isDeferred() { return self.is_deferred; }
+
+    fn clear() {
+        self.bindings = [];
+        self.deferred_updates = [];
+        self.update_count = 0;
+        return 0;
+    }
+
+    fn dispose() {
+        self.clear();
+        return 0;
+    }
+}
+
+
+class CppBindingExpression {
+    let binding = nullptr;
+    let target = nullptr;
+    let target_property = "";
+    let is_dirty = false;
+    let expression_str = "";
+    let last_value = nullptr;
+
+    fn init_expr(binding, tgt, tprop) {
+        self.binding = binding;
+        self.target = tgt;
+        self.target_property = tprop;
+        self.is_dirty = false;
+        self.expression_str = "";
+        self.last_value = nullptr;
+        return 0;
+    }
+
+    fn getBinding() { return self.binding; }
+    fn getTarget() { return self.target; }
+    fn getTargetProperty() { return self.target_property; }
+    fn isDirty() { return self.is_dirty; }
+
+    fn markDirty() {
+        self.is_dirty = true;
+        return 0;
+    }
+
+    fn refresh() {
+        if (self.binding != nullptr) {
+            self.binding.updateTarget();
+        }
+        self.is_dirty = false;
+        return 0;
+    }
+
+    fn getLastValue() { return self.last_value; }
+    fn setExpression(expr) { self.expression_str = expr; return 0; }
+    fn getExpression() { return self.expression_str; }
+
+    fn dispose() {
+        self.binding = nullptr;
+        self.target = nullptr;
+        self.last_value = nullptr;
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 6: RPC/服务层 — 远程过程调用
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppServiceHost {
+    let host_name = "";
+    let port = 0;
+    let services = {};
+    let endpoints = [];
+    let is_running = false;
+    let max_connections = 100;
+    let protocol = "tcp";
+
+    fn init_host(name, port) {
+        self.host_name = name;
+        self.port = port;
+        self.services = {};
+        self.endpoints = [];
+        self.is_running = false;
+        self.max_connections = 100;
+        self.protocol = "tcp";
+        return 0;
+    }
+
+    fn getHostName() { return self.host_name; }
+    fn getPort() { return self.port; }
+    fn isRunning() { return self.is_running; }
+
+    fn start() {
+        self.is_running = true;
+        return 0;
+    }
+
+    fn stop() {
+        self.is_running = false;
+        return 0;
+    }
+
+    fn registerService(name, svc) {
+        self.services[name] = svc;
+        return 0;
+    }
+
+    fn hasService(name) {
+        return self.services[name] != nullptr;
+    }
+
+    fn getService(name) {
+        return self.services[name];
+    }
+
+    fn unregisterService(name) {
+        self.services[name] = nullptr;
+        return 0;
+    }
+
+    fn getServiceCount() {
+        let count = 0;
+        for k in self.services {
+            if (self.services[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn setMaxConnections(max) { self.max_connections = max; return 0; }
+    fn getMaxConnections() { return self.max_connections; }
+    fn addEndpoint(endpoint) { push(self.endpoints, endpoint); return 0; }
+    fn getEndpoints() { return self.endpoints; }
+    fn setProtocol(proto) { self.protocol = proto; return 0; }
+    fn getProtocol() { return self.protocol; }
+
+    fn dispose() {
+        self.services = {};
+        self.endpoints = [];
+        self.is_running = false;
+        return 0;
+    }
+}
+
+
+class CppRPCClient {
+    let endpoint = "";
+    let timeout = 30000;
+    let is_connected = false;
+    let auth_token = "";
+    let call_count = 0;
+    let serializer = nullptr;
+
+    fn init_client(endpoint) {
+        self.endpoint = endpoint;
+        self.timeout = 30000;
+        self.is_connected = false;
+        self.auth_token = "";
+        self.call_count = 0;
+        self.serializer = nullptr;
+        return 0;
+    }
+
+    fn getEndpoint() { return self.endpoint; }
+    fn setTimeout(ms) { self.timeout = ms; return 0; }
+    fn getTimeout() { return self.timeout; }
+    fn setAuthToken(token) { self.auth_token = token; return 0; }
+    fn getAuthToken() { return self.auth_token; }
+    fn isConnected() { return self.is_connected; }
+
+    fn connect() {
+        self.is_connected = true;
+        return 0;
+    }
+
+    fn disconnect() {
+        self.is_connected = false;
+        return 0;
+    }
+
+    fn call(method, args) {
+        self.call_count = self.call_count + 1;
+        let result = new CppResult();
+        result.init_result();
+        result.setCallId(self.call_count);
+        result.setSuccess(nullptr);
+        return result;
+    }
+
+    fn getCallCount() { return self.call_count; }
+    fn setSerializer(s) { self.serializer = s; return 0; }
+    fn getSerializer() { return self.serializer; }
+
+    fn dispose() {
+        self.disconnect();
+        self.serializer = nullptr;
+        return 0;
+    }
+}
+
+
+class CppRPCMessage {
+    let method = "";
+    let params = [];
+    let id = 0;
+    let is_request = true;
+    let is_notification = false;
+    let correlation_id = "";
+    let timestamp = 0;
+
+    fn init_message(method) {
+        self.method = method;
+        self.params = [];
+        self.id = 0;
+        self.is_request = true;
+        self.is_notification = false;
+        self.correlation_id = "";
+        self.timestamp = 0;
+        return 0;
+    }
+
+    fn getMethod() { return self.method; }
+    fn getParamCount() { return len(self.params); }
+
+    fn getParam(index) {
+        if (index >= 0 and index < len(self.params)) {
+            return self.params[index];
+        }
+        return nullptr;
+    }
+
+    fn addParam(param) { push(self.params, param); return 0; }
+    fn getId() { return self.id; }
+    fn setId(v) { self.id = v; return 0; }
+    fn isRequest() { return self.is_request; }
+    fn isNotification() { return self.is_notification; }
+    fn setNotification(v) { self.is_notification = v; return 0; }
+    fn getCorrelationId() { return self.correlation_id; }
+    fn setCorrelationId(v) { self.correlation_id = v; return 0; }
+    fn getTimestamp() { return self.timestamp; }
+    fn setTimestamp(v) { self.timestamp = v; return 0; }
+    fn getParams() { return self.params; }
+    fn setParams(p) { self.params = p; return 0; }
+
+    fn dispose() {
+        self.params = [];
+        return 0;
+    }
+}
+
+
+class CppRPCResponse {
+    let message_id = 0;
+    let success = false;
+    let result = nullptr;
+    let error_code = 0;
+    let error_message = "";
+    let correlation_id = "";
+    let duration = 0;
+
+    fn init_response() {
+        self.message_id = 0;
+        self.success = false;
+        self.result = nullptr;
+        self.error_code = 0;
+        self.error_message = "";
+        self.correlation_id = "";
+        self.duration = 0;
+        return 0;
+    }
+
+    fn getMessageId() { return self.message_id; }
+    fn setMessageId(id) { self.message_id = id; return 0; }
+    fn isSuccess() { return self.success; }
+    fn setSuccess(v) { self.success = v; return 0; }
+    fn getResult() { return self.result; }
+    fn setResult(v) { self.result = v; return 0; }
+    fn setError(code, msg) { self.error_code = code; self.error_message = msg; return 0; }
+    fn getErrorCode() { return self.error_code; }
+    fn getError() { return self.error_message; }
+    fn getCorrelationId() { return self.correlation_id; }
+    fn setCorrelationId(v) { self.correlation_id = v; return 0; }
+    fn getDuration() { return self.duration; }
+    fn setDuration(v) { self.duration = v; return 0; }
+
+    fn dispose() {
+        self.result = nullptr;
+        return 0;
+    }
+}
+
+
+class CppRPCContext {
+    let request = nullptr;
+    let response = nullptr;
+    let is_authenticated = false;
+    let principal = "";
+    let user_data = nullptr;
+    let session_id = "";
+
+    fn init_context() {
+        self.request = nullptr;
+        self.response = nullptr;
+        self.is_authenticated = false;
+        self.principal = "";
+        self.user_data = nullptr;
+        self.session_id = "";
+        return 0;
+    }
+
+    fn getRequest() { return self.request; }
+    fn getResponse() { return self.response; }
+    fn isAuthenticated() { return self.is_authenticated; }
+    fn setAuthenticated(v) { self.is_authenticated = v; return 0; }
+    fn getPrincipal() { return self.principal; }
+    fn setPrincipal(v) { self.principal = v; return 0; }
+    fn getUserData() { return self.user_data; }
+    fn setUserData(v) { self.user_data = v; return 0; }
+    fn getSessionId() { return self.session_id; }
+    fn setSessionId(v) { self.session_id = v; return 0; }
+
+    fn dispose() {
+        self.request = nullptr;
+        self.response = nullptr;
+        self.user_data = nullptr;
+        return 0;
+    }
+}
+
+
+class CppSocketChannel {
+    let host = "";
+    let port = 0;
+    let is_connected = false;
+    let is_ssl = false;
+    let socket_type = "unix";
+    let buffer_size = 4096;
+
+    fn init_channel(host, port) {
+        self.host = host;
+        self.port = port;
+        self.is_connected = false;
+        self.is_ssl = false;
+        self.socket_type = "unix";
+        self.buffer_size = 4096;
+        return 0;
+    }
+
+    fn getHost() { return self.host; }
+    fn getPort() { return self.port; }
+    fn isConnected() { return self.is_connected; }
+
+    fn connect() {
+        self.is_connected = true;
+        return 0;
+    }
+
+    fn disconnect() {
+        self.is_connected = false;
+        return 0;
+    }
+
+    fn setSSL(v) { self.is_ssl = v; return 0; }
+    fn isSSL() { return self.is_ssl; }
+    fn setSocketType(t) { self.socket_type = t; return 0; }
+    fn getSocketType() { return self.socket_type; }
+    fn setBufferSize(sz) { self.buffer_size = sz; return 0; }
+    fn getBufferSize() { return self.buffer_size; }
+
+    fn dispose() {
+        self.disconnect();
+        return 0;
+    }
+}
+
+
+class CppMappedBuffer {
+    let name = "";
+    let size = 0;
+    let is_open = false;
+    let access_mode = "read_write";
+    let file_path = "";
+    let is_anonymous = false;
+
+    fn init_buffer(name, sz) {
+        self.name = name;
+        self.size = sz;
+        self.is_open = false;
+        self.access_mode = "read_write";
+        self.file_path = "";
+        self.is_anonymous = false;
+        return 0;
+    }
+
+    fn getName() { return self.name; }
+    fn getSize() { return self.size; }
+    fn isOpen() { return self.is_open; }
+
+    fn open() {
+        self.is_open = true;
+        return 0;
+    }
+
+    fn close() {
+        self.is_open = false;
+        return 0;
+    }
+
+    fn setAccess(mode) { self.access_mode = mode; return 0; }
+    fn getAccess() { return self.access_mode; }
+    fn setFilePath(path) { self.file_path = path; return 0; }
+    fn getFilePath() { return self.file_path; }
+    fn isAnonymous() { return self.is_anonymous; }
+    fn setAnonymous(v) { self.is_anonymous = v; return 0; }
+
+    fn dispose() {
+        self.close();
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 7: 序列化层 — 跨运行时类型转换
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppSerializer {
+    let format = "json";
+    let indent = false;
+    let mapper = nullptr;
+    let type_handlers = {};
+
+    fn init_serializer(mapper) {
+        self.format = "json";
+        self.indent = false;
+        self.mapper = mapper;
+        self.type_handlers = {};
+        return 0;
+    }
+
+    fn getFormat() { return self.format; }
+    fn setFormat(f) { self.format = f; return 0; }
+    fn setIndent(v) { self.indent = v; return 0; }
+    fn getIndent() { return self.indent; }
+
+    fn serialize(val) {
+        if (val == nullptr) {
+            return {"__type__": "nullptr", "value": nullptr};
+        }
+        return {"__type__": "auto", "value": val};
+    }
+
+    fn serializeObject(obj) {
+        if (obj == nullptr) { return nullptr; }
+        let result = {};
+        for k in obj {
+            result[k] = obj[k];
+        }
+        return result;
+    }
+
+    fn serializeList(lst) {
+        if (lst == nullptr) { return []; }
+        let result = [];
+        let i = 0;
+        while (i < len(lst)) {
+            push(result, lst[i]);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    fn serializeListLength(lst) {
+        if (lst == nullptr) { return 0; }
+        return len(lst);
+    }
+
+    fn addTypeHandler(type_name, handler) {
+        self.type_handlers[type_name] = handler;
+        return 0;
+    }
+
+    fn getTypeHandler(type_name) {
+        return self.type_handlers[type_name];
+    }
+
+    fn getMapper() { return self.mapper; }
+
+    fn dispose() {
+        self.type_handlers = {};
+        self.mapper = nullptr;
+        return 0;
+    }
+}
+
+
+class CppDeserializer {
+    let format = "json";
+    let strict = false;
+    let mapper = nullptr;
+    let type_handlers = {};
+
+    fn init_deserializer(mapper) {
+        self.format = "json";
+        self.strict = false;
+        self.mapper = mapper;
+        self.type_handlers = {};
+        return 0;
+    }
+
+    fn getFormat() { return self.format; }
+    fn setFormat(f) { self.format = f; return 0; }
+    fn setStrict(v) { self.strict = v; return 0; }
+    fn isStrict() { return self.strict; }
+
+    fn deserialize(data) {
+        if (data == nullptr) { return nullptr; }
+        let ctype = data["__type__"];
+        if (ctype == nullptr) { return data; }
+        let handler = self.type_handlers[ctype];
+        if (handler != nullptr) {
+            return handler(data);
+        }
+        return data["value"];
+    }
+
+    fn deserializeObject(data) {
+        return self.deserialize(data);
+    }
+
+    fn deserializeList(data) {
+        if (data == nullptr) { return []; }
+        return data;
+    }
+
+    fn addTypeHandler(type_name, handler) {
+        self.type_handlers[type_name] = handler;
+        return 0;
+    }
+
+    fn getTypeHandler(type_name) {
+        return self.type_handlers[type_name];
+    }
+
+    fn getMapper() { return self.mapper; }
+
+    fn dispose() {
+        self.type_handlers = {};
+        self.mapper = nullptr;
+        return 0;
+    }
+}
+
+
+class CppMessagePack {
+    let packed = nullptr;
+    let unpacked = nullptr;
+
+    fn init_pack() {
+        self.packed = nullptr;
+        self.unpacked = nullptr;
+        return 0;
+    }
+
+    fn pack(data) {
+        self.packed = data;
+        return self.packed;
+    }
+
+    fn unpack(data) {
+        self.unpacked = data;
+        return self.unpacked;
+    }
+
+    fn getPacked() { return self.packed; }
+    fn getUnpacked() { return self.unpacked; }
+
+    fn packSize() {
+        if (self.packed == nullptr) { return 0; }
+        return 1;
+    }
+
+    fn unpackedSize() {
+        if (self.unpacked == nullptr) { return 0; }
+        return 1;
+    }
+
+    fn dispose() {
+        self.packed = nullptr;
+        self.unpacked = nullptr;
+        return 0;
+    }
+}
+
+
+class CppJSON {
+    let indent_level = 0;
+    let escape_chars = true;
+    let strict_mode = false;
+
+    fn init_json() {
+        self.indent_level = 0;
+        self.escape_chars = true;
+        self.strict_mode = false;
+        return 0;
+    }
+
+    fn stringify(obj) {
+        if (obj == nullptr) { return "null"; }
+        if (obj == true) { return "true"; }
+        if (obj == false) { return "false"; }
+        return "\"" + str(obj) + "\"";
+    }
+
+    fn parse(json_str) {
+        if (json_str == nullptr) { return nullptr; }
+        return {};
+    }
+
+    fn setIndent(level) { self.indent_level = level; return 0; }
+    fn setStrict(v) { self.strict_mode = v; return 0; }
+
+    fn escape(str_val) {
+        if (str_val == nullptr) { return ""; }
+        return str_val;
+    }
+
+    fn unescape(str_val) {
+        if (str_val == nullptr) { return ""; }
+        return str_val;
+    }
+
+    fn dispose() {
+        return 0;
+    }
+}
+
+
+class CppTypeConverter {
+    let converters = {};
+    let conversion_cache = {};
+
+    fn init_converter() {
+        self.converters = {};
+        self.conversion_cache = {};
+        self._register_defaults();
+        return 0;
+    }
+
+    fn _register_defaults() {
+        self.converters["int->double"] = fn(val) { return val * 1.0; };
+        self.converters["double->int"] = fn(val) { return val; };
+        self.converters["int->string"] = fn(val) { return str(val); };
+        self.converters["float->string"] = fn(val) { return str(val); };
+        self.converters["bool->string"] = fn(val) { if (val) { return "true"; } return "false"; };
+        self.converters["string->int"] = fn(val) { return val; };
+        self.converters["string->float"] = fn(val) { return val; };
+        self.converters["string->bool"] = fn(val) { if (val == "true") { return true; } return false; };
+        self.converters["int->bool"] = fn(val) { if (val != 0) { return true; } return false; };
+        self.converters["bool->int"] = fn(val) { if (val) { return 1; } return 0; };
+        self.converters["string->list"] = fn(val) { return [val]; };
+        self.converters["list->string"] = fn(val) { return str(val); };
+        return 0;
+    }
+
+    fn register(from, to, converter_fn) {
+        let key = from + "->" + to;
+        self.converters[key] = converter_fn;
+        return 0;
+    }
+
+    fn canConvert(from, to) {
+        let key = from + "->" + to;
+        return self.converters[key] != nullptr;
+    }
+
+    fn convert(val, from, to) {
+        let key = from + "->" + to;
+        let converter = self.converters[key];
+        if (converter != nullptr) {
+            return converter(val);
+        }
+        return val;
+    }
+
+    fn getConverter(from, to) {
+        let key = from + "->" + to;
+        return self.converters[key];
+    }
+
+    fn removeConverter(from, to) {
+        let key = from + "->" + to;
+        self.converters[key] = nullptr;
+        return 0;
+    }
+
+    fn getConverterCount() {
+        let count = 0;
+        for k in self.converters {
+            if (self.converters[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn clear() {
+        self.converters = {};
+        self.conversion_cache = {};
+        return 0;
+    }
+
+    fn dispose() {
+        self.converters = {};
+        self.conversion_cache = {};
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 8: 异步任务桥接层
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppFuture {
+    let id = 0;
+    let status = "created";
+    let result = nullptr;
+    let exception = nullptr;
+    let is_done = false;
+    let is_faulted = false;
+    let is_cancelled = false;
+    let callbacks = [];
+
+    fn init_future() {
+        self.id = 0;
+        self.status = "created";
+        self.result = nullptr;
+        self.exception = nullptr;
+        self.is_done = false;
+        self.is_faulted = false;
+        self.is_cancelled = false;
+        self.callbacks = [];
+        return 0;
+    }
+
+    fn getId() { return self.id; }
+    fn setId(v) { self.id = v; return 0; }
+    fn getStatus() { return self.status; }
+    fn isDone() { return self.is_done; }
+    fn isFaulted() { return self.is_faulted; }
+    fn isCancelled() { return self.is_cancelled; }
+
+    fn complete(val) {
+        self.result = val;
+        self.is_done = true;
+        self.status = "completed";
+        self._runCallbacks();
+        return 0;
+    }
+
+    fn fail(ex) {
+        self.exception = ex;
+        self.is_faulted = true;
+        self.is_done = true;
+        self.status = "faulted";
+        self._runCallbacks();
+        return 0;
+    }
+
+    fn cancel() {
+        self.is_cancelled = true;
+        self.is_done = true;
+        self.status = "cancelled";
+        return 0;
+    }
+
+    fn getResult() { return self.result; }
+    fn getException() { return self.exception; }
+
+    fn addCallback(cb) {
+        if (self.is_done) {
+            cb(self);
+        } else {
+            push(self.callbacks, cb);
+        }
+        return 0;
+    }
+
+    fn removeCallback(cb) {
+        let new_callbacks = [];
+        let i = 0;
+        while (i < len(self.callbacks)) {
+            if (self.callbacks[i] != cb) {
+                push(new_callbacks, self.callbacks[i]);
+            }
+            i = i + 1;
+        }
+        self.callbacks = new_callbacks;
+        return 0;
+    }
+
+    fn getCallbacks() { return self.callbacks; }
+
+    fn _runCallbacks() {
+        let i = 0;
+        while (i < len(self.callbacks)) {
+            self.callbacks[i](self);
+            i = i + 1;
+        }
+        self.callbacks = [];
+        return 0;
+    }
+
+    fn dispose() {
+        self.result = nullptr;
+        self.exception = nullptr;
+        self.callbacks = [];
+        return 0;
+    }
+}
+
+
+class CppThreadPool {
+    let core_pool_size = 2;
+    let max_pool_size = 8;
+    let is_running = false;
+    let tasks = [];
+    let futures = [];
+    let queue_type = "fifo";
+
+    fn init_pool() {
+        self.core_pool_size = 2;
+        self.max_pool_size = 8;
+        self.is_running = false;
+        self.tasks = [];
+        self.futures = [];
+        self.queue_type = "fifo";
+        return 0;
+    }
+
+    fn getCorePoolSize() { return self.core_pool_size; }
+    fn setCorePoolSize(sz) { self.core_pool_size = sz; return 0; }
+    fn setMaxPoolSize(sz) { self.max_pool_size = sz; return 0; }
+    fn getMaxPoolSize() { return self.max_pool_size; }
+    fn isRunning() { return self.is_running; }
+
+    fn execute(task_fn) {
+        if (task_fn != nullptr) {
+            task_fn();
+        }
+        return 0;
+    }
+
+    fn submit(task_fn) {
+        let future = new CppFuture();
+        future.init_future();
+        future.setId(len(self.futures) + 1);
+        push(self.futures, future);
+        if (task_fn != nullptr) {
+            let result = task_fn();
+            future.complete(result);
+        }
+        return future;
+    }
+
+    fn getTaskCount() { return len(self.tasks); }
+    fn getFutureCount() { return len(self.futures); }
+    fn setQueueType(t) { self.queue_type = t; return 0; }
+    fn getQueueType() { return self.queue_type; }
+
+    fn cancelAll() {
+        let i = 0;
+        while (i < len(self.futures)) {
+            self.futures[i].cancel();
+            i = i + 1;
+        }
+        self.futures = [];
+        return 0;
+    }
+
+    fn shutdown() {
+        self.is_running = false;
+        self.cancelAll();
+        return 0;
+    }
+
+    fn dispose() {
+        self.shutdown();
+        return 0;
+    }
+}
+
+
+class CppCancellationToken {
+    let is_cancelled = false;
+    let on_cancel_callbacks = [];
+    let source = "";
+
+    fn init_token() {
+        self.is_cancelled = false;
+        self.on_cancel_callbacks = [];
+        self.source = "";
+        return 0;
+    }
+
+    fn isCancelled() { return self.is_cancelled; }
+
+    fn cancel() {
+        self.is_cancelled = true;
+        let i = 0;
+        while (i < len(self.on_cancel_callbacks)) {
+            self.on_cancel_callbacks[i]();
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn setOnCancel(cb) {
+        push(self.on_cancel_callbacks, cb);
+        return 0;
+    }
+
+    fn getOnCancel() { return self.on_cancel_callbacks; }
+
+    fn reset() {
+        self.is_cancelled = false;
+        self.on_cancel_callbacks = [];
+        return 0;
+    }
+
+    fn dispose() {
+        self.on_cancel_callbacks = [];
+        return 0;
+    }
+}
+
+
+class CppAsyncResult {
+    let future = nullptr;
+    let is_completed = false;
+    let async_state = nullptr;
+    let result_id = 0;
+    let wait_handle = nullptr;
+
+    fn init_async() {
+        self.future = nullptr;
+        self.is_completed = false;
+        self.async_state = nullptr;
+        self.result_id = 0;
+        self.wait_handle = nullptr;
+        return 0;
+    }
+
+    fn getFuture() { return self.future; }
+    fn isCompleted() { return self.is_completed; }
+    fn setCompleted(v) { self.is_completed = v; return 0; }
+    fn getAsyncState() { return self.async_state; }
+    fn setAsyncState(state) { self.async_state = state; return 0; }
+    fn getResultId() { return self.result_id; }
+    fn setResultId(id) { self.result_id = id; return 0; }
+    fn setWaitHandle(handle) { self.wait_handle = handle; return 0; }
+    fn getWaitHandle() { return self.wait_handle; }
+
+    fn dispose() {
+        self.future = nullptr;
+        self.async_state = nullptr;
+        self.wait_handle = nullptr;
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 9: 诊断与配置层
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppLogger {
+    let level = 1;
+    let log_file = "";
+    let is_file_logging = false;
+    let format_str = "[C++] {level} {message}";
+    let max_level = 4;
+
+    fn init_logger() {
+        self.level = 1;
+        self.log_file = "";
+        self.is_file_logging = false;
+        self.format_str = "[C++] {level} {message}";
+        self.max_level = 4;
+        return 0;
+    }
+
+    fn getLevel() { return self.level; }
+    fn setLevel(v) { self.level = v; return 0; }
+    fn setLogFile(path) { self.log_file = path; return 0; }
+    fn getLogFile() { return self.log_file; }
+    fn isFileLogging() { return self.is_file_logging; }
+    fn setFormat(f) { self.format_str = f; return 0; }
+    fn getFormat() { return self.format_str; }
+
+    fn debug(msg) {
+        if (self.level <= 0) { self._write("DEBUG", msg); }
+        return 0;
+    }
+
+    fn info(msg) {
+        if (self.level <= 1) { self._write("INFO", msg); }
+        return 0;
+    }
+
+    fn warn(msg) {
+        if (self.level <= 2) { self._write("WARN", msg); }
+        return 0;
+    }
+
+    fn error(msg) {
+        if (self.level <= 3) { self._write("ERROR", msg); }
+        return 0;
+    }
+
+    fn fatal(msg) {
+        self._write("FATAL", msg);
+        return 0;
+    }
+
+    fn log(level, msg) {
+        if (level >= self.level) {
+            let names = ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"];
+            let lname = "UNKNOWN";
+            if (level >= 0 and level < len(names)) {
+                lname = names[level];
+            }
+            self._write(lname, msg);
+        }
+        return 0;
+    }
+
+    fn _write(level_name, msg) {
+        print("[C++] [" + level_name + "] " + msg);
+        return 0;
+    }
+
+    fn setMaxLevel(v) { self.max_level = v; return 0; }
+    fn getMaxLevel() { return self.max_level; }
+
+    fn dispose() {
+        return 0;
+    }
+}
+
+
+class CppProfiler {
+    let measurements = {};
+    let is_running = false;
+    let start_time = 0;
+    let total_measurements = 0;
+    let category = "default";
+
+    fn init_profiler() {
+        self.measurements = {};
+        self.is_running = false;
+        self.start_time = 0;
+        self.total_measurements = 0;
+        self.category = "default";
+        return 0;
+    }
+
+    fn start(name) {
+        self.measurements[name] = {"start": 0, "end": 0, "elapsed": 0, "running": true};
+        self.is_running = true;
+        return 0;
+    }
+
+    fn stop(name) {
+        let m = self.measurements[name];
+        if (m != nullptr) {
+            m["running"] = false;
+            self.total_measurements = self.total_measurements + 1;
+        }
+        self.is_running = false;
+        return 0;
+    }
+
+    fn measure(name) {
+        self.start(name);
+        self.stop(name);
+        return 0;
+    }
+
+    fn getMeasurements() { return self.measurements; }
+    fn getTotalMeasurements() { return self.total_measurements; }
+    fn isRunning() { return self.is_running; }
+
+    fn reset() {
+        self.measurements = {};
+        self.total_measurements = 0;
+        self.is_running = false;
+        return 0;
+    }
+
+    fn getAverageDuration(name) {
+        let m = self.measurements[name];
+        if (m != nullptr) {
+            return m["elapsed"];
+        }
+        return 0;
+    }
+
+    fn getCategory() { return self.category; }
+    fn setCategory(c) { self.category = c; return 0; }
+
+    fn dispose() {
+        self.measurements = {};
+        return 0;
+    }
+}
+
+
+class CppDebugger {
+    let is_attached = false;
+    let breakpoints = {};
+    let current_file = "";
+    let current_line = 0;
+    let debug_port = 0;
+    let step_mode = "none";
+    let watch_vars = [];
+
+    fn init_debugger() {
+        self.is_attached = false;
+        self.breakpoints = {};
+        self.current_file = "";
+        self.current_line = 0;
+        self.debug_port = 0;
+        self.step_mode = "none";
+        self.watch_vars = [];
+        return 0;
+    }
+
+    fn isAttached() { return self.is_attached; }
+
+    fn attach() {
+        self.is_attached = true;
+        return 0;
+    }
+
+    fn detach() {
+        self.is_attached = false;
+        self.breakpoints = {};
+        self.step_mode = "none";
+        return 0;
+    }
+
+    fn setBreakpoint(file, line) {
+        let key = file + ":" + str(line);
+        self.breakpoints[key] = true;
+        return 0;
+    }
+
+    fn removeBreakpoint(file, line) {
+        let key = file + ":" + str(line);
+        self.breakpoints[key] = nullptr;
+        return 0;
+    }
+
+    fn getBreakpoints() { return self.breakpoints; }
+
+    fn getBreakpointCount() {
+        let count = 0;
+        for k in self.breakpoints {
+            if (self.breakpoints[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn clearBreakpoints() {
+        self.breakpoints = {};
+        return 0;
+    }
+
+    fn setDebugPort(port) { self.debug_port = port; return 0; }
+    fn getDebugPort() { return self.debug_port; }
+    fn setStepMode(mode) { self.step_mode = mode; return 0; }
+    fn getStepMode() { return self.step_mode; }
+    fn setCurrentFile(file) { self.current_file = file; return 0; }
+    fn getCurrentFile() { return self.current_file; }
+    fn setCurrentLine(line) { self.current_line = line; return 0; }
+    fn getCurrentLine() { return self.current_line; }
+
+    fn addWatch(var_name) {
+        push(self.watch_vars, var_name);
+        return 0;
+    }
+
+    fn removeWatch(var_name) {
+        let new_watches = [];
+        let i = 0;
+        while (i < len(self.watch_vars)) {
+            if (self.watch_vars[i] != var_name) {
+                push(new_watches, self.watch_vars[i]);
+            }
+            i = i + 1;
+        }
+        self.watch_vars = new_watches;
+        return 0;
+    }
+
+    fn getWatches() { return self.watch_vars; }
+
+    fn dispose() {
+        self.breakpoints = {};
+        self.watch_vars = [];
+        return 0;
+    }
+}
+
+
+class CppConfig {
+    let config_file = "";
+    let values = {};
+    let sections = {};
+    let is_loaded = false;
+
+    fn init_config() {
+        self.config_file = "";
+        self.values = {};
+        self.sections = {};
+        self.is_loaded = false;
+        return 0;
+    }
+
+    fn load(file_path) {
+        self.config_file = file_path;
+        self.is_loaded = true;
+        return 0;
+    }
+
+    fn save() {
+        return 0;
+    }
+
+    fn getConfigFile() { return self.config_file; }
+    fn setConfigFile(f) { self.config_file = f; return 0; }
+
+    fn hasKey(key) {
+        return self.values[key] != nullptr;
+    }
+
+    fn get(key, default_val) {
+        let val = self.values[key];
+        if (val == nullptr) {
+            return default_val;
+        }
+        return val;
+    }
+
+    fn set(key, val) {
+        self.values[key] = val;
+        return 0;
+    }
+
+    fn setSection(name, section_data) {
+        self.sections[name] = section_data;
+        return 0;
+    }
+
+    fn getSection(name) {
+        return self.sections[name];
+    }
+
+    fn getKeys() {
+        let keys = [];
+        for k in self.values {
+            push(keys, k);
+        }
+        return keys;
+    }
+
+    fn remove(key) {
+        self.values[key] = nullptr;
+        return 0;
+    }
+
+    fn clear() {
+        self.values = {};
+        self.sections = {};
+        return 0;
+    }
+
+    fn isLoaded() { return self.is_loaded; }
+
+    fn dispose() {
+        self.clear();
+        return 0;
+    }
+}
+
+
+class CppEnvironment {
+    let os_name = "";
+    let arch = "";
+    let processor_count = 0;
+    let working_dir = "";
+    let compiler = "";
+    let compiler_version = "";
+    let is_64bit = true;
+    let include_paths = [];
+    let lib_paths = [];
+    let env_vars = {};
+
+    fn init_env() {
+        self.os_name = "";
+        self.arch = "";
+        self.processor_count = 0;
+        self.working_dir = ".";
+        self.compiler = "";
+        self.compiler_version = "";
+        self.is_64bit = true;
+        self.include_paths = [];
+        self.lib_paths = [];
+        self.env_vars = {};
+        return 0;
+    }
+
+    fn getOSName() { return self.os_name; }
+    fn setOSName(v) { self.os_name = v; return 0; }
+    fn getArchitecture() { return self.arch; }
+    fn setArchitecture(v) { self.arch = v; return 0; }
+    fn getProcessorCount() { return self.processor_count; }
+    fn setProcessorCount(v) { self.processor_count = v; return 0; }
+    fn getWorkingDirectory() { return self.working_dir; }
+    fn setWorkingDirectory(v) { self.working_dir = v; return 0; }
+    fn getCompiler() { return self.compiler; }
+    fn setCompiler(v) { self.compiler = v; return 0; }
+    fn getCompilerVersion() { return self.compiler_version; }
+    fn setCompilerVersion(v) { self.compiler_version = v; return 0; }
+    fn is64Bit() { return self.is_64bit; }
+    fn setIs64Bit(v) { self.is_64bit = v; return 0; }
+
+    fn addIncludePath(path) {
+        push(self.include_paths, path);
+        return 0;
+    }
+
+    fn getIncludePaths() { return self.include_paths; }
+
+    fn addLibPath(path) {
+        push(self.lib_paths, path);
+        return 0;
+    }
+
+    fn getLibPaths() { return self.lib_paths; }
+
+    fn setEnvVar(key, value) {
+        self.env_vars[key] = value;
+        return 0;
+    }
+
+    fn getEnvVar(key) {
+        return self.env_vars[key];
+    }
+
+    fn getEnvVars() { return self.env_vars; }
+
+    fn dispose() {
+        self.include_paths = [];
+        self.lib_paths = [];
+        self.env_vars = {};
+        return 0;
+    }
+}
+
+
+class CppProcess {
+    let process_name = "";
+    let arguments = [];
+    let is_running = false;
+    let pid = 0;
+    let working_dir = "";
+    let exit_code = -1;
+    let stdout = "";
+    let stderr = "";
+
+    fn init_process(name) {
+        self.process_name = name;
+        self.arguments = [];
+        self.is_running = false;
+        self.pid = 0;
+        self.working_dir = ".";
+        self.exit_code = -1;
+        self.stdout = "";
+        self.stderr = "";
+        return 0;
+    }
+
+    fn getProcessName() { return self.process_name; }
+    fn getArguments() { return self.arguments; }
+    fn setArguments(args) { self.arguments = args; return 0; }
+    fn addArgument(arg) { push(self.arguments, arg); return 0; }
+    fn isRunning() { return self.is_running; }
+
+    fn start() {
+        self.is_running = true;
+        return 0;
+    }
+
+    fn destroy() {
+        self.is_running = false;
+        self.exit_code = -1;
+        return 0;
+    }
+
+    fn getPID() { return self.pid; }
+    fn setPID(v) { self.pid = v; return 0; }
+    fn setWorkingDir(dir) { self.working_dir = dir; return 0; }
+    fn getWorkingDir() { return self.working_dir; }
+    fn getExitCode() { return self.exit_code; }
+    fn setExitCode(code) { self.exit_code = code; return 0; }
+    fn getStdout() { return self.stdout; }
+    fn setStdout(out) { self.stdout = out; return 0; }
+    fn getStderr() { return self.stderr; }
+    fn setStderr(err) { self.stderr = err; return 0; }
+
+    fn dispose() {
+        self.arguments = [];
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 10: CMake & 项目层
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppCMakeTarget {
+    let name = "";
+    let target_type = "";
+    let version = "";
+    let sources = [];
+    let headers = [];
+    let dependencies = [];
+    let link_libs = [];
+    let compile_defs = [];
+    let compile_opts = [];
+    let is_installed = false;
+    let scope = "compile";
+
+    fn init_target(name, ttype) {
+        self.name = name;
+        self.target_type = ttype;
+        self.version = "1.0.0";
+        self.sources = [];
+        self.headers = [];
+        self.dependencies = [];
+        self.link_libs = [];
+        self.compile_defs = [];
+        self.compile_opts = [];
+        self.is_installed = false;
+        self.scope = "compile";
+        return 0;
+    }
+
+    fn getName() { return self.name; }
+    fn getType() { return self.target_type; }
+    fn getVersion() { return self.version; }
+    fn setVersion(v) { self.version = v; return 0; }
+
+    fn addSource(src) { push(self.sources, src); return 0; }
+    fn getSources() { return self.sources; }
+
+    fn addHeader(hdr) { push(self.headers, hdr); return 0; }
+    fn getHeaders() { return self.headers; }
+
+    fn addDependency(dep) { push(self.dependencies, dep); return 0; }
+    fn getDependencies() { return self.dependencies; }
+
+    fn addLinkLib(lib) { push(self.link_libs, lib); return 0; }
+    fn getLinkLibs() { return self.link_libs; }
+
+    fn addCompileDef(def) { push(self.compile_defs, def); return 0; }
+    fn getCompileDefs() { return self.compile_defs; }
+
+    fn addCompileOpt(opt) { push(self.compile_opts, opt); return 0; }
+    fn getCompileOpts() { return self.compile_opts; }
+
+    fn isInstalled() { return self.is_installed; }
+    fn setInstalled(v) { self.is_installed = v; return 0; }
+    fn getScope() { return self.scope; }
+    fn setScope(s) { self.scope = s; return 0; }
+
+    fn getId() {
+        return self.name + ":" + self.version;
+    }
+
+    fn dispose() {
+        self.sources = [];
+        self.headers = [];
+        self.dependencies = [];
+        self.link_libs = [];
+        self.compile_defs = [];
+        self.compile_opts = [];
+        return 0;
+    }
+}
+
+
+class CppCMakeManager {
+    let repos = [];
+    let installed_targets = {};
+    let local_repo = "";
+
+    fn init_cmake() {
+        self.repos = [];
+        self.installed_targets = {};
+        self.local_repo = "";
+        return 0;
+    }
+
+    fn addRepository(repo) {
+        push(self.repos, repo);
+        return 0;
+    }
+
+    fn getRepositories() { return self.repos; }
+
+    fn install(target) {
+        let key = target.getId();
+        target.setInstalled(true);
+        self.installed_targets[key] = target;
+        return target;
+    }
+
+    fn getTarget(name) {
+        for k in self.installed_targets {
+            let t = self.installed_targets[k];
+            if (t != nullptr and t.getName() == name) {
+                return t;
+            }
+        }
+        return nullptr;
+    }
+
+    fn getInstalledTargets() {
+        let result = [];
+        for k in self.installed_targets {
+            if (self.installed_targets[k] != nullptr) {
+                push(result, self.installed_targets[k]);
+            }
+        }
+        return result;
+    }
+
+    fn getTargetCount() {
+        let count = 0;
+        for k in self.installed_targets {
+            if (self.installed_targets[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn uninstall(name) {
+        for k in self.installed_targets {
+            let t = self.installed_targets[k];
+            if (t != nullptr and t.getName() == name) {
+                self.installed_targets[k] = nullptr;
+            }
+        }
+        return 0;
+    }
+
+    fn setLocalRepo(path) { self.local_repo = path; return 0; }
+    fn getLocalRepo() { return self.local_repo; }
+
+    fn findPackage(name) {
+        return self.getTarget(name);
+    }
+
+    fn resolve(name) {
+        return self.getTarget(name);
+    }
+
+    fn dispose() {
+        self.repos = [];
+        self.installed_targets = {};
+        return 0;
+    }
+}
+
+
+class CppProject {
+    let name = "";
+    let project_type = "";
+    let build_system = "cmake";
+    let group_id = "";
+    let artifact_id = "";
+    let version = "";
+    let main_class = "";
+    let cpp_version = "c++17";
+    let dependencies = [];
+    let plugins = [];
+    let source_dirs = [];
+    let output_dir = "";
+    let targets = [];
+
+    fn init_project(name, ptype) {
+        self.name = name;
+        self.project_type = ptype;
+        self.build_system = "cmake";
+        self.group_id = "com.example";
+        self.artifact_id = name;
+        self.version = "1.0.0";
+        self.main_class = "";
+        self.cpp_version = "c++17";
+        self.dependencies = [];
+        self.plugins = [];
+        self.source_dirs = [];
+        self.output_dir = "";
+        self.targets = [];
+        return 0;
+    }
+
+    fn getName() { return self.name; }
+    fn getProjectType() { return self.project_type; }
+    fn getBuildSystem() { return self.build_system; }
+    fn setBuildSystem(v) { self.build_system = v; return 0; }
+    fn setGroupId(v) { self.group_id = v; return 0; }
+    fn getGroupId() { return self.group_id; }
+    fn setArtifactId(v) { self.artifact_id = v; return 0; }
+    fn getArtifactId() { return self.artifact_id; }
+    fn setVersion(v) { self.version = v; return 0; }
+    fn getVersion() { return self.version; }
+    fn setMainClass(v) { self.main_class = v; return 0; }
+    fn getMainClass() { return self.main_class; }
+    fn setCppVersion(v) { self.cpp_version = v; return 0; }
+    fn getCppVersion() { return self.cpp_version; }
+
+    fn addDependency(dep) { push(self.dependencies, dep); return 0; }
+    fn getDependencies() { return self.dependencies; }
+
+    fn addPlugin(plugin) { push(self.plugins, plugin); return 0; }
+    fn getPlugins() { return self.plugins; }
+
+    fn addSourceDir(dir) { push(self.source_dirs, dir); return 0; }
+    fn getSourceDirs() { return self.source_dirs; }
+
+    fn setOutputDir(dir) { self.output_dir = dir; return 0; }
+    fn getOutputDir() { return self.output_dir; }
+
+    fn addTarget(target) { push(self.targets, target); return 0; }
+    fn getTargets() { return self.targets; }
+
+    fn dispose() {
+        self.dependencies = [];
+        self.plugins = [];
+        self.source_dirs = [];
+        self.targets = [];
+        return 0;
+    }
+}
+
+
+class CppModule {
+    let name = "";
+    let projects = [];
+    let build_config = "";
+    let module_type = "library";
+
+    fn init_module(name) {
+        self.name = name;
+        self.projects = [];
+        self.build_config = "debug";
+        self.module_type = "library";
+        return 0;
+    }
+
+    fn getName() { return self.name; }
+    fn getProjectCount() { return len(self.projects); }
+
+    fn addProject(project) {
+        push(self.projects, project);
+        return 0;
+    }
+
+    fn getProject(name) {
+        let i = 0;
+        while (i < len(self.projects)) {
+            if (self.projects[i].getName() == name) {
+                return self.projects[i];
+            }
+            i = i + 1;
+        }
+        return nullptr;
+    }
+
+    fn setBuildConfig(c) { self.build_config = c; return 0; }
+    fn getBuildConfig() { return self.build_config; }
+
+    fn removeProject(name) {
+        let new_projects = [];
+        let i = 0;
+        while (i < len(self.projects)) {
+            if (self.projects[i].getName() != name) {
+                push(new_projects, self.projects[i]);
+            }
+            i = i + 1;
+        }
+        self.projects = new_projects;
+        return 0;
+    }
+
+    fn getProjects() { return self.projects; }
+    fn setModuleType(t) { self.module_type = t; return 0; }
+    fn getModuleType() { return self.module_type; }
+
+    fn dispose() {
+        self.projects = [];
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 11: Qt/QML 层
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppQML {
+    let root_element = "";
+    let content = "";
+    let resources = {};
+    let namespaces = {};
+    let controller_class = "";
+    let imports = [];
+
+    fn init_qml() {
+        self.root_element = "";
+        self.content = "";
+        self.resources = {};
+        self.namespaces = {};
+        self.controller_class = "";
+        self.imports = [];
+        return 0;
+    }
+
+    fn getRootElement() { return self.root_element; }
+    fn setRootElement(v) { self.root_element = v; return 0; }
+    fn getContent() { return self.content; }
+    fn setContent(v) { self.content = v; return 0; }
+
+    fn addResource(key, value) {
+        self.resources[key] = value;
+        return 0;
+    }
+
+    fn getResources() { return self.resources; }
+    fn getNamespaces() { return self.namespaces; }
+
+    fn addNamespace(prefix, uri) {
+        self.namespaces[prefix] = uri;
+        return 0;
+    }
+
+    fn setControllerClass(cls) { self.controller_class = cls; return 0; }
+    fn getControllerClass() { return self.controller_class; }
+
+    fn addImport(imp) { push(self.imports, imp); return 0; }
+    fn getImports() { return self.imports; }
+
+    fn dispose() {
+        self.resources = {};
+        self.namespaces = {};
+        self.imports = [];
+        return 0;
+    }
+}
+
+
+class CppStyleBridge {
+    let mappings = [];
+    let reverse_mappings = {};
+
+    fn init_style_bridge() {
+        self.mappings = [];
+        self.reverse_mappings = {};
+        self._register_defaults();
+        return 0;
+    }
+
+    fn _register_defaults() {
+        self.addMapping("background", "background-color");
+        self.addMapping("color", "color");
+        self.addMapping("fontSize", "font-size");
+        self.addMapping("fontFamily", "font-family");
+        self.addMapping("fontWeight", "font-weight");
+        self.addMapping("padding", "padding");
+        self.addMapping("margin", "margin");
+        self.addMapping("border", "border");
+        self.addMapping("borderColor", "border-color");
+        self.addMapping("borderRadius", "border-radius");
+        self.addMapping("opacity", "opacity");
+        self.addMapping("visibility", "visibility");
+        return 0;
+    }
+
+    fn getMappingCount() { return len(self.mappings); }
+
+    fn toQt(hwd_prop) {
+        return self.reverse_mappings[hwd_prop];
+    }
+
+    fn toHwdUI(qt_prop) {
+        let i = 0;
+        while (i < len(self.mappings)) {
+            if (self.mappings[i]["qt"] == qt_prop) {
+                return self.mappings[i]["hwd"];
+            }
+            i = i + 1;
+        }
+        return nullptr;
+    }
+
+    fn addMapping(hwd_prop, qt_prop) {
+        push(self.mappings, {"hwd": hwd_prop, "qt": qt_prop});
+        self.reverse_mappings[hwd_prop] = qt_prop;
+        return 0;
+    }
+
+    fn removeMapping(hwd_prop) {
+        let new_mappings = [];
+        let i = 0;
+        while (i < len(self.mappings)) {
+            if (self.mappings[i]["hwd"] != hwd_prop) {
+                push(new_mappings, self.mappings[i]);
+            }
+            i = i + 1;
+        }
+        self.mappings = new_mappings;
+        self.reverse_mappings[hwd_prop] = nullptr;
+        return 0;
+    }
+
+    fn getMappings() { return self.mappings; }
+    fn getReverseMappings() { return self.reverse_mappings; }
+
+    fn clear() {
+        self.mappings = [];
+        self.reverse_mappings = {};
+        return 0;
+    }
+
+    fn dispose() {
+        self.clear();
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 12: 资源层
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CppResourceBundle {
+    let resources = {};
+    let locale = "";
+    let base_name = "";
+    let fallback_locale = "";
+
+    fn init_bundle() {
+        self.resources = {};
+        self.locale = "";
+        self.base_name = "";
+        self.fallback_locale = "";
+        return 0;
+    }
+
+    fn setLocale(l) { self.locale = l; return 0; }
+    fn getLocale() { return self.locale; }
+    fn setBaseName(name) { self.base_name = name; return 0; }
+    fn getBaseName() { return self.base_name; }
+
+    fn getString(key) {
+        let val = self.resources[key];
+        if (val == nullptr) { return key; }
+        return val;
+    }
+
+    fn getInteger(key) {
+        let val = self.resources[key];
+        if (val == nullptr) { return 0; }
+        return val;
+    }
+
+    fn getBoolean(key) {
+        let val = self.resources[key];
+        if (val == nullptr) { return false; }
+        return val;
+    }
+
+    fn hasResource(key) {
+        return self.resources[key] != nullptr;
+    }
+
+    fn addResource(key, value) {
+        self.resources[key] = value;
+        return 0;
+    }
+
+    fn removeResource(key) {
+        self.resources[key] = nullptr;
+        return 0;
+    }
+
+    fn getResourceCount() {
+        let count = 0;
+        for k in self.resources {
+            if (self.resources[k] != nullptr) {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+
+    fn clear() {
+        self.resources = {};
+        return 0;
+    }
+
+    fn setFallbackLocale(l) { self.fallback_locale = l; return 0; }
+    fn getFallbackLocale() { return self.fallback_locale; }
+
+    fn dispose() {
+        self.resources = {};
+        return 0;
+    }
+}
+
+
+class CppFileWatcher {
+    let path = "";
+    let filter = "*";
+    let is_watching = false;
+    let include_subdirs = true;
+    let change_callback = nullptr;
+    let watch_interval = 1000;
+
+    fn init_watcher(path, filter) {
+        self.path = path;
+        self.filter = filter;
+        self.is_watching = false;
+        self.include_subdirs = true;
+        self.change_callback = nullptr;
+        self.watch_interval = 1000;
+        return 0;
+    }
+
+    fn getPath() { return self.path; }
+    fn getFilter() { return self.filter; }
+    fn isWatching() { return self.is_watching; }
+
+    fn start() {
+        self.is_watching = true;
+        return 0;
+    }
+
+    fn stop() {
+        self.is_watching = false;
+        return 0;
+    }
+
+    fn setIncludeSubdirs(v) { self.include_subdirs = v; return 0; }
+    fn getIncludeSubdirs() { return self.include_subdirs; }
+    fn setCallback(cb) { self.change_callback = cb; return 0; }
+    fn getCallback() { return self.change_callback; }
+    fn setInterval(ms) { self.watch_interval = ms; return 0; }
+    fn getInterval() { return self.watch_interval; }
+
+    fn dispose() {
+        self.stop();
+        self.change_callback = nullptr;
+        return 0;
+    }
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 13: 全局函数与初始化
+# ═══════════════════════════════════════════════════════════════════════════
+
+let _cpp_mapper = new CppTypeMapper();
+let _cpp_cache = new CppObjectCache();
+let _cpp_event_bus = new CppCrossEventBus();
+let _cpp_binding_mgr = new CppBindingManager();
+let _cpp_serializer = new CppSerializer(_cpp_mapper);
+let _cpp_deserializer = new CppDeserializer(_cpp_mapper);
+let _cpp_type_converter = new CppTypeConverter();
+let _cpp_logger = new CppLogger();
+let _cpp_profiler = new CppProfiler();
+let _cpp_config = new CppConfig();
+let _cpp_env = new CppEnvironment();
+let _cpp_lib_loader = new CppLibLoader();
+let _cpp_control_factory = new CppControlFactory();
+let _cpp_style_bridge = new CppStyleBridge();
+let _cpp_qml = new CppQML();
+let _cpp_resource_bundle = new CppResourceBundle();
+let _cpp_cmake = new CppCMakeManager();
+let _cpp_thread_pool = new CppThreadPool();
+let _cpp_is_initialized = false;
+
+_cpp_mapper.init_mapper();
+_cpp_cache.init_cache();
+_cpp_event_bus.init_cross_bus();
+_cpp_binding_mgr.init_binding_mgr();
+_cpp_serializer.init_serializer(_cpp_mapper);
+_cpp_deserializer.init_deserializer(_cpp_mapper);
+_cpp_type_converter.init_converter();
+_cpp_logger.init_logger();
+_cpp_profiler.init_profiler();
+_cpp_config.init_config();
+_cpp_env.init_env();
+_cpp_lib_loader.init_loader();
+_cpp_control_factory.init_factory();
+_cpp_style_bridge.init_style_bridge();
+_cpp_qml.init_qml();
+_cpp_resource_bundle.init_bundle();
+_cpp_cmake.init_cmake();
+_cpp_thread_pool.init_pool();
+
+fn cpp_init() {
+    _cpp_is_initialized = true;
+    _cpp_logger.info("cpp_init: H# ↔ C++ interop initialized");
+    _cpp_logger.info("cpp_init: " + "type mappings, object cache, event bus, bindings ready");
+    return true;
+}
+
+fn cpp_shutdown() {
+    _cpp_cache.clear();
+    _cpp_event_bus.clear();
+    _cpp_binding_mgr.clear();
+    _cpp_config.clear();
+    _cpp_thread_pool.cancelAll();
+    _cpp_is_initialized = false;
+    _cpp_logger.info("cpp_shutdown: H# ↔ C++ interop shut down");
+    return 0;
+}
+
+fn cpp_is_ready() {
+    return _cpp_is_initialized;
+}
+
+fn cpp_get_mapper() { return _cpp_mapper; }
+fn cpp_get_cache() { return _cpp_cache; }
+fn cpp_get_event_bus() { return _cpp_event_bus; }
+fn cpp_get_binding_manager() { return _cpp_binding_mgr; }
+fn cpp_get_serializer() { return _cpp_serializer; }
+fn cpp_get_deserializer() { return _cpp_deserializer; }
+fn cpp_get_type_converter() { return _cpp_type_converter; }
+fn cpp_get_logger() { return _cpp_logger; }
+fn cpp_get_profiler() { return _cpp_profiler; }
+fn cpp_get_config() { return _cpp_config; }
+fn cpp_get_env() { return _cpp_env; }
+fn cpp_get_lib_loader() { return _cpp_lib_loader; }
+fn cpp_get_control_factory() { return _cpp_control_factory; }
+fn cpp_get_style_bridge() { return _cpp_style_bridge; }
+fn cpp_get_qml() { return _cpp_qml; }
+fn cpp_get_resource_bundle() { return _cpp_resource_bundle; }
+fn cpp_get_cmake() { return _cpp_cmake; }
+fn cpp_get_thread_pool() { return _cpp_thread_pool; }
+fn cpp_get_version() { return "1.0.0"; }
+
+fn cpp_summary() {
+    print("");
+    print("══════════════════════════════════════════════");
+    print("  H# zzwUI ↔ C++ 协同开发库 v1.0");
+    print("══════════════════════════════════════════════");
+    print("  Core: CppTypeMapper, CppValue, CppInvoke/Result");
+    print("  Objects: CppObject, Cache, SharedLib, Method, Field");
+    print("  Events: CppCrossEventBus, UIDispatcher, Listener");
+    print("  UI Bridge: ZzwUICppControlBridge, WindowBridge, Host");
+    print("  Data: CppBinding, MultiBinding, BindingManager");
+    print("  RPC: CppServiceHost, RPCClient, RPCMessage, Socket");
+    print("  Serialization: CppSerializer, Deserializer, JSON");
+    print("  Async: CppFuture, ThreadPool, CancellationToken");
+    print("  Diagnostics: CppLogger, Profiler, Debugger, Config");
+    print("  Project: CppProject, CMake, Module, QML/Style");
+    print("══════════════════════════════════════════════");
+    return 0;
+}
+
+cpp_summary();

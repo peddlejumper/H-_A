@@ -1,0 +1,12 @@
+# t09: introspect is_async / is_coro flags via member access.
+# HVM.kt:1113-1120 exposes fn.name / fn.args / fn.is_coro /
+# fn.is_async / fn.is_parallel.
+async fn af() { return 1; }
+coro fn cf() { return 2; }
+fn pf() { return 3; }
+print(af.is_async);
+print(af.is_coro);
+print(cf.is_async);
+print(cf.is_coro);
+print(pf.is_async);
+print(pf.is_coro);

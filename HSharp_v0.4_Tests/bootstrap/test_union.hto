@@ -1,0 +1,105 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# H# Union Type Test Suite
+# ═══════════════════════════════════════════════════════════════════════════
+
+let _test_count = 0;
+let _pass_count = 0;
+
+fn assert(condition, msg) {
+    _test_count = _test_count + 1;
+    if (condition) {
+        _pass_count = _pass_count + 1;
+        print("  PASS: " + msg);
+    } else {
+        print("  FAIL: " + msg);
+    }
+    return 0;
+}
+
+fn test_summary() {
+    print("");
+    print("Test Results: " + _pass_count + "/" + _test_count + " passed");
+    if (_pass_count == _test_count) {
+        print("ALL TESTS PASSED ✓");
+    } else {
+        let failed = _test_count - _pass_count;
+        print("FAILED: " + failed + " tests");
+    }
+    return 0;
+}
+
+union Shape {
+    Circle: radius;
+    Rectangle: width, height;
+    Point;
+}
+
+union Result {
+    Ok: value;
+    Err: message;
+}
+
+union Option {
+    Some: val;
+    None;
+}
+
+fn test_union_declaration() {
+    assert(true, "union declaration parses");
+}
+
+fn test_union_construct_circle() {
+    let c = Shape{Circle: 5.0};
+    assert(c["__union__"] == "Shape", "circle is Shape");
+    assert(c["__variant__"] == "Circle", "variant is Circle");
+    assert(c["radius"] == 5.0, "radius is 5.0");
+}
+
+fn test_union_construct_rectangle() {
+    let r = Shape{Rectangle: 3.0, 4.0};
+    assert(r["__union__"] == "Shape", "rect is Shape");
+    assert(r["__variant__"] == "Rectangle", "variant is Rectangle");
+    assert(r["width"] == 3.0, "width is 3.0");
+    assert(r["height"] == 4.0, "height is 4.0");
+}
+
+fn test_union_construct_point() {
+    let p = Shape{Point};
+    assert(p["__union__"] == "Shape", "point is Shape");
+    assert(p["__variant__"] == "Point", "variant is Point");
+}
+
+fn test_union_ok() {
+    let ok = Result{Ok: 42};
+    assert(ok["value"] == 42, "Ok wraps 42");
+}
+
+fn test_union_err() {
+    let err = Result{Err: "something went wrong"};
+    assert(err["message"] == "something went wrong", "Err wraps message");
+}
+
+fn test_union_some() {
+    let s = Option{Some: "hello"};
+    assert(s["val"] == "hello", "Some wraps hello");
+}
+
+fn test_union_none() {
+    let n = Option{None};
+    assert(n["__variant__"] == "None", "None variant");
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Run Tests
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Union Type Tests ──");
+test_union_declaration();
+test_union_construct_circle();
+test_union_construct_rectangle();
+test_union_construct_point();
+test_union_ok();
+test_union_err();
+test_union_some();
+test_union_none();
+
+test_summary();

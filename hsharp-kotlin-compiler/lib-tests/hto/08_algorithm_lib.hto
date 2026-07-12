@@ -1,0 +1,360 @@
+# H# Library Test 08 — Algorithms Library
+# Classic algorithm implementations: sorting, searching, graph, etc.
+
+let __stats = [0, 0, []];   # [passed, failed, failed_names]
+
+fn check(name, cond) {
+    if (cond) {
+        __stats[0] = __stats[0] + 1;
+    } else {
+        __stats[1] = __stats[1] + 1;
+        push(__stats[2], name);
+    }
+}
+
+# =====================================================
+# Section 1: Bubble Sort
+# =====================================================
+fn bubble_sort(arr) {
+    let n = len(arr);
+    let a = arr;
+    let i = 0;
+    while (i < n - 1) {
+        let j = 0;
+        let swapped = false;
+        while (j < n - 1 - i) {
+            if (a[j] > a[j + 1]) {
+                let tmp = a[j];
+                a[j] = a[j + 1];
+                a[j + 1] = tmp;
+                swapped = true;
+            }
+            j = j + 1;
+        }
+        if (!swapped) { break; }
+        i = i + 1;
+    }
+    return a;
+}
+
+let a1 = bubble_sort([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]);
+check("algo/bubble/0",   a1[0] == 1);
+check("algo/bubble/5",   a1[5] == 4);
+check("algo/bubble/10",  a1[10] == 9);
+check("algo/bubble/sorted", a1[0] <= a1[1] && a1[1] <= a1[2] && a1[2] <= a1[3]);
+
+# =====================================================
+# Section 2: Selection Sort
+# =====================================================
+fn selection_sort(arr) {
+    let n = len(arr);
+    let a = arr;
+    let i = 0;
+    while (i < n - 1) {
+        let min_idx = i;
+        let j = i + 1;
+        while (j < n) {
+            if (a[j] < a[min_idx]) { min_idx = j; }
+            j = j + 1;
+        }
+        let tmp = a[i];
+        a[i] = a[min_idx];
+        a[min_idx] = tmp;
+        i = i + 1;
+    }
+    return a;
+}
+
+let a2 = selection_sort([5, 4, 3, 2, 1]);
+check("algo/sel/0",      a2[0] == 1);
+check("algo/sel/4",      a2[4] == 5);
+check("algo/sel/sorted", a2[0] <= a2[1] && a2[4] >= a2[3]);
+
+# =====================================================
+# Section 3: Insertion Sort
+# =====================================================
+fn insertion_sort(arr) {
+    let n = len(arr);
+    let a = arr;
+    let i = 1;
+    while (i < n) {
+        let key = a[i];
+        let j = i - 1;
+        while (j >= 0 && a[j] > key) {
+            a[j + 1] = a[j];
+            j = j - 1;
+        }
+        a[j + 1] = key;
+        i = i + 1;
+    }
+    return a;
+}
+
+let a3 = insertion_sort([7, 3, 8, 1, 5, 2, 6, 4]);
+check("algo/ins/0",      a3[0] == 1);
+check("algo/ins/7",      a3[7] == 8);
+check("algo/ins/sorted", a3[0] <= a3[1] && a3[1] <= a3[2]);
+
+# =====================================================
+# Section 4: Linear search
+# =====================================================
+fn linear_search(arr, target) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] == target) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+check("algo/lin/found0",    linear_search([10, 20, 30, 40], 30) == 2);
+check("algo/lin/found1",    linear_search([10, 20, 30, 40], 10) == 0);
+check("algo/lin/notfound",  linear_search([10, 20, 30, 40], 99) == -1);
+check("algo/lin/empty",     linear_search([], 5) == -1);
+
+# =====================================================
+# Section 5: Binary search (iterative)
+# =====================================================
+fn binary_search(arr, target) {
+    let lo = 0;
+    let hi = len(arr) - 1;
+    while (lo <= hi) {
+        let mid = (lo + hi) / 2;
+        if (arr[mid] == target) { return mid; }
+        if (arr[mid] < target) { lo = mid + 1; }
+        else { hi = mid - 1; }
+    }
+    return -1;
+}
+
+let sorted = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+check("algo/bin/found0",    binary_search(sorted, 1) == 0);
+check("algo/bin/found9",    binary_search(sorted, 19) == 9);
+check("algo/bin/found5",    binary_search(sorted, 9) == 4);
+check("algo/bin/notfound",  binary_search(sorted, 100) == -1);
+
+# =====================================================
+# Section 6: Two-pointer sum
+# =====================================================
+fn two_sum(arr, target) {
+    let i = 0;
+    let j = len(arr) - 1;
+    while (i < j) {
+        let s = arr[i] + arr[j];
+        if (s == target) { return [i, j]; }
+        if (s < target) { i = i + 1; }
+        else { j = j - 1; }
+    }
+    return [-1, -1];
+}
+
+let ts = two_sum([1, 3, 4, 5, 7, 11], 9);
+check("algo/2sum/i",        ts[0] == 2);
+check("algo/2sum/j",        ts[1] == 3);
+let ts2 = two_sum([1, 3, 4, 5, 7, 11], 100);
+check("algo/2sum/miss",     ts2[0] == -1);
+
+# =====================================================
+# Section 7: GCD (Euclidean)
+# =====================================================
+fn gcd(a, b) {
+    while (b != 0) {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    return a;
+}
+
+check("algo/gcd/12,8",      gcd(12, 8) == 4);
+check("algo/gcd/15,5",      gcd(15, 5) == 5);
+check("algo/gcd/17,5",      gcd(17, 5) == 1);
+check("algo/gcd/100,75",    gcd(100, 75) == 25);
+check("algo/gcd/0,5",       gcd(0, 5) == 5);
+
+# =====================================================
+# Section 8: Sieve of Eratosthenes
+# =====================================================
+fn sieve(n) {
+    let is_prime = [];
+    let i = 0;
+    while (i <= n) {
+        push(is_prime, true);
+        i = i + 1;
+    }
+    if (n >= 0) { is_prime[0] = false; }
+    if (n >= 1) { is_prime[1] = false; }
+    let p = 2;
+    while (p * p <= n) {
+        if (is_prime[p]) {
+            let m = p * p;
+            while (m <= n) {
+                is_prime[m] = false;
+                m = m + p;
+            }
+        }
+        p = p + 1;
+    }
+    return is_prime;
+}
+
+let sp = sieve(20);
+check("algo/sieve/2",       sp[2] == true);
+check("algo/sieve/3",       sp[3] == true);
+check("algo/sieve/4",       sp[4] == false);
+check("algo/sieve/5",       sp[5] == true);
+check("algo/sieve/19",      sp[19] == true);
+check("algo/sieve/20",      sp[20] == false);
+
+# =====================================================
+# Section 9: Quicksort (in-place Lomuto partition)
+# =====================================================
+fn quicksort(arr, lo, hi) {
+    if (lo >= hi) { return null; }
+    let pivot = arr[hi];
+    let i = lo - 1;
+    let j = lo;
+    while (j < hi) {
+        if (arr[j] < pivot) {
+            i = i + 1;
+            let tmp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = tmp;
+        }
+        j = j + 1;
+    }
+    i = i + 1;
+    let tmp = arr[i];
+    arr[i] = arr[hi];
+    arr[hi] = tmp;
+    quicksort(arr, lo, i - 1);
+    quicksort(arr, i + 1, hi);
+}
+
+let a4 = [9, 7, 5, 3, 1, 8, 6, 4, 2, 0];
+quicksort(a4, 0, 9);
+check("algo/qsort/0",       a4[0] == 0);
+check("algo/qsort/9",       a4[9] == 9);
+check("algo/qsort/mid",     a4[5] == 5);
+
+# =====================================================
+# Section 10: BFS on adjacency list
+# =====================================================
+fn bfs(graph, start, target) {
+    let visited = [];
+    push(visited, start);
+    let queue = [];
+    push(queue, start);
+    while (len(queue) > 0) {
+        let node = queue[0];
+        let new_q = [];
+        let k = 1;
+        while (k < len(queue)) {
+            push(new_q, queue[k]);
+            k = k + 1;
+        }
+        queue = new_q;
+        if (node == target) { return true; }
+        let nbrs = graph[node];
+        let n = 0;
+        while (n < len(nbrs)) {
+            let nbr = nbrs[n];
+            let seen = false;
+            let v = 0;
+            while (v < len(visited)) {
+                if (visited[v] == nbr) { seen = true; }
+                v = v + 1;
+            }
+            if (!seen) {
+                push(visited, nbr);
+                push(queue, nbr);
+            }
+            n = n + 1;
+        }
+    }
+    return false;
+}
+
+# Graph: 0-1, 0-2, 1-3, 2-3, 3-4
+let g = [
+    [1, 2],     # 0's neighbors
+    [0, 3],     # 1's neighbors
+    [0, 3],     # 2's neighbors
+    [1, 2, 4],  # 3's neighbors
+    [3]         # 4's neighbors
+];
+check("algo/bfs/0->3",     bfs(g, 0, 3) == true);
+check("algo/bfs/0->4",     bfs(g, 0, 4) == true);
+check("algo/bfs/0->0",     bfs(g, 0, 0) == true);
+check("algo/bfs/0->99",    bfs(g, 0, 99) == false);
+
+# =====================================================
+# Section 11: Longest common subsequence (length only)
+# =====================================================
+fn lcs_len(a, b) {
+    let n = len(a);
+    let m = len(b);
+    let dp = [];
+    let i = 0;
+    while (i <= n) {
+        let row = [];
+        let j = 0;
+        while (j <= m) {
+            push(row, 0);
+            j = j + 1;
+        }
+        push(dp, row);
+        i = i + 1;
+    }
+    i = 1;
+    while (i <= n) {
+        let j = 1;
+        while (j <= m) {
+            if (a[i - 1] == b[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                let x = dp[i - 1][j];
+                let y = dp[i][j - 1];
+                if (x > y) { dp[i][j] = x; } else { dp[i][j] = y; }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return dp[n][m];
+}
+
+check("algo/lcs/abc-abc",  lcs_len("abc", "abc") == 3);
+check("algo/lcs/abc-def",  lcs_len("abc", "def") == 0);
+check("algo/lcs/abcde-ace", lcs_len("abcde", "ace") == 3);
+check("algo/lcs/empty",    lcs_len("", "abc") == 0);
+
+# =====================================================
+# Section 12: Fibonacci mod (large test)
+# =====================================================
+fn fibmod(n, m) {
+    if (n < 2) { return n; }
+    let a = 0;
+    let b = 1;
+    let i = 2;
+    while (i <= n) {
+        let c = (a + b) % m;
+        a = b;
+        b = c;
+        i = i + 1;
+    }
+    return b;
+}
+
+check("algo/fibmod/0",    fibmod(0, 100) == 0);
+check("algo/fibmod/10",   fibmod(10, 1000) == 55);
+check("algo/fibmod/100",  fibmod(100, 100) == 75);
+
+print("08_ALGO_LIB : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));
+if (__stats[1] > 0) {
+    let i = 0;
+    while (i < len(__stats[2])) {
+        print("  FAIL: " + __stats[2][i]);
+        i = i + 1;
+    }
+}

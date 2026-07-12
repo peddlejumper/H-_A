@@ -1,0 +1,14 @@
+# 12 - for + continue
+# 目的: continue 跳回循环顶部；continue 的 JUMP 目标也是 for_start (P+1)
+# 因此 continue 也依赖 fixForLoopJumps 修正才能正确回到 FOR_ITER
+let oddsum = 0;
+let cnt = 0;
+for i in range(10) {
+    cnt = cnt + 1;
+    if (i % 2 == 0) { continue; }
+    oddsum = oddsum + i;
+}
+print("oddsum=" + str(oddsum));
+print("expected_oddsum=25");
+print("cnt=" + str(cnt));
+print("expected_cnt=10");

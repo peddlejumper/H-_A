@@ -1,0 +1,8 @@
+# 02_pop_top.hto — POP_TOP 在多种表达式语句之后
+let x = 1 + 2;
+x;           # POP_TOP (变量读后丢弃)
+[1, 2, 3];   # list literal 后丢弃
+{"k": "v"};  # dict literal 后丢弃
+"str_lit";   # 字符串字面量后丢弃
+1 + 2 * 3;   # 算术表达式后丢弃
+print("survived");

@@ -1,0 +1,6 @@
+# _probe144_s10_newexpr.hto — new <expr>() -> SyntaxError
+# 预期: 解析失败, new 后必须是 IDENTIFIER
+class C { let x = 1; }
+let lst = [C];
+let o = new lst[0]();
+print(o.x);

@@ -1,0 +1,16 @@
+# t03 - literal integer patterns (0, positive, negative)
+fn name(n) {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        42 => "answer",
+        _ => "other"
+    };
+}
+print("t03_lit0:" + name(0));
+print("t03_lit1:" + name(1));
+print("t03_lit42:" + name(42));
+print("t03_lit99:" + name(99));
+print("t03_lit_oth0:" + name(0.0));
+# NOTE: -1 as a literal pattern is a PARSER BUG (MINUS not handled in parse_pattern)
+# Tested separately in t21_parser_bugs.hto

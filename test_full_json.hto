@@ -1,0 +1,44 @@
+# test_full_json.hto
+fn json_stringify(value) {
+    return net_json_stringify(value);
+}
+
+fn json_parse(text) {
+    return net_json_parse(text);
+}
+
+fn json_object() {
+    return {};
+}
+
+fn json_set(obj, key, value) {
+    obj[key] = value;
+    return obj;
+}
+
+fn json_get(obj, key) {
+    if (obj == nullptr) {
+        return nullptr;
+    }
+    if (key in obj) {
+        return obj[key];
+    }
+    return nullptr;
+}
+
+fn json_response_ok(data) {
+    return {"ok": true, "data": data, "error": ""};
+}
+
+fn json_response_err(msg) {
+    return {"ok": false, "data": nullptr, "error": msg};
+}
+
+fn http_response(status, body, content_type) {
+    if (content_type == nullptr) {
+        content_type = "application/json; charset=utf-8";
+    }
+    return {"status": status, "body": body, "content_type": content_type};
+}
+
+print("ok");

@@ -1,0 +1,6 @@
+# Probe 124-C: list?.[0]  (带点的可选索引)
+# 预期: PARSE 错误
+print("probe C start");
+let l = [1, 2, 3];
+print(l?.[0]);
+print("probe C end");

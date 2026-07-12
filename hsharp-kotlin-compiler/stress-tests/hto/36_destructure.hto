@@ -1,0 +1,29 @@
+# D3: destructuring assignment
+let [a, b, c] = [1, 2, 3];
+print(a);
+print(b);
+print(c);
+
+# Skip slots with _
+let [x, _, z] = [10, 20, 30];
+print(x);
+print(z);
+
+# Destructure a function return
+fn pair() {
+    return [100, 200];
+}
+let [p, q] = pair();
+print(p);
+print(q);
+
+# Destructure a string
+let [s0, s1, s2] = "abc";
+print(s0);
+print(s1);
+print(s2);
+
+# Destructure nested expressions
+let nums = [5, 6, 7];
+let [n0, n1, n2] = nums;
+print(n0 + n1 + n2);

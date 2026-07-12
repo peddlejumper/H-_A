@@ -1,0 +1,33 @@
+# t04_inline_cache_hit.hto - inline cache 命中：同类对象属性访问
+# 同一类的多个实例反复访问属性，inline cache 应命中
+class Box {
+    let v = 0;
+    fn set(x) {
+        self.v = x;
+    }
+    fn get() {
+        return self.v;
+    }
+}
+let a = new Box();
+let b = new Box();
+let c = new Box();
+a.set(11);
+b.set(22);
+c.set(33);
+let total = 0;
+let i = 0;
+while (i < 50) {
+    total = total + a.get();
+    total = total + b.get();
+    total = total + c.get();
+    i = i + 1;
+}
+print("total=");
+print(total);
+print("a=");
+print(a.get());
+print("b=");
+print(b.get());
+print("c=");
+print(c.get());

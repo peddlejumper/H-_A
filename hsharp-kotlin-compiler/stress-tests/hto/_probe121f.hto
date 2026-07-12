@@ -1,0 +1,3 @@
+# probe S9: default referencing earlier param
+fn f(a, b=a) { return [a, b]; }
+print(f(5));

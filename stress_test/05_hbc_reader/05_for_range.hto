@@ -1,0 +1,12 @@
+# 05 - for over range
+# 目的: range() 迭代触发 fixForLoopJumps
+let sqsum = 0;
+let cnt = 0;
+for i in range(6) {
+    sqsum = sqsum + i * i;
+    cnt = cnt + 1;
+}
+print("sqsum=" + str(sqsum));
+print("expected_sqsum=55");
+print("cnt=" + str(cnt));
+print("expected_cnt=6");

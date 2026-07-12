@@ -1,0 +1,4 @@
+# test_ternary.hto
+let x = 5;
+let y = "big" if x > 3 else "small";
+print(y);

@@ -1,0 +1,2 @@
+# this is a .hto source file, not a compiled .hbc
+print("hi");

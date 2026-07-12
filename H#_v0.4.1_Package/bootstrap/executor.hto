@@ -1,0 +1,422 @@
+# H# bootstrap bytecode executor (VM)
+# runs bytecode produced by compiler.hto
+#
+# Bytecode format: {"instructions": [[op, arg], ...], "consts": [...]}
+#
+# Supported opcodes:
+#   LOAD_CONST idx      LOAD_NAME name     STORE_NAME name
+#   PRINT               POP_TOP            MAKE_LIST n
+#   MAKE_DICT n         GET_ITEM           LOAD_ATTR name
+#   STORE_ATTR name     SET_ITEM           BINARY_ADD
+#   BINARY_SUB          BINARY_MUL         BINARY_DIV
+#   UNARY_NOT           UNARY_NEG          COMPARE_OP op
+#   JUMP_IF_FALSE off   JUMP off           CALL_FUNCTION [name, argc]
+#   RETURN_VALUE        CALL_VALUE argc    HALT
+#   CONTINUE            BREAK              LOAD_BUILTIN name
+
+fn _env_lookup(env_list, name) {
+    let i = 0;
+    while (i < len(env_list)) {
+        let pair = env_list[i];
+        if (pair[0] == name) { return pair[1]; }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn _env_setlocal(env_list, name, val) {
+    let i = 0;
+    while (i < len(env_list)) {
+        let pair = env_list[i];
+        if (pair[0] == name) { pair[1] = val; return nullptr; }
+        i = i + 1;
+    }
+    push(env_list, [name, val]);
+}
+
+fn _make_builtins() {
+    let b = {};
+    return b;
+}
+
+fn _get_builtin(name) {
+    if (name == "len") { return _builtin_len; }
+    if (name == "push") { return _builtin_push; }
+    if (name == "pop") { return _builtin_pop; }
+    if (name == "read_file") { return _builtin_read_file; }
+    if (name == "int") { return _builtin_int; }
+    if (name == "str") { return _builtin_str; }
+    if (name == "type") { return _builtin_type; }
+    if (name == "print") { return _builtin_print; }
+    return nullptr;
+}
+
+fn _builtin_len(args) {
+    return len(args[0]);
+}
+
+fn _builtin_push(args) {
+    push(args[0], args[1]);
+    return nullptr;
+}
+
+fn _builtin_pop(args) {
+    return pop(args[0]);
+}
+
+fn _builtin_read_file(args) {
+    return read_file(args[0]);
+}
+
+fn _builtin_int(args) {
+    if (args[0] == nullptr) { return nullptr; }
+    if (typeof(args[0]) == "string") { return str_to_num(args[0]); }
+    return args[0];
+}
+
+fn _builtin_str(args) {
+    if (args[0] == nullptr) { return "nullptr"; }
+    if (typeof(args[0]) == "number") {
+        let v = args[0];
+        return "" + v;
+    }
+    return "" + args[0];
+}
+
+fn _builtin_type(args) {
+    if (args[0] == nullptr) { return "nullptr"; }
+    let t = typeof(args[0]);
+    if (t == "number") { return "number"; }
+    if (t == "string") { return "string"; }
+    return t;
+}
+
+fn _builtin_print(args) {
+    print(args[0]);
+    return nullptr;
+}
+
+# run bytecode in an environment
+# bc: {"instructions": [[op,arg], ...], "consts": [...]}
+# env: [[name, value], ...]  local env for parameters/variables
+# closure: [[name, value], ...]  captured env at function definition
+# returns: the returned value or nullptr
+fn run(bc, env, closure) {
+    if (closure == nullptr) { closure = env; }
+    let instrs = bc["instructions"];
+    let consts = [];
+    if (bc["consts"] != nullptr) { consts = bc["consts"]; }
+    let stack = [];
+    let pc = 0;
+    let loop_stack = [];
+
+    while (pc < len(instrs)) {
+        let inst = instrs[pc];
+        let op = inst[0];
+        let arg = inst[1];
+        pc = pc + 1;
+
+        if (op == "LOAD_CONST") {
+            push(stack, consts[arg]);
+            continue;
+        }
+
+        if (op == "LOAD_NAME") {
+            let val = _env_lookup(env, arg);
+            if (val == nullptr and closure != env) {
+                val = _env_lookup(closure, arg);
+            }
+            if (val == nullptr) {
+                val = _get_builtin(arg);
+            }
+            push(stack, val);
+            continue;
+        }
+
+        if (op == "STORE_NAME") {
+            let val = pop(stack);
+            _env_setlocal(env, arg, val);
+            let cl_name = "__cl_" + arg;
+            _env_setlocal(env, cl_name, env);
+            continue;
+        }
+
+        if (op == "PRINT") {
+            let val = pop(stack);
+            print(val);
+            continue;
+        }
+
+        if (op == "POP_TOP") {
+            pop(stack);
+            continue;
+        }
+
+        if (op == "MAKE_LIST") {
+            let n = arg;
+            let items = [];
+            let i = 0;
+            while (i < n) {
+                let item = pop(stack);
+                # prepend
+                let j = 0;
+                let tmp = [];
+                push(tmp, item);
+                while (j < len(items)) { push(tmp, items[j]); j = j + 1; }
+                items = tmp;
+                i = i + 1;
+            }
+            push(stack, items);
+            continue;
+        }
+
+        if (op == "MAKE_DICT") {
+            let n = arg;
+            let d = {};
+            let i = 0;
+            while (i < n) {
+                let val = pop(stack);
+                let key = pop(stack);
+                d[key] = val;
+                i = i + 1;
+            }
+            push(stack, d);
+            continue;
+        }
+
+        if (op == "GET_ITEM") {
+            let idx = pop(stack);
+            let left = pop(stack);
+            push(stack, left[idx]);
+            continue;
+        }
+
+        if (op == "LOAD_ATTR") {
+            let obj = pop(stack);
+            if (obj == nullptr) { push(stack, nullptr); continue; }
+            push(stack, obj[arg]);
+            continue;
+        }
+
+        if (op == "STORE_ATTR") {
+            let val = pop(stack);
+            let obj = pop(stack);
+            obj[arg] = val;
+            push(stack, val);
+            continue;
+        }
+
+        if (op == "SET_ITEM") {
+            let val = pop(stack);
+            let idx = pop(stack);
+            let left = pop(stack);
+            left[idx] = val;
+            push(stack, val);
+            continue;
+        }
+
+        if (op == "BINARY_ADD") {
+            let b = pop(stack);
+            let a = pop(stack);
+            push(stack, a + b);
+            continue;
+        }
+
+        if (op == "BINARY_SUB") {
+            let b = pop(stack);
+            let a = pop(stack);
+            push(stack, a - b);
+            continue;
+        }
+
+        if (op == "BINARY_MUL") {
+            let b = pop(stack);
+            let a = pop(stack);
+            push(stack, a * b);
+            continue;
+        }
+
+        if (op == "BINARY_DIV") {
+            let b = pop(stack);
+            let a = pop(stack);
+            if (b == 0) { return nullptr; }
+            push(stack, a / b);
+            continue;
+        }
+
+        if (op == "UNARY_NOT") {
+            let a = pop(stack);
+            if (a == nullptr or a == false) { push(stack, true); }
+            else { push(stack, false); }
+            continue;
+        }
+
+        if (op == "UNARY_NEG") {
+            let a = pop(stack);
+            push(stack, -a);
+            continue;
+        }
+
+        if (op == "COMPARE_OP") {
+            let b = pop(stack);
+            let a = pop(stack);
+            if (arg == "EQEQ") { push(stack, a == b); continue; }
+            if (arg == "BANGEQ") { push(stack, a != b); continue; }
+            if (arg == "GT") { push(stack, a > b); continue; }
+            if (arg == "LT") { push(stack, a < b); continue; }
+            if (arg == "GTE") { push(stack, a >= b); continue; }
+            if (arg == "LTE") { push(stack, a <= b); continue; }
+            continue;
+        }
+
+        if (op == "JUMP_IF_FALSE") {
+            let cond = pop(stack);
+            if (cond == nullptr or cond == false) {
+                pc = pc + arg - 1;
+                if (pc < 0) { pc = 0; }
+            }
+            continue;
+        }
+
+        if (op == "JUMP") {
+            pc = pc + arg;
+            if (pc < 0) { pc = 0; }
+            continue;
+        }
+
+        if (op == "CALL_FUNCTION") {
+            let fname = arg[0];
+            let argc = arg[1];
+            let args = [];
+            let i = 0;
+            while (i < argc) {
+                let v = pop(stack);
+                # prepend
+                let tmp = [];
+                push(tmp, v);
+                let j = 0;
+                while (j < len(args)) { push(tmp, args[j]); j = j + 1; }
+                args = tmp;
+                i = i + 1;
+            }
+
+            # try builtins first
+            let builtin = _get_builtin(fname);
+            if (builtin != nullptr) {
+                push(stack, builtin(args));
+                continue;
+            }
+
+            # try H# function in env
+            let func = _env_lookup(env, fname);
+            if (func == nullptr and closure != env) {
+                func = _env_lookup(closure, fname);
+            }
+            if (func != nullptr and func["bytecode"] != nullptr) {
+                let fargs = func["args"];
+                if (fargs == nullptr) { fargs = []; }
+                let call_env = [];
+                let k = 0;
+                while (k < len(fargs)) {
+                    if (k < len(args)) { push(call_env, [fargs[k], args[k]]); }
+                    else { push(call_env, [fargs[k], nullptr]); }
+                    k = k + 1;
+                }
+                let cl_name = "__cl_" + fname;
+                let fclosure = _env_lookup(env, cl_name);
+                if (fclosure == nullptr and closure != env) {
+                    fclosure = _env_lookup(closure, cl_name);
+                }
+                if (fclosure == nullptr) { fclosure = closure; }
+                let fbc = {"instructions": func["bytecode"], "consts": func["consts"]};
+                let result = run(fbc, call_env, fclosure);
+                push(stack, result);
+                continue;
+            }
+
+            push(stack, nullptr);
+            continue;
+        }
+
+        if (op == "CALL_VALUE") {
+            let argc = arg;
+            let args = [];
+            let i = 0;
+            while (i < argc) {
+                let v = pop(stack);
+                let tmp = [];
+                push(tmp, v);
+                let j = 0;
+                while (j < len(args)) { push(tmp, args[j]); j = j + 1; }
+                args = tmp;
+                i = i + 1;
+            }
+            let func = pop(stack);
+            if (func != nullptr and func["bytecode"] != nullptr) {
+                let fargs = func["args"];
+                if (fargs == nullptr) { fargs = []; }
+                let call_env = [];
+                let k = 0;
+                while (k < len(fargs)) {
+                    if (k < len(args)) { push(call_env, [fargs[k], args[k]]); }
+                    else { push(call_env, [fargs[k], nullptr]); }
+                    k = k + 1;
+                }
+                let fclosure = closure;
+                if (func["closure"] != nullptr) { fclosure = func["closure"]; }
+                let fbc = {"instructions": func["bytecode"], "consts": func["consts"]};
+                let result = run(fbc, call_env, fclosure);
+                push(stack, result);
+                continue;
+            }
+            push(stack, nullptr);
+            continue;
+        }
+
+        if (op == "RETURN_VALUE") {
+            if (len(stack) > 0) { return pop(stack); }
+            return nullptr;
+        }
+
+        if (op == "HALT") {
+            if (len(stack) > 0) { return pop(stack); }
+            return nullptr;
+        }
+
+        if (op == "CONTINUE") {
+            # find matching loop
+            if (len(loop_stack) > 0) {
+                pc = loop_stack[len(loop_stack) - 1];
+            }
+            continue;
+        }
+
+        if (op == "BREAK") {
+            # we need to find the exit pc - stored in loop_stack
+            # the compiler sets the jump target relative to the next instruction
+            # for simplicity, we just skip forward (won't work for all cases)
+            # proper solution: store loop exit pc alongside loop start pc
+            if (len(loop_stack) > 0) {
+                # jump to pc stored at loop_stack[0] for the exit
+                # actually the loop_stack stores [start_pc, exit_pc]
+                let info = loop_stack[len(loop_stack) - 1];
+                pc = info[1];
+            }
+            continue;
+        }
+
+        if (op == "LOAD_BUILTIN") {
+            let builtin = _get_builtin(arg);
+            push(stack, builtin);
+            continue;
+        }
+    }
+
+    if (len(stack) > 0) { return pop(stack); }
+    return nullptr;
+}
+
+fn execute(bc) {
+    let env = [];
+    return run(bc, env, env);
+}

@@ -1,0 +1,11 @@
+# t20: call async fn but never await — eager-resolve side effect.
+# The body runs eagerly at call time (single-threaded sugar), so
+# side effects happen before await.  Print ordering matters.
+async fn say() {
+    print("inside");
+    return 1;
+}
+let f = say();
+print("after call");
+let v = await f;
+print(v);

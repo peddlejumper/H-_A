@@ -1,0 +1,159 @@
+# ============================================================
+# round4_127_coerce.hto — 类型转换与强制 (type coercion & conversion)
+# 测试智能体 #127, Round 4。覆盖 S1..S10 共 10 个子领域。
+#
+# 转换函数: int(x) / float(x) / str(x) / bool(x)
+# 已知限制: HNumber 存 Double, int/float 运行时不区分;
+#           `print` 是关键字 (TokenType.PRINT), 不能作为值传入 str()。
+# ============================================================
+
+# ============================================================
+# 工具: 安全执行包装 — 捕获异常, 输出 r127_<name>:<result>
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+print("===== R4-127 TYPE COERCION & CONVERSION =====");
+
+# ============================================================
+# === S1: int() 转换 ===
+# ============================================================
+print("=== S1. int() conversion ===");
+safe("r127_s1_int_str_42", fn() { return int("42"); });                       # expect 42
+safe("r127_s1_int_str_3p14", fn() { return int("3.14"); });                   # expect 3 (truncate)
+safe("r127_s1_int_num_3p14", fn() { return int(3.14); });                     # expect 3
+safe("r127_s1_int_true", fn() { return int(true); });                         # expect 1
+safe("r127_s1_int_false", fn() { return int(false); });                       # expect 0
+safe("r127_s1_int_null", fn() { return int(null); });                         # expect EXC
+safe("r127_s1_int_str_hex", fn() { return int("0x1F"); });                    # expect EXC (kotlin toDoubleOrNull 不识别 0x)
+safe("r127_s1_int_str_ws", fn() { return int("  42  "); });                   # expect 42 (trim)
+
+# ============================================================
+# === S2: float() 转换 ===
+# ============================================================
+print("=== S2. float() conversion ===");
+safe("r127_s2_float_str_3p14", fn() { return float("3.14"); });               # expect 3.14
+safe("r127_s2_float_str_42", fn() { return float("42"); });                   # expect 42 (int-valued double -> "42")
+safe("r127_s2_float_num_42", fn() { return float(42); });                      # expect 42 (int/float 不分)
+safe("r127_s2_float_true", fn() { return float(true); });                     # expect 1
+safe("r127_s2_float_null", fn() { return float(null); });                     # expect EXC
+safe("r127_s2_float_str_neg", fn() { return float("-2.5"); });                # expect -2.5
+
+# ============================================================
+# === S3: str() 转换 ===
+# ============================================================
+print("=== S3. str() conversion ===");
+safe("r127_s3_str_int", fn() { return str(42); });                            # expect "42"
+safe("r127_s3_str_float", fn() { return str(3.14); });                        # expect "3.14"
+safe("r127_s3_str_true", fn() { return str(true); });                         # expect "true"
+safe("r127_s3_str_null", fn() { return str(null); });                         # expect "null"
+safe("r127_s3_str_list", fn() { return str([1, 2]); });                       # expect "[1, 2]"
+safe("r127_s3_str_dict", fn() { return str({"k": "v"}); });                   # expect "{k: v}" (非 JSON)
+safe("r127_s3_str_empty_list", fn() { return str([]); });                     # expect "[]"
+safe("r127_s3_str_empty_dict", fn() { return str({}); });                     # expect "{}"
+safe("r127_s3_str_float_intval", fn() { return str(3.0); });                  # expect "3" (int-valued)
+safe("r127_s3_str_fn", fn() { return str(fn() { return 1; }); });             # expect "<function .../0>"
+
+# ============================================================
+# === S4: bool() 转换 ===
+# ============================================================
+print("=== S4. bool() conversion ===");
+safe("r127_s4_bool_0", fn() { return bool(0); });                             # expect false
+safe("r127_s4_bool_1", fn() { return bool(1); });                            # expect true
+safe("r127_s4_bool_neg1", fn() { return bool(0 - 1); });                      # expect true
+safe("r127_s4_bool_0p0", fn() { return bool(0.0); });                        # expect false
+safe("r127_s4_bool_empty_str", fn() { return bool(""); });                   # expect false
+safe("r127_s4_bool_str_x", fn() { return bool("x"); });                      # expect true
+safe("r127_s4_bool_empty_list", fn() { return bool([]); });                  # expect false
+safe("r127_s4_bool_list0", fn() { return bool([0]); });                      # expect true
+safe("r127_s4_bool_empty_dict", fn() { return bool({}); });                  # expect false
+safe("r127_s4_bool_null", fn() { return bool(null); });                      # expect false
+safe("r127_s4_bool_str_0", fn() { return bool("0"); });                      # expect true (non-empty string)
+safe("r127_s4_bool_str_false", fn() { return bool("false"); });              # expect true (non-empty string)
+
+# ============================================================
+# === S5: 隐式转换 (算术/拼接) ===
+# ============================================================
+print("=== S5. implicit conversion (arith/concat) ===");
+safe("r127_s5_str_plus_int", fn() { return "3" + 1; });                       # expect "31" (string concat)
+safe("r127_s5_int_plus_str", fn() { return 3 + "1"; });                       # expect "31"
+safe("r127_s5_true_plus_1", fn() { return true + 1; });                       # expect 2 (toDouble path)
+safe("r127_s5_1_plus_true", fn() { return 1 + true; });                       # expect 2
+safe("r127_s5_null_plus_str", fn() { return null + ""; });                    # expect "null"
+safe("r127_s5_str_plus_null", fn() { return "n=" + null; });                  # expect "n=null"
+safe("r127_s5_null_plus_int", fn() { return null + 1; });                     # expect 1 (toDouble(null)=0 + 1)
+safe("r127_s5_true_plus_true", fn() { return true + true; });                 # expect 2
+safe("r127_s5_true_mul_3", fn() { return true * 3; });                        # expect 3
+
+# ============================================================
+# === S6: 比较中转换 ===
+# ============================================================
+print("=== S6. comparison coercion ===");
+safe("r127_s6_eq_int_float", fn() { return 1 == 1.0; });                      # expect true (both HNumber)
+safe("r127_s6_eq_str_int", fn() { return "1" == 1; });                        # expect false (不同类型)
+safe("r127_s6_eq_bool_int", fn() { return true == 1; });                      # expect false (HBool vs HNumber)
+safe("r127_s6_eq_list", fn() { return [1] == [1]; });                         # expect true (deep equal)
+safe("r127_s6_eq_null_false", fn() { return null == false; });                # expect false
+safe("r127_s6_eq_0_false", fn() { return 0 == false; });                      # expect false
+safe("r127_s6_neq_str_int", fn() { return "1" != 1; });                       # expect true
+
+# ============================================================
+# === S7: 条件中转换 (truthiness) ===
+# ============================================================
+print("=== S7. condition coercion (truthiness) ===");
+fn truthy_label(x) {
+    if (x) { return "truthy"; }
+    return "falsy";
+}
+safe("r127_s7_if_empty_str", fn() { return truthy_label(""); });              # expect falsy
+safe("r127_s7_if_0", fn() { return truthy_label(0); });                       # expect falsy
+safe("r127_s7_if_empty_list", fn() { return truthy_label([]); });             # expect falsy
+safe("r127_s7_if_empty_dict", fn() { return truthy_label({}); });             # expect falsy
+safe("r127_s7_if_str_0", fn() { return truthy_label("0"); });                 # expect truthy
+safe("r127_s7_if_str_false", fn() { return truthy_label("false"); });         # expect truthy
+safe("r127_s7_if_null", fn() { return truthy_label(null); });                 # expect falsy
+safe("r127_s7_if_neg1", fn() { return truthy_label(0 - 1); });                # expect truthy
+
+# ============================================================
+# === S8: 大数精度 ===
+# ============================================================
+print("=== S8. large number precision ===");
+safe("r127_s8_int_big", fn() { return int(9999999999999999.0); });            # expect 10000000000000000 (precision loss)
+safe("r127_s8_float_big", fn() { return float(9999999999999999); });          # expect 10000000000000000
+safe("r127_s8_str_0p1p0p2", fn() { return str(0.1 + 0.2); });                # expect "0.30000000000000004"
+safe("r127_s8_str_2pow53_plus1", fn() { return 9007199254740992 + 1 == 9007199254740992; });  # expect true (loss)
+safe("r127_s8_int_negbig", fn() { return int(0 - 9999999999999999.0); });     # expect -10000000000000000
+
+# ============================================================
+# === S9: 无效转换 ===
+# ============================================================
+print("=== S9. invalid conversion ===");
+safe("r127_s9_int_str_abc", fn() { return int("abc"); });                     # expect EXC
+safe("r127_s9_int_null", fn() { return int(null); });                         # expect EXC
+safe("r127_s9_float_str_xyz", fn() { return float("xyz"); });                 # expect EXC
+safe("r127_s9_int_list", fn() { return int([1, 2]); });                       # expect EXC
+safe("r127_s9_int_dict", fn() { return int({"a": 1}); });                     # expect EXC
+safe("r127_s9_float_list", fn() { return float([]); });                       # expect EXC
+safe("r127_s9_int_empty_str", fn() { return int(""); });                      # expect EXC
+safe("r127_s9_int_str_ws_only", fn() { return int("   "); });                 # expect EXC (trim -> empty)
+# 注: str(print) 不可测试 — print 是关键字, 会导致整文件 parse error
+
+# ============================================================
+# === S10: 转换链 ===
+# ============================================================
+print("=== S10. conversion chain ===");
+safe("r127_s10_chain_sif", fn() { return str(int(float("3.14"))); });         # expect "3"
+safe("r127_s10_int_str_42p5", fn() { return int(str(42.5)); });               # expect 42
+safe("r127_s10_bool_int_str_0", fn() { return bool(int("0")); });             # expect false
+safe("r127_s10_int_bool_str_0", fn() { return int(bool("0")); });             # expect 1 (bool("0")=true)
+safe("r127_s10_str_bool_int", fn() { return str(bool(int("42"))); });         # expect "true"
+safe("r127_s10_float_str_back", fn() { return str(float(str(3.14))); });      # expect "3.14"
+safe("r127_s10_chain_neg", fn() { return str(int(float("-2.9"))); });         # expect "-2"
+
+print("===== R4-127 DONE =====");

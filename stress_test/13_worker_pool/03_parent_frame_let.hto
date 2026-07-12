@@ -1,0 +1,78 @@
+# 03 — parent-frame let access inside parallel fn
+# Covers: parallel fn 内访问模块顶层 let 常量（parent-frame 传递）
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# 模块顶层 let 常量
+let WIDTH = 80;
+let HEIGHT = 40;
+let GREETING = "hello";
+let PI2 = 3.14159;
+
+parallel fn read_width() {
+    return WIDTH;
+}
+parallel fn read_height() {
+    return HEIGHT;
+}
+parallel fn read_greeting() {
+    return GREETING;
+}
+parallel fn read_pi() {
+    return PI2;
+}
+parallel fn compute_area() {
+    return WIDTH * HEIGHT;
+}
+parallel fn greet(name) {
+    # 同时读常量 + 用参数
+    return GREETING + " " + name + " @ " + str(WIDTH) + "x" + str(HEIGHT);
+}
+
+check("read_width",   await read_width() == 80, "got " + str(await read_width()));
+check("read_height",  await read_height() == 40, "got " + str(await read_height()));
+check("read_greeting", await read_greeting() == "hello", "got " + str(await read_greeting()));
+check("read_pi",      str(await read_pi()) == "3.14159", "got " + str(await read_pi()));
+check("compute_area", await compute_area() == 3200, "got " + str(await compute_area()));
+
+let g = greet("world");
+check("greet_uses_consts", await g == "hello world @ 80x40", "got [" + str(await g) + "]");
+
+# 在 concurrent {} 内多 worker 同时读同一常量
+parallel fn use_width(x) {
+    return x * WIDTH;
+}
+let sum = 0;
+concurrent {
+    let f0 = use_width(1);
+    let f1 = use_width(2);
+    let f2 = use_width(3);
+    let f3 = use_width(4);
+    sum = await f0 + await f1 + await f2 + await f3;
+}
+check("concurrent_read_const", sum == (1 + 2 + 3 + 4) * 80, "sum=" + str(sum));
+
+# 100 个 worker 同时读 WIDTH，应全部正确
+parallel fn width_plus(n) {
+    return WIDTH + n;
+}
+let futs = [];
+let i = 0;
+while (i < 100) {
+    push(futs, width_plus(i));
+    i = i + 1;
+}
+let all_ok = true;
+let expected = 0;
+let k = 0;
+while (k < 100) {
+    if (await futs[k] != 80 + k) { all_ok = false; }
+    expected = expected + 80 + k;
+    k = k + 1;
+}
+check("100_workers_read_const", all_ok, "some worker got wrong WIDTH");
+
+print("T03_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

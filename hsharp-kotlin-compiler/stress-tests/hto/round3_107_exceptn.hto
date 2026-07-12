@@ -1,0 +1,1344 @@
+# ============================================================
+# Round 3 / Agent #107 — 异常链与嵌套 try/catch 深度测试
+# H# v0.4.1
+# 已知事实（来自先前测试）：
+#   - H# 无 finally 块
+#   - catch (e) 是唯一形式，无 catch{} 无多重 catch 无类型匹配 catch
+#   - catch 变量名 + 括号必填
+#   - 异常值可为任意类型
+#   - concurrent{} CONCURRENT_EXIT 有 scope 泄漏历史 bug
+# 本测试聚焦：深嵌套、异常链式重抛、catch 作用域、throw 表达式、
+#   lambda/concurrent 中的异常、str(e) 格式、异常对象属性
+# ============================================================
+
+print("===== R3-107 START =====");
+
+# ============================================================
+# D01: 4 层嵌套 try，每层 catch 后 rethrow 新值（异常链）
+# 预期：L1->L2->L3->L4 依次捕获，最终 L4 输出 "L3"
+# ============================================================
+print("== D01 ==");
+try {
+    try {
+        try {
+            try {
+                throw "L0";
+            } catch (e) {
+                print("L1 caught: " + e);
+                throw "L1";
+            }
+        } catch (e) {
+            print("L2 caught: " + e);
+            throw "L2";
+        }
+    } catch (e) {
+        print("L3 caught: " + e);
+        throw "L3";
+    }
+} catch (e) {
+    print("L4 caught: " + e);
+}
+
+# ============================================================
+# D02: REMOVED — try{} without catch{} causes SyntaxError (parser requires catch).
+#       Finding: H# does NOT support try-without-catch / try-finally-only.
+# ============================================================
+# (see D02b isolated probe below)
+
+# ============================================================
+# D03: catch 中再 try/catch（嵌套异常处理 in catch block）
+# 预期：outer caught -> inner caught -> done
+# ============================================================
+print("== D03 ==");
+try {
+    throw "outer-D03";
+} catch (e) {
+    print("D03 outer caught: " + e);
+    try {
+        throw "inner-D03";
+    } catch (e2) {
+        print("D03 inner caught: " + e2);
+    }
+    print("D03 catch block done");
+}
+
+# ============================================================
+# D04: catch 中 throw 新异常，新异常被同层 try 的外层 catch 捕获
+# （异常链：original -> wrapped）
+# ============================================================
+print("== D04 ==");
+try {
+    try {
+        throw "original-D04";
+    } catch (e) {
+        print("D04 wrapping: " + e);
+        throw "wrapped(" + e + ")";
+    }
+} catch (e2) {
+    print("D04 final: " + e2);
+}
+
+# ============================================================
+# D05: rethrow 相同变量（throw e）— 值是否原样传播
+# ============================================================
+print("== D05 ==");
+try {
+    try {
+        throw "rethrow-me-D05";
+    } catch (e) {
+        print("D05 inner got: " + e);
+        throw e;
+    }
+} catch (e) {
+    print("D05 outer got: " + e);
+}
+
+# ============================================================
+# D06: catch 中修改变量 e 后 rethrow — 外层收到修改值还是原值
+# ============================================================
+print("== D06 ==");
+try {
+    try {
+        throw "original-D06";
+    } catch (e) {
+        e = "mutated-D06";
+        print("D06 inner mutated e, will throw");
+        throw e;
+    }
+} catch (e) {
+    print("D06 outer got: " + e);
+}
+
+# ============================================================
+# D07: catch 变量作用域 — catch 块后 e 是否可见（泄漏检测）
+# 预期（块级作用域）：after catch e = ERROR (未定义)
+# 实际（先前测试发现泄漏）：e 可能仍可见
+# ============================================================
+print("== D07 ==");
+let e = "outer-e-D07";
+try {
+    throw "inner-e-D07";
+} catch (e) {
+    print("D07 in catch e = " + e);
+}
+print("D07 after catch e = " + e);
+
+# ============================================================
+# D08: catch 变量名与外层已有 let 同名 — 遮蔽后是否恢复
+# ============================================================
+print("== D08 ==");
+let shadowVar = "outer-D08";
+try {
+    throw "exc-D08";
+} catch (shadowVar) {
+    print("D08 in catch shadowVar = " + shadowVar);
+}
+print("D08 after catch shadowVar = " + shadowVar);
+
+# ============================================================
+# D09: catch 变量名与函数参数同名 — 参数是否被污染
+# ============================================================
+print("== D09 ==");
+fn d09fn(param) {
+    try {
+        throw "exc-D09";
+    } catch (param) {
+        print("D09 in catch param = " + param);
+    }
+    return param;
+}
+print("D09 returned: " + d09fn("orig-param-D09"));
+
+# ============================================================
+# D10: REMOVED — `let x = throw "err"` causes SyntaxError.
+#       Finding: throw is a STATEMENT, not an expression. Cannot be used in
+#       expression context (let RHS, binary operand, list literal element).
+# ============================================================
+
+# ============================================================
+# D11: REMOVED — `1 + (throw "err")` causes SyntaxError (same as D10).
+#       Finding: throw cannot appear inside parenthesized expressions.
+# ============================================================
+
+# ============================================================
+# D12: throw Error("msg") — Error 构造器是否存在
+# 预期：Error 类型可能不存在 -> 编译错误 或 运行时错误
+# ============================================================
+print("== D12 ==");
+let d12 = "no-throw";
+try {
+    throw Error("error-obj-D12");
+} catch (e) {
+    d12 = "caught: " + str(e);
+}
+print("D12 result: " + d12);
+
+# ============================================================
+# D13: 异常对象属性 — e.message / e.type
+# 预期：字符串异常可能无 .message 属性 -> 抛异常或 undefined
+# ============================================================
+print("== D13 ==");
+try {
+    throw "string-exc-D13";
+} catch (e) {
+    print("D13 e = " + e);
+    let msg = "no-attr";
+    try {
+        msg = e.message;
+    } catch (e2) {
+        msg = "attr-err: " + str(e2);
+    }
+    print("D13 e.message = " + msg);
+    let typ = "no-attr";
+    try {
+        typ = e.type;
+    } catch (e3) {
+        typ = "attr-err: " + str(e3);
+    }
+    print("D13 e.type = " + typ);
+}
+
+# ============================================================
+# D14: str(e) 格式 — 各种类型的异常值转字符串
+# ============================================================
+print("== D14 ==");
+try { throw "string-val"; } catch (e) { print("D14 str: " + str(e)); }
+try { throw 42; } catch (e) { print("D14 num: " + str(e)); }
+try { throw 3.14; } catch (e) { print("D14 float: " + str(e)); }
+try { throw true; } catch (e) { print("D14 bool: " + str(e)); }
+try { throw null; } catch (e) { print("D14 null: " + str(e)); }
+try { throw [1, 2, 3]; } catch (e) { print("D14 list: " + str(e)); }
+try { throw {"k": "v"}; } catch (e) { print("D14 dict: " + str(e)); }
+try { throw -7; } catch (e) { print("D14 neg: " + str(e)); }
+try { throw 0; } catch (e) { print("D14 zero: " + str(e)); }
+try { throw ""; } catch (e) { print("D14 empty-str: [" + str(e) + "]"); }
+try { throw []; } catch (e) { print("D14 empty-list: " + str(e)); }
+
+# ============================================================
+# D15: 异常值为 dict — catch 后访问字段与方法
+# ============================================================
+print("== D15 ==");
+try {
+    throw {"code": 500, "msg": "server error", "data": [1, 2, 3]};
+} catch (e) {
+    print("D15 code = " + e["code"]);
+    print("D15 msg = " + e["msg"]);
+    print("D15 data[1] = " + e["data"][1]);
+    print("D15 str = " + str(e));
+}
+
+# ============================================================
+# D16: 异常值为 list — catch 后访问元素
+# ============================================================
+print("== D16 ==");
+try {
+    throw ["err", 404, {"detail": "nf"}];
+} catch (e) {
+    print("D16 [0] = " + e[0]);
+    print("D16 [1] = " + e[1]);
+    print("D16 [2].detail = " + e[2]["detail"]);
+}
+
+# ============================================================
+# D17: 异常值为类实例 — catch 后调用方法
+# ============================================================
+print("== D17 ==");
+class ErrorObj17 {
+    let code = 0;
+    let msg = "";
+    fn init(c, m) {
+        code = c;
+        msg = m;
+    }
+    fn format() { return "[" + code + "] " + msg; }
+}
+try {
+    let err = new ErrorObj17();
+    err.init(503, "unavailable");
+    throw err;
+} catch (e) {
+    print("D17 code = " + e.code);
+    print("D17 msg = " + e.msg);
+    print("D17 format = " + e.format());
+}
+
+# ============================================================
+# D18: 多次 throw 同一异常对象（引用一致性）
+# ============================================================
+print("== D18 ==");
+let sharedErr = {"id": "E18"};
+let d18a = "no-throw";
+let d18b = "no-throw";
+try {
+    throw sharedErr;
+} catch (e) {
+    d18a = "caught-1 id=" + e["id"];
+}
+try {
+    throw sharedErr;
+} catch (e) {
+    d18b = "caught-2 id=" + e["id"];
+}
+print("D18 " + d18a);
+print("D18 " + d18b);
+
+# ============================================================
+# D19: lambda 中 throw — 调用处 catch
+# ============================================================
+print("== D19 ==");
+let lam = fn(x) {
+    if (x < 0) { throw "lambda-err-D19: " + x; }
+    return x * 2;
+};
+try {
+    let r = lam(-5);
+    print("D19 got r = " + r);
+} catch (e) {
+    print("D19 caught: " + e);
+}
+try {
+    print("D19 ok: " + lam(10));
+} catch (e) {
+    print("D19 should NOT catch: " + e);
+}
+
+# ============================================================
+# D20: lambda 中 throw — lambda 作为 HOF 参数
+# ============================================================
+print("== D20 ==");
+fn apply20(f, x) {
+    return f(x);
+}
+try {
+    let r = apply20(fn(x) {
+        if (x == 0) { throw "zero-D20"; }
+        return 100 / x;
+    }, 0);
+    print("D20 got r = " + r);
+} catch (e) {
+    print("D20 caught: " + e);
+}
+
+# ============================================================
+# D21: lambda 中 throw — lambda 在 list 中，for 遍历调用
+# ============================================================
+print("== D21 ==");
+let fns = [
+    fn(x) { return x + 1; },
+    fn(x) { throw "bad-fn-D21"; },
+    fn(x) { return x + 2; }
+];
+let d21results = [];
+for f in fns {
+    try {
+        d21results.append(f(10));
+    } catch (e) {
+        d21results.append("ERR:" + e);
+    }
+}
+print("D21 results = " + str(d21results));
+
+# ============================================================
+# D22: 异常在闭包中（捕获外部变量后 throw）
+# ============================================================
+print("== D22 ==");
+fn makeThrower22(msg) {
+    fn inner() { throw msg; }
+    return inner;
+}
+let t22 = makeThrower22("from-closure-D22");
+try {
+    t22();
+    print("D22 should NOT reach");
+} catch (e) {
+    print("D22 caught: " + e);
+}
+
+# ============================================================
+# D23: 异常穿过闭包链 — 闭包调闭包调闭包...最深处 throw
+# ============================================================
+print("== D23 ==");
+fn makeChain23(n) {
+    if (n == 0) {
+        return fn() { throw "chain-bottom-D23"; };
+    }
+    let next = makeChain23(n - 1);
+    return fn() { return next(); };
+}
+let chain = makeChain23(3);
+try {
+    chain();
+    print("D23 should NOT reach");
+} catch (e) {
+    print("D23 caught: " + e);
+}
+
+# ============================================================
+# D24: 异常在递归中 — 递归深层 throw，外层 catch
+# ============================================================
+print("== D24 ==");
+fn rec24(n) {
+    if (n == 0) { throw "rec-bottom-D24"; }
+    return rec24(n - 1);
+}
+try {
+    rec24(10);
+    print("D24 should NOT reach");
+} catch (e) {
+    print("D24 caught: " + e);
+}
+
+# ============================================================
+# D25: 递归中每层都有 try/catch，每层 rethrow
+# ============================================================
+print("== D25 ==");
+fn rec25(n) {
+    if (n == 0) { throw "rec25-bottom"; }
+    try {
+        return rec25(n - 1);
+    } catch (e) {
+        throw "rec25-L" + n + "(" + e + ")";
+    }
+}
+try {
+    rec25(3);
+} catch (e) {
+    print("D25 caught: " + e);
+}
+
+# ============================================================
+# D26: 异常在 for 循环中 — throw 打断循环，外层 catch
+# ============================================================
+print("== D26 ==");
+let d26count = 0;
+try {
+    for i in range(10) {
+        d26count = d26count + 1;
+        if (i == 3) { throw "loop-break-D26"; }
+    }
+    print("D26 loop done");
+} catch (e) {
+    print("D26 caught: " + e + ", count=" + d26count);
+}
+
+# ============================================================
+# D27: 循环内 try/catch — 捕获后继续循环
+# ============================================================
+print("== D27 ==");
+let d27errs = [];
+for i in range(5) {
+    try {
+        if (i % 2 == 0) { throw "even-" + i; }
+        print("D27 odd " + i);
+    } catch (e) {
+        d27errs.append(e);
+    }
+}
+print("D27 errs = " + str(d27errs));
+
+# ============================================================
+# D28: 嵌套循环 + 嵌套 try — 内循环 throw 被内 catch，外循环继续
+# ============================================================
+print("== D28 ==");
+let d28log = "";
+for i in range(3) {
+    for j in range(3) {
+        try {
+            if (j == 1) { throw "j1-i" + i; }
+            d28log = d28log + i + "," + j + ";";
+        } catch (e) {
+            d28log = d28log + "E" + i + ";";
+        }
+    }
+}
+print("D28 log = " + d28log);
+
+# ============================================================
+# D29: try 内 break/continue 后 handler 栈是否泄漏
+# （break/continue 在 try 内 — 后续异常能否正常捕获）
+# ============================================================
+print("== D29 ==");
+let d29sum = 0;
+for i in range(10) {
+    try {
+        if (i == 3) { continue; }
+        if (i == 7) { break; }
+        d29sum = d29sum + i;
+    } catch (e) {
+        d29sum = d29sum + 100;
+    }
+}
+print("D29 sum = " + d29sum);
+# 验证 break/continue 后 try 仍能 catch
+try {
+    throw "post-loop-D29";
+} catch (e) {
+    print("D29 post caught: " + e);
+}
+
+# ============================================================
+# D30: try 内 return — catch 不执行，函数正常返回
+# ============================================================
+print("== D30 ==");
+fn d30ok() {
+    try {
+        return 100;
+    } catch (e) {
+        return -1;
+    }
+}
+print("D30 ok = " + d30ok());
+
+fn d30throw() {
+    try {
+        throw "fail-D30";
+    } catch (e) {
+        return 200;
+    }
+    return 300;
+}
+print("D30 throw = " + d30throw());
+
+# ============================================================
+# D31: 空异常值 — throw null, catch (e), e 是什么
+# ============================================================
+print("== D31 ==");
+try {
+    throw null;
+} catch (e) {
+    print("D31 e = " + str(e));
+    print("D31 e is null? " + str(e == null));
+    print("D31 e type = " + type(e));
+}
+
+# ============================================================
+# D32: throw false / throw 0 / throw "" — falsy 异常值
+# ============================================================
+print("== D32 ==");
+try { throw false; } catch (e) { print("D32 false: " + str(e) + " type=" + type(e)); }
+try { throw 0; } catch (e) { print("D32 zero: " + str(e) + " type=" + type(e)); }
+try { throw ""; } catch (e) { print("D32 empty: [" + str(e) + "] type=" + type(e)); }
+
+# ============================================================
+# D33: 未捕获异常 — 程序行为
+# 预期：打印错误并终止，后续代码不执行
+# （此测试放在中间观察 — 实际会终止，所以用函数包裹测试）
+# ============================================================
+print("== D33 ==");
+fn d33uncaught() {
+    throw "uncaught-in-fn-D33";
+}
+let d33result = "no-throw";
+try {
+    d33uncaught();
+} catch (e) {
+    d33result = "caught: " + e;
+}
+print("D33 result: " + d33result);
+
+# ============================================================
+# D34: 异常值比较 — e == "msg"
+# ============================================================
+print("== D34 ==");
+try {
+    throw "known-err-D34";
+} catch (e) {
+    if (e == "known-err-D34") {
+        print("D34 matched");
+    } else {
+        print("D34 NOT matched: " + e);
+    }
+}
+
+# ============================================================
+# D35: 隐式异常 — dict 缺失键
+# ============================================================
+print("== D35 ==");
+let d35 = {"a": 1};
+let d35r = "no-throw";
+try {
+    let v = d35["missing"];
+    d35r = "got: " + str(v);
+} catch (e) {
+    d35r = "caught: " + str(e);
+}
+print("D35 dict missing: " + d35r);
+
+# ============================================================
+# D36: 隐式异常 — list 越界索引
+# ============================================================
+print("== D36 ==");
+let d36list = [10, 20];
+let d36r = "no-throw";
+try {
+    let v = d36list[10];
+    d36r = "got: " + str(v);
+} catch (e) {
+    d36r = "caught: " + str(e);
+}
+print("D36 list oob: " + d36r);
+
+# ============================================================
+# D37: 隐式异常 — 除以零
+# ============================================================
+print("== D37 ==");
+let d37r = "no-throw";
+try {
+    let v = 1 / 0;
+    d37r = "got: " + str(v);
+} catch (e) {
+    d37r = "caught: " + str(e);
+}
+print("D37 div zero: " + d37r);
+
+# ============================================================
+# D38: 隐式异常 — list.remove(not_found) 是否 throw
+# ============================================================
+print("== D38 ==");
+let d38list = [1, 2, 3];
+let d38r = "no-throw";
+try {
+    d38list.remove(99);
+    d38r = "no-throw (no removal)";
+} catch (e) {
+    d38r = "caught: " + str(e);
+}
+print("D38 remove missing: " + d38r);
+
+# ============================================================
+# D39: 隐式异常 — 访问 null 的属性
+# ============================================================
+print("== D39 ==");
+let d39r = "no-throw";
+try {
+    let n = null;
+    let v = n.foo;
+    d39r = "got: " + str(v);
+} catch (e) {
+    d39r = "caught: " + str(e);
+}
+print("D39 null attr: " + d39r);
+
+# ============================================================
+# D40: 隐式异常 — 调用不存在的方法
+# ============================================================
+print("== D40 ==");
+let d40r = "no-throw";
+try {
+    let s = "hello";
+    let v = s.nonexistentMethod();
+    d40r = "got: " + str(v);
+} catch (e) {
+    d40r = "caught: " + str(e);
+}
+print("D40 missing method: " + d40r);
+
+# ============================================================
+# D41: 异常穿过函数调用链 — A->B->C->throw, A catch
+# ============================================================
+print("== D41 ==");
+fn d41c() { throw "from-D41-C"; }
+fn d41b() { return d41c(); }
+fn d41a() { return d41b(); }
+try {
+    d41a();
+    print("D41 should NOT reach");
+} catch (e) {
+    print("D41 caught: " + e);
+}
+
+# ============================================================
+# D42: 异常穿过函数调用链 — 中间层 catch 后 rethrow 新异常
+# ============================================================
+print("== D42 ==");
+fn d42c() { throw "D42-C-err"; }
+fn d42b() {
+    try {
+        d42c();
+    } catch (e) {
+        throw "D42-B-wrapped: " + e;
+    }
+}
+fn d42a() { return d42b(); }
+try {
+    d42a();
+} catch (e) {
+    print("D42 caught: " + e);
+}
+
+# ============================================================
+# D43: 异常穿过函数调用链 — 每层都 catch 并 rethrow（链式包装）
+# ============================================================
+print("== D43 ==");
+fn d43base() { throw "D43-base"; }
+fn d43m1() {
+    try { d43base(); }
+    catch (e) { throw "D43-m1[" + e + "]"; }
+}
+fn d43m2() {
+    try { d43m1(); }
+    catch (e) { throw "D43-m2[" + e + "]"; }
+}
+fn d43m3() {
+    try { d43m2(); }
+    catch (e) { throw "D43-m3[" + e + "]"; }
+}
+try {
+    d43m3();
+} catch (e) {
+    print("D43 caught: " + e);
+}
+
+# ============================================================
+# D44: catch 块中调用会 throw 的函数 — 异常处理里再触发异常
+# ============================================================
+print("== D44 ==");
+fn d44inner() { throw "from-d44-inner"; }
+try {
+    try {
+        throw "d44-outer";
+    } catch (e) {
+        print("D44 caught outer: " + e + ", calling inner");
+        d44inner();
+    }
+} catch (e2) {
+    print("D44 outer caught: " + e2);
+}
+
+# ============================================================
+# D45: throw 在函数参数求值时
+# ============================================================
+print("== D45 ==");
+fn d45explodes() { throw "in-arg-D45"; }
+fn d45consumer(x) { return x + 1; }
+try {
+    let r = d45consumer(d45explodes());
+    print("D45 got r = " + r);
+} catch (e) {
+    print("D45 caught: " + e);
+}
+
+# ============================================================
+# D46: throw 在 if 条件表达式中
+# ============================================================
+print("== D46 ==");
+fn d46cond() { throw "cond-throw-D46"; }
+try {
+    if (d46cond()) {
+        print("D46 true");
+    } else {
+        print("D46 false");
+    }
+} catch (e) {
+    print("D46 caught: " + e);
+}
+
+# ============================================================
+# D47: REMOVED — `[1, 2, (throw "err"), 4]` causes SyntaxError (same as D10).
+#       Finding: throw cannot appear in list literal — it's a statement only.
+# ============================================================
+
+# ============================================================
+# D48: throw 在 for-in 的 iterable 表达式里
+# ============================================================
+print("== D48 ==");
+fn d48badIter() { throw "bad-iterable-D48"; }
+try {
+    for x in d48badIter() {
+        print("D48 should NOT iterate: " + x);
+    }
+    print("D48 should NOT reach");
+} catch (e) {
+    print("D48 caught: " + e);
+}
+
+# ============================================================
+# D49: try 内多条语句，throw 在中间，后续不执行
+# ============================================================
+print("== D49 ==");
+let d49log = "";
+try {
+    d49log = d49log + "a;";
+    d49log = d49log + "b;";
+    throw "mid-D49";
+    d49log = d49log + "c;";
+    d49log = d49log + "d;";
+} catch (e) {
+    d49log = d49log + "caught:" + e + ";";
+}
+print("D49 log = " + d49log);
+
+# ============================================================
+# D50: 空 try 体 + 空 catch 体
+# ============================================================
+print("== D50 ==");
+try {} catch (e) {}
+print("D50 both empty ok");
+
+# ============================================================
+# D51: catch 中 return — 函数从 catch 返回
+# ============================================================
+print("== D51 ==");
+fn d51fn() {
+    try {
+        throw "d51-err";
+    } catch (e) {
+        return "returned-from-catch: " + e;
+    }
+    return "unreachable";
+}
+print("D51: " + d51fn());
+
+# ============================================================
+# D52: catch 中 break/continue（在循环内）
+# ============================================================
+print("== D52 ==");
+let d52sum = 0;
+for i in range(10) {
+    try {
+        if (i == 3) { throw "skip-D52"; }
+        d52sum = d52sum + i;
+    } catch (e) {
+        continue;
+    }
+}
+print("D52 sum = " + d52sum);
+
+# ============================================================
+# D53: try-catch 在 concurrent 每个分支中
+# ============================================================
+print("== D53 ==");
+parallel fn d53task(n) {
+    try {
+        if (n < 0) { throw "neg-D53-" + n; }
+        return n * 2;
+    } catch (e) {
+        return "caught: " + e;
+    }
+}
+let d53r1 = "no-throw";
+let d53r2 = "no-throw";
+try {
+    concurrent {
+        let f1 = d53task(5);
+        let f2 = d53task(-1);
+        let r1 = await f1;
+        let r2 = await f2;
+        d53r1 = "r1=" + str(r1);
+        d53r2 = "r2=" + str(r2);
+    }
+} catch (e) {
+    d53r1 = "ERR: " + str(e);
+    d53r2 = "";
+}
+print("D53 " + d53r1);
+print("D53 " + d53r2);
+
+# ============================================================
+# D54: concurrent 块内任务 throw，外层 catch
+# ============================================================
+print("== D54 ==");
+parallel fn d54fail() { throw "d54-boom"; }
+let d54r = "no-throw";
+try {
+    concurrent {
+        let f = d54fail();
+        let r = await f;
+        print("D54 unreachable");
+    }
+} catch (e) {
+    d54r = "caught: " + str(e);
+}
+print("D54 result: " + d54r);
+
+# ============================================================
+# D55: concurrent 内 throw 后再进 concurrent（scope 泄漏检测）
+# ============================================================
+print("== D55 ==");
+parallel fn d55fail() { throw "d55-fail"; }
+parallel fn d55ok() { return 42; }
+let d55s1 = "no-throw";
+let d55s2 = "no-throw";
+try {
+    try {
+        concurrent {
+            let f = d55fail();
+            let r = await f;
+        }
+    } catch (e) {
+        d55s1 = "first caught: " + str(e);
+    }
+    concurrent {
+        let f = d55ok();
+        let r = await f;
+        d55s2 = "second r=" + str(r);
+    }
+} catch (e) {
+    d55s2 = "second ERR: " + str(e);
+}
+print("D55 stage1: " + d55s1);
+print("D55 stage2: " + d55s2);
+
+# ============================================================
+# D56: 异常消息含特殊字符（\n \t）
+# ============================================================
+print("== D56 ==");
+try {
+    throw "line1\nline2\ttabbed";
+} catch (e) {
+    print("D56 caught:");
+    print(e);
+    print("D56 end");
+}
+
+# ============================================================
+# D57: 异常值比较 — e == 数字 / e == list
+# ============================================================
+print("== D57 ==");
+try { throw 42; } catch (e) {
+    if (e == 42) { print("D57 num matched"); }
+    else { print("D57 num NOT matched: " + str(e)); }
+}
+try { throw [1, 2]; } catch (e) {
+    if (e == [1, 2]) { print("D57 list matched"); }
+    else { print("D57 list NOT matched: " + str(e)); }
+    print("D57 list[0] = " + e[0]);
+}
+
+# ============================================================
+# D58: catch 块内 try/catch 嵌套 — 内层 throw 不影响外层 catch 继续
+# ============================================================
+print("== D58 ==");
+try {
+    throw "outer-D58";
+} catch (e) {
+    print("D58 outer caught: " + e);
+    try {
+        throw "inner-D58-1";
+    } catch (e1) {
+        print("D58 inner1 caught: " + e1);
+    }
+    try {
+        throw "inner-D58-2";
+    } catch (e2) {
+        print("D58 inner2 caught: " + e2);
+    }
+    print("D58 catch block done");
+}
+
+# ============================================================
+# D59: 3 层嵌套 — 内层 catch 并 rethrow，中层 catch 透传，外层 catch
+# 注：H# 每个 try 必须有 catch，无法测试"try 无 catch 穿透"
+# ============================================================
+print("== D59 ==");
+try {
+    try {
+        try {
+            throw "L0-D59";
+        } catch (e) {
+            print("D59 L1 caught: " + e);
+            throw "L1-D59";
+        }
+    } catch (e) {
+        print("D59 L2 caught, rethrow: " + e);
+        throw e;
+    }
+} catch (e) {
+    print("D59 L3 caught: " + e);
+}
+
+# ============================================================
+# D60: 类方法中 throw — 调用方 catch
+# ============================================================
+print("== D60 ==");
+class Service60 {
+    let name = "svc60";
+    fn check(x) {
+        if (x < 0) { throw "bad x in " + this.name; }
+        return x;
+    }
+    fn process(x) {
+        try {
+            return this.check(x);
+        } catch (e) {
+            throw "process-failed: " + e;
+        }
+    }
+}
+let s60 = new Service60();
+try {
+    s60.process(-1);
+} catch (e) {
+    print("D60 caught: " + e);
+}
+try {
+    print("D60 ok: " + s60.process(7));
+} catch (e) {
+    print("D60 should NOT catch: " + e);
+}
+
+# ============================================================
+# D61: 异常在 init 中 — 实例构造失败
+# ============================================================
+print("== D61 ==");
+class StrictInit61 {
+    let v = 0;
+    fn init(x) {
+        if (x > 100) { throw "too big D61: " + x; }
+        v = x;
+    }
+}
+try {
+    let obj = new StrictInit61();
+    obj.init(200);
+    print("D61 should NOT reach");
+} catch (e) {
+    print("D61 caught: " + e);
+}
+try {
+    let ok = new StrictInit61();
+    ok.init(50);
+    print("D61 ok v=" + ok.v);
+} catch (e) {
+    print("D61 should NOT catch: " + e);
+}
+
+# ============================================================
+# D62: REMOVED — finally{} causes SyntaxError (parser doesn't recognize 'finally').
+#       Finding: H# does NOT support finally blocks. Confirmed by source: parser.py
+#       try_statement() only parses try{}catch(e){}, no finally branch.
+# ============================================================
+
+# ============================================================
+# D63: REMOVED — multiple catch{} clauses cause SyntaxError (Expected CATCH got CATCH).
+#       Finding: H# only supports single catch per try.
+# ============================================================
+
+# ============================================================
+# D64: REMOVED — catch(e is Type) typed catch causes SyntaxError.
+#       Finding: H# does NOT support typed/multiple catch.
+# ============================================================
+
+# ============================================================
+# D65: REMOVED — bare throw; (no value) causes SyntaxError.
+#       Finding: throw requires a value expression.
+# ============================================================
+
+# ============================================================
+# D66: 异常在 while 循环中
+# ============================================================
+print("== D66 ==");
+let d66count = 0;
+try {
+    let i = 0;
+    while (i < 10) {
+        d66count = d66count + 1;
+        if (i == 2) { throw "while-throw-D66"; }
+        i = i + 1;
+    }
+} catch (e) {
+    print("D66 caught: " + e + ", count=" + d66count);
+}
+
+# ============================================================
+# D67: 异常在 while 循环 try 内 — 捕获后继续
+# ============================================================
+print("== D67 ==");
+let d67sum = 0;
+let i67 = 0;
+while (i67 < 5) {
+    try {
+        if (i67 == 2) { throw "skip-D67"; }
+        d67sum = d67sum + i67;
+    } catch (e) {
+        d67sum = d67sum + 100;
+    }
+    i67 = i67 + 1;
+}
+print("D67 sum = " + d67sum);
+
+# ============================================================
+# D68: catch 中修改外部变量
+# ============================================================
+print("== D68 ==");
+let d68counter = 0;
+let d68msg = "before";
+try {
+    d68counter = d68counter + 1;
+    throw "boom-D68";
+} catch (e) {
+    d68counter = d68counter + 10;
+    d68msg = "caught: " + e;
+}
+print("D68 counter=" + d68counter + ", msg=" + d68msg);
+
+# ============================================================
+# D69: catch 后再 throw 一个不同类型（字符串 -> 数字）
+# ============================================================
+print("== D69 ==");
+try {
+    try {
+        throw "string-err-D69";
+    } catch (e) {
+        throw 999;
+    }
+} catch (e2) {
+    print("D69 caught: " + str(e2) + " type=" + type(e2));
+}
+
+# ============================================================
+# D70: 异常值类型 — type(e) 检查
+# ============================================================
+print("== D70 ==");
+try { throw "str"; } catch (e) { print("D70 str type=" + type(e)); }
+try { throw 42; } catch (e) { print("D70 num type=" + type(e)); }
+try { throw true; } catch (e) { print("D70 bool type=" + type(e)); }
+try { throw null; } catch (e) { print("D70 null type=" + type(e)); }
+try { throw [1]; } catch (e) { print("D70 list type=" + type(e)); }
+try { throw {"k":"v"}; } catch (e) { print("D70 dict type=" + type(e)); }
+
+# ============================================================
+# D71: 异常值为负数 / 浮点数
+# ============================================================
+print("== D71 ==");
+try { throw -42; } catch (e) { print("D71 neg: " + str(e) + " type=" + type(e)); }
+try { throw 3.14; } catch (e) { print("D71 float: " + str(e) + " type=" + type(e)); }
+
+# ============================================================
+# D72: 异常值为多行字符串
+# ============================================================
+print("== D72 ==");
+try {
+    throw "line1\nline2\nline3";
+} catch (e) {
+    print("D72 caught:");
+    print(e);
+    print("D72 ends");
+}
+
+# ============================================================
+# D73: 综合控制流 — try 内嵌套 for + break + throw
+# ============================================================
+print("== D73 ==");
+let d73out = "";
+try {
+    for i in range(5) {
+        try {
+            if (i == 3) { throw "stop@D73-" + i; }
+            d73out = d73out + i;
+        } catch (e) {
+            d73out = d73out + "E" + i;
+            break;
+        }
+    }
+} catch (e) {
+    d73out = d73out + "OUTER" + e;
+}
+print("D73 out = " + d73out);
+
+# ============================================================
+# D74: 多次 throw 同一 catch（循环内反复 throw + catch）
+# ============================================================
+print("== D74 ==");
+let d74attempts = 0;
+let d74lastErr = "";
+for i in range(3) {
+    try {
+        d74attempts = d74attempts + 1;
+        throw "attempt-D74-" + i;
+    } catch (e) {
+        d74lastErr = e;
+        print("D74 caught " + e);
+    }
+}
+print("D74 attempts=" + d74attempts + ", lastErr=" + d74lastErr);
+
+# ============================================================
+# D75: catch 后继续调用同一函数（异常不残留）
+# ============================================================
+print("== D75 ==");
+fn d75maybeFail(n) {
+    if (n < 0) { throw "neg-D75"; }
+    return n * 2;
+}
+try { d75maybeFail(-1); } catch (e) { print("D75 first caught: " + e); }
+try { print("D75 second ok: " + d75maybeFail(5)); } catch (e) { print("D75 should NOT catch: " + e); }
+try { print("D75 third ok: " + d75maybeFail(10)); } catch (e) { print("D75 should NOT catch: " + e); }
+
+# ============================================================
+# D76: 异常穿过多个 return 点（每层函数 return 调用结果）
+# ============================================================
+print("== D76 ==");
+fn d76base() { throw "deep-D76"; }
+fn d76m1() { return d76base(); }
+fn d76m2() { return d76m1(); }
+fn d76m3() { return d76m2(); }
+try {
+    let v = d76m3();
+    print("D76 should NOT reach: " + v);
+} catch (e) {
+    print("D76 caught: " + e);
+}
+
+# ============================================================
+# D77: try 内调用函数，函数内 try/catch 自己处理（不传播）
+# ============================================================
+print("== D77 ==");
+fn d77inner() {
+    try {
+        throw "d77-inner-err";
+    } catch (e) {
+        return "handled: " + e;
+    }
+}
+try {
+    let r = d77inner();
+    print("D77 got: " + r);
+} catch (e) {
+    print("D77 should NOT catch: " + e);
+}
+
+# ============================================================
+# D78: catch 块内调用外部函数 — 函数内 throw 被更外层 catch
+# ============================================================
+print("== D78 ==");
+fn d78helper() { throw "from-d78-helper"; }
+try {
+    try {
+        throw "d78-outer";
+    } catch (e) {
+        print("D78 caught: " + e + ", calling helper");
+        d78helper();
+    }
+} catch (e2) {
+    print("D78 final caught: " + e2);
+}
+
+# ============================================================
+# D79: 异常在 channel 操作中 — send on closed
+# ============================================================
+print("== D79 ==");
+let d79ch = chan_new(2);
+chan_close(d79ch);
+let d79r = "no-throw";
+try {
+    chan_send(d79ch, 1);
+} catch (e) {
+    d79r = "caught: " + str(e);
+}
+print("D79 send-on-closed: " + d79r);
+
+# ============================================================
+# D80: 异常在 channel 操作中 — recv on drained closed
+# ============================================================
+print("== D80 ==");
+let d80ch = chan_new(2);
+chan_send(d80ch, 1);
+chan_close(d80ch);
+chan_recv(d80ch);
+let d80r = "no-throw";
+try {
+    chan_recv(d80ch);
+} catch (e) {
+    d80r = "caught: " + str(e);
+}
+print("D80 recv-drained-closed: " + d80r);
+
+# ============================================================
+# D81: 异常值在 catch 中被修改后，作用域结束后恢复？
+# （测试 catch 变量是局部还是污染外层）
+# ============================================================
+print("== D81 ==");
+let d81e = "outer-D81";
+try {
+    throw "inner-D81";
+} catch (d81e) {
+    d81e = "modified-in-catch-D81";
+    print("D81 in catch: " + d81e);
+}
+print("D81 after catch: " + d81e);
+
+# ============================================================
+# D82: 3 层嵌套 — 中层 catch 后 break 出外层循环（异常 + 循环控制流）
+# ============================================================
+print("== D82 ==");
+let d82sum = 0;
+for i in range(10) {
+    try {
+        try {
+            if (i == 4) { throw "break-D82"; }
+            d82sum = d82sum + i;
+        } catch (e) {
+            print("D82 inner caught: " + e);
+            break;
+        }
+    } catch (e2) {
+        d82sum = d82sum + 1000;
+    }
+}
+print("D82 sum = " + d82sum);
+
+# ============================================================
+# D83: 异常值是 dict — catch 中修改 dict 后 rethrow，外层看到修改？
+# （dict 是引用类型，修改可能影响原对象）
+# ============================================================
+print("== D83 ==");
+try {
+    try {
+        throw {"val": "original-D83"};
+    } catch (e) {
+        e["val"] = "modified-D83";
+        e["new"] = "added";
+        throw e;
+    }
+} catch (e2) {
+    print("D83 val = " + e2["val"]);
+    print("D83 new = " + e2["new"]);
+}
+
+# ============================================================
+# D84: 异常值是 list — catch 中 append 后 rethrow
+# ============================================================
+print("== D84 ==");
+try {
+    try {
+        throw [1, 2, 3];
+    } catch (e) {
+        e.append(4);
+        throw e;
+    }
+} catch (e2) {
+    print("D84 list = " + str(e2));
+    print("D84 len = " + str(len(e2)));
+}
+
+# ============================================================
+# D85: 异常值是类实例 — catch 中修改字段后 rethrow
+# ============================================================
+print("== D85 ==");
+class Err85 {
+    let code = 0;
+    fn init(c) { code = c; }
+}
+try {
+    try {
+        let err = new Err85();
+        err.init(500);
+        throw err;
+    } catch (e) {
+        e.code = 503;
+        throw e;
+    }
+} catch (e2) {
+    print("D85 code = " + e2.code);
+}
+
+print("===== R3-107 DONE =====");
+
+# ============================================================
+# D86: 顶层未捕获异常 — 观察程序终止行为
+# 预期：打印错误并终止，"after" 不打印
+# ============================================================
+print("== D86 uncaught ==");
+throw "uncaught-termination-D86";
+print("D86 after - should NOT print");

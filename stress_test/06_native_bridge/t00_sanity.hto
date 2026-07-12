@@ -1,0 +1,5 @@
+# sanity check - does each VM run basic code?
+print("hello");
+let xs = [1, 2, 3];
+print(len(xs));
+print(str(42));

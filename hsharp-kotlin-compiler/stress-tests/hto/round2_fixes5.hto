@@ -1,0 +1,326 @@
+# ============================================================
+# round2_fixes5.hto — HVM.kt 三项修复验证 (智能体 #fixes5)
+#   Bug1: list 方法 pop(i)/insert/remove/sort/reverse/index
+#   Bug2: concurrent{} CONCURRENT_EXIT 幂等性 (scope 泄漏探测)
+#   Bug3: 方法内裸名调用同类方法
+# 方法: 每个用例打印 [TAG 预期] 实际; 易错项 try/catch 包裹
+# ============================================================
+
+print("===== R2-FIXES5 START =====");
+
+# ============================================================
+# Bug 1: list 方法
+# ============================================================
+print("--- B1: list methods ---");
+
+# T1: pop() 无参数 — 弹出末尾
+let l1 = [1, 2, 3];
+let r1 = l1.pop();
+print("[T1.1 pop() returns last] expect=3]");
+print(r1);
+print("[T1.2 pop() mutates] expect=[1, 2]]");
+print(l1);
+
+# T2: pop(i) 正索引
+let l2 = [10, 20, 30, 40];
+let r2 = l2.pop(1);
+print("[T2.1 pop(1) returns] expect=20]");
+print(r2);
+print("[T2.2 pop(1) mutates] expect=[10, 30, 40]]");
+print(l2);
+
+# T3: pop(i) 负索引 (从末尾计数)
+let l3 = [10, 20, 30, 40];
+let r3 = l3.pop(-1);
+print("[T3.1 pop(-1) returns last] expect=40]");
+print(r3);
+print("[T3.2 pop(-1) mutates] expect=[10, 20, 30]]");
+print(l3);
+
+let l3b = [10, 20, 30, 40];
+let r3b = l3b.pop(-2);
+print("[T3.3 pop(-2) returns] expect=30]");
+print(r3b);
+print("[T3.4 pop(-2) mutates] expect=[10, 20, 40]]");
+print(l3b);
+
+# T4: pop 越界 — 应抛
+let t4 = "no-err";
+try { let x = [1].pop(5); t4 = "got:" + str(x); } catch (e) { t4 = "caught:" + str(e); }
+print("[T4.1 pop(5) out of range] expect=caught err]");
+print(t4);
+
+# T5: pop 空列表 — 应抛
+let t5 = "no-err";
+try { let x = [].pop(); t5 = "got:" + str(x); } catch (e) { t5 = "caught:" + str(e); }
+print("[T5.1 pop() empty] expect=caught err]");
+print(t5);
+
+# T6: insert(i, x) 正索引
+let l6 = [1, 2, 3];
+l6.insert(1, 99);
+print("[T6.1 insert(1,99)] expect=[1, 99, 2, 3]]");
+print(l6);
+
+# T7: insert 头部
+let l7 = [2, 3];
+l7.insert(0, 1);
+print("[T7.1 insert(0,1) head] expect=[1, 2, 3]]");
+print(l7);
+
+# T8: insert 末尾 (i == size)
+let l8 = [1, 2];
+l8.insert(2, 3);
+print("[T8.1 insert(2,3) tail] expect=[1, 2, 3]]");
+print(l8);
+
+# T9: insert 负索引
+let l9 = [1, 2, 3];
+l9.insert(-1, 99);
+print("[T9.1 insert(-1,99)] expect=[1, 2, 99, 3]]");
+print(l9);
+
+# T10: insert 越界正索引 — 钳制到末尾
+let l10 = [1, 2];
+l10.insert(100, 3);
+print("[T10.1 insert(100,3) clamped] expect=[1, 2, 3]]");
+print(l10);
+
+# T11: insert 越界负索引 — 钳制到头部
+let l11 = [1, 2];
+l11.insert(-100, 0);
+print("[T11.1 insert(-100,0) clamped] expect=[0, 1, 2]]");
+print(l11);
+
+# T12: remove(x) 已存在
+let l12 = [1, 2, 3, 2, 4];
+l12.remove(2);
+print("[T12.1 remove(2) first occurence] expect=[1, 3, 2, 4]]");
+print(l12);
+
+# T13: remove(x) 不存在 — 应抛
+let t13 = "no-err";
+try { let l13 = [1, 2, 3]; l13.remove(99); t13 = "no-throw"; } catch (e) { t13 = "caught:" + str(e); }
+print("[T13.1 remove(99) not found] expect=caught err]");
+print(t13);
+
+# T14: sort() 默认升序
+let l14 = [5, 2, 8, 1, 9, 3];
+l14.sort();
+print("[T14.1 sort() ascending] expect=[1, 2, 3, 5, 8, 9]]");
+print(l14);
+
+# T15: sort 已排序
+let l15 = [1, 2, 3];
+l15.sort();
+print("[T15.1 sort() already sorted] expect=[1, 2, 3]]");
+print(l15);
+
+# T16: sort 单元素
+let l16 = [42];
+l16.sort();
+print("[T16.1 sort() single] expect=[42]]");
+print(l16);
+
+# T17: sort 空列表
+let l17 = [];
+l17.sort();
+print("[T17.1 sort() empty] expect=[]]");
+print(l17);
+
+# T18: sort 负数
+let l18 = [3, -1, 2, -5, 0];
+l18.sort();
+print("[T18.1 sort() with negatives] expect=[-5, -1, 0, 2, 3]]");
+print(l18);
+
+# T19: reverse()
+let l19 = [1, 2, 3, 4];
+l19.reverse();
+print("[T19.1 reverse()] expect=[4, 3, 2, 1]]");
+print(l19);
+
+# T20: reverse 空列表
+let l20 = [];
+l20.reverse();
+print("[T20.1 reverse() empty] expect=[]]");
+print(l20);
+
+# T21: reverse 单元素
+let l21 = [7];
+l21.reverse();
+print("[T21.1 reverse() single] expect=[7]]");
+print(l21);
+
+# T22: index(x) 已存在
+let l22 = [10, 20, 30, 20];
+print("[T22.1 index(20) first] expect=1]");
+print(l22.index(20));
+print("[T22.2 index(30)] expect=2]");
+print(l22.index(30));
+print("[T22.3 index(10) head] expect=0]");
+print(l22.index(10));
+
+# T23: index(x) 不存在 — 返回 -1
+let l23 = [1, 2, 3];
+print("[T23.1 index(99) absent] expect=-1]");
+print(l23.index(99));
+
+# T24: 综合操作 — 用 insert+sort+reverse 构造序列
+let l24 = [];
+l24.insert(0, 3);
+l24.insert(0, 1);
+l24.insert(1, 2);
+l24.insert(3, 4);
+print("[T24.1 built via insert] expect=[1, 2, 3, 4]]");
+print(l24);
+l24.reverse();
+print("[T24.2 reversed] expect=[4, 3, 2, 1]]");
+print(l24);
+l24.sort();
+print("[T24.3 sorted back] expect=[1, 2, 3, 4]]");
+print(l24);
+let p24 = l24.pop(0);
+print("[T24.4 pop(0)] expect=1 | [2, 3, 4]]");
+print(p24);
+print(l24);
+
+# ============================================================
+# Bug 3: 方法内裸名调用同类方法
+# ============================================================
+print("--- B3: bare-name method call ---");
+
+class Counter {
+    let n = 0;
+    fn inc() { n = n + 1; return n; }
+    # add_two 调用 inc() 两次 (裸名) — 应解析为 self.inc()
+    fn add_two() { inc(); inc(); return n; }
+    # 调用同类方法并使用返回值
+    fn double_inc() { let a = inc(); let b = inc(); return a + b; }
+    fn describe() { return "count=" + str(n); }
+}
+
+let c = new Counter();
+print("[B3.1 add_two via bare-name calls] expect=2]");
+print(c.add_two());
+print("[B3.2 n after add_two] expect=2]");
+print(c.n);
+print("[B3.3 describe] expect=count=2]");
+print(c.describe());
+
+let c2 = new Counter();
+# c2 起始 n=0; inc()->1(a), inc()->2(b); a+b=3
+print("[B3.4 double_inc returns sum] expect=3]");
+print(c2.double_inc());
+
+# 裸名调用同类方法 + 字段读取混合
+class Greeter {
+    let name = "world";
+    fn who() { return name; }
+    fn greet() { return "hello, " + who(); }   # 裸名调用 who()
+}
+let g = new Greeter();
+print("[B3.5 greet() calls who() bare] expect=hello, world]");
+print(g.greet());
+
+# 动态分派: 子类覆盖 who(), 父类 greet() 裸名调用应命中子类
+class Base {
+    fn who() { return "base"; }
+    fn greet() { return "hi from " + who(); }
+}
+class Derived extends Base {
+    fn who() { return "derived"; }
+}
+let d = new Derived();
+print("[B3.6 dynamic dispatch bare-name] expect=hi from derived]");
+print(d.greet());
+
+# 裸名调用继承来的方法 (子类方法调用父类方法)
+class Tool {
+    fn helper(x) { return x * 2; }
+    fn run(x) { return helper(x) + 1; }   # 裸名调用 helper
+}
+class SubTool extends Tool {
+    fn helper(x) { return x * 10; }   # 覆盖
+}
+let t = new Tool();
+print("[B3.7 base helper via bare-name] expect=5 (2*2+1)]");
+print(t.run(2));
+let st = new SubTool();
+print("[B3.8 overridden helper via bare-name] expect=21 (2*10+1)]");
+print(st.run(2));
+
+# 裸名调用不应被同名字段遮蔽测试: 字段优先 (与属性访问一致)
+class Shadow {
+    let f = "field";
+    fn f() { return "method"; }
+    fn callit() { return f; }   # f 既是字段也是方法; 字段优先
+}
+# 注: 字段与方法同名可能编译时就有冲突; 用 try 包裹
+let sh = "skip";
+try {
+    let s = new Shadow();
+    sh = s.callit();
+} catch (e) {
+    sh = "caught:" + str(e);
+}
+print("[B3.9 field/method name clash (field wins)] expect=field or caught]");
+print(sh);
+
+# ============================================================
+# Bug 2: concurrent{} CONCURRENT_EXIT 幂等性 / scope 泄漏
+# (依赖 compiler.py 用 SETUP_EXCEPT 包裹 body; 这里探测行为)
+# ============================================================
+print("--- B2: concurrent CONCURRENT_EXIT idempotency ---");
+
+parallel fn b2_fail() { throw "b2-boom"; }
+parallel fn b2_ok() { return 42; }
+
+# P-LEAK: 第一次 concurrent 内 throw, CONCURRENT_EXIT 可能被跳过;
+# 第二次进入 concurrent — 若 scope 泄漏, parent 链被污染, 第二次会异常。
+# 幂等修复 + compiler SETUP_EXCEPT 包裹后, 第一次应正确清理, 第二次正常。
+print("[B2.1 first concurrent throws]");
+let b2_stage1 = "no-throw";
+try {
+    concurrent {
+        let f = b2_fail();
+        let r = await f;
+        print("unreachable");
+    }
+} catch (e) {
+    b2_stage1 = "caught:" + str(e);
+}
+print(b2_stage1);
+
+print("[B2.2 second concurrent after throw]");
+let b2_stage2 = "no-throw";
+try {
+    concurrent {
+        let f = b2_ok();
+        let r = await f;
+        b2_stage2 = "second-r=" + str(r);
+    }
+} catch (e) {
+    b2_stage2 = "ERR:" + str(e);
+}
+print("[B2.3 second concurrent result] expect=second-r=42]");
+print(b2_stage2);
+
+# 正常 concurrent 基线 (应一直通过)
+parallel fn b2_work(n) { return n * n; }
+let b2_baseline = "no-throw";
+try {
+    concurrent {
+        let f1 = b2_work(3);
+        let f2 = b2_work(4);
+        let r1 = await f1;
+        let r2 = await f2;
+        b2_baseline = "sum=" + str(r1 + r2);
+    }
+} catch (e) {
+    b2_baseline = "ERR:" + str(e);
+}
+print("[B2.4 baseline concurrent] expect=sum=25]");
+print(b2_baseline);
+
+print("===== R2-FIXES5 DONE =====");

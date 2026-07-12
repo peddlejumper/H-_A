@@ -1,0 +1,12 @@
+# 测试 str, int, float, substring, ord, chr, time_now
+print(str(42));
+print(str(3.14));
+print(int("42"));
+print(int(3.9));
+print(float("3.14"));
+print(float(5));
+print(substring("Hello", 0, 3));
+print(substring("Hello", 1, 4));
+print(ord("A"));
+print(chr(66));
+print(time_now());

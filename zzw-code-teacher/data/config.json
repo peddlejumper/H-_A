@@ -1,0 +1,15 @@
+{
+  "ai": {
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "api_key": "",
+    "model": "gpt-4o-mini",
+    "max_tokens": 1024,
+    "temperature": 0.3,
+    "system_prompt": ""
+  },
+  "judge": {
+    "timeout_ms": 3000,
+    "max_output_size": 65536,
+    "sandbox": false
+  }
+}

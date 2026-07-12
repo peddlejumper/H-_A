@@ -1,0 +1,11 @@
+# t04_for_nested.hto - JUMP 回填（嵌套 for）
+let pairs = [];
+for i in [1, 2, 3] {
+    for j in ["a", "b"] {
+        push(pairs, str(i) + j);
+    }
+}
+print(len(pairs));
+for p in pairs {
+    print(p);
+}

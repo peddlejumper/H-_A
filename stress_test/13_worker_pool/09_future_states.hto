@@ -1,0 +1,101 @@
+# 09 — FutureCell state machine: PENDING -> RESOLVED, PENDING -> FAILED
+# Covers: FutureCell 状态机 — 正常完成 (RESOLVED)、抛异常 (FAILED)。
+# PENDING -> CANCELLED 路径在用户代码中不可达（无 cancel API），单独在 t10 探测。
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+# PENDING -> RESOLVED：调用后 future 类型正确，await 后值正确
+parallel fn resolve_with(v) {
+    return v;
+}
+let f = resolve_with(42);
+check("future_type_before_await", type(f) == "future", "type=" + type(f));
+check("await_resolves", await f == 42, "got " + str(await f));
+# 再次 await 仍得到同一值（幂等 — RESOLVED 是终态）
+check("await_after_resolved", await f == 42, "second await=" + str(await f));
+
+# PENDING -> FAILED：parallel fn 内 throw
+parallel fn fail_with(msg) {
+    throw msg;
+}
+let ff = fail_with("err-xyz");
+check("failed_future_type", type(ff) == "future", "type=" + type(ff));
+let caught = false;
+let msg = "";
+try {
+    let _ = await ff;
+} catch (e) {
+    caught = true;
+    msg = str(e);
+}
+check("failed_await_raises", caught, "no exception raised");
+check("failed_payload_intact", msg == "err-xyz", "msg=" + msg);
+# 再次 await 已 FAILED 的 future，应再次抛同样异常（幂等）
+let caught2 = false;
+let msg2 = "";
+try {
+    let _ = await ff;
+} catch (e) {
+    caught2 = true;
+    msg2 = str(e);
+}
+check("failed_reawait_raises_again", caught2, "no exception on re-await");
+check("failed_reawait_same_payload", msg2 == "err-xyz", "msg2=" + msg2);
+
+# RESOLVED 后再 complete 应无效（cell 只能 settle 一次）—
+# 用户层无法直接 complete，但可观察：await 同一 future 100 次都同值
+parallel fn once() {
+    return 999;
+}
+let fo = once();
+let first = await fo;
+let all_same = true;
+let i = 0;
+while (i < 99) {
+    if (await fo != first) { all_same = false; }
+    i = i + 1;
+}
+check("resolved_is_idempotent_100x", all_same, "value changed across awaits");
+
+# FAILED 后 future 不会变成 RESOLVED
+parallel fn fail_once() {
+    throw "permanent";
+}
+let fb = fail_once();
+let _ = "x";
+try { let _ = await fb; } catch (e) { }
+# 再 await 仍应抛
+let still_failing = false;
+try { let _ = await fb; } catch (e) { still_failing = true; }
+check("failed_stays_failed", still_failing, "failed future became resolved");
+
+# 大量并发：一半 resolve 一半 fail，互不干扰
+parallel fn half(v) {
+    if (v % 2 == 0) { return v; }
+    throw v;
+}
+let futs = [];
+let i = 0;
+while (i < 100) {
+    push(futs, half(i));
+    i = i + 1;
+}
+let ok_count = 0;
+let fail_count = 0;
+let j = 0;
+while (j < 100) {
+    try {
+        let v = await futs[j];
+        if (v == j) { ok_count = ok_count + 1; }
+    } catch (e) {
+        if (str(e) == str(j)) { fail_count = fail_count + 1; }
+    }
+    j = j + 1;
+}
+check("half_resolve_count", ok_count == 50, "ok_count=" + str(ok_count));
+check("half_fail_count",   fail_count == 50, "fail_count=" + str(fail_count));
+
+print("T09_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

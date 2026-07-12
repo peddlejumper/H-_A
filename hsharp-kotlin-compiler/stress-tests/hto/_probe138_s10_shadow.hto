@@ -1,0 +1,31 @@
+# _probe138_s10_shadow.hto — 确认 safe 参数 f 遮蔽全局函数 f
+# 假设: safe(label, f) 的参数 f 遮蔽了全局 fn f(x)
+# 测试1: 用 f 作为 safe 参数名 (预期: 失败)
+# 测试2: 用 fn_ 作为 safe 参数名 (预期: 成功)
+
+fn f(x) { return x + 1; }
+fn g(x) { return x * 2; }
+
+fn caller() { return f(g(5)); }
+
+print("probe_shadow_test1:");
+fn safe1(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+safe1("shadow_with_f_param", fn() { return caller(); });
+
+print("probe_shadow_test2:");
+fn safe2(label, fn_) {
+    try {
+        let r = fn_();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+safe2("shadow_with_fn_param", fn() { return caller(); });

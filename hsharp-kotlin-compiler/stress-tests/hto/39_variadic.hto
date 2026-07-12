@@ -1,0 +1,80 @@
+# D5: variadic parameters — `fn f(...args)` / `fn f(a, b, ...rest)`
+
+# 1. Pure variadic: collect all args into a list and return its length.
+fn count_all(...args) {
+    return len(args);
+}
+print(count_all());
+print(count_all(1));
+print(count_all(1, 2, 3));
+print(count_all(10, 20, 30, 40, 50));
+
+# 2. Sum all variadic args by iterating.
+fn sum(...nums) {
+    total = 0;
+    for n in nums {
+        total = total + n;
+    }
+    return total;
+}
+print(sum());
+print(sum(1));
+print(sum(1, 2, 3));
+print(sum(10, 20, 30, 40));
+
+# 3. Fixed + variadic: first arg is the separator, rest are joined.
+fn join(sep, ...parts) {
+    result = "";
+    i = 0;
+    for p in parts {
+        if (i > 0) {
+            result = result + sep;
+        }
+        result = result + p;
+        i = i + 1;
+    }
+    return result;
+}
+print(join(", ", "a", "b", "c"));
+print(join("-", "x", "y"));
+print(join("|", "solo"));
+print(join(",", "only"));
+
+# 4. Variadic captures strings as well as numbers.
+fn first_of(...items) {
+    if (len(items) == 0) {
+        return "<empty>";
+    }
+    return items[0];
+}
+print(first_of());
+print(first_of("hello", "world"));
+print(first_of(42, 99));
+
+# 5. Variadic returns the whole list (round-trip).
+fn collect(...xs) {
+    return xs;
+}
+let r = collect(1, 2, 3);
+print(len(r));
+print(r[0]);
+print(r[1]);
+print(r[2]);
+
+# 6. Multiple fixed params before the variadic.
+fn build(prefix, suffix, ...mids) {
+    out = prefix;
+    for m in mids {
+        out = out + m;
+    }
+    return out + suffix;
+}
+print(build("[", "]", "a", "b", "c"));
+print(build("(", ")", "x"));
+
+# 7. Zero trailing args to a fixed+variadic function.
+fn tail_after(first, ...rest) {
+    return len(rest);
+}
+print(tail_after("head"));
+print(tail_after("head", 1, 2, 3));

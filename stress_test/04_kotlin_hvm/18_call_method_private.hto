@@ -1,0 +1,24 @@
+# 18_call_method_private.hto — CALL_METHOD 私有字段访问
+class Counter {
+    private let count = 0;
+    fn init(start) {
+        self.count = start;
+    }
+    fn get() {
+        return self.count;
+    }
+    fn bump() {
+        self.count = self.count + 1;
+    }
+}
+let c = new Counter();
+c.init(10);
+print(c.get());
+c.bump();
+print(c.get());
+try {
+    print(c.count);
+} catch (e) {
+    print("private denied: " + str(e));
+}
+print("done");

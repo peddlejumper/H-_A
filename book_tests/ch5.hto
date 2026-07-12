@@ -1,0 +1,61 @@
+# 5.1 整数
+let a = 42;
+let b = -7;
+let c = 0;
+print(a);
+print(b);
+print(c);
+print(a + b);
+print(a * 2);
+# 5.2 浮点数
+let pi = 3.14;
+let g = 9.8;
+let neg = -0.5;
+print(pi);
+print(g);
+print(neg);
+print(1.5 + 2.5);
+print(pi * 2);
+# 5.3 字符串
+let s1 = "Hello";
+let s2 = "World";
+print(s1 + " " + s2);
+print(len(s1));
+print(s1[0]);
+# 5.4 布尔
+let t = true;
+let f = false;
+print(t);
+print(f);
+print(t and f);
+print(t or f);
+print(not t);
+# 5.5 null
+let nothing = nullptr;
+print(nothing);
+print(nothing == nullptr);
+# 5.6 列表
+let fruits = ["apple", "banana", "cherry"];
+print(fruits);
+print(len(fruits));
+print(fruits[0]);
+push(fruits, "date");
+print(fruits);
+let last = pop(fruits);
+print(last);
+print(fruits);
+# 5.7 字典
+let scores = {"math": 90, "english": 85};
+print(scores);
+print(scores["math"]);
+print(dict_has(scores, "math"));
+print(dict_keys(scores));
+print(dict_values(scores));
+# 5.9 类型转换
+print(str(42));
+print(str(3.14));
+print(str(true));
+print(int("123"));
+print(int(3.9));
+print(float("2.5"));
+print(float(5));

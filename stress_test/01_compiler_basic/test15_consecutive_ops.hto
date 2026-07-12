@@ -1,0 +1,7 @@
+# test15: consecutive operators
+let a = 1 + +2;
+let b = 1 - -2;
+let c = 1 - -1;
+print(a);
+print(b);
+print(c);

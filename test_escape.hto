@@ -1,0 +1,30 @@
+# test_escape.hto
+fn json_escape_string(s) {
+    if (s == nullptr) {
+        return "null";
+    }
+    let result = "\"";
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let c = s[i];
+        if (c == "\\") {
+            result = result + "\\\\";
+        } elif (c == "\"") {
+            result = result + "\\\"";
+        } elif (c == "\n") {
+            result = result + "\\n";
+        } elif (c == "\r") {
+            result = result + "\\r";
+        } elif (c == "\t") {
+            result = result + "\\t";
+        } else {
+            result = result + c;
+        }
+        i = i + 1;
+    }
+    result = result + "\"";
+    return result;
+}
+
+print(json_escape_string("hello\nworld"));

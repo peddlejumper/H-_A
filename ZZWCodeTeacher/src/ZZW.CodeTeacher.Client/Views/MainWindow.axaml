@@ -1,0 +1,127 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+        xmlns:v="using:ZZW.CodeTeacher.Client.Views"
+        x:Class="ZZW.CodeTeacher.Client.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="ZZW Code Teacher"
+        Width="1380" Height="860"
+        MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent">
+
+  <Border Background="{DynamicResource AppBackgroundBrush}"
+          BorderBrush="{DynamicResource GlassBorderBrush}"
+          BorderThickness="1"
+          CornerRadius="24">
+  <Panel>
+  <Border CornerRadius="24" ClipToBounds="True"
+          Background="{DynamicResource AppBackgroundBrush}">
+    <Image Source="{Binding BackgroundImage}"
+           IsVisible="{Binding HasCustomBackground}"
+           Opacity="{Binding BackgroundImageOpacity}"
+           Stretch="UniformToFill" />
+  </Border>
+  <DockPanel LastChildFill="True">
+    <Border DockPanel.Dock="Top" Classes="toolbar" Padding="20,10"
+            CornerRadius="24,24,0,0">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
+                    PointerPressed="OnTitleBarPointerPressed">
+          <Border Width="32" Height="32" CornerRadius="16" Background="{DynamicResource BrandBlueContainerBrush}">
+            <TextBlock Text="Z" Foreground="{DynamicResource OnBrandBlueContainerBrush}"
+                       FontSize="15" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <StackPanel VerticalAlignment="Center" Spacing="0">
+            <TextBlock Classes="title" Text="ZZW Code Teacher" />
+            <TextBlock Classes="subtitle" Text="代码教练 · 学员端" />
+          </StackPanel>
+        </StackPanel>
+        <Border Grid.Column="1" Background="Transparent"
+                PointerPressed="OnTitleBarPointerPressed" />
+        <TextBlock Grid.Column="2" Text="{Binding UserName}" Classes="subtitle"
+                   VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="280"
+                   HorizontalAlignment="Right" />
+        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" Margin="14,0,0,0"
+                    VerticalAlignment="Center">
+          <Button Classes="text icon" Content="-" ToolTip.Tip="最小化"
+                  Click="OnMinimizeClick" />
+          <Button Classes="text icon" Content="▢" ToolTip.Tip="最大化/还原"
+                  Click="OnToggleMaximizeClick" />
+          <Button Classes="text icon window-close" Content="×" ToolTip.Tip="关闭"
+                  Click="OnCloseClick" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Classes="toolbar" Padding="20,7"
+            CornerRadius="0,0,24,24">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <Ellipse Width="6" Height="6" Fill="{DynamicResource SuccessGreen}" />
+          <TextBlock Text="{Binding StatusBar}" Foreground="{DynamicResource InkTertiaryBrush}"
+                     FontSize="12" TextWrapping="Wrap" />
+        </StackPanel>
+        <TextBlock Grid.Column="1" Text="v1.0.0" Foreground="{DynamicResource InkMutedBrush}"
+                   FontSize="11" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
+
+    <ContentControl Content="{Binding ActiveView}">
+      <ContentControl.DataTemplates>
+        <DataTemplate DataType="vm:LoginViewModel">
+          <v:LoginView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:MainIdeViewModel">
+          <v:MainIdeView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:ProfileViewModel">
+          <v:ProfileView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:TeacherDashboardViewModel">
+          <v:TeacherDashboardView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:BlogViewModel">
+          <v:BlogView />
+        </DataTemplate>
+        <DataTemplate DataType="vm:AiSettingsViewModel">
+          <v:AiSettingsView />
+        </DataTemplate>
+      </ContentControl.DataTemplates>
+    </ContentControl>
+  </DockPanel>
+
+  <!-- 命令面板浮层(Ctrl+K / Cmd+K 触发,Esc 关闭,Enter 执行,Up/Down 导航) -->
+  <Border IsVisible="{Binding IsCommandPaletteOpen}"
+          Background="{DynamicResource ScrimBrush}"
+          HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+    <Border Width="480" MaxHeight="420" VerticalAlignment="Top" Margin="0,120,0,0"
+            Background="{DynamicResource GlassSurfaceBrush}"
+            CornerRadius="24" Padding="0"
+            BorderBrush="{DynamicResource GlassBorderBrush}" BorderThickness="1"
+            BoxShadow="{DynamicResource Elevation4}">
+      <DockPanel>
+        <TextBox DockPanel.Dock="Top" Text="{Binding CommandPalette.FilterText, Mode=TwoWay}"
+                 Watermark="输入命令名(回车执行,Esc 关闭)…" Padding="14,10"
+                 BorderThickness="0" FontSize="14" x:Name="PaletteSearchBox" />
+        <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource BorderDefaultBrush}" />
+        <ListBox ItemsSource="{Binding CommandPalette.FilteredCommands}"
+                 SelectedItem="{Binding CommandPalette.SelectedCommand, Mode=TwoWay}"
+                 Background="Transparent" BorderThickness="0" Padding="0"
+                 x:Name="PaletteList">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:CommandItem">
+              <TextBlock Text="{Binding Title}" Padding="14,8" FontSize="13" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+  </Border>
+  </Panel>
+  </Border>
+</Window>

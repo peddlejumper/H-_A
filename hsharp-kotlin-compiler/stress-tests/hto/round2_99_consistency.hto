@@ -1,0 +1,337 @@
+# ============================================================
+# round2_99_consistency.hto — Python VM vs Kotlin HVM 跨运行时一致性
+# 智能体 #99, Round 2
+#
+# 重要背景: 两个运行时使用不同的解析器/解释器:
+#   - Python VM (hsharp.py): 根目录 parser.py + interpreter.py (旧实现)
+#   - Kotlin HVM: HSharp_v0.4_Tests/parser.py 编译 -> Kotlin 运行时 (新实现)
+#
+# Python VM 不支持的构造 (在别处已单独验证, 见 bug 报告):
+#   - 切片语法 x[1:3], x[::-1]
+#   - 字面量索引 "abc"[0], [1,2,3][0]
+#   - 方法调用 obj.method() (s.strip(), L.push(), d.keys())
+#   - try / catch / throw (解释器无 visit_TryStatement)
+#   - null / none / nil 字面量
+#   - range(), type(), bool(), keys(), values(), has_key()
+#   - 闭包捕获外部变量
+#   - 类方法内访问字段 (this.x / 裸 x)
+#
+# 本文件只用【公共子集】构造, 以便两个运行时都能跑完, 从而对比
+# 真正的行为差异。每行先打印预期注释, 后打印实际值。
+# ============================================================
+
+print("===== R2-99 CROSS-RUNTIME CONSISTENCY (COMMON SUBSET) =====");
+
+# ---------- T1: 整数除法 ----------
+print("[T1.1 7/2]");
+print(7 / 2);
+print("[T1.2 10/4]");
+print(10 / 4);
+print("[T1.3 1/3]");
+print(1 / 3);
+print("[T1.4 100/10/2]");
+print(100 / 10 / 2);
+print("[T1.5 -7/2]");
+print(-7 / 2);
+print("[T1.6 7/-2]");
+print(7 / -2);
+print("[T1.7 0/5]");
+print(0 / 5);
+
+# ---------- T2: 浮点除法 (重点: Kotlin 是否 floor) ----------
+print("[T2.1 7.0/2.0]");
+print(7.0 / 2.0);
+print("[T2.2 10.0/4.0]");
+print(10.0 / 4.0);
+print("[T2.3 1.0/3.0]");
+print(1.0 / 3.0);
+print("[T2.4 3.0/2.0]");
+print(3.0 / 2.0);
+print("[T2.5 -7.0/2.0]");
+print(-7.0 / 2.0);
+print("[T2.6 5.0/2.0]");
+print(5.0 / 2.0);
+print("[T2.7 1.0/4.0]");
+print(1.0 / 4.0);
+
+# ---------- T3: 混合 int/float 除法 ----------
+print("[T3.1 7/2.0]");
+print(7 / 2.0);
+print("[T3.2 7.0/2]");
+print(7.0 / 2);
+
+# ---------- T4: 模运算 (含负数) ----------
+print("[T4.1 -7%3]");
+print(-7 % 3);
+print("[T4.2 7%-3]");
+print(7 % -3);
+print("[T4.3 -7%-3]");
+print(-7 % -3);
+print("[T4.4 7%3]");
+print(7 % 3);
+print("[T4.5 5.5%2]");
+print(5.5 % 2);
+print("[T4.6 -5.5%2]");
+print(-5.5 % 2);
+print("[T4.7 0%5]");
+print(0 % 5);
+
+# ---------- T5: 浮点精度 ----------
+print("[T5.1 0.1+0.2]");
+print(0.1 + 0.2);
+print("[T5.2 1.0-0.9]");
+print(1.0 - 0.9);
+print("[T5.3 0.5+0.25]");
+print(0.5 + 0.25);
+
+# ---------- T6: 变量字符串索引 ----------
+let s6 = "abc";
+print("[T6.1 s[0]]");
+print(s6[0]);
+print("[T6.2 s[2]]");
+print(s6[2]);
+print("[T6.3 s[-1]]");
+print(s6[-1]);
+print("[T6.4 s[-3]]");
+print(s6[-3]);
+
+# ---------- T7: 变量列表索引 ----------
+let L7 = [10, 20, 30, 40, 50];
+print("[T7.1 L[0]]");
+print(L7[0]);
+print("[T7.2 L[4]]");
+print(L7[4]);
+print("[T7.3 L[-1]]");
+print(L7[-1]);
+print("[T7.4 L[-5]]");
+print(L7[-5]);
+
+# ---------- T8: len() 含 Unicode ----------
+print("[T8.1 len('hello')]");
+print(len("hello"));
+print("[T8.2 len('中文')]");
+print(len("中文"));
+print("[T8.3 len('a中b')]");
+print(len("a中b"));
+print("[T8.4 len([1,2,3])]");
+print(len([1, 2, 3]));
+let d8 = {"a": 1, "b": 2, "c": 3};
+print("[T8.5 len(dict)]");
+print(len(d8));
+
+# ---------- T9: print() 浮点格式化 (重点) ----------
+print("[T9.1 1.0]");
+print(1.0);
+print("[T9.2 2.0]");
+print(2.0);
+print("[T9.3 0.0]");
+print(0.0);
+print("[T9.4 -0.0]");
+print(-0.0);
+print("[T9.5 3.14]");
+print(3.14);
+print("[T9.6 1.5]");
+print(1.5);
+print("[T9.7 100.0]");
+print(100.0);
+print("[T9.8 0.5]");
+print(0.5);
+print("[T9.9 1234567.89]");
+print(1234567.89);
+print("[T9.10 -0.5]");
+print(-0.5);
+
+# ---------- T10: int() 转换 (截断 vs floor) ----------
+print("[T10.1 int(12.7)]");
+print(int(12.7));
+print("[T10.2 int(12.2)]");
+print(int(12.2));
+print("[T10.3 int(-12.7)]");
+print(int(-12.7));
+print("[T10.4 int(-12.2)]");
+print(int(-12.2));
+print("[T10.5 int(0.9)]");
+print(int(0.9));
+print("[T10.6 int(-0.9)]");
+print(int(-0.9));
+print("[T10.7 int(3.0)]");
+print(int(3.0));
+print("[T10.8 int('42')]");
+print(int("42"));
+
+# ---------- T11: str(list) 格式化 (重点: 引号/空格/bool/null) ----------
+print("[T11.1 str([1,2,3])]");
+print(str([1, 2, 3]));
+print("[T11.2 str([1,2,3]) direct]");
+print([1, 2, 3]);
+print("[T11.3 str(['a','b'])]");
+print(str(["a", "b"]));
+print("[T11.4 str([1,'a'])]");
+print(str([1, "a"]));
+print("[T11.5 str([true,false])]");
+print(str([true, false]));
+print("[T11.6 str([])]");
+print(str([]));
+print("[T11.7 str([[1,2],[3]])]");
+print(str([[1, 2], [3]]));
+print("[T11.8 str([1.5, 2.0])]");
+print(str([1.5, 2.0]));
+
+# ---------- T12: str(dict) 格式化 (重点: key 引号) ----------
+print("[T12.1 str({'a':1})]");
+print(str({"a": 1}));
+print("[T12.2 str({'a':1,'b':2})]");
+print(str({"a": 1, "b": 2}));
+print("[T12.3 str({})]");
+print(str({}));
+print("[T12.4 str({'a':[1,2]})]");
+print(str({"a": [1, 2]}));
+print("[T12.5 str({'a':{'b':1}})]");
+print(str({"a": {"b": 1}}));
+print("[T12.6 str({1:'one'})]");
+print(str({1: "one"}));
+print("[T12.7 str({true:1})]");
+print(str({true: 1}));
+
+# ---------- T13: dict 迭代顺序 ----------
+let d13 = {"z": 1, "a": 2, "m": 3, "b": 4, "y": 5};
+let d13order = "";
+for k, v in d13 { d13order = d13order + k; }
+print("[T13.1 dict-iter-order]");
+print(d13order);
+let d13v = "";
+for k, v in d13 { d13v = d13v + str(v); }
+print("[T13.2 values-order]");
+print(d13v);
+# 重复 key 覆盖
+let d13b = {"x": 1, "y": 2, "x": 99};
+let d13border = "";
+for k, v in d13b { d13border = d13border + k + "=" + str(v) + ";"; }
+print("[T13.3 overwrite-order]");
+print(d13border);
+
+# ---------- T14: del dict key ----------
+let d14 = {"a": 1, "b": 2, "c": 3};
+del d14["b"];
+print("[T14.1 str-after-del]");
+print(str(d14));
+print("[T14.2 len-after-del]");
+print(len(d14));
+
+# ---------- T15: list pop() ----------
+let L15 = [1, 2, 3];
+let popv = L15.pop();
+print("[T15.1 pop-returns]");
+print(popv);
+print("[T15.2 list-after-pop]");
+print(str(L15));
+
+# ---------- T16: 字符串拼接与重复 ----------
+print("[T16.1 str-concat]");
+print("a" + "b" + "c");
+print("[T16.2 str-int-concat]");
+print("n=" + str(42));
+# NOTE: str*int repetition tested separately — diverges (see bug report):
+#   Python VM: "ab"*3 -> "Operands must be numbers" (unsupported)
+#   Kotlin HVM: "ab"*3 -> "ababab"; 3*"ab" -> "cannot coerce STRING to int"
+print("[T16.3 str-bool-concat]");
+print("v=" + str(true));
+
+# ---------- T17: 字符串比较 ----------
+print("[T17.1 'abc'<'abd']");
+print("abc" < "abd");
+print("[T17.2 'abc'=='abc']");
+print("abc" == "abc");
+print("[T17.3 'abc'=='xyz']");
+print("abc" == "xyz");
+
+# ---------- T18: 算术优先级 ----------
+print("[T18.1 1+2*3]");
+print(1 + 2 * 3);
+print("[T18.2 (1+2)*3]");
+print((1 + 2) * 3);
+print("[T18.3 20/3%4]");
+print(20 / 3 % 4);
+print("[T18.4 -5+3]");
+print(-5 + 3);
+print("[T18.5 10+-5]");
+print(10 + -5);
+
+# ---------- T19: 类默认字段 + 继承 ----------
+class Base99 {
+    let x = 10;
+}
+class Child99 extends Base99 {
+    let y = 20;
+}
+let c19 = new Child99();
+print("[T19.1 inherit-field-x]");
+print(c19.x);
+print("[T19.2 own-field-y]");
+print(c19.y);
+
+class Defaults99 {
+    let a = 42;
+    let b = "hi";
+    let c = [1, 2];
+}
+let df19 = new Defaults99();
+print("[T19.3 default-int]");
+print(df19.a);
+print("[T19.4 default-str]");
+print(df19.b);
+print("[T19.5 default-list]");
+print(str(df19.c));
+
+# ---------- T20: for-in 列表迭代 ----------
+let L20 = [10, 20, 30];
+let sum20 = 0;
+for v in L20 { sum20 = sum20 + v; }
+print("[T20.1 for-list-sum]");
+print(sum20);
+let s20 = "";
+for v in L20 { s20 = s20 + str(v) + ","; }
+print("[T20.2 for-list-build-str]");
+print(s20);
+
+# ---------- T21: while 循环 ----------
+let i21 = 0;
+let acc21 = 0;
+while (i21 < 5) { acc21 = acc21 + i21; i21 = i21 + 1; }
+print("[T21.1 while-sum-0..4]");
+print(acc21);
+
+# ---------- T22: if/else ----------
+fn sign22(n) {
+    if (n > 0) { return "pos"; }
+    if (n < 0) { return "neg"; }
+    return "zero";
+}
+print("[T22.1 sign(5)]");
+print(sign22(5));
+print("[T22.2 sign(-3)]");
+print(sign22(-3));
+print("[T22.3 sign(0)]");
+print(sign22(0));
+
+# ---------- T23: 嵌套函数调用 ----------
+fn add23(a, b) { return a + b; }
+fn mul23(a, b) { return a * b; }
+print("[T23.1 add(mul(2,3),4)]");
+print(add23(mul23(2, 3), 4));
+
+# ---------- T24: 负数与一元 ----------
+print("[T24.1 -5]");
+print(-5);
+print("[T24.2 --5]");
+print(--5);
+print("[T24.3 -(2+3)]");
+print(-(2 + 3));
+
+# ---------- T25: 大整数 ----------
+print("[T25.1 100000*100000]");
+print(100000 * 100000);
+print("[T25.2 1000000000]");
+print(1000000000);
+
+print("===== R2-99 DONE =====");

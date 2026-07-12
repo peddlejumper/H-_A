@@ -1,0 +1,16 @@
+# T14 - Static methods
+class Counter {
+    private let count = 0;
+    static fn make(initial) {
+        let c = new Counter();
+        c.count = initial;
+        return c;
+    }
+    fn inc() { count = count + 1; }
+    fn get() { return count; }
+}
+let c = Counter.make(10);
+c.inc();
+c.inc();
+c.inc();
+print(c.get());

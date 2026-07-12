@@ -1,0 +1,21 @@
+# t14_lambda_generic.hto — lambda 泛型：let f = fn<T>(x) { return x; };
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+try {
+    let f = fn<T>(x) { return x; };
+    print("14/lambda_defined");
+    let r = f<int>(99);
+    print("14/lambda_call=" + str(r));
+    check("14/lambda_int", r == 99);
+} catch (err) {
+    print("14/lambda_err=" + str(err));
+}
+
+# 普通 lambda（无类型参数）应仍可用
+let g = fn(x) { return x + 1; };
+check("14/plain_lambda", g(10) == 11);
+
+print("14/done");

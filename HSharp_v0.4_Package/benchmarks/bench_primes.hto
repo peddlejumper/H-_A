@@ -1,0 +1,21 @@
+# H# Benchmark 2: Loop / Iteration
+# Count primes up to N (naive trial division)
+
+let n = 30000;
+let count = 0;
+let i = 2;
+while (i <= n) {
+    let is_prime = true;
+    let j = 2;
+    while (j * j <= i) {
+        if (i % j == 0) {
+            is_prime = false;
+        }
+        j = j + 1;
+    }
+    if (is_prime) {
+        count = count + 1;
+    }
+    i = i + 1;
+}
+print("primes=" + str(count));

@@ -1,0 +1,35 @@
+# t15 - guard pattern: `pat if cond` — guard false falls through to next arm
+fn sign(x) {
+    return match x {
+        n if n > 0 => "pos",
+        n if n < 0 => "neg",
+        z if z == 0 => "zero",
+        _ => "impossible"
+    };
+}
+print("t15_pos:" + sign(5));
+print("t15_neg:" + sign(-3));
+print("t15_zero:" + sign(0));
+
+# guard on literal pattern
+fn grade(x) {
+    return match x {
+        100 if true => "perfect",
+        n if n >= 60 => "pass",
+        _ => "fail"
+    };
+}
+print("t15_perfect:" + grade(100));
+print("t15_pass:" + grade(70));
+print("t15_fail:" + grade(30));
+
+# guard that references outer variable
+let threshold = 10;
+fn big(x) {
+    return match x {
+        n if n > threshold => "big",
+        _ => "small"
+    };
+}
+print("t15_big:" + big(20));
+print("t15_small:" + big(5));

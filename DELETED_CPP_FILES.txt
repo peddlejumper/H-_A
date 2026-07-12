@@ -1,0 +1,42 @@
+# 已删除的 C++ 文件列表
+# 删除日期: 2026-04-11
+# 原因: 这些文件与 H# 语言解释器项目无关
+
+## 删除的文件清单:
+
+1. ascii_code.cpp
+2. char_type.cpp
+3. corner_pattern.cpp
+4. corner_v.cpp
+5. corner_v_fill.cpp
+6. corner_vi.cpp
+7. corner_vi_fill.cpp
+8. corner_vi_final.cpp
+9. flower_matrix.cpp
+10. fun_pattern_i.cpp
+11. letter_rectangle1.cpp
+12. letter_rectangle2.cpp
+13. letter_right_triangle1.cpp
+14. letter_triangle.cpp
+15. maze_problem.cpp
+16. next_letter.cpp
+17. prime_factorization.cpp
+18. prime_factorization_countif.cpp
+19. prime_factorization_fastio.cpp
+20. prime_factorization_lambda.cpp
+21. prime_factorization_range.cpp
+22. prime_factorization_stl.cpp
+23. reverse_string.cpp
+24. sliding_window.cpp
+25. sliding_window_fastio.cpp
+26. sliding_window_final.cpp
+27. sliding_window_lambda.cpp
+28. sliding_window_simple.cpp
+29. swap_case.cpp
+
+**总计删除: 29 个 .cpp 文件**
+
+## 说明:
+这些是 C++ 示例代码文件，与 H# 语言解释器项目无关。
+它们可能是之前误放入项目的测试文件或示例代码。
+H# 项目是一个 Python 编写的语言解释器，不需要 C++ 文件。

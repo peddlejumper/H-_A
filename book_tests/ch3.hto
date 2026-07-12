@@ -1,0 +1,31 @@
+# 3.1 标识符示例
+let userName = "Alice";
+let _count = 10;
+let total2 = 100;
+print(userName);
+print(_count);
+print(total2);
+# 3.2 注释
+# 这是单行注释
+let x = 10; # 这是行尾注释
+print(x);
+# 3.4 语句与分号
+let a = 1;
+let b = 2;
+let c = a + b;
+print(c);
+# 3.5 字面量
+let num = 42;
+let pi = 3.14;
+let text = "Hello";
+let flag = true;
+let empty = nullptr;
+let primes = [2, 3, 5, 7];
+let person = {"name": "Bob", "age": 25};
+print(num);
+print(pi);
+print(text);
+print(flag);
+print(empty);
+print(primes);
+print(person);

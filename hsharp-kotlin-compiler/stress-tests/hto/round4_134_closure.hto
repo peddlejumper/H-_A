@@ -1,0 +1,759 @@
+# round4_134_closure.hto — 测试智能体 Round 4 #134
+# 领域: 闭包捕获语义 (Closure Capture Semantics)
+# H# v0.4.1
+#
+# 已知背景 (来自 round3_110 / 72 / 73):
+#   - 单闭包修改外部变量可工作 (counter 模式 1,2,3)
+#   - 多闭包共享同一变量 → 各自独立 snapshot
+#   - 闭包捕获后外部再修改 → snapshot (返回旧值)
+#   - let-lambda 递归 → 可能 "Undefined name: fact"
+#   - 嵌套 fn 语句 (非 let-lambda) → 可能 "Undefined name"
+#
+# 本测试聚焦 S1..S10 闭包捕获语义, 每个子领域 3-5 个用例。
+# 用 try/catch 包裹避免整体中止；打印 "Sxx:" 前缀, 预期值在注释。
+
+# ============================================================
+# S1: 快照捕获 — 闭包定义后外部修改变量, 闭包看到的是旧值还是新值?
+# ============================================================
+print("=== S1 snapshot capture ===");
+
+# S1.1: lambda 形式 — 捕获后修改外部 let
+try {
+    fn mk_s11() {
+        let x = 10;
+        let f = fn() { return x; };
+        x = 20;
+        return f();
+    }
+    print("S1.1: " + mk_s11());   # 20 (by-ref) ; 10 (snapshot)
+} catch (e) { print("S1.1-ERR: " + e); }
+
+# S1.2: fn 语句形式 — 捕获后修改外部 let
+try {
+    fn mk_s12() {
+        let x = 10;
+        fn inner() { return x; }
+        x = 20;
+        return inner();
+    }
+    print("S1.2: " + mk_s12());   # 20 (by-ref) ; 10 (snapshot)
+} catch (e) { print("S1.2-ERR: " + e); }
+
+# S1.3: 捕获参数, 然后修改参数
+try {
+    fn mk_s13(a) {
+        let g = fn() { return a; };
+        a = 100;
+        return g();
+    }
+    print("S1.3: " + mk_s13(1));   # 100 (by-ref) ; 1 (snapshot)
+} catch (e) { print("S1.3-ERR: " + e); }
+
+# S1.4: 模块级 let 捕获后修改
+try {
+    let g_s14 = 1;
+    let reader_s14 = fn() { return g_s14; };
+    print("S1.4a: " + reader_s14());   # 1
+    g_s14 = 99;
+    print("S1.4b: " + reader_s14());   # 99 (by-ref) ; 1 (snapshot)
+} catch (e) { print("S1.4-ERR: " + e); }
+
+# S1.5: 两次调用闭包之间修改外部变量
+try {
+    fn mk_s15() {
+        let x = 5;
+        let f = fn() { return x; };
+        return [f, fn(v) { x = v; }];
+    }
+    let p = mk_s15();
+    let f = p[0];
+    let setX = p[1];
+    print("S1.5a: " + f());   # 5
+    setX(50);
+    print("S1.5b: " + f());   # 50 (by-ref) ; 5 (snapshot)
+} catch (e) { print("S1.5-ERR: " + e); }
+
+# ============================================================
+# S2: 捕获变量修改 — 闭包内修改捕获变量, 外部是否可见?
+# ============================================================
+print("=== S2 closure modifies capture ===");
+
+# S2.1: 单闭包 counter — 经典模式
+try {
+    fn mk_s21() {
+        let n = 0;
+        let f = fn() { n = n + 1; return n; };
+        return f;
+    }
+    let f = mk_s21();
+    print("S2.1a: " + f());   # 1
+    print("S2.1b: " + f());   # 2
+    print("S2.1c: " + f());   # 3
+} catch (e) { print("S2.1-ERR: " + e); }
+
+# S2.2: 闭包修改后, 外部直接读变量
+try {
+    fn mk_s22() {
+        let x = 10;
+        let f = fn() { x = 20; return x; };
+        f();
+        return x;
+    }
+    print("S2.2: " + mk_s22());   # 20 (by-ref) ; 10 (snapshot)
+} catch (e) { print("S2.2-ERR: " + e); }
+
+# S2.3: 闭包内修改捕获变量, 闭包外用另一闭包读
+try {
+    fn mk_s23() {
+        let x = 10;
+        let setter = fn(v) { x = v; };
+        let getter = fn() { return x; };
+        return [setter, getter];
+    }
+    let p = mk_s23();
+    let setter = p[0];
+    let getter = p[1];
+    print("S2.3a: " + getter());   # 10
+    setter(42);
+    print("S2.3b: " + getter());   # 42 (by-ref) ; 10 (snapshot)
+} catch (e) { print("S2.3-ERR: " + e); }
+
+# S2.4: 闭包内捕获变量自增, 多次调用累积
+try {
+    fn mk_s24() {
+        let x = 100;
+        let f = fn() { x = x + 1; return x; };
+        return f;
+    }
+    let f = mk_s24();
+    print("S2.4a: " + f());   # 101
+    print("S2.4b: " + f());   # 102
+    print("S2.4c: " + f());   # 103
+} catch (e) { print("S2.4-ERR: " + e); }
+
+# S2.5: 闭包内对捕获 string 做拼接
+try {
+    fn mk_s25() {
+        let s = "a";
+        let f = fn() { s = s + "b"; return s; };
+        return f;
+    }
+    let f = mk_s25();
+    print("S2.5a: " + f());   # ab
+    print("S2.5b: " + f());   # abb
+    print("S2.5c: " + f());   # abbb
+} catch (e) { print("S2.5-ERR: " + e); }
+
+# ============================================================
+# S3: 循环中闭包 — 经典循环闭包问题
+# ============================================================
+print("=== S3 closure in loop ===");
+
+# S3.1: list literal 循环 — 推迟调用
+try {
+    let fs = [];
+    for i in [0, 1, 2] {
+        push(fs, fn() { return i; });
+    }
+    print("S3.1a: " + fs[0]());   # 0 (snapshot per iter) ; 2 (late binding)
+    print("S3.1b: " + fs[1]());   # 1 ; 2
+    print("S3.1c: " + fs[2]());   # 2 ; 2
+} catch (e) { print("S3.1-ERR: " + e); }
+
+# S3.2: range() 循环 — 推迟调用
+try {
+    let fs = [];
+    for i in range(0, 3) {
+        push(fs, fn() { return i; });
+    }
+    print("S3.2a: " + fs[0]());   # 0 ; 2
+    print("S3.2b: " + fs[1]());   # 1 ; 2
+    print("S3.2c: " + fs[2]());   # 2 ; 2
+} catch (e) { print("S3.2-ERR: " + e); }
+
+# S3.3: 循环中立即调用 — 每次迭代值应正确
+try {
+    let log = [];
+    for i in range(0, 3) {
+        let f = fn() { return i; };
+        push(log, f());
+    }
+    print("S3.3: " + log);   # [0, 1, 2]
+} catch (e) { print("S3.3-ERR: " + e); }
+
+# S3.4: 循环中闭包修改捕获变量 — 是否影响下次迭代?
+try {
+    let log = [];
+    for i in [0, 1, 2] {
+        push(log, i);
+        let bump = fn() { i = i + 10; return i; };
+        bump();
+    }
+    print("S3.4: " + log);   # [0, 1, 2] (snapshot) ; [0, 11, 22] (if by-ref & affects iter)
+} catch (e) { print("S3.4-ERR: " + e); }
+
+# S3.5: 嵌套循环中闭包捕获内外层循环变量
+try {
+    let fs = [];
+    for i in range(0, 2) {
+        for j in range(0, 2) {
+            push(fs, fn() { return i * 10 + j; });
+        }
+    }
+    print("S3.5: " + fs[0]() + "," + fs[1]() + "," + fs[2]() + "," + fs[3]());
+    # 预期 0,1,10,11 (snapshot per iter) ; 10,11,10,11 (late binding)
+} catch (e) { print("S3.5-ERR: " + e); }
+
+# ============================================================
+# S4: 嵌套闭包 — 闭包捕获闭包
+# ============================================================
+print("=== S4 nested closures ===");
+
+# S4.1: 3 层 lambda 嵌套 (curry)
+try {
+    fn curry_s41(a) {
+        return fn(b) {
+            return fn(c) { return a + b + c; };
+        };
+    }
+    print("S4.1a: " + curry_s41(1)(2)(3));    # 6
+    print("S4.1b: " + curry_s41(10)(20)(30)); # 60
+} catch (e) { print("S4.1-ERR: " + e); }
+
+# S4.2: 嵌套 fn 语句形式 (而非 let-lambda)
+try {
+    fn outer_s42(a) {
+        fn mid(b) {
+            fn inner(c) {
+                return a + b + c;
+            }
+            return inner;
+        }
+        return mid;
+    }
+    print("S4.2: " + outer_s42(1)(2)(3));   # 6 if works ; ERR if bug
+} catch (e) { print("S4.2-ERR: " + e); }
+
+# S4.3: 4 层嵌套闭包, 最内层修改最外层变量
+try {
+    fn mk_s43() {
+        let n = 0;
+        let L2 = fn() {
+            return fn() {
+                return fn() { n = n + 1; return n; };
+            };
+        };
+        return L2;
+    }
+    let deep = mk_s43();
+    let innermost = deep()();
+    print("S4.3a: " + innermost());   # 1
+    print("S4.3b: " + innermost());   # 2
+    print("S4.3c: " + innermost());   # 3
+} catch (e) { print("S4.3-ERR: " + e); }
+
+# S4.4: 嵌套闭包各层修改各自变量
+try {
+    fn mk_s44() {
+        let a = 0;
+        let f1 = fn() {
+            a = a + 1;
+            let b = 0;
+            let f2 = fn() {
+                b = b + 10;
+                return a * 100 + b;
+            };
+            return f2;
+        };
+        return f1;
+    }
+    let f1 = mk_s44();
+    let f2 = f1();
+    print("S4.4a: " + f2());   # 110 (a=1, b=10)
+    print("S4.4b: " + f2());   # 120 (a=1, b=20)
+    let f2b = f1();
+    print("S4.4c: " + f2b());  # 210 (a=2, b=10) if by-ref ; 110 if snapshot
+} catch (e) { print("S4.4-ERR: " + e); }
+
+# S4.5: 嵌套闭包链 — 字符串拼接
+try {
+    fn mk_s45() {
+        let a = "a";
+        let f1 = fn() {
+            let b = "b";
+            let f2 = fn() {
+                let c = "c";
+                let f3 = fn() {
+                    return a + "-" + b + "-" + c + "-end";
+                };
+                return f3();
+            };
+            return f2();
+        };
+        return f1();
+    }
+    print("S4.5: " + mk_s45());   # a-b-c-end
+} catch (e) { print("S4.5-ERR: " + e); }
+
+# ============================================================
+# S5: 捕获 self — 类方法中 lambda 捕获 self
+# ============================================================
+print("=== S5 capture self ===");
+
+# S5.1: getter 闭包捕获 self, 外部修改字段后闭包看到新值
+try {
+    class Box51 {
+        fn init(v) { self.v = v; }
+        fn getter() { return fn() { return self.v; }; }
+    }
+    let b = new Box51(99);
+    let g = b.getter();
+    print("S5.1a: " + g());   # 99
+    b.v = 77;
+    print("S5.1b: " + g());   # 77 (self is same instance reference)
+} catch (e) { print("S5.1-ERR: " + e); }
+
+# S5.2: setter 闭包捕获 self, 修改字段
+try {
+    class Box52 {
+        fn init(v) { self.v = v; }
+        fn setter() { return fn(x) { self.v = x; }; }
+        fn getter() { return fn() { return self.v; }; }
+    }
+    let b = new Box52(0);
+    let s = b.setter();
+    let g = b.getter();
+    s(42);
+    print("S5.2a: " + g());   # 42
+    print("S5.2b: " + b.v);   # 42
+} catch (e) { print("S5.2-ERR: " + e); }
+
+# S5.3: 两个实例的闭包不应互相干扰
+try {
+    class Box53 {
+        fn init(v) { self.v = v; }
+        fn getter() { return fn() { return self.v; }; }
+    }
+    let b1 = new Box53(1);
+    let b2 = new Box53(2);
+    let g1 = b1.getter();
+    let g2 = b2.getter();
+    print("S5.3a: " + g1());   # 1
+    print("S5.3b: " + g2());   # 2
+    b1.v = 10;
+    b2.v = 20;
+    print("S5.3c: " + g1());   # 10
+    print("S5.3d: " + g2());   # 20
+} catch (e) { print("S5.3-ERR: " + e); }
+
+# S5.4: 闭包捕获 self 并调用 self 的其他方法
+try {
+    class Calc54 {
+        fn init(b) { self.base = b; }
+        fn add(x) { return self.base + x; }
+        fn adder() { return fn(x) { return self.add(x); }; }
+    }
+    let c = new Calc54(100);
+    let add = c.adder();
+    print("S5.4a: " + add(50));   # 150
+    c.base = 200;
+    print("S5.4b: " + add(50));   # 250
+} catch (e) { print("S5.4-ERR: " + e); }
+
+# S5.5: 循环中创建实例, 每个实例的 getter 闭包独立
+try {
+    class Box55 {
+        fn init(v) { self.v = v; }
+        fn getter() { return fn() { return self.v; }; }
+    }
+    let fns = [];
+    for i in [1, 2, 3] {
+        let b = new Box55(i);
+        push(fns, b.getter());
+    }
+    print("S5.5: " + fns[0]() + "," + fns[1]() + "," + fns[2]());   # 1,2,3
+} catch (e) { print("S5.5-ERR: " + e); }
+
+# ============================================================
+# S6: 类方法中闭包捕获字段
+# ============================================================
+print("=== S6 closure captures field ===");
+
+# S6.1: 类方法中 lambda 读取 self.x
+try {
+    class C61 {
+        fn init(x) { self.x = x; }
+        fn m() {
+            let f = fn() { return self.x; };
+            return f();
+        }
+    }
+    let c = new C61(10);
+    print("S6.1: " + c.m());   # 10
+} catch (e) { print("S6.1-ERR: " + e); }
+
+# S6.2: 类方法中 lambda 修改 self.x, 方法返回后字段已变
+try {
+    class C62 {
+        fn init(x) { self.x = x; }
+        fn m() {
+            let f = fn(v) { self.x = v; };
+            f(99);
+            return self.x;
+        }
+    }
+    let c = new C62(10);
+    print("S6.2: " + c.m());   # 99
+    print("S6.2b: " + c.x);    # 99
+} catch (e) { print("S6.2-ERR: " + e); }
+
+# S6.3: 类方法返回 lambda, 外部多次调用累积修改字段
+try {
+    class C63 {
+        fn init() { self.x = 0; }
+        fn bump() {
+            return fn() { self.x = self.x + 1; return self.x; };
+        }
+    }
+    let c = new C63();
+    let f = c.bump();
+    print("S6.3a: " + f());   # 1
+    print("S6.3b: " + f());   # 2
+    print("S6.3c: " + f());   # 3
+    print("S6.3d: " + c.x);   # 3
+} catch (e) { print("S6.3-ERR: " + e); }
+
+# S6.4: 类方法中 lambda 捕获局部变量 (非 self 字段)
+try {
+    class C64 {
+        fn init() {}
+        fn m() {
+            let local = 5;
+            let f = fn() { return local * 2; };
+            return f();
+        }
+    }
+    let c = new C64();
+    print("S6.4: " + c.m());   # 10
+} catch (e) { print("S6.4-ERR: " + e); }
+
+# S6.5: 类方法中 lambda 同时捕获 self 和局部变量
+try {
+    class C65 {
+        fn init(x) { self.x = x; }
+        fn m(factor) {
+            let f = fn() { return self.x * factor; };
+            return f;
+        }
+    }
+    let c = new C65(10);
+    let f = c.m(3);
+    print("S6.5a: " + f());   # 30
+    c.x = 20;
+    print("S6.5b: " + f());   # 60 (self.x 改变) ; 30 (snapshot)
+} catch (e) { print("S6.5-ERR: " + e); }
+
+# ============================================================
+# S7: 多闭包共享变量 — inc + get / inc + dec + get
+# ============================================================
+print("=== S7 multi-closure shared var ===");
+
+# S7.1: inc + get 共享 n (list 形式)
+try {
+    fn mk_s71() {
+        let n = 0;
+        let inc = fn() { n = n + 1; return n; };
+        let get = fn() { return n; };
+        return [inc, get];
+    }
+    let p = mk_s71();
+    let inc = p[0];
+    let get = p[1];
+    print("S7.1a: " + inc());   # 1
+    print("S7.1b: " + inc());   # 2
+    print("S7.1c: " + inc());   # 3
+    print("S7.1d: " + get());   # 3 (by-ref) ; 0 (snapshot)
+} catch (e) { print("S7.1-ERR: " + e); }
+
+# S7.2: inc + dec + get (3 闭包共享)
+try {
+    fn mk_s72() {
+        let n = 0;
+        let inc = fn() { n = n + 1; return n; };
+        let dec = fn() { n = n - 1; return n; };
+        let get = fn() { return n; };
+        return {"inc": inc, "dec": dec, "get": get};
+    }
+    let c = mk_s72();
+    print("S7.2a: " + c["inc"]());   # 1
+    print("S7.2b: " + c["inc"]());   # 2
+    print("S7.2c: " + c["dec"]());   # 1 (by-ref) ; -1 (snapshot)
+    print("S7.2d: " + c["dec"]());   # 0 (by-ref) ; -2 (snapshot)
+    print("S7.2e: " + c["get"]());   # 0 (by-ref) ; 0 (snapshot, coincidentally same)
+} catch (e) { print("S7.2-ERR: " + e); }
+
+# S7.3: 3 闭包顺序调用共享同一变量
+try {
+    fn mk_s73() {
+        let n = 0;
+        let a = fn() { n = n + 1; return n; };
+        let b = fn() { n = n + 1; return n; };
+        let c = fn() { n = n + 1; return n; };
+        return [a, b, c];
+    }
+    let fs = mk_s73();
+    print("S7.3a: " + fs[0]());   # 1
+    print("S7.3b: " + fs[1]());   # 2 (by-ref) ; 1 (snapshot)
+    print("S7.3c: " + fs[2]());   # 3 (by-ref) ; 1 (snapshot)
+} catch (e) { print("S7.3-ERR: " + e); }
+
+# S7.4: setter + getter 共享 (跨闭包写入读取)
+try {
+    fn mk_s74() {
+        let x = 0;
+        let setter = fn(v) { x = v; };
+        let getter = fn() { return x; };
+        return [setter, getter];
+    }
+    let p = mk_s74();
+    let setter = p[0];
+    let getter = p[1];
+    setter(42);
+    print("S7.4a: " + getter());   # 42 (by-ref) ; 0 (snapshot)
+    setter(99);
+    print("S7.4b: " + getter());   # 99 (by-ref) ; 0 (snapshot)
+} catch (e) { print("S7.4-ERR: " + e); }
+
+# S7.5: 多闭包共享 string 变量
+try {
+    fn mk_s75() {
+        let s = "init";
+        let append = fn(x) { s = s + x; };
+        let get = fn() { return s; };
+        return [append, get];
+    }
+    let p = mk_s75();
+    let append = p[0];
+    let get = p[1];
+    append("-a");
+    print("S7.5a: " + get());   # init-a (by-ref) ; init (snapshot)
+    append("-b");
+    print("S7.5b: " + get());   # init-a-b (by-ref) ; init (snapshot)
+} catch (e) { print("S7.5-ERR: " + e); }
+
+# ============================================================
+# S8: 闭包捕获循环变量 — 立即调用 vs 推迟调用
+# ============================================================
+print("=== S8 closure captures loop var ===");
+
+# S8.1: 循环中立即调用闭包
+try {
+    let log = [];
+    for i in range(0, 3) {
+        let f = fn() { return i; };
+        push(log, f());
+    }
+    print("S8.1: " + log);   # [0, 1, 2]
+} catch (e) { print("S8.1-ERR: " + e); }
+
+# S8.2: 循环中推迟调用闭包 (经典问题)
+try {
+    let fs = [];
+    for i in range(0, 3) {
+        push(fs, fn() { return i; });
+    }
+    print("S8.2: " + fs[0]() + "," + fs[1]() + "," + fs[2]());
+    # 预期 0,1,2 (snapshot per iter) ; 2,2,2 (late binding)
+} catch (e) { print("S8.2-ERR: " + e); }
+
+# S8.3: 循环中两个闭包捕获同一 i — 同次迭代内是否共享 cell
+try {
+    let pairs = [];
+    for i in [1, 2, 3] {
+        let getter = fn() { return i; };
+        let setter = fn(v) { i = v; };
+        push(pairs, [getter, setter]);
+    }
+    pairs[0][1](100);
+    print("S8.3a: " + pairs[0][0]());   # 100 (共享) 或 1 (snapshot)
+    print("S8.3b: " + pairs[1][0]());   # 2 (不应被影响)
+} catch (e) { print("S8.3-ERR: " + e); }
+
+# S8.4: 循环中闭包捕获外层变量 (非循环变量)
+try {
+    let outer = 100;
+    let fs = [];
+    for i in range(0, 3) {
+        push(fs, fn() { return outer + i; });
+    }
+    print("S8.4: " + fs[0]() + "," + fs[1]() + "," + fs[2]());
+    # 预期 100,101,102 (snapshot) ; 102,102,102 (late binding)
+} catch (e) { print("S8.4-ERR: " + e); }
+
+# S8.5: 双层循环, 内层闭包捕获外层循环变量
+try {
+    let fs = [];
+    for i in range(0, 2) {
+        for j in range(0, 2) {
+            push(fs, fn() { return i; });
+        }
+    }
+    print("S8.5: " + fs[0]() + "," + fs[1]() + "," + fs[2]() + "," + fs[3]());
+    # 预期 0,0,1,1 (snapshot) ; 1,1,1,1 (late binding)
+} catch (e) { print("S8.5-ERR: " + e); }
+
+# ============================================================
+# S9: 递归闭包 — lambda 内引用自身
+# ============================================================
+print("=== S9 recursive closure ===");
+
+# S9.1: factorial 递归
+try {
+    let fact = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * fact(n - 1);
+    };
+    print("S9.1a: " + fact(1));    # 1
+    print("S9.1b: " + fact(5));    # 120
+    print("S9.1c: " + fact(10));   # 3628800
+} catch (e) { print("S9.1-ERR: " + e); }
+
+# S9.2: fibonacci 递归
+try {
+    let fib = fn(n) {
+        if (n < 2) { return n; }
+        return fib(n - 1) + fib(n - 2);
+    };
+    print("S9.2a: " + fib(0));    # 0
+    print("S9.2b: " + fib(1));    # 1
+    print("S9.2c: " + fib(10));   # 55
+} catch (e) { print("S9.2-ERR: " + e); }
+
+# S9.3: 递归 + 修改捕获变量 (accumulator)
+try {
+    fn mk_s93() {
+        let count = 0;
+        let rec = fn(n) {
+            count = count + 1;
+            if (n <= 1) { return 1; }
+            return n * rec(n - 1);
+        };
+        return [rec, fn() { return count; }];
+    }
+    let p = mk_s93();
+    let rec = p[0];
+    let getCount = p[1];
+    print("S9.3a: " + rec(5));       # 120
+    print("S9.3b: " + getCount());  # 5 (递归 5 次) — snapshot 可能 0
+} catch (e) { print("S9.3-ERR: " + e); }
+
+# S9.4: 间接递归 (a 调 b, b 调 a)
+try {
+    let isEven = fn(n) {
+        if (n == 0) { return true; }
+        return isOdd(n - 1);
+    };
+    let isOdd = fn(n) {
+        if (n == 0) { return false; }
+        return isEven(n - 1);
+    };
+    print("S9.4a: " + isEven(10));   # true
+    print("S9.4b: " + isOdd(7));     # true
+} catch (e) { print("S9.4-ERR: " + e); }
+
+# S9.5: 深度递归 (尾递归形式, 但 H# 可能不支持尾调用优化)
+try {
+    let sumTo = fn(n) {
+        if (n <= 0) { return 0; }
+        return n + sumTo(n - 1);
+    };
+    print("S9.5a: " + sumTo(100));    # 5050
+    print("S9.5b: " + sumTo(1000));   # 500500
+} catch (e) { print("S9.5-ERR: " + e); }
+
+# ============================================================
+# S10: 闭包作为集合元素 — dict / list of closures
+# ============================================================
+print("=== S10 closure as collection element ===");
+
+# S10.1: dict of closures (字符串键)
+try {
+    let ops = {
+        "add": fn(a, b) { return a + b; },
+        "sub": fn(a, b) { return a - b; },
+        "mul": fn(a, b) { return a * b; }
+    };
+    print("S10.1a: " + ops["add"](1, 2));    # 3
+    print("S10.1b: " + ops["sub"](10, 3));   # 7
+    print("S10.1c: " + ops["mul"](4, 5));    # 20
+} catch (e) { print("S10.1-ERR: " + e); }
+
+# S10.2: list of closures
+try {
+    let fs = [
+        fn(x) { return x + 1; },
+        fn(x) { return x * 2; },
+        fn(x) { return x * x; }
+    ];
+    print("S10.2a: " + fs[0](10));   # 11
+    print("S10.2b: " + fs[1](10));   # 20
+    print("S10.2c: " + fs[2](10));   # 100
+} catch (e) { print("S10.2-ERR: " + e); }
+
+# S10.3: dict of closures 捕获共享变量
+try {
+    fn mk_s103() {
+        let n = 0;
+        return {
+            "inc": fn() { n = n + 1; return n; },
+            "get": fn() { return n; }
+        };
+    }
+    let o = mk_s103();
+    print("S10.3a: " + o["inc"]());   # 1
+    print("S10.3b: " + o["inc"]());   # 2
+    print("S10.3c: " + o["get"]());   # 2 (by-ref) ; 0 (snapshot)
+} catch (e) { print("S10.3-ERR: " + e); }
+
+# S10.4: 闭包作为 dict 值, 多个闭包共享同一变量
+try {
+    fn mk_s104() {
+        let n = 0;
+        return {
+            "bump": fn() { n = n + 1; return n; },
+            "reset": fn() { n = 0; },
+            "val": fn() { return n; }
+        };
+    }
+    let c = mk_s104();
+    print("S10.4a: " + c["bump"]());   # 1
+    print("S10.4b: " + c["bump"]());   # 2
+    c["reset"]();
+    print("S10.4c: " + c["val"]());    # 0 (by-ref) ; 2 (snapshot, reset 不影响 val)
+} catch (e) { print("S10.4-ERR: " + e); }
+
+# S10.5: 嵌套 dict of closures
+try {
+    fn mk_s105() {
+        let a = 0;
+        let b = 0;
+        return {
+            "a": {
+                "inc": fn() { a = a + 1; return a; },
+                "get": fn() { return a; }
+            },
+            "b": {
+                "inc": fn() { b = b + 1; return b; },
+                "get": fn() { return b; }
+            }
+        };
+    }
+    let cfg = mk_s105();
+    print("S10.5a: " + cfg["a"]["inc"]());   # 1
+    print("S10.5b: " + cfg["b"]["inc"]());   # 1
+    print("S10.5c: " + cfg["a"]["inc"]());   # 2
+    print("S10.5d: " + cfg["a"]["get"]());   # 2 (by-ref) ; 0 (snapshot)
+    print("S10.5e: " + cfg["b"]["get"]());   # 1 (by-ref) ; 0 (snapshot)
+} catch (e) { print("S10.5-ERR: " + e); }
+
+print("=== ALL DONE ===");

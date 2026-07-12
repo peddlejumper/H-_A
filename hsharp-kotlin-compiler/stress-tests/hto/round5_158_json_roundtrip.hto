@@ -1,0 +1,689 @@
+# =============================================================
+# Round 5 / Test #158 — JSON 序列化往返全面测试
+# 智能体 #158, Round 5
+# 背景: v0.4.1。探测 H# 的 JSON 序列化/反序列化能力与往返一致性
+# 目标: 穷尽 15 个子领域的 JSON 序列化边界, 标记 bug
+# 方法: 每个用例打印 [TAG 预期] 实际; 易错项 try/catch 包裹
+# 源码分析:
+#   - json_stringify(obj)  = HString(obj.toDisplayString())  -- 非有效 JSON!
+#   - net_json_stringify   = 同上
+#   - json_parse(str)      = 真实 MiniJson 解析器 (HbcReader.kt:255)
+#   - net_json_parse(str)  = stub, 总是返回空列表!
+#   - str(obj)             = obj.toDisplayString()
+#   - toDisplayString:
+#       HString -> raw value (无引号!)
+#       HList   -> [a, b, c] (元素无引号)
+#       HDict   -> {key: val} (键无引号, 值无引号)
+#       HNumber -> 整数显示为整数, 42.0 显示为 "42"
+#       HBool   -> true/false
+#       HNull   -> null
+#       循环引用 -> [...] / {...} (不报错)
+# =============================================================
+
+print("===== R5-158 JSON ROUNDTRIP =====");
+
+# =============================================================
+# S1: 探测 JSON 函数是否存在
+# 测试各种可能的 JSON 函数名: json_dumps, json_loads,
+# json.stringify, json.parse, json_stringify, json_parse,
+# net_json_stringify, net_json_parse
+# =============================================================
+print("--- S1: PROBE JSON FUNCTIONS ---");
+
+# json_stringify — 源码确认存在 (HNativeBridge.kt:1448)
+try {
+    let r = json_stringify({"a": 1});
+    print("[S1.01 json_stringify-exists expect={a: 1}] " + r);
+} catch (e) {
+    print("[S1.01 json_stringify-exists expect=ERR] got-ERR: " + e);
+}
+
+# json_parse — 源码确认存在 (HNativeBridge.kt:1449)
+try {
+    let r = json_parse("{\"a\": 1}");
+    print("[S1.02 json_parse-exists expect={a: 1}] " + str(r));
+} catch (e) {
+    print("[S1.02 json_parse-exists expect=ERR] got-ERR: " + e);
+}
+
+# net_json_stringify — 源码确认存在 (HNativeBridge.kt:1070)
+try {
+    let r = net_json_stringify({"a": 1});
+    print("[S1.03 net_json_stringify-exists expect={a: 1}] " + r);
+} catch (e) {
+    print("[S1.03 net_json_stringify-exists expect=ERR] got-ERR: " + e);
+}
+
+# net_json_parse — 源码确认是 stub (HNativeBridge.kt:1073)
+try {
+    let r = net_json_parse("{\"a\": 1}");
+    print("[S1.04 net_json_parse-stub expect=[]] " + str(r));
+} catch (e) {
+    print("[S1.04 net_json_parse-stub expect=ERR] got-ERR: " + e);
+}
+
+# json_dumps — 探测 (预期不存在)
+try {
+    let r = json_dumps({"a": 1});
+    print("[S1.05 json_dumps-exists expect=ERR] " + str(r));
+} catch (e) {
+    print("[S1.05 json_dumps-exists expect=ERR] got-ERR: " + e);
+}
+
+# json_loads — 探测 (预期不存在)
+try {
+    let r = json_loads("{\"a\": 1}");
+    print("[S1.06 json_loads-exists expect=ERR] " + str(r));
+} catch (e) {
+    print("[S1.06 json_loads-exists expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# S2: str() 序列化 — 是否接近 JSON?
+# str({"a":1,"b":[2,3]}) 的格式
+# 预期: {a: 1, b: [2, 3]} — 非有效 JSON (键无引号)
+# =============================================================
+print("--- S2: str() SERIALIZATION FORMAT ---");
+
+print("[S2.01 str-dict expect={a: 1, b: [2, 3]}] " + str({"a": 1, "b": [2, 3]}));
+print("[S2.02 str-dict-strval expect={name: hello}] " + str({"name": "hello"}));
+print("[S2.03 str-list-str expect=[a, b]] " + str(["a", "b"]));
+print("[S2.04 str-nested expect={x: {y: [1, 2]}}] " + str({"x": {"y": [1, 2]}}));
+# str() 输出是否为有效 JSON? 用 json_parse 测试
+let s2out = str({"a": 1, "b": [2, 3]});
+try {
+    let parsed = json_parse(s2out);
+    print("[S2.05 str-is-valid-json expect=PARSED] " + str(parsed));
+} catch (e) {
+    print("[S2.05 str-is-valid-json expect=FAIL] got-ERR: " + e);
+}
+
+# =============================================================
+# S3: 简单值序列化 — 数字、字符串、布尔、null 的 str() 格式
+# =============================================================
+print("--- S3: SIMPLE VALUE SERIALIZATION ---");
+
+print("[S3.01 str-int expect=42] " + str(42));
+print("[S3.02 str-neg-int expect=-7] " + str(-7));
+print("[S3.03 str-zero expect=0] " + str(0));
+print("[S3.04 str-float expect=3.14] " + str(3.14));
+print("[S3.05 str-float-whole expect=3] " + str(3.0));  # 3.0 -> "3" (类型丢失!)
+print("[S3.06 str-string expect=hello] " + str("hello"));
+print("[S3.07 str-string-with-space expect=hello world] " + str("hello world"));
+print("[S3.08 str-bool-true expect=true] " + str(true));
+print("[S3.09 str-bool-false expect=false] " + str(false));
+print("[S3.10 str-null expect=null] " + str(null));
+
+# =============================================================
+# S4: 嵌套结构 — str({"a":{"b":{"c":1}}}) 的格式
+# =============================================================
+print("--- S4: NESTED STRUCTURE SERIALIZATION ---");
+
+print("[S4.01 str-nested-3deep expect={a: {b: {c: 1}}}] " + str({"a": {"b": {"c": 1}}}));
+print("[S4.02 str-list-of-dicts expect=[{x: 1}, {y: 2}]] " + str([{"x": 1}, {"y": 2}]));
+print("[S4.03 str-dict-of-lists expect={a: [1], b: [2, 3]}] " + str({"a": [1], "b": [2, 3]}));
+print("[S4.04 str-mixed-deep expect={data: [{id: 1, tags: [a, b]}]}] " + str({"data": [{"id": 1, "tags": ["a", "b"]}]}));
+print("[S4.05 str-empty-nested expect={a: {b: {}}}] " + str({"a": {"b": {}}}));
+print("[S4.06 str-list-empty-nested expect=[[], [[]]]] " + str([[], [[]]]));
+
+# =============================================================
+# S5: 列表序列化 — str([1,"two",true,null,3.14]) 的格式
+# =============================================================
+print("--- S5: LIST SERIALIZATION ---");
+
+print("[S5.01 str-mixed-list expect=[1, two, true, null, 3.14]] " + str([1, "two", true, null, 3.14]));
+print("[S5.02 str-int-list expect=[1, 2, 3]] " + str([1, 2, 3]));
+print("[S5.03 str-string-list expect=[a, b, c]] " + str(["a", "b", "c"]));
+print("[S5.04 str-bool-list expect=[true, false]] " + str([true, false]));
+print("[S5.05 str-null-list expect=[null, null]] " + str([null, null]));
+print("[S5.06 str-float-list expect=[1.5, 2.5]] " + str([1.5, 2.5]));
+print("[S5.07 str-empty-list expect=[]] " + str([]));
+print("[S5.08 str-single-element expect=[42]] " + str([42]));
+print("[S5.09 str-nested-list expect=[[1, 2], [3, 4]]] " + str([[1, 2], [3, 4]]));
+
+# =============================================================
+# S6: 特殊字符 — 字符串中的引号、反斜杠、换行符如何序列化
+# toDisplayString 返回原始值, 不转义!
+# =============================================================
+print("--- S6: SPECIAL CHARACTERS IN SERIALIZATION ---");
+
+# 含引号的字符串
+let s6quote = "he said \"hi\"";
+print("[S6.01 str-with-quotes expect=he said \"hi\"] " + str(s6quote));
+# str() 是否转义引号? 用 json_stringify 测试
+print("[S6.02 json_stringify-quotes expect=he said \"hi\"] " + json_stringify(s6quote));
+# 在 list 中序列化含引号字符串
+print("[S6.03 list-with-quotes expect=[he said \"hi\"]] " + str([s6quote]));
+# 含反斜杠
+let s6slash = "a\\b";
+print("[S6.04 str-with-backslash expect=a\\b] " + str(s6slash));
+print("[S6.05 json_stringify-backslash expect=a\\b] " + json_stringify(s6slash));
+# 含换行符
+let s6nl = "line1\nline2";
+print("[S6.06 str-with-newline-len expect=11] " + str(len(s6nl)));
+print("[S6.07 str-with-newline expect=line1\\nline2-actual] " + str(s6nl));
+# 在 list 中含换行符
+print("[S6.08 list-with-newline expect=[line1\\nline2]] " + str([s6nl]));
+# 含制表符
+let s6tab = "a\tb";
+print("[S6.09 str-with-tab-len expect=3] " + str(len(s6tab)));
+print("[S6.10 str-with-tab expect=a\\tb-actual] " + str(s6tab));
+# 用 chr 构造控制字符
+let s6ctrl = "a" + chr(0) + "b";
+print("[S6.11 str-with-nul-len expect=3] " + str(len(s6ctrl)));
+print("[S6.12 str-with-nul expect=a\\0b-actual] " + str(s6ctrl));
+
+# json_stringify 含特殊字符的字符串 — 是否产生有效 JSON?
+let s6special = "he said \"hi\" and a\\b";
+let s6encoded = json_stringify(s6special);
+try {
+    # json_parse 期望带引号的有效 JSON 字符串
+    # json_stringify 不加引号, 所以解析会失败
+    let s6quoted = "\"" + s6special + "\"";
+    print("[S6.13 raw-special-not-quoted expect=FAIL-PARSE]");
+} catch (e) {
+    print("[S6.13 raw-special-not-quoted expect=FAIL-PARSE] got: " + e);
+}
+
+# =============================================================
+# S7: Unicode 序列化 — emoji 和非 ASCII 字符在 str() 中的表示
+# toDisplayString 返回原始 Unicode 字符, 不转义为 \uXXXX
+# =============================================================
+print("--- S7: UNICODE SERIALIZATION ---");
+
+print("[S7.01 str-emoji expect=😀] " + str("😀"));
+print("[S7.02 str-cn expect=你好] " + str("你好"));
+print("[S7.03 str-emoji-list expect=[😀, 🎉]] " + str(["😀", "🎉"]));
+print("[S7.04 str-emoji-dict expect={emoji: 😀}] " + str({"emoji": "😀"}));
+print("[S7.05 str-mixed-unicode expect={name: 世界, e: 😀}] " + str({"name": "世界", "e": "😀"}));
+# json_stringify 对 Unicode
+print("[S7.06 json_stringify-emoji expect=😀] " + json_stringify("😀"));
+print("[S7.07 json_stringify-cn-dict expect={name: 世界}] " + json_stringify({"name": "世界"}));
+# json_parse 解析含 Unicode 的 JSON
+try {
+    let r = json_parse("{\"emoji\": \"😀\"}");
+    print("[S7.08 json_parse-emoji expect={emoji: 😀}] " + str(r));
+} catch (e) {
+    print("[S7.08 json_parse-emoji expect=ERR] got-ERR: " + e);
+}
+# json_parse 解析 \u 转义
+try {
+    let r = json_parse("{\"key\": \"\\u4e16\\u754c\"}");
+    print("[S7.09 json_parse-unicode-escape expect={key: 世界}] " + str(r));
+} catch (e) {
+    print("[S7.09 json_parse-unicode-escape expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# S8: 字典键序 — str({"b":2,"a":1}) 的键是否排序?
+# HDict 使用 LinkedHashMap, 保持插入顺序, 不排序
+# =============================================================
+print("--- S8: DICT KEY ORDER ---");
+
+print("[S8.01 str-dict-order expect={b: 2, a: 1}] " + str({"b": 2, "a": 1}));
+print("[S8.02 str-dict-sorted-input expect={a: 1, b: 2}] " + str({"a": 1, "b": 2}));
+print("[S8.03 str-dict-reverse expect={z: 1, a: 2}] " + str({"z": 1, "a": 2}));
+print("[S8.04 str-dict-three expect={c: 3, a: 1, b: 2}] " + str({"c": 3, "a": 1, "b": 2}));
+# 键序是否稳定? 同一字典多次 str
+let d8 = {"x": 1, "a": 2, "m": 3};
+print("[S8.05 str-dict-stable-1 expect={x: 1, a: 2, m: 3}] " + str(d8));
+print("[S8.06 str-dict-stable-2 expect={x: 1, a: 2, m: 3}] " + str(d8));
+# json_stringify 键序
+print("[S8.07 json_stringify-order expect={b: 2, a: 1}] " + json_stringify({"b": 2, "a": 1}));
+
+# =============================================================
+# S9: 循环引用 — let a=[]; push(a,a); str(a) 的行为
+# toDisplayString 使用 displayStack 检测循环, 返回 "[...]" / "{...}"
+# 不报错!
+# =============================================================
+print("--- S9: CIRCULAR REFERENCES ---");
+
+# 列表自引用
+let circList = [];
+push(circList, circList);
+try {
+    let r = str(circList);
+    print("[S9.01 str-circular-list expect=[...]] " + r);
+} catch (e) {
+    print("[S9.01 str-circular-list expect=[...]] got-ERR: " + e);
+}
+
+# 字典自引用
+let circDict = {};
+circDict["self"] = circDict;
+try {
+    let r = str(circDict);
+    print("[S9.02 str-circular-dict expect={self: {...}}] " + r);
+} catch (e) {
+    print("[S9.02 str-circular-dict expect={self: {...}}] got-ERR: " + e);
+}
+
+# 列表互相引用
+let a9 = [];
+let b9 = [];
+push(a9, b9);
+push(b9, a9);
+try {
+    let r = str(a9);
+    print("[S9.03 str-mutual-circular expect=[[...]]] " + r);
+} catch (e) {
+    print("[S9.03 str-mutual-circular expect=ERR] got-ERR: " + e);
+}
+
+# json_stringify 循环引用
+try {
+    let r = json_stringify(circList);
+    print("[S9.04 json_stringify-circular expect=[...]] " + r);
+} catch (e) {
+    print("[S9.04 json_stringify-circular expect=[...]] got-ERR: " + e);
+}
+
+# 深层循环
+let deepCirc = [];
+push(deepCirc, [deepCirc]);
+try {
+    let r = str(deepCirc);
+    print("[S9.05 str-deep-circular expect=[[...]]] " + r);
+} catch (e) {
+    print("[S9.05 str-deep-circular expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# S10: fmt() 与 JSON — fmt("{}", {"a":1}) 的行为
+# fmt 只支持 {N} 位置占位符, 不支持 {}
+# =============================================================
+print("--- S10: fmt() AND JSON ---");
+
+# fmt 不支持 {} 自动索引
+print("[S10.01 fmt-empty-brace expect={}] " + fmt("{}", {"a": 1}));
+# fmt {0} 对字典
+print("[S10.02 fmt-dict expect={a: 1}] " + fmt("{0}", {"a": 1}));
+# fmt {0} 对列表
+print("[S10.03 fmt-list expect=[1, 2]] " + fmt("{0}", [1, 2]));
+# fmt 嵌套
+print("[S10.04 fmt-nested expect={a: [1, 2]}] " + fmt("{0}", {"a": [1, 2]}));
+# fmt 多值
+print("[S10.05 fmt-multi expect=n=42 s=hi] " + fmt("n={0} s={1}", 42, "hi"));
+# fmt 不支持格式说明符
+print("[S10.06 fmt-spec expect={0:.2f}] " + fmt("{0:.2f}", 3.14159));
+# fmt 与 json_stringify 一致性
+let f10obj = {"a": 1, "b": [2, 3]};
+print("[S10.07 fmt-vs-json_stringify expect=true] " + str(fmt("{0}", f10obj) == json_stringify(f10obj)));
+print("[S10.08 fmt-vs-str expect=true] " + str(fmt("{0}", f10obj) == str(f10obj)));
+
+# =============================================================
+# S11: 解析 — json_parse 测试各种 JSON 字符串
+# =============================================================
+print("--- S11: json_parse VARIOUS INPUTS ---");
+
+# 简单对象
+try {
+    let r = json_parse("{\"a\": 1}");
+    print("[S11.01 parse-simple-obj expect={a: 1}] " + str(r));
+} catch (e) {
+    print("[S11.01 parse-simple-obj expect=ERR] got-ERR: " + e);
+}
+
+# 简单数组
+try {
+    let r = json_parse("[1, 2, 3]");
+    print("[S11.02 parse-array expect=[1, 2, 3]] " + str(r));
+} catch (e) {
+    print("[S11.02 parse-array expect=ERR] got-ERR: " + e);
+}
+
+# 嵌套对象
+try {
+    let r = json_parse("{\"a\": {\"b\": {\"c\": 1}}}");
+    print("[S11.03 parse-nested-obj expect={a: {b: {c: 1}}}] " + str(r));
+} catch (e) {
+    print("[S11.03 parse-nested-obj expect=ERR] got-ERR: " + e);
+}
+
+# 含字符串值
+try {
+    let r = json_parse("{\"name\": \"hello\"}");
+    print("[S11.04 parse-string-val expect={name: hello}] " + str(r));
+} catch (e) {
+    print("[S11.04 parse-string-val expect=ERR] got-ERR: " + e);
+}
+
+# 含布尔和 null
+try {
+    let r = json_parse("[true, false, null]");
+    print("[S11.05 parse-bool-null expect=[true, false, null]] " + str(r));
+} catch (e) {
+    print("[S11.05 parse-bool-null expect=ERR] got-ERR: " + e);
+}
+
+# 含浮点数
+try {
+    let r = json_parse("{\"pi\": 3.14}");
+    print("[S11.06 parse-float expect={pi: 3.14}] " + str(r));
+} catch (e) {
+    print("[S11.06 parse-float expect=ERR] got-ERR: " + e);
+}
+
+# 空对象/数组
+try {
+    let r = json_parse("{}");
+    print("[S11.07 parse-empty-obj expect={}] " + str(r));
+} catch (e) {
+    print("[S11.07 parse-empty-obj expect=ERR] got-ERR: " + e);
+}
+try {
+    let r = json_parse("[]");
+    print("[S11.08 parse-empty-arr expect=[]] " + str(r));
+} catch (e) {
+    print("[S11.08 parse-empty-arr expect=ERR] got-ERR: " + e);
+}
+
+# 负数
+try {
+    let r = json_parse("{\"x\": -42}");
+    print("[S11.09 parse-negative expect={x: -42}] " + str(r));
+} catch (e) {
+    print("[S11.09 parse-negative expect=ERR] got-ERR: " + e);
+}
+
+# 字符串转义
+try {
+    let r = json_parse("{\"s\": \"hello\\nworld\"}");
+    print("[S11.10 parse-escape-n expect={s: hello\\nworld}] " + str(r));
+    print("[S11.11 parse-escape-n-len expect=11] " + str(len(r["s"])));
+} catch (e) {
+    print("[S11.10 parse-escape-n expect=ERR] got-ERR: " + e);
+}
+
+# 无效 JSON — 应报错
+try {
+    let r = json_parse("not json");
+    print("[S11.12 parse-invalid expect=ERR] " + str(r));
+} catch (e) {
+    print("[S11.12 parse-invalid expect=ERR] got-ERR: " + e);
+}
+
+# 非引号键 (无效 JSON, 但 str() 产生这种)
+try {
+    let r = json_parse("{a: 1}");
+    print("[S11.13 parse-unquoted-key expect=ERR] " + str(r));
+} catch (e) {
+    print("[S11.13 parse-unquoted-key expect=ERR] got-ERR: " + e);
+}
+
+# net_json_parse — stub, 总是返回空列表
+try {
+    let r = net_json_parse("{\"a\": 1}");
+    print("[S11.14 net_json_parse-stub expect=[]] " + str(r));
+} catch (e) {
+    print("[S11.14 net_json_parse-stub expect=ERR] got-ERR: " + e);
+}
+try {
+    let r = net_json_parse("[1, 2, 3]");
+    print("[S11.15 net_json_parse-stub2 expect=[]] " + str(r));
+} catch (e) {
+    print("[S11.15 net_json_parse-stub2 expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# S12: 往返一致性 — 序列化再解析是否得到原始值?
+# json_stringify 产生 toDisplayString 输出 (非有效 JSON)
+# json_parse 期望有效 JSON
+# 往返必然失败!
+# =============================================================
+print("--- S12: ROUNDTRIP CONSISTENCY ---");
+
+# 数字往返
+let n12 = 42;
+let n12s = json_stringify(n12);
+try {
+    let n12p = json_parse(n12s);
+    print("[S12.01 rt-number expect=42] " + str(n12p));
+} catch (e) {
+    print("[S12.01 rt-number expect=FAIL] got-ERR: " + e);
+}
+
+# 布尔往返
+let b12 = true;
+let b12s = json_stringify(b12);
+try {
+    let b12p = json_parse(b12s);
+    print("[S12.02 rt-bool expect=true] " + str(b12p));
+} catch (e) {
+    print("[S12.02 rt-bool expect=FAIL] got-ERR: " + e);
+}
+
+# null 往返
+let null12 = null;
+let null12s = json_stringify(null12);
+try {
+    let null12p = json_parse(null12s);
+    print("[S12.03 rt-null expect=null] " + str(null12p));
+} catch (e) {
+    print("[S12.03 rt-null expect=FAIL] got-ERR: " + e);
+}
+
+# 字符串往返 — json_stringify 不加引号, 必失败
+let s12 = "hello";
+let s12s = json_stringify(s12);
+print("[S12.04 rt-string-encoded expect=hello] " + s12s);
+try {
+    let s12p = json_parse(s12s);
+    print("[S12.05 rt-string expect=hello] " + str(s12p));
+} catch (e) {
+    print("[S12.05 rt-string expect=FAIL] got-ERR: " + e);
+}
+
+# 列表往返 — json_stringify 不加引号, 必失败
+let l12 = [1, 2, 3];
+let l12s = json_stringify(l12);
+print("[S12.06 rt-list-encoded expect=[1, 2, 3]] " + l12s);
+try {
+    let l12p = json_parse(l12s);
+    print("[S12.07 rt-list expect=[1, 2, 3]] " + str(l12p));
+} catch (e) {
+    print("[S12.07 rt-list expect=FAIL] got-ERR: " + e);
+}
+
+# 字典往返 — json_stringify 键无引号, 必失败
+let d12 = {"a": 1};
+let d12s = json_stringify(d12);
+print("[S12.08 rt-dict-encoded expect={a: 1}] " + d12s);
+try {
+    let d12p = json_parse(d12s);
+    print("[S12.09 rt-dict expect={a: 1}] " + str(d12p));
+} catch (e) {
+    print("[S12.09 rt-dict expect=FAIL] got-ERR: " + e);
+}
+
+# 含字符串值的字典往返 — 必失败
+let ds12 = {"name": "hello"};
+let ds12s = json_stringify(ds12);
+print("[S12.10 rt-dict-str-encoded expect={name: hello}] " + ds12s);
+try {
+    let ds12p = json_parse(ds12s);
+    print("[S12.11 rt-dict-str expect={name: hello}] " + str(ds12p));
+} catch (e) {
+    print("[S12.11 rt-dict-str expect=FAIL] got-ERR: " + e);
+}
+
+# 纯数字列表往返 — 数字列表无字符串, 可能成功?
+let nl12 = [1, 2, 3];
+let nl12s = json_stringify(nl12);
+try {
+    let nl12p = json_parse(nl12s);
+    print("[S12.12 rt-num-list expect=[1, 2, 3]] " + str(nl12p));
+} catch (e) {
+    print("[S12.12 rt-num-list expect=FAIL] got-ERR: " + e);
+}
+
+# 手动构造有效 JSON 然后往返
+let validJson = "{\"a\": 1, \"b\": [2, 3]}";
+try {
+    let parsed = json_parse(validJson);
+    let reStr = json_stringify(parsed);
+    print("[S12.13 rt-valid-json-input expect={a: 1, b: [2, 3]}] " + reStr);
+    # 再次解析 reStr 会失败 (因为 reStr 不是有效 JSON)
+    try {
+        let reparsed = json_parse(reStr);
+        print("[S12.14 rt-double-parse expect=FAIL] " + str(reparsed));
+    } catch (e) {
+        print("[S12.14 rt-double-parse expect=FAIL] got-ERR: " + e);
+    }
+} catch (e) {
+    print("[S12.13 rt-valid-json-input expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# S13: 数字精度 — 大数字、浮点数序列化后是否保持精度?
+# HNumber 内部用 Double, 大整数可能丢失精度
+# =============================================================
+print("--- S13: NUMBER PRECISION ---");
+
+# 大整数
+let big13 = 9007199254740992;  # 2^53, Double 精度边界
+print("[S13.01 str-big-int expect=9007199254740992] " + str(big13));
+let big13b = 9007199254740993;  # 2^53 + 1, 无法精确表示
+print("[S13.02 str-big-int-plus1 expect=9007199254740993] " + str(big13b));
+
+# 浮点精度
+let f13 = 0.1;
+print("[S13.03 str-0.1 expect=0.1] " + str(f13));
+let f13b = 0.1 + 0.2;
+print("[S13.04 str-0.3 expect=0.30000000000000004] " + str(f13b));
+
+# 整数 vs 浮点显示
+print("[S13.05 str-int-42 expect=42] " + str(42));
+print("[S13.06 str-float-42.0 expect=42] " + str(42.0));
+print("[S13.07 str-float-42.5 expect=42.5] " + str(42.5));
+
+# json_parse 数字精度
+try {
+    let r = json_parse("{\"big\": 9007199254740992}");
+    print("[S13.08 parse-big-int expect={big: 9007199254740992}] " + str(r));
+} catch (e) {
+    print("[S13.08 parse-big-int expect=ERR] got-ERR: " + e);
+}
+
+# 科学计数法
+try {
+    let r = json_parse("{\"x\": 1e10}");
+    print("[S13.09 parse-sci-notation expect={x: 10000000000}] " + str(r));
+} catch (e) {
+    print("[S13.09 parse-sci-notation expect=ERR] got-ERR: " + e);
+}
+
+# json_stringify 大数
+print("[S13.10 json_stringify-big expect=9007199254740992] " + json_stringify(9007199254740992));
+
+# =============================================================
+# S14: 类型信息丢失 — 42 和 42.0 是否可区分? true 和 1 是否可区分?
+# HNumber 内部用 Double, 42 和 42.0 相等
+# HBool 和 HNumber 是不同类型, true != 1
+# =============================================================
+print("--- S14: TYPE INFORMATION LOSS ---");
+
+# 42 vs 42.0 — toDisplayString 相同
+print("[S14.01 str-42-vs-42.0 expect=same] " + (str(42) == str(42.0) ?: "same" : "diff"));
+# type() 区分?
+print("[S14.02 type-42 expect=number] " + type(42));
+print("[S14.03 type-42.0 expect=number] " + type(42.0));
+# 42 == 42.0?
+print("[S14.04 42-eq-42.0 expect=true] " + str(42 == 42.0));
+
+# true vs 1
+print("[S14.05 str-true-vs-1 expect=diff] " + (str(true) == str(1) ?: "same" : "diff"));
+print("[S14.06 type-true expect=bool] " + type(true));
+print("[S14.07 type-1 expect=number] " + type(1));
+print("[S14.08 true-eq-1 expect=false] " + str(true == 1));
+
+# null vs 0
+print("[S14.09 str-null-vs-0 expect=diff] " + (str(null) == str(0) ?: "same" : "diff"));
+print("[S14.10 type-null expect=null] " + type(null));
+print("[S14.11 type-0 expect=number] " + type(0));
+print("[S14.12 null-eq-0 expect=false] " + str(null == 0));
+
+# 空串 vs null
+print("[S14.13 str-empty-vs-null expect=diff] " + (str("") == str(null) ?: "same" : "diff"));
+print("[S14.14 type-empty-str expect=string] " + type(""));
+print("[S14.15 empty-str-eq-null expect=false] " + str("" == null));
+
+# json_parse 后类型: 42 -> number, 42.0 -> number (都成 Double)
+try {
+    let r = json_parse("{\"i\": 42, \"f\": 42.0}");
+    print("[S14.16 parse-int-type expect=number] " + type(r["i"]));
+    print("[S14.17 parse-float-type expect=number] " + type(r["f"]));
+    print("[S14.18 parse-int-eq-float expect=true] " + str(r["i"] == r["f"]));
+} catch (e) {
+    print("[S14.16 parse-int-type expect=ERR] got-ERR: " + e);
+}
+
+# json_parse 后 true vs 1
+try {
+    let r = json_parse("{\"b\": true, \"n\": 1}");
+    print("[S14.19 parse-bool-type expect=bool] " + type(r["b"]));
+    print("[S14.20 parse-num-type expect=number] " + type(r["n"]));
+    print("[S14.21 parse-bool-eq-num expect=false] " + str(r["b"] == r["n"]));
+} catch (e) {
+    print("[S14.19 parse-bool-type expect=ERR] got-ERR: " + e);
+}
+
+# =============================================================
+# S15: 空值 — str(null), str({}), str([]) 的格式
+# =============================================================
+print("--- S15: EMPTY VALUES ---");
+
+print("[S15.01 str-null expect=null] " + str(null));
+print("[S15.02 str-empty-dict expect={}] " + str({}));
+print("[S15.03 str-empty-list expect=[]] " + str([]));
+print("[S15.04 str-empty-string expect=] [" + str("") + "]");
+print("[S15.05 str-zero expect=0] " + str(0));
+print("[S15.06 str-false expect=false] " + str(false));
+
+# json_stringify 空值
+print("[S15.07 json_stringify-null expect=null] " + json_stringify(null));
+print("[S15.08 json_stringify-empty-dict expect={}] " + json_stringify({}));
+print("[S15.09 json_stringify-empty-list expect=[]] " + json_stringify([]));
+print("[S15.10 json_stringify-empty-str expect=] [" + json_stringify("") + "]");
+
+# json_parse 空值
+try {
+    print("[S15.11 parse-null expect=null] " + str(json_parse("null")));
+} catch (e) {
+    print("[S15.11 parse-null expect=ERR] got-ERR: " + e);
+}
+try {
+    print("[S15.12 parse-empty-obj expect={}] " + str(json_parse("{}")));
+} catch (e) {
+    print("[S15.12 parse-empty-obj expect=ERR] got-ERR: " + e);
+}
+try {
+    print("[S15.13 parse-empty-arr expect=[]] " + str(json_parse("[]")));
+} catch (e) {
+    print("[S15.13 parse-empty-arr expect=ERR] got-ERR: " + e);
+}
+try {
+    print("[S15.14 parse-empty-str expect=ERR] " + str(json_parse("")));
+} catch (e) {
+    print("[S15.14 parse-empty-str expect=ERR] got-ERR: " + e);
+}
+
+# 空值往返
+let empty15 = {};
+let empty15s = json_stringify(empty15);
+try {
+    let empty15p = json_parse(empty15s);
+    print("[S15.15 rt-empty-dict expect={}] " + str(empty15p));
+} catch (e) {
+    print("[S15.15 rt-empty-dict expect=FAIL] got-ERR: " + e);
+}
+let emptyList15 = [];
+let emptyList15s = json_stringify(emptyList15);
+try {
+    let emptyList15p = json_parse(emptyList15s);
+    print("[S15.16 rt-empty-list expect=[]] " + str(emptyList15p));
+} catch (e) {
+    print("[S15.16 rt-empty-list expect=FAIL] got-ERR: " + e);
+}
+
+print("===== DONE R5-158 =====");

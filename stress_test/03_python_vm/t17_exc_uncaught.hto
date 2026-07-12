@@ -1,0 +1,15 @@
+# t17_exc_uncaught.hto - 未捕获异常传播
+# 在没有 try/catch 的函数中抛出异常，测试传播到顶层
+fn blow() {
+    throw "uncaught here";
+}
+fn caller() {
+    blow();
+    print("after blow (should not print)");
+    return 1;
+}
+print("before caller");
+let r = caller();
+print("after caller, r=");
+print(r);
+print("end (should not print)");

@@ -1,0 +1,44 @@
+# t17 - nested match + match as value + complex scrutinee
+# match as expression value in arithmetic
+fn val(x) {
+    let base = match x {
+        1 => 10,
+        2 => 20,
+        _ => 0
+    };
+    return base + 1;
+}
+print("t17_val1:" + str(val(1)));
+print("t17_val2:" + str(val(2)));
+print("t17_val9:" + str(val(9)));
+
+# nested match
+fn nested(x, y) {
+    return match x {
+        0 => match y {
+            0 => "00",
+            _ => "0x"
+        },
+        _ => match y {
+            0 => "x0",
+            _ => "xx"
+        }
+    };
+}
+print("t17_nest_00:" + nested(0, 0));
+print("t17_nest_0x:" + nested(0, 5));
+print("t17_nest_x0:" + nested(5, 0));
+print("t17_nest_xx:" + nested(5, 5));
+
+# complex scrutinee: function call + arithmetic
+fn double(x) { return x * 2; }
+fn complex_scrut(x) {
+    return match double(x) + 1 {
+        5 => "five",
+        11 => "eleven",
+        _ => "other"
+    };
+}
+print("t17_complex_5:" + complex_scrut(2));
+print("t17_complex_11:" + complex_scrut(5));
+print("t17_complex_oth:" + complex_scrut(0));

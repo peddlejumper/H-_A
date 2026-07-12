@@ -1,0 +1,5 @@
+# test_empty_dict.hto
+fn make_dict() {
+    return {};
+}
+print(make_dict());

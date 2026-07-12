@@ -1,0 +1,30 @@
+print("== A: named fn ==");
+fn namedfn() { return undefined_a; }
+fn probe(label, f) {
+    try {
+        let r = f();
+        print(label + " OK:" + str(r));
+    } catch (e) {
+        print(label + " EXC:[" + str(e) + "]");
+    }
+}
+probe("A", namedfn);
+
+print("== B: inline lambda ==");
+probe("B", fn() { return undefined_b; });
+
+print("== C: lambda in let ==");
+let lam = fn() { return undefined_c; };
+probe("C", lam);
+
+print("== D: direct throw in lambda ==");
+probe("D", fn() { throw "from-D-lambda"; });
+
+print("== E: direct throw named ==");
+fn throwfn() { throw "from-E-named"; }
+probe("E", throwfn);
+
+print("== F: div0 in lambda ==");
+probe("F", fn() { return 1 / 0; });
+
+print("end");

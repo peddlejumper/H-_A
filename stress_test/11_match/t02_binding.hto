@@ -1,0 +1,19 @@
+# t02 - binding (bare identifier) pattern
+# Covers: binding matches anything and binds name; binding used in body
+fn b(x) {
+    return match x {
+        v => v
+    };
+}
+print("t02_bind_int:" + str(b(7)));
+print("t02_bind_str:" + b("xy"));
+print("t02_bind_list:" + str(b([1,2,3])));
+print("t02_bind_null:" + str(b(null)));
+
+# binding name can be used in arithmetic
+fn inc(x) {
+    return match x {
+        n => n + 1
+    };
+}
+print("t02_bind_inc:" + str(inc(41)));

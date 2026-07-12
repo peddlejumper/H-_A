@@ -1,0 +1,22 @@
+# t11_dict_iter_order.hto - 字典迭代顺序
+# 插入若干键，迭代观察顺序（应保持插入顺序，Python dict 语义）
+let d = {};
+d["a"] = 1;
+d["b"] = 2;
+d["c"] = 3;
+d["d"] = 4;
+d["e"] = 5;
+print("--- keys ---");
+for k in d {
+    print(k);
+}
+print("--- kv ---");
+for k in d {
+    print(k + "=" + str(d[k]));
+}
+print("--- keys() builtin ---");
+let ks = keys(d);
+print(ks);
+print("--- values() builtin ---");
+let vs = values(d);
+print(vs);

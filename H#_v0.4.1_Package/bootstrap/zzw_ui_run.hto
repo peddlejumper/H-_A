@@ -1,0 +1,294 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# zzw_ui_run.h — 100% H# GUI Application Launcher
+# Imports all modules and runs the demo
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/hwdui.hto";
+import "bootstrap/zzw_native.h";
+import "bootstrap/zzw_render.h";
+
+print("══════════════════════════════════════");
+print("  zzw UI v6.0 — 100% H# GUI Engine");
+print("  318 classes · 500 features · Native Renderer");
+print("══════════════════════════════════════");
+print("");
+print("Starting GUI Application...");
+print("");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Main Application
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn main() {
+    # Create window
+    let win = ZzwWindow();
+    win.init_zw("zzw UI v6.0 — 100% H# Native Renderer", 600, 770);
+    win.setBgColor("#0f1119");
+
+    # ─── Create Widgets ───
+
+    # Title Section
+    let title_lbl = Label();
+    title_lbl.init_lbl("");
+    title_lbl.widget_type = "Label";
+    title_lbl.text = "zzw UI v6.0";
+    title_lbl.x = 20; title_lbl.y = 16; title_lbl.w = 300; title_lbl.h = 24;
+    win.addWidget(title_lbl);
+
+    let subtitle_lbl = Label();
+    subtitle_lbl.init_lbl("");
+    subtitle_lbl.widget_type = "Label";
+    subtitle_lbl.text = "100% H# · Native Rendering · 500+ Features";
+    subtitle_lbl.x = 20; subtitle_lbl.y = 40; subtitle_lbl.w = 400; subtitle_lbl.h = 20;
+    win.addWidget(subtitle_lbl);
+
+    # ─── Buttons Row ───
+    let btn1 = Button();
+    btn1.init_btn("Primary");
+    btn1.widget_type = "Button";
+    btn1.x = 20; btn1.y = 72; btn1.w = 100; btn1.h = 34;
+    win.addWidget(btn1);
+
+    let btn2 = Button();
+    btn2.init_btn("Success");
+    btn2.widget_type = "Button";
+    btn2.x = 128; btn2.y = 72; btn2.w = 100; btn2.h = 34;
+    win.addWidget(btn2);
+
+    let btn3 = Button();
+    btn3.init_btn("Danger");
+    btn3.widget_type = "Button";
+    btn3.x = 236; btn3.y = 72; btn3.w = 100; btn3.h = 34;
+    win.addWidget(btn3);
+
+    let btn4 = Button();
+    btn4.init_btn("Outline");
+    btn4.widget_type = "Button";
+    btn4.x = 344; btn4.y = 72; btn4.w = 100; btn4.h = 34;
+    win.addWidget(btn4);
+
+    # ─── Toggle Buttons ───
+    let tbtn_b = ToggleButton();
+    tbtn_b.init_tbtn("B");
+    tbtn_b.is_checked = true;
+    tbtn_b.x = 20; tbtn_b.y = 118; tbtn_b.w = 40; tbtn_b.h = 30;
+    win.addWidget(tbtn_b);
+
+    let tbtn_i = ToggleButton();
+    tbtn_i.init_tbtn("I");
+    tbtn_i.is_checked = false;
+    tbtn_i.x = 64; tbtn_i.y = 118; tbtn_i.w = 40; tbtn_i.h = 30;
+    win.addWidget(tbtn_i);
+
+    let tbtn_u = ToggleButton();
+    tbtn_u.init_tbtn("U");
+    tbtn_u.is_checked = false;
+    tbtn_u.x = 108; tbtn_u.y = 118; tbtn_u.w = 40; tbtn_u.h = 30;
+    win.addWidget(tbtn_u);
+
+    # Icon Buttons
+    let ico1 = IconButton();
+    ico1.init_ibtn("🔍", "");
+    ico1.widget_type = "IconButton";
+    ico1.x = 160; ico1.y = 115; ico1.w = 36; ico1.h = 36;
+    win.addWidget(ico1);
+
+    let ico2 = IconButton();
+    ico2.init_ibtn("⚙️", "");
+    ico2.widget_type = "IconButton";
+    ico2.x = 202; ico2.y = 115; ico2.w = 36; ico2.h = 36;
+    win.addWidget(ico2);
+
+    let ico3 = IconButton();
+    ico3.init_ibtn("💾", "");
+    ico3.widget_type = "IconButton";
+    ico3.x = 244; ico3.y = 115; ico3.w = 36; ico3.h = 36;
+    win.addWidget(ico3);
+
+    let ico4 = IconButton();
+    ico4.init_ibtn("📁", "");
+    ico4.widget_type = "IconButton";
+    ico4.x = 286; ico4.y = 115; ico4.w = 36; ico4.h = 36;
+    win.addWidget(ico4);
+
+    # ─── Input Fields ───
+    let tb = TextBox();
+    tb.init_tb("Type here...");
+    tb.widget_type = "TextBox";
+    tb.x = 20; tb.y = 165; tb.w = 280; tb.h = 32;
+    win.addWidget(tb);
+
+    let pb = PasswordBox();
+    pb.init_pb();
+    pb.set_text("password123");
+    pb.widget_type = "PasswordBox";
+    pb.x = 310; pb.y = 165; pb.w = 250; pb.h = 32;
+    win.addWidget(pb);
+
+    let comb = ComboBox();
+    comb.init_cb();
+    comb.add_item("Dark Theme");
+    comb.add_item("Light Theme");
+    comb.add_item("Ocean Theme");
+    comb.add_item("Forest Theme");
+    comb.selected_index = 0;
+    comb.text = "Dark Theme";
+    comb.x = 20; comb.y = 207; comb.w = 280; comb.h = 32;
+    win.addWidget(comb);
+
+    let search = SearchBox();
+    search.init_sb();
+    search.set_text("Search widgets...");
+    search.widget_type = "SearchBox";
+    search.x = 310; search.y = 207; search.w = 250; search.h = 32;
+    win.addWidget(search);
+
+    # ─── Checkboxes ───
+    let cb1 = CheckBox();
+    cb1.init_cb("Enable animations");
+    cb1.is_checked = true;
+    cb1.x = 20; cb1.y = 250; cb1.w = 200; cb1.h = 24;
+    win.addWidget(cb1);
+
+    let cb2 = CheckBox();
+    cb2.init_cb("Auto-save");
+    cb2.is_checked = false;
+    cb2.x = 20; cb2.y = 276; cb2.w = 200; cb2.h = 24;
+    win.addWidget(cb2);
+
+    # ─── Radio Buttons ───
+    let rb1 = RadioButton();
+    rb1.init_rb("Option A", "group1");
+    rb1.is_checked = true;
+    rb1.x = 250; rb1.y = 250; rb1.w = 200; rb1.h = 24;
+    win.addWidget(rb1);
+
+    let rb2 = RadioButton();
+    rb2.init_rb("Option B", "group1");
+    rb2.is_checked = false;
+    rb2.x = 250; rb2.y = 276; rb2.w = 200; rb2.h = 24;
+    win.addWidget(rb2);
+
+    # ─── Slider ───
+    let sl = Slider();
+    sl.init_sl(0, 100, 65);
+    sl.x = 20; sl.y = 310; sl.w = 540; sl.h = 24;
+    win.addWidget(sl);
+
+    # ─── ProgressBar ───
+    let prog = ProgressBar();
+    prog.init_pb();
+    prog.val = 75; prog.max_val = 100;
+    prog.x = 20; prog.y = 345; prog.w = 540; prog.h = 20;
+    win.addWidget(prog);
+
+    # ─── Toggle Switches ───
+    let sw1 = ToggleSwitch();
+    sw1.init_ts("WiFi");
+    sw1.is_checked = true;
+    sw1.x = 20; sw1.y = 378; sw1.w = 120; sw1.h = 24;
+    win.addWidget(sw1);
+
+    let sw2 = ToggleSwitch();
+    sw2.init_ts("Bluetooth");
+    sw2.is_checked = false;
+    sw2.x = 150; sw2.y = 378; sw2.w = 120; sw2.h = 24;
+    win.addWidget(sw2);
+
+    # ─── SpinBox ───
+    let sp = SpinBox();
+    sp.init_sp(0, 100, 42, 1);
+    sp.x = 20; sp.y = 412; sp.w = 100; sp.h = 32;
+    win.addWidget(sp);
+
+    # ─── Rating ───
+    let rate = Rating();
+    rate.init_rt();
+    rate.val = 4;
+    rate.x = 140; rate.y = 414; rate.w = 120; rate.h = 24;
+    win.addWidget(rate);
+
+    # ─── Badge ───
+    let bdg = Badge();
+    bdg.init_bd("NEW");
+    bdg.x = 280; bdg.y = 416; bdg.w = 40; bdg.h = 20;
+    win.addWidget(bdg);
+
+    # ─── DatePicker ───
+    let dp = DatePicker();
+    dp.init_dp();
+    dp.selected_date = "2026-06-13";
+    dp.x = 340; dp.y = 412; dp.w = 220; dp.h = 32;
+    win.addWidget(dp);
+
+    # ─── TabControl ───
+    let tab = TabControl();
+    tab.init_tc();
+    tab.tabs = ["General", "Appearance", "Advanced", "About"];
+    tab.selected_index = 0;
+    tab.x = 20; tab.y = 458; tab.w = 540; tab.h = 140;
+    win.addWidget(tab);
+
+    # ─── ListBox ───
+    let lb = ListBox();
+    lb.init_lb();
+    lb.add_item("JavaScript");
+    lb.add_item("Python");
+    lb.add_item("H# Language");
+    lb.add_item("Rust");
+    lb.add_item("Go");
+    lb.selected_index = 2;
+    lb.x = 20; lb.y = 610; lb.w = 260; lb.h = 120;
+    win.addWidget(lb);
+
+    # ─── TreeView ───
+    let tv = TreeView();
+    tv.init_tv();
+    tv.add_item("zzw-ui");
+    tv.add_item("├── Core");
+    tv.add_item("├── Widgets");
+    tv.add_item("├── Containers");
+    tv.add_item("└── Systems");
+    tv.x = 290; tv.y = 610; tv.w = 270; tv.h = 120;
+    win.addWidget(tv);
+
+    # ─── StatusBar ───
+    let stb = StatusBar();
+    stb.init_sb("");
+    stb.text = "Ready — zzw UI v6.0 | 318 classes | 500 features | 100% H#";
+    stb.x = 0; stb.y = 742; stb.w = 600; stb.h = 24;
+    win.addWidget(stb);
+
+    # ─── Run Event Loop ───
+    print("Opening window...");
+    win.open();
+
+    if (win.getWinId() <= 0) {
+        print("ERROR: Failed to create window!");
+        return 0;
+    }
+
+    print("Window ID: " + str(win.getWinId()));
+    print("Entering render loop...");
+    print("");
+
+    win.running = true;
+    let frame = 0;
+    while (win.running and frame < 10000) {
+        win.handleEvents();
+        win.render();
+        native_poll_events();
+        frame = frame + 1;
+    }
+
+    win.close();
+    print("");
+    print("Done. " + str(frame) + " frames rendered.");
+    return 0;
+}
+
+main();
+print("");
+print("══════════════════════════════════════");
+print("  zzw UI Demo completed successfully!");
+print("══════════════════════════════════════");

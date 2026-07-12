@@ -1,0 +1,448 @@
+# round4_132_classfield.hto — 测试智能体 #132 (Round 4)
+# 领域: 类字段语义 (Class Field Semantics)
+# H# v0.4.1
+#
+# 子领域:
+#   S1  字段默认值 (field default values)
+#   S2  无默认值字段 (field without default) — parse error, 见 _probe132_s2_nodefault.hto
+#   S3  继承字段遮蔽 (inheritance field shadowing)
+#   S4  静态字段 (static fields) — parse error, 见 _probe132_s4_staticfield.hto
+#   S5  字段初始化顺序/字段间引用 (field-to-field reference in defaults)
+#   S6  self 绑定 (self binding)
+#   S7  裸字段访问 vs 全局 (bare field access vs global)
+#   S8  可变默认值 (mutable default value sharing)
+#   S9  动态添加字段 (dynamic field addition)
+#   S10 私有字段 (private field external access)
+#
+# 每个 try/catch 独立; 打印 "Sxx-Tnn:" 前缀, 预期值在注释。
+# 严重性标注: [BUG]=确认缺陷 [LEAK]=泄漏 [CRASH]=崩溃 [LIMIT]=语言限制
+
+# ============================================================
+# S1: 字段默认值 (field default values)
+# 每个 new C() 的 x 都应是默认值; 修改一个不影响其他。
+# ============================================================
+print("=== S1: field defaults ===");
+
+# S1-T1: 单字段默认值
+class C1 { let x = 10; }
+try {
+    let a = new C1();
+    print("S1-T1: " + a.x);   # 10
+} catch (e) { print("S1-T1-ERR: " + e); }
+
+# S1-T2: 多实例各自独立, 默认值相同
+try {
+    let a = new C1();
+    let b = new C1();
+    let c = new C1();
+    print("S1-T2: " + (a.x + b.x + c.x));   # 30
+} catch (e) { print("S1-T2-ERR: " + e); }
+
+# S1-T3: 修改一个实例不影响其他实例的默认值
+try {
+    let a = new C1();
+    let b = new C1();
+    a.x = 99;
+    print("S1-T3: " + a.x + "," + b.x);   # 99,10
+} catch (e) { print("S1-T3-ERR: " + e); }
+
+# S1-T4: 多字段默认值 (混合类型字面量)
+class C1b {
+    let n = 5;
+    let s = "hi";
+    let b = true;
+    let z = null;
+}
+try {
+    let a = new C1b();
+    print("S1-T4: " + a.n + "|" + a.s + "|" + a.b + "|" + a.z);   # 5|hi|true|null
+} catch (e) { print("S1-T4-ERR: " + e); }
+
+# S1-T5: 字面量列表默认值
+class C1c { let lst = [1, 2, 3]; }
+try {
+    let a = new C1c();
+    print("S1-T5: " + a.lst);   # [1, 2, 3]
+} catch (e) { print("S1-T5-ERR: " + e); }
+
+# ============================================================
+# S2: 无默认值字段 (field without default)
+# 解析器要求 let 字段必须有 '=' (parser.py:393 eat(EQ)),
+# 所以 `let x;` 是 SyntaxError, 会阻塞整个文件编译。
+# 用单独探针文件 _probe132_s2_nodefault.hto 验证。
+# 这里只在 try/catch 中模拟 (仍会 parse-fail, 故注释掉)。
+# ============================================================
+print("=== S2: field without default (see probe) ===");
+print("S2-DOC: `let x;` -> SyntaxError (EQ required); tested in _probe132_s2_nodefault.hto");
+
+# ============================================================
+# S3: 继承字段遮蔽 (inheritance field shadowing)
+# class A { let x = 1; } class B extends A { let x = 2; }
+# B 实例的 x 应为 2 (子类遮蔽父类)。
+# resolveClass: fields = LinkedHashMap(base.fields).apply{putAll(child.fields)}
+# ============================================================
+print("=== S3: inheritance field shadowing ===");
+
+class A3 { let x = 1; }
+class B3 extends A3 { let x = 2; }
+
+# S3-T1: 子类实例读到子类字段值
+try {
+    let a = new A3();
+    let b = new B3();
+    print("S3-T1: " + a.x + "," + b.x);   # 1,2
+} catch (e) { print("S3-T1-ERR: " + e); }
+
+# S3-T2: 修改子类实例的 x 不影响父类实例
+try {
+    let b = new B3();
+    b.x = 99;
+    let a = new A3();
+    print("S3-T2: " + a.x + "," + b.x);   # 1,99
+} catch (e) { print("S3-T2-ERR: " + e); }
+
+# S3-T3: 三层继承字段遮蔽
+class A3d { let x = 1; }
+class B3d extends A3d { let x = 2; }
+class C3d extends B3d { let x = 3; }
+try {
+    let ca = new A3d();
+    let cb = new B3d();
+    let cc = new C3d();
+    print("S3-T3: " + ca.x + "," + cb.x + "," + cc.x);   # 1,2,3
+} catch (e) { print("S3-T3-ERR: " + e); }
+
+# S3-T4: 子类遮蔽 + 父类独有字段仍可访问
+class A3e { let x = 1; let y = 10; }
+class B3e extends A3e { let x = 2; }
+try {
+    let b = new B3e();
+    print("S3-T4: " + b.x + "," + b.y);   # 2,10
+} catch (e) { print("S3-T4-ERR: " + e); }
+
+# S3-T5: 方法中读 self.x 应读遮蔽后的子类值
+class A3f { let x = 1; fn get() { return self.x; } }
+class B3f extends A3f { let x = 2; }
+try {
+    let b = new B3f();
+    print("S3-T5: " + b.get());   # 2
+} catch (e) { print("S3-T5-ERR: " + e); }
+
+# ============================================================
+# S4: 静态字段 (static fields)
+# 解析器要求 static 后必须跟 fn (parser.py:402-403),
+# 所以 `static let count = 0;` 是 SyntaxError, 阻塞编译。
+# 用 _probe132_s4_staticfield.hto 验证 parse error。
+# 这里测试静态 *方法* 与类属性访问作为对照。
+# ============================================================
+print("=== S4: static fields (see probe) ===");
+print("S4-DOC: `static let count = 0;` -> SyntaxError (static must be followed by fn)");
+
+# S4-T1: 静态方法经类名调用 (对照)
+class C4a { static fn v() { return 42; } }
+try {
+    print("S4-T1: " + C4a.v());   # 42
+} catch (e) { print("S4-T1-ERR: " + e); }
+
+# S4-T2: 静态方法经实例调用 (已知 bug: instance 调 static 失败)
+try {
+    let st = new C4a();
+    print("S4-T2: " + st.v());   # 42 (期望) ; 实际可能 ERR
+} catch (e) { print("S4-T2-ERR: " + e); }
+
+# S4-T3: 读取类对象上不存在的属性
+try {
+    print("S4-T3: " + C4a.count);   # ERR: Attribute not found
+} catch (e) { print("S4-T3-ERR: " + e); }
+
+# S4-T4: 尝试给类对象设置属性 (模拟静态字段)
+try {
+    C4a.count = 0;
+    print("S4-T4: " + C4a.count);   # ERR: STORE_ATTR target not object
+} catch (e) { print("S4-T4-ERR: " + e); }
+
+# ============================================================
+# S5: 字段初始化顺序/字段间引用 (field-to-field reference)
+# 编译期 eval_literal 只认字面量; `a + 1` 是 BinaryOp -> 返回 None。
+# 故 `let b = a + 1;` 的默认值会变成 null (静默, 非报错)。
+# ============================================================
+print("=== S5: field-to-field reference in defaults ===");
+
+# S5-T1: 字段引用前一个字段 (BinaryOp) -> 默认值变 null
+class C5a { let a = 1; let b = a + 1; }
+try {
+    let c = new C5a();
+    print("S5-T1: a=" + c.a + " b=" + c.b);   # a=1 b=null (BUG: 期望 2 或报错)
+} catch (e) { print("S5-T1-ERR: " + e); }
+
+# S5-T2: 字段引用前一个字段做算术后再使用 -> null 参与运算
+class C5b { let a = 1; let b = a + 1; }
+try {
+    let c = new C5b();
+    print("S5-T2: " + (c.b + 10));   # ERR or 10 (null+10)
+} catch (e) { print("S5-T2-ERR: " + e); }
+
+# S5-T3: 字段引用全局变量 (非字面量) -> 默认值变 null
+let G5 = 100;
+class C5c { let g = G5; }
+try {
+    let c = new C5c();
+    print("S5-T3: " + c.g);   # null (BUG: 期望 100 或报错)
+} catch (e) { print("S5-T3-ERR: " + e); }
+
+# S5-T4: 字段引用函数调用 -> 默认值变 null
+fn five5() { return 5; }
+class C5d { let v = five5(); }
+try {
+    let c = new C5d();
+    print("S5-T4: " + c.v);   # null (BUG)
+} catch (e) { print("S5-T4-ERR: " + e); }
+
+# S5-T5: 字面量列表内含表达式元素 -> eval_literal 递归, 非字面量元素变 null
+class C5e { let a = 1; let lst = [a, 2, 3]; }
+try {
+    let c = new C5e();
+    print("S5-T5: " + c.lst);   # [null, 2, 3] (BUG)
+} catch (e) { print("S5-T5-ERR: " + e); }
+
+# ============================================================
+# S6: self 绑定 (self binding)
+# 方法内 self 应正确引用当前实例。
+# ============================================================
+print("=== S6: self binding ===");
+
+class C6 { let x = 10; fn get() { return self.x; } fn setX(v) { self.x = v; } }
+
+# S6-T1: self.x 读取
+try {
+    let c = new C6();
+    print("S6-T1: " + c.get());   # 10
+} catch (e) { print("S6-T1-ERR: " + e); }
+
+# S6-T2: self.x 写入后再读
+try {
+    let c = new C6();
+    c.setX(77);
+    print("S6-T2: " + c.get());   # 77
+} catch (e) { print("S6-T2-ERR: " + e); }
+
+# S6-T3: self 作为返回值 (链式)
+class C6b { let v = 0; fn add(n) { self.v = self.v + n; return self; } fn get() { return self.v; } }
+try {
+    let c = new C6b();
+    print("S6-T3: " + c.add(3).add(4).get());   # 7
+} catch (e) { print("S6-T3-ERR: " + e); }
+
+# S6-T4: self 在 lambda 中捕获 (闭包快照语义)
+class C6c { let x = 1; fn makeGetter() { let g = fn() { return self.x; }; return g; } }
+try {
+    let c = new C6c();
+    let g = c.makeGetter();
+    c.x = 42;
+    print("S6-T4: " + g());   # 42 (self 是实例引用)
+} catch (e) { print("S6-T4-ERR: " + e); }
+
+# S6-T5: 多实例 self 互不干扰
+class C6d { let x = 0; fn set(v) { self.x = v; } fn get() { return self.x; } }
+try {
+    let a = new C6d();
+    let b = new C6d();
+    a.set(11);
+    b.set(22);
+    print("S6-T5: " + a.get() + "," + b.get());   # 11,22
+} catch (e) { print("S6-T5-ERR: " + e); }
+
+# ============================================================
+# S7: 裸字段访问 vs 全局 (bare field access vs global)
+# lookup(): self.fields 在 globals 之前查找, 故裸名优先读字段。
+# ============================================================
+print("=== S7: bare field access vs global ===");
+
+# S7-T1: 裸字段读 (无 self) — 应读字段
+class C7a { let x = 10; fn get() { return x; } }
+try {
+    let c = new C7a();
+    print("S7-T1: " + c.get());   # 10
+} catch (e) { print("S7-T1-ERR: " + e); }
+
+# S7-T2: 裸字段写 (无 self) — 应写字段 (STORE_NAME 路由)
+class C7b { let x = 0; fn set(v) { x = v; } fn get() { return x; } }
+try {
+    let c = new C7b();
+    c.set(55);
+    print("S7-T2: " + c.get());   # 55
+} catch (e) { print("S7-T2-ERR: " + e); }
+
+# S7-T3: 同名全局 vs 字段 — 裸名应优先字段
+let x7 = 999;
+class C7c { let x = 1; fn get() { return x; } }
+try {
+    let c = new C7c();
+    print("S7-T3: " + c.get());   # 1 (字段优先于全局)
+} catch (e) { print("S7-T3-ERR: " + e); }
+
+# S7-T4: 类无该字段时, 裸名读全局
+let g7 = 888;
+class C7d { fn get() { return g7; } }
+try {
+    let c = new C7d();
+    print("S7-T4: " + c.get());   # 888 (无字段, 读全局)
+} catch (e) { print("S7-T4-ERR: " + e); }
+
+# S7-T5: 局部变量遮蔽字段 — 裸名应读局部 (env 优先于 self.fields)
+class C7e { let x = 1; fn get() { let x = 100; return x; } }
+try {
+    let c = new C7e();
+    print("S7-T5: " + c.get());   # 100 (局部优先)
+} catch (e) { print("S7-T5-ERR: " + e); }
+
+# ============================================================
+# S8: 可变默认值 (mutable default value sharing)
+# VM callNew 用 deepCopy 复制字段默认值, 故 [] / {} 应每实例独立。
+# ============================================================
+print("=== S8: mutable default value sharing ===");
+
+# S8-T1: 列表默认值 — 两实例应独立
+class C8a { let lst = []; }
+try {
+    let a = new C8a();
+    let b = new C8a();
+    push(a.lst, 1);
+    print("S8-T1: " + a.lst + " | " + b.lst);   # [1] | [] (正确: deepCopy)
+} catch (e) { print("S8-T1-ERR: " + e); }
+
+# S8-T2: 字典默认值 — 两实例应独立
+class C8b { let d = {"k": 0}; }
+try {
+    let a = new C8b();
+    let b = new C8b();
+    a.d["k"] = 99;
+    print("S8-T2: " + a.d["k"] + " | " + b.d["k"]);   # 99 | 0
+} catch (e) { print("S8-T2-ERR: " + e); }
+
+# S8-T3: 嵌套列表默认值 — deepCopy 应深拷贝
+class C8c { let m = [[1, 2], [3, 4]]; }
+try {
+    let a = new C8c();
+    let b = new C8c();
+    push(a.m[0], 99);
+    print("S8-T3: " + a.m + " | " + b.m);   # [[1,2,99],[3,4]] | [[1,2],[3,4]]
+} catch (e) { print("S8-T3-ERR: " + e); }
+
+# S8-T4: 多次 new 共享检查 (连续创建 3 个)
+class C8d { let lst = []; }
+try {
+    let a = new C8d();
+    let b = new C8d();
+    let c = new C8d();
+    push(a.lst, "a");
+    push(b.lst, "b");
+    print("S8-T4: " + a.lst + " | " + b.lst + " | " + c.lst);   # [a] | [b] | []
+} catch (e) { print("S8-T4-ERR: " + e); }
+
+# S8-T5: 实例方法内修改列表默认值, 不影响其他实例
+class C8e { let lst = []; fn add(v) { push(lst, v); } }
+try {
+    let a = new C8e();
+    let b = new C8e();
+    a.add(1);
+    a.add(2);
+    b.add(9);
+    print("S8-T5: " + a.lst + " | " + b.lst);   # [1,2] | [9]
+} catch (e) { print("S8-T5-ERR: " + e); }
+
+# ============================================================
+# S9: 动态添加字段 (dynamic field addition)
+# storeAttr 对 HInstance 无声明检查, 直接 obj.fields[name]=v。
+# ============================================================
+print("=== S9: dynamic field addition ===");
+
+class C9 { let x = 1; }
+
+# S9-T1: 给实例添加新字段
+try {
+    let c = new C9();
+    c.newField = 99;
+    print("S9-T1: " + c.newField);   # 99 (允许)
+} catch (e) { print("S9-T1-ERR: " + e); }
+
+# S9-T2: 动态字段只影响该实例, 不影响其他实例
+try {
+    let a = new C9();
+    let b = new C9();
+    a.dyn = 7;
+    print("S9-T2a: " + a.dyn);   # 7
+    try {
+        print("S9-T2b: " + b.dyn);   # ERR: Attribute not found
+    } catch (e) { print("S9-T2b-ERR: " + e); }
+} catch (e) { print("S9-T2-ERR: " + e); }
+
+# S9-T3: 读取不存在的字段 -> 报错
+try {
+    let c = new C9();
+    print("S9-T3: " + c.missing);   # ERR: Attribute not found
+} catch (e) { print("S9-T3-ERR: " + e); }
+
+# S9-T4: 动态字段与方法名同名 (覆盖方法?)
+class C9b { fn m() { return "method"; } }
+try {
+    let c = new C9b();
+    c.m = "field";
+    print("S9-T4a: " + c.m);   # field (字段遮蔽方法)
+    try {
+        print("S9-T4b: " + c.m());   # ERR: 不可调用
+    } catch (e) { print("S9-T4b-ERR: " + e); }
+} catch (e) { print("S9-T4-ERR: " + e); }
+
+# S9-T5: 动态字段类型多样
+try {
+    let c = new C9();
+    c.fn_val = fn(x) { return x + 1; };
+    c.lst_val = [1, 2];
+    c.obj_val = new C9();
+    print("S9-T5: " + c.fn_val(10) + " | " + c.lst_val + " | " + c.obj_val.x);   # 11 | [1,2] | 1
+} catch (e) { print("S9-T5-ERR: " + e); }
+
+# ============================================================
+# S10: 私有字段 (private field external access)
+# loadAttr/storeAttr: private 字段从外部 (callerSelf !== obj) 访问 -> 报错。
+# ============================================================
+print("=== S10: private field external access ===");
+
+class C10 { private let x = 10; fn get() { return self.x; } fn set(v) { self.x = v; } }
+
+# S10-T1: 方法内访问私有字段
+try {
+    let c = new C10();
+    print("S10-T1: " + c.get());   # 10
+} catch (e) { print("S10-T1-ERR: " + e); }
+
+# S10-T2: 外部读取私有字段 -> 报错
+try {
+    let c = new C10();
+    print("S10-T2: " + c.x);   # ERR: Private access denied
+} catch (e) { print("S10-T2-ERR: " + e); }
+
+# S10-T3: 外部写入私有字段 -> 报错
+try {
+    let c = new C10();
+    c.x = 99;
+    print("S10-T3: wrote " + c.x);   # ERR: Private write denied
+} catch (e) { print("S10-T3-ERR: " + e); }
+
+# S10-T4: 私有字段修改后方法内可见
+try {
+    let c = new C10();
+    c.set(77);
+    print("S10-T4: " + c.get());   # 77
+} catch (e) { print("S10-T4-ERR: " + e); }
+
+# S10-T5: 不同实例互相访问私有字段 (callerSelf !== obj) -> 报错
+class C10b { private let x = 1; fn peek(other) { return other.x; } }
+try {
+    let a = new C10b();
+    let b = new C10b();
+    print("S10-T5: " + a.peek(b));   # ERR: 跨实例私有访问被拒 (callerSelf=a, obj=b)
+} catch (e) { print("S10-T5-ERR: " + e); }
+
+print("=== round4_132 DONE ===");

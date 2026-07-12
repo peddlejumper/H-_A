@@ -1,0 +1,9 @@
+# t7
+fn f(cfg) {
+    if (cfg == nullptr) {
+        return;
+    }
+    print(cfg);
+}
+f(1);
+print("ok");

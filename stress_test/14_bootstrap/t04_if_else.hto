@@ -1,0 +1,8 @@
+# 测试 04: if/else 分支
+# 期望输出: big
+let x = 15;
+if (x > 10) {
+    print("big");
+} else {
+    print("small");
+}

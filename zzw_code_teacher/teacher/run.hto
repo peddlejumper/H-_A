@@ -1,0 +1,4 @@
+# 单独运行教师端的入口
+import "zzw_code_teacher/teacher/teacher_admin.hto";
+
+run_teacher();

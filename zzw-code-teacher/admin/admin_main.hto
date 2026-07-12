@@ -1,0 +1,62 @@
+# admin/admin_main.hto
+# 管理端主窗口(多 Tab)
+#   Tab1: 仪表盘
+#   Tab2: 用户管理
+#   Tab3: 题目管理
+#   Tab4: 提交审核
+#   Tab5: 系统设置
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "client/login_window.hto";
+import "admin/dashboard.hto";
+import "admin/user_mgmt.hto";
+import "admin/problem_mgmt.hto";
+import "admin/review_panel.hto";
+import "admin/settings.hto";
+import "shared/json_utils.hto";
+
+let _admin_main_ref = nullptr;
+
+fn admin_main_build() {
+    let t = ide_theme();
+    let W = 1200;
+    let H = 760;
+    let win = hwdui_create_window("ZZW Code Teacher - 管理端", W, H);
+    ide_apply_to_window(win);
+    # 顶部信息条
+    let info = new Label();
+    info.init_label("👤 " + _admin_state["user"]["display_name"] + " (" + _admin_state["user"]["role"] + ")  ·  服务器: " + _admin_state["server_url"]);
+    info.set_pos(10, 8);
+    info.set_size(W - 20, 22);
+    info.set_color(t["accent"]);
+    info.set_font_size(12);
+    win.add_child(info);
+    # Tab 控件
+    let tabs = new TabControl();
+    tabs.init_tabcontrol();
+    tabs.set_pos(0, 36);
+    tabs.set_size(W, H - 36);
+    tabs.add_tab("📊 仪表盘");
+    tabs.add_tab("👥 用户");
+    tabs.add_tab("📚 题目");
+    tabs.add_tab("📋 审核");
+    tabs.add_tab("⚙ 设置");
+    win.add_child(tabs);
+    # 4 个面板
+    let dash = dashboard.build(tabs, 0, 30, W, H - 66);
+    let um = user_mgmt.build(tabs, 0, 30, W, H - 66);
+    let pm = problem_mgmt.build(tabs, 0, 30, W, H - 66);
+    let rv = review_panel.build(tabs, 0, 30, W, H - 66);
+    let st = settings.build(tabs, 0, 30, W, H - 66);
+    _admin_main_ref = {
+        "window": win,
+        "tabs": tabs,
+        "dash": dash,
+        "um": um,
+        "pm": pm,
+        "rv": rv,
+        "st": st
+    };
+    return _admin_main_ref;
+}

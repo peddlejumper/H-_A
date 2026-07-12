@@ -1,0 +1,127 @@
+# admin/login_window.hto
+# 管理员登录窗口(强制验证 role=admin)
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "shared/json_utils.hto";
+
+fn build_admin_login_window() {
+    let t = ide_theme();
+    let win = hwdui_create_window("ZZW Code Teacher - 管理员登录", 480, 360);
+    ide_apply_to_window(win);
+    let title = new Label();
+    title.init_label("ZZW 管理端");
+    title.set_pos(0, 30);
+    title.set_size(480, 36);
+    title.set_text_align("center");
+    title.set_color(t["accent"]);
+    title.set_font_size(20);
+    win.add_child(title);
+
+    let sub = new Label();
+    sub.init_label("仅限管理员 / 教师账号");
+    sub.set_pos(0, 70);
+    sub.set_size(480, 20);
+    sub.set_text_align("center");
+    sub.set_color(t["warning"]);
+    sub.set_font_size(11);
+    win.add_child(sub);
+
+    let server_label = new Label();
+    server_label.init_label("服务器:");
+    server_label.set_pos(40, 120);
+    server_label.set_size(120, 24);
+    win.add_child(server_label);
+    let server_input = new TextBox();
+    server_input.init_textbox();
+    server_input.set_pos(160, 120);
+    server_input.set_size(280, 28);
+    server_input.set_text(_admin_state["server_url"]);
+    win.add_child(server_input);
+
+    let user_label = new Label();
+    user_label.init_label("账号:");
+    user_label.set_pos(40, 170);
+    user_label.set_size(120, 24);
+    win.add_child(user_label);
+    let user_input = new TextBox();
+    user_input.init_textbox();
+    user_input.set_pos(160, 170);
+    user_input.set_size(280, 28);
+    win.add_child(user_input);
+
+    let pw_label = new Label();
+    pw_label.init_label("密码:");
+    pw_label.set_pos(40, 220);
+    pw_label.set_size(120, 24);
+    win.add_child(pw_label);
+    let pw_input = new TextBox();
+    pw_input.init_textbox();
+    pw_input.set_pos(160, 220);
+    pw_input.set_size(280, 28);
+    pw_input.set_password(true);
+    win.add_child(pw_input);
+
+    let status = new Label();
+    status.init_label(" ");
+    status.set_pos(40, 260);
+    status.set_size(400, 20);
+    status.set_color(t["warning"]);
+    win.add_child(status);
+
+    let login_btn = new Button();
+    login_btn.init_button("登录");
+    login_btn.set_pos(180, 300);
+    login_btn.set_size(120, 36);
+    login_btn.set_bg_color(t["accent"]);
+    win.add_child(login_btn);
+
+    let widgets = {
+        "window": win,
+        "server_input": server_input,
+        "user_input": user_input,
+        "pw_input": pw_input,
+        "status": status
+    };
+    login_btn.onClick = fn() { _do_login(widgets); };
+    pw_input.onEnter = fn() { _do_login(widgets); };
+    return widgets;
+}
+
+fn _do_login(w) {
+    let url = w["server_input"].get_text();
+    let username = w["user_input"].get_text();
+    let password = w["pw_input"].get_text();
+    if (username == "" or password == "") {
+        w["status"].set_text("⚠ 请填写账号/密码");
+        w["status"].set_color("#F48771");
+    } else {
+        admin_set_server(url);
+        let body = json_stringify({"username": username, "password": password});
+        let resp = http_post_json(url + "/api/auth/login", body, [
+            ["Content-Type", "application/json"]
+        ]);
+        let s = http_get_status(resp);
+        let b = http_get_body(resp);
+        if (s != 200) {
+            w["status"].set_text("登录失败(" + str(s) + ")");
+            w["status"].set_color("#F48771");
+        } else {
+            let data = json_parse(b);
+            if (data == nullptr or not data["ok"]) {
+                w["status"].set_text("响应无效");
+            } else {
+                let u = data["data"]["user"];
+                if (u["role"] != "admin" and u["role"] != "teacher") {
+                    w["status"].set_text("❌ 非管理员/教师账号,无权使用本端");
+                    w["status"].set_color("#F48771");
+                } else {
+                    admin_set_user(u, data["data"]["token"]);
+                    w["window"].close();
+                    let main = admin_main_build();
+                    main["window"].open();
+                }
+            }
+        }
+    }
+}

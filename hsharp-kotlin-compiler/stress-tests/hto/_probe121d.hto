@@ -1,0 +1,4 @@
+# probe S4: default captures outer variable
+let g = 10;
+fn f(x=g) { return x; }
+print(f());

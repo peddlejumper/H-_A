@@ -1,0 +1,33 @@
+# t06_cancel_propagation.hto
+# concurrent 内任务 cancel 传播：A 立即抛错，B 跑一个长循环。
+# parent-wins 语义要求：A 失败应 cancel 仍在运行的 B，块立即以 A 的错误失败。
+# 观察点：B 是否被取消？块失败时间是否接近 A 的失败时刻？
+#   - 若 "B-finished" 打印出来，说明 B 未被取消，join 等到了 B 完成。
+#   - 若耗时很长，说明 join 阻塞在 B 上。
+parallel fn fastFail() {
+    throw "A-fail";
+}
+parallel fn longRun() {
+    let i = 0;
+    while (i < 2000000) {
+        i = i + 1;
+    }
+    print("B-finished");
+    return i;
+}
+let t0 = time_now();
+try {
+    concurrent {
+        let fa = fastFail();
+        let fb = longRun();
+        let ra = await fa;
+        print("unreachable");
+    }
+} catch (e) {
+    let t1 = time_now();
+    print("caught:");
+    print(e);
+    print("elapsed-ms:");
+    print(t1 - t0);
+}
+print("after");

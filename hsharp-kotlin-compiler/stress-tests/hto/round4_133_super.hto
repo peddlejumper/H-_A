@@ -1,0 +1,511 @@
+# round4_133_super.hto — 测试智能体 Round 4 #133
+# 领域: super 调用模式 (super call patterns)
+# H# v0.4.1
+#
+# 已知背景 (来自 round3_108 / round2_86):
+#   - super.method() 编译为 CALL_SUPER (method_name, argc)
+#   - HVM.kt callSuper 使用 __current_class__ 跟踪当前方法定义类
+#   - 多层 super 链已修复 (不再无限递归)
+#   - 调用不存在的 super 方法会抛 "Method 'x' not found in any base class"
+#   - super() 在非方法上下文抛 "super() can only be called within a method"
+#
+# 本测试聚焦 S1..S10 super 调用模式, 每个子领域 3-5 个用例。
+# 用 try/catch 包裹避免整体中止；打印 "Sxx:" 前缀, 预期值在注释。
+# 注: H# 同时支持 init 与 __init__ 作为构造器名 (均会编译为 init)。
+
+# ============================================================
+# S1: 单层 super — 子类方法调用直接父类方法
+# ============================================================
+print("=== S1 single-level super ===");
+
+# S1.1: 最基本 super.m() 返回父类值
+try {
+    class S1A1 { fn m() { return "A"; } }
+    class S1B1 extends S1A1 { fn m() { return super.m() + "B"; } }
+    print("S1.1: " + (new S1B1()).m());   # 预期: AB
+} catch (e) { print("S1.1-ERR: " + e); }
+
+# S1.2: super.m() 与算术
+try {
+    class S1A2 { fn m() { return 10; } }
+    class S1B2 extends S1A2 { fn m() { return super.m() * 2; } }
+    print("S1.2: " + (new S1B2()).m());   # 预期: 20
+} catch (e) { print("S1.2-ERR: " + e); }
+
+# S1.3: super.m() 仅作为表达式的一部分 (不返回 super 的值本身)
+try {
+    class S1A3 { fn m() { return "base"; } }
+    class S1B3 extends S1A3 { fn m() { return "[" + super.m() + "]"; } }
+    print("S1.3: " + (new S1B3()).m());   # 预期: [base]
+} catch (e) { print("S1.3-ERR: " + e); }
+
+# S1.4: super.m() 返回值用于条件
+try {
+    class S1A4 { fn ok() { return true; } }
+    class S1B4 extends S1A4 { fn m() { if (super.ok()) { return "yes"; } return "no"; } }
+    print("S1.4: " + (new S1B4()).m());   # 预期: yes
+} catch (e) { print("S1.4-ERR: " + e); }
+
+# S1.5: super.m() 访问父类字段 (通过父类方法)
+try {
+    class S1A5 { let v = 42; fn m() { return v; } }
+    class S1B5 extends S1A5 { fn m() { return super.m() + 1; } }
+    print("S1.5: " + (new S1B5()).m());   # 预期: 43
+} catch (e) { print("S1.5-ERR: " + e); }
+
+# ============================================================
+# S2: 多层 super — A -> B -> C, 每层 super.m()
+# ============================================================
+print("=== S2 multi-level super ===");
+
+# S2.1: A->B->C 三层, 每层 super.m() 加和
+try {
+    class S2A1 { fn m() { return "A"; } }
+    class S2B1 extends S2A1 { fn m() { return super.m() + "B"; } }
+    class S2C1 extends S2B1 { fn m() { return super.m() + "C"; } }
+    print("S2.1: " + (new S2C1()).m());   # 预期: ABC
+} catch (e) { print("S2.1-ERR: " + e); }
+
+# S2.2: A->B->C->D 四层
+try {
+    class S2A2 { fn m() { return 1; } }
+    class S2B2 extends S2A2 { fn m() { return super.m() + 2; } }
+    class S2C2 extends S2B2 { fn m() { return super.m() + 3; } }
+    class S2D2 extends S2C2 { fn m() { return super.m() + 4; } }
+    print("S2.2: " + (new S2D2()).m());   # 预期: 10
+} catch (e) { print("S2.2-ERR: " + e); }
+
+# S2.3: 中间层不覆盖, super 应跳层
+try {
+    class S2A3 { fn m() { return "A"; } }
+    class S2B3 extends S2A3 { }    # 不覆盖 m
+    class S2C3 extends S2B3 { fn m() { return super.m() + "C"; } }
+    print("S2.3: " + (new S2C3()).m());   # 预期: AC (B 跳过)
+} catch (e) { print("S2.3-ERR: " + e); }
+
+# S2.4: 仅顶层和底层覆盖
+try {
+    class S2A4 { fn m() { return "A"; } }
+    class S2B4 extends S2A4 { }    # 不覆盖
+    class S2C4 extends S2B4 { }    # 不覆盖
+    class S2D4 extends S2C4 { fn m() { return super.m() + "D"; } }
+    print("S2.4: " + (new S2D4()).m());   # 预期: AD
+} catch (e) { print("S2.4-ERR: " + e); }
+
+# S2.5: 嵌套格式 super.m() 包装
+try {
+    class S2A5 { fn m() { return "A"; } }
+    class S2B5 extends S2A5 { fn m() { return "B(" + super.m() + ")"; } }
+    class S2C5 extends S2B5 { fn m() { return "C(" + super.m() + ")"; } }
+    print("S2.5: " + (new S2C5()).m());   # 预期: C(B(A))
+} catch (e) { print("S2.5-ERR: " + e); }
+
+# ============================================================
+# S3: 构造器链 — super.__init__ / super.init
+# ============================================================
+print("=== S3 constructor chain ===");
+
+# S3.1: super.init() 无参数
+try {
+    class S3A1 {
+        let log = "";
+        fn init() { self.log = self.log + "A"; }
+    }
+    class S3B1 extends S3A1 {
+        fn init() { super.init(); self.log = self.log + "B"; }
+    }
+    let o = new S3B1();
+    print("S3.1: " + o.log);   # 预期: AB
+} catch (e) { print("S3.1-ERR: " + e); }
+
+# S3.2: super.__init__(x) 带参数, 使用 __init__ 语法
+try {
+    class S3A2 {
+        let x = 0;
+        fn __init__(x) { self.x = x; }
+    }
+    class S3B2 extends S3A2 {
+        let y = 0;
+        fn __init__(x, y) { super.__init__(x); self.y = y; }
+    }
+    let o = new S3B2(10, 20);
+    print("S3.2: " + o.x + "," + o.y);   # 预期: 10,20
+} catch (e) { print("S3.2-ERR: " + e); }
+
+# S3.3: 三层构造器链 A->B->C 都 super.init
+try {
+    class S3A3 {
+        let log = "";
+        fn init() { self.log = self.log + "A"; }
+    }
+    class S3B3 extends S3A3 {
+        fn init() { super.init(); self.log = self.log + "B"; }
+    }
+    class S3C3 extends S3B3 {
+        fn init() { super.init(); self.log = self.log + "C"; }
+    }
+    let o = new S3C3();
+    print("S3.3: " + o.log);   # 预期: ABC
+} catch (e) { print("S3.3-ERR: " + e); }
+
+# S3.4: 子类无 init, 父类 init 自动调用?
+try {
+    class S3A4 {
+        let v = 0;
+        fn init(x) { self.v = x; }
+    }
+    class S3B4 extends S3A4 { }
+    let o = new S3B4(99);
+    print("S3.4: " + o.v);   # 预期: 99 (父 init 继承)
+} catch (e) { print("S3.4-ERR: " + e); }
+
+# S3.5: super.init 带参数 + 字段初始化顺序
+try {
+    class S3A5 {
+        let a = 0;
+        let log = "";
+        fn init(x) { self.a = x; self.log = self.log + "A"; }
+    }
+    class S3B5 extends S3A5 {
+        let b = 0;
+        fn init(x, y) { super.init(x); self.b = y; self.log = self.log + "B"; }
+    }
+    let o = new S3B5(5, 7);
+    print("S3.5: " + o.a + "," + o.b + "," + o.log);   # 预期: 5,7,AB
+} catch (e) { print("S3.5-ERR: " + e); }
+
+# ============================================================
+# S4: super 调用不同方法名 — 子类方法 super.parent_method()
+# ============================================================
+print("=== S4 super different method name ===");
+
+# S4.1: 子类 derived() 调用 super.base()
+try {
+    class S4A1 { fn base() { return 1; } }
+    class S4B1 extends S4A1 { fn derived() { return super.base() + 1; } }
+    print("S4.1: " + (new S4B1()).derived());   # 预期: 2
+} catch (e) { print("S4.1-ERR: " + e); }
+
+# S4.2: 子类 main() 同时调用 super.helper() 和自己 helper()
+try {
+    class S4A2 {
+        fn helper() { return "A.help"; }
+    }
+    class S4B2 extends S4A2 {
+        fn helper() { return "B.help"; }
+        fn main() { return super.helper() + "|" + self.helper(); }
+    }
+    print("S4.2: " + (new S4B2()).main());   # 预期: A.help|B.help
+} catch (e) { print("S4.2-ERR: " + e); }
+
+# S4.3: super.method() 调用父类不存在的方法
+try {
+    class S4A3 { fn m() { return "A.m"; } }
+    class S4B3 extends S4A3 { fn m() { return super.nonexistent() + "B"; } }
+    print("S4.3: " + (new S4B3()).m());   # 预期: 抛异常
+} catch (e) { print("S4.3-OK-EXC: " + e); }
+
+# S4.4: super 调用祖父类方法 (父类未定义该方法)
+try {
+    class S4A4 { fn grand() { return "grand"; } }
+    class S4B4 extends S4A4 { fn m() { return super.grand() + "+B"; } }
+    print("S4.4: " + (new S4B4()).m());   # 预期: grand+B
+} catch (e) { print("S4.4-ERR: " + e); }
+
+# ============================================================
+# S5: super.super — 能否跳过直接父类调用祖父?
+# 注: super.super.method() 语法 parser 不支持 (parser.py 在 SUPER
+#     之后强制期望 DOT IDENTIFIER, 遇到第二个 SUPER 抛 SyntaxError,
+#     整个文件无法编译)。因此本节测试语义等价路径:
+#     (a) 链式 super.m() 间接到达祖父;
+#     (b) 父类不覆盖时 super.m() 自动跳层到祖父。
+# ============================================================
+print("=== S5 super.super (skip parent) ===");
+
+# S5.1: 通过 super.m() 链式 (B 的 super.m() 会到 A) - 间接到达祖父
+try {
+    class S5A1 { fn m() { return "A"; } }
+    class S5B1 extends S5A1 { fn m() { return super.m() + "B"; } }
+    class S5C1 extends S5B1 { fn m() { return super.m() + "C"; } }
+    print("S5.1: " + (new S5C1()).m());   # 预期: ABC (链式到 A)
+} catch (e) { print("S5.1-ERR: " + e); }
+
+# S5.2: B 不覆盖 m, C 的 super.m() 直接到 A (跳层)
+try {
+    class S5A2 { fn m() { return "A"; } }
+    class S5B2 extends S5A2 { }   # 不覆盖
+    class S5C2 extends S5B2 { fn m() { return super.m() + "C"; } }
+    print("S5.2: " + (new S5C2()).m());   # 预期: AC (跳过 B)
+} catch (e) { print("S5.2-ERR: " + e); }
+
+# S5.3: 4 层链 A->B->C->D, B/C 不覆盖, D 的 super.m() 直接跳到 A
+try {
+    class S5A3 { fn m() { return "A"; } }
+    class S5B3 extends S5A3 { }
+    class S5C3 extends S5B3 { }
+    class S5D3 extends S5C3 { fn m() { return super.m() + "D"; } }
+    print("S5.3: " + (new S5D3()).m());   # 预期: AD (跳过 B, C)
+} catch (e) { print("S5.3-ERR: " + e); }
+
+# S5.4: C 调用 super.grandMethod(), 父类 B 未定义, 自动跳到 A
+try {
+    class S5A4 { fn grandMethod() { return "grand"; } }
+    class S5B4 extends S5A4 { fn m() { return "B.m"; } }
+    class S5C4 extends S5B4 {
+        fn m() { return super.grandMethod() + "+C"; }
+    }
+    print("S5.4: " + (new S5C4()).m());   # 预期: grand+C (跳层查找)
+} catch (e) { print("S5.4-ERR: " + e); }
+
+# ============================================================
+# S6: 无 super 调用覆盖 — 子类完全覆盖父类方法
+# ============================================================
+print("=== S6 override without super ===");
+
+# S6.1: 子类完全覆盖, 不调用 super
+try {
+    class S6A1 { fn m() { return "A"; } }
+    class S6B1 extends S6A1 { fn m() { return "B"; } }
+    print("S6.1: " + (new S6B1()).m());   # 预期: B
+} catch (e) { print("S6.1-ERR: " + e); }
+
+# S6.2: 多层覆盖, 每层都不调 super
+try {
+    class S6A2 { fn m() { return "A"; } }
+    class S6B2 extends S6A2 { fn m() { return "B"; } }
+    class S6C2 extends S6B2 { fn m() { return "C"; } }
+    print("S6.2: " + (new S6C2()).m());   # 预期: C
+} catch (e) { print("S6.2-ERR: " + e); }
+
+# S6.3: 覆盖返回不同类型 (int vs str)
+try {
+    class S6A3 { fn m() { return 1; } }
+    class S6B3 extends S6A3 { fn m() { return "one"; } }
+    print("S6.3: " + (new S6B3()).m());   # 预期: one
+} catch (e) { print("S6.3-ERR: " + e); }
+
+# S6.4: 覆盖 + 父类方法仍可通过 super 访问
+try {
+    class S6A4 { fn m() { return "A"; } }
+    class S6B4 extends S6A4 {
+        fn m() { return "B"; }
+        fn parentM() { return super.m(); }
+    }
+    let o = new S6B4();
+    print("S6.4: " + o.m() + "|" + o.parentM());   # 预期: B|A
+} catch (e) { print("S6.4-ERR: " + e); }
+
+# S6.5: 子类不覆盖, 完全继承父类方法
+try {
+    class S6A5 { fn m() { return "A"; } }
+    class S6B5 extends S6A5 { }
+    class S6C5 extends S6B5 { }
+    print("S6.5: " + (new S6C5()).m());   # 预期: A
+} catch (e) { print("S6.5-ERR: " + e); }
+
+# ============================================================
+# S7: 静态方法 super — 静态方法中能调用 super 吗?
+# ============================================================
+print("=== S7 static method super ===");
+
+# S7.1: 静态方法中调用 super.method() — 预期失败 (无 self/instance)
+try {
+    class S7A1 { fn m() { return "A.m"; } }
+    class S7B1 extends S7A1 {
+        static fn sm() { return super.m(); }
+    }
+    print("S7.1: " + S7B1.sm());   # 预期: 异常
+} catch (e) { print("S7.1-OK-EXC: " + e); }
+
+# S7.2: 静态方法调用父类静态方法 (通过类名)
+try {
+    class S7A2 { static fn sm() { return "A.sm"; } }
+    class S7B2 extends S7A2 {
+        static fn sm() { return S7A2.sm() + "+B"; }
+    }
+    print("S7.2: " + S7B2.sm());   # 预期: A.sm+B
+} catch (e) { print("S7.2-ERR: " + e); }
+
+# S7.3: 子类继承父类静态方法 (不覆盖)
+try {
+    class S7A3 { static fn sm() { return "inherited"; } }
+    class S7B3 extends S7A3 { }
+    print("S7.3: " + S7B3.sm());   # 预期: inherited
+} catch (e) { print("S7.3-ERR: " + e); }
+
+# S7.4: 静态方法 super.method() 调用实例方法
+try {
+    class S7A4 { fn im() { return "A.im"; } }
+    class S7B4 extends S7A4 {
+        static fn sm() { return super.im(); }
+    }
+    print("S7.4: " + S7B4.sm());   # 预期: 异常 (无 self)
+} catch (e) { print("S7.4-OK-EXC: " + e); }
+
+# ============================================================
+# S8: super 带参数 — super.compute(1, 2, 3)
+# ============================================================
+print("=== S8 super with arguments ===");
+
+# S8.1: super.method(a, b, c) 三参数
+try {
+    class S8A1 { fn compute(a, b, c) { return a + b + c; } }
+    class S8B1 extends S8A1 { fn compute(a, b, c) { return super.compute(a, b, c) * 10; } }
+    print("S8.1: " + (new S8B1()).compute(1, 2, 3));   # 预期: 60
+} catch (e) { print("S8.1-ERR: " + e); }
+
+# S8.2: super.method() 不传参
+try {
+    class S8A2 { fn m() { return "no-args"; } }
+    class S8B2 extends S8A2 { fn m() { return super.m(); } }
+    print("S8.2: " + (new S8B2()).m());   # 预期: no-args
+} catch (e) { print("S8.2-ERR: " + e); }
+
+# S8.3: super.method(list, dict) 复杂参数
+try {
+    class S8A3 { fn process(lst, d) { return len(lst) + len(d); } }
+    class S8B3 extends S8A3 { fn process(lst, d) { return super.process(lst, d) + 100; } }
+    print("S8.3: " + (new S8B3()).process([1,2,3], {"a":1,"b":2}));   # 预期: 105
+} catch (e) { print("S8.3-ERR: " + e); }
+
+# S8.4: super.method(self.field) 用字段作参数
+try {
+    class S8A4 {
+        fn double(x) { return x * 2; }
+    }
+    class S8B4 extends S8A4 {
+        let v = 21;
+        fn m() { return super.double(self.v); }
+    }
+    print("S8.4: " + (new S8B4()).m());   # 预期: 42
+} catch (e) { print("S8.4-ERR: " + e); }
+
+# S8.5: super.method(expr, expr) 表达式参数
+try {
+    class S8A5 { fn add(a, b) { return a + b; } }
+    class S8B5 extends S8A5 { fn add(a, b) { return super.add(a * 10, b * 10); } }
+    print("S8.5: " + (new S8B5()).add(3, 4));   # 预期: 70
+} catch (e) { print("S8.5-ERR: " + e); }
+
+# ============================================================
+# S9: super 在字段初始化 — 字段初始化器中能调用 super 吗?
+# ============================================================
+print("=== S9 super in field initializer ===");
+
+# S9.1: 字段初始化器调用 super.method() — 预期失败
+try {
+    class S9A1 { fn base() { return 100; } }
+    class S9B1 extends S9A1 {
+        let v = super.base();
+    }
+    let o = new S9B1();
+    print("S9.1: " + o.v);   # 预期: 异常或编译错误
+} catch (e) { print("S9.1-OK-EXC: " + e); }
+
+# S9.2: 字段初始化器调用 self.method() (实例方法)
+try {
+    class S9A2 { fn base() { return 100; } }
+    class S9B2 extends S9A2 {
+        let v = self.base();
+    }
+    let o = new S9B2();
+    print("S9.2: " + o.v);   # 预期: 100 (或异常, 视实现)
+} catch (e) { print("S9.2-OK-EXC: " + e); }
+
+# S9.3: 字段初始化器调用父类静态方法 (通过类名)
+try {
+    class S9A3 { static fn sm() { return "static"; } }
+    class S9B3 extends S9A3 {
+        let v = S9A3.sm();
+    }
+    let o = new S9B3();
+    print("S9.3: " + o.v);   # 预期: static
+} catch (e) { print("S9.3-ERR: " + e); }
+
+# S9.4: 字段默认值后, super.init() 修改父类字段
+try {
+    class S9A4 {
+        let a = 1;
+        fn init() { self.a = 999; }
+    }
+    class S9B4 extends S9A4 {
+        let b = 2;
+        fn init() { super.init(); }
+    }
+    let o = new S9B4();
+    print("S9.4: " + o.a + "," + o.b);   # 预期: 999,2
+} catch (e) { print("S9.4-ERR: " + e); }
+
+# ============================================================
+# S10: 多个 super 调用 — 一个方法中多次 super.m() + super.n()
+# ============================================================
+print("=== S10 multiple super calls ===");
+
+# S10.1: 同一方法中 super.m() + super.n()
+try {
+    class S10A1 {
+        fn m() { return "A.m"; }
+        fn n() { return "A.n"; }
+    }
+    class S10B1 extends S10A1 {
+        fn m() { return super.m() + "|" + super.n(); }
+    }
+    print("S10.1: " + (new S10B1()).m());   # 预期: A.m|A.n
+} catch (e) { print("S10.1-ERR: " + e); }
+
+# S10.2: 同一方法中多次调用 super.m()
+try {
+    class S10A2 { fn m() { return "x"; } }
+    class S10B2 extends S10A2 {
+        fn m() { return super.m() + super.m() + super.m(); }
+    }
+    print("S10.2: " + (new S10B2()).m());   # 预期: xxx
+} catch (e) { print("S10.2-ERR: " + e); }
+
+# S10.3: super.m() + super.n() + super.o() 三个不同方法
+try {
+    class S10A3 {
+        fn m() { return 1; }
+        fn n() { return 2; }
+        fn o() { return 3; }
+    }
+    class S10B3 extends S10A3 {
+        fn m() { return super.m() + super.n() + super.o(); }
+    }
+    print("S10.3: " + (new S10B3()).m());   # 预期: 6
+} catch (e) { print("S10.3-ERR: " + e); }
+
+# S10.4: super.m() 在条件分支中调用
+try {
+    class S10A4 { fn m() { return "A"; } }
+    class S10B4 extends S10A4 {
+        fn m(flag) {
+            if (flag) {
+                return super.m() + "-yes";
+            } else {
+                return super.m() + "-no";
+            }
+        }
+    }
+    let o = new S10B4();
+    print("S10.4: " + o.m(true) + "|" + o.m(false));   # 预期: A-yes|A-no
+} catch (e) { print("S10.4-ERR: " + e); }
+
+# S10.5: super.m() 在循环中累加
+try {
+    class S10A5 { fn step() { return 1; } }
+    class S10B5 extends S10A5 {
+        fn m(n) {
+            let total = 0;
+            let i = 0;
+            while (i < n) {
+                total = total + super.step();
+                i = i + 1;
+            }
+            return total;
+        }
+    }
+    print("S10.5: " + (new S10B5()).m(5));   # 预期: 5
+} catch (e) { print("S10.5-ERR: " + e); }
+
+print("=== r133 done ===");

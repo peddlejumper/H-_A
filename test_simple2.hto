@@ -1,0 +1,14 @@
+# test_simple2.hto
+let _ai_cfg = {"a": 1};
+
+fn test(cfg) {
+    if (cfg == nullptr) {
+        return;
+    }
+    if ("a" in cfg) {
+        let x = 1;
+        print(str(x));
+    }
+}
+
+test({"a": 42});

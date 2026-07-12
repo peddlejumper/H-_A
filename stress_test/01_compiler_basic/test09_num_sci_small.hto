@@ -1,0 +1,3 @@
+# test09: number boundary - scientific notation 1e-308
+let a = 1e-308;
+print(a);

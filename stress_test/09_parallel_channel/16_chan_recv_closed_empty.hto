@@ -1,0 +1,77 @@
+# 16 — chan_recv on closed+drained channel raises (and doesn't deadlock)
+# Verifies the close-then-drain-then-recv path raises instead of blocking.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Close empty channel — recv should raise immediately (not block)
+let ch1 = chan_new(0);
+chan_close(ch1);
+let caught1 = false;
+let t0 = time_ms();
+try {
+    let v = chan_recv(ch1);
+} catch (e) {
+    caught1 = true;
+}
+let t1 = time_ms();
+check("recv_closed_empty_raises", caught1, "not caught");
+check("recv_closed_empty_fast", (t1 - t0) < 1000, "took " + str(t1 - t0) + "ms");
+
+# Fill, close, drain, then recv raises
+let ch2 = chan_new(0);
+chan_send(ch2, 1);
+chan_send(ch2, 2);
+chan_close(ch2);
+let _a = chan_recv(ch2);
+let _b = chan_recv(ch2);
+let caught2 = false;
+try {
+    let v = chan_recv(ch2);
+} catch (e) {
+    caught2 = true;
+}
+check("recv_drained_closed_raises", caught2, "not caught");
+
+# Same with bounded channel
+let ch3 = chan_new(3);
+chan_send(ch3, "x");
+chan_close(ch3);
+let _x = chan_recv(ch3);
+let caught3 = false;
+try {
+    let v = chan_recv(ch3);
+} catch (e) {
+    caught3 = true;
+}
+check("bounded_drained_closed_raises", caught3, "not caught");
+
+# Multiple recvs after drain all raise
+let ch4 = chan_new(0);
+chan_send(ch4, 1);
+chan_close(ch4);
+let _c = chan_recv(ch4);
+let raised_count = 0;
+let i = 0;
+while (i < 5) {
+    let caught = false;
+    try {
+        let v = chan_recv(ch4);
+    } catch (e) {
+        caught = true;
+    }
+    if (caught) {
+        raised_count = raised_count + 1;
+    }
+    i = i + 1;
+}
+check("multiple_recv_after_drain_all_raise", raised_count == 5, "raised=" + str(raised_count));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

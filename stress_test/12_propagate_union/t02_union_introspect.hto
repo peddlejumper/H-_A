@@ -1,0 +1,26 @@
+# T02 - Union introspection via __union__ / __variant__
+union Color {
+    RGB: r, g, b;
+    CMYK: c, m, y, k;
+}
+
+let a = Color{RGB: 255, 128, 0};
+let b = Color{CMYK: 0, 1, 1, 0};
+
+print(a.__union__);
+print(a.__variant__);
+print(b.__union__);
+print(b.__variant__);
+
+# introspection-driven dispatch (no match needed)
+fn describe(x) {
+    if (x.__variant__ == "RGB") {
+        return "rgb";
+    }
+    if (x.__variant__ == "CMYK") {
+        return "cmyk";
+    }
+    return "?";
+}
+print(describe(a));
+print(describe(b));

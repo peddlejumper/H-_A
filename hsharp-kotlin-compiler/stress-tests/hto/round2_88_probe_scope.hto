@@ -1,0 +1,48 @@
+# Probe: block scoping in H# — does `let` inside if/for/try leak to outer scope?
+print("== P-SCOPE ==");
+let outer = "O";
+if (true) {
+    let inner = "I";
+    outer = "modified-in-if";
+}
+print("outer = " + outer);
+# inner 应该不可见 — 但 H# 可能是函数级作用域
+try {
+    print("inner visible? " + inner);
+} catch (e) {
+    print("inner NOT visible: " + e);
+}
+
+# catch 变量是否泄漏到 catch 块外？
+let c = "C-outer";
+try {
+    throw "C-inner";
+} catch (c) {
+    print("in catch c = " + c);
+}
+print("after catch c = " + c);
+
+# try 外、循环内 break — try 包裹整个循环
+print("== P-BREAK-IN-LOOP-IN-TRY ==");
+try {
+    for i in range(5) {
+        if (i == 2) { break; }
+        print("loop " + i);
+    }
+    print("after loop still in try");
+} catch (e) {
+    print("caught: " + e);
+}
+print("after try");
+
+# catch 变量与函数参数同名 — 参数是否被污染？
+fn tester(p) {
+    try {
+        throw "exc-val";
+    } catch (p) {
+        print("catch p = " + p);
+    }
+    return p;
+}
+print("tester = " + tester("orig-param"));
+print("done");

@@ -1,0 +1,124 @@
+# shared/auth.hto
+# 鉴权:密码哈希(简化 SHA-256 风格) + Token 生成/校验
+
+import "shared/storage.hto";
+import "shared/json_utils.hto";
+
+# ============= 密码哈希 =============
+# 使用 djb2 风格哈希(教学用,非生产级)
+
+fn _hash_string(s) {
+    let h = 5381;
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let c = ord(s[i]);
+        h = (h * 33 + c) % 4294967296;
+        i = i + 1;
+    }
+    # 用 hex 表示
+    let hex = "";
+    let digits = "0123456789abcdef";
+    let x = h;
+    let j = 0;
+    while (j < 8) {
+        let d = x % 16;
+        hex = digits[d] + hex;
+        x = x / 16;
+        j = j + 1;
+    }
+    return hex;
+}
+
+fn password_hash(plain) {
+    # 加盐
+    return _hash_string("zzw_salt_" + plain + "_2026");
+}
+
+fn password_verify(plain, hash) {
+    return password_hash(plain) == hash;
+}
+
+# ============= Token =============
+# Token = user_id + "." + timestamp + "." + signature
+# signature = hash(secret + user_id + timestamp)
+
+let _auth_secret = "zzw-code-teacher-default-secret";
+
+fn auth_set_secret(secret) {
+    _auth_secret = secret;
+}
+
+fn _sign(payload) {
+    return _hash_string(_auth_secret + "|" + payload);
+}
+
+fn token_generate(user_id) {
+    if (user_id == nullptr) {
+        return "";
+    }
+    let ttl_sec = 86400;
+    let ts = time_now();
+    let exp = ts + ttl_sec * 1000;
+    let payload = user_id + "|" + str(exp);
+    let sig = _sign(payload);
+    return payload + "|" + sig;
+}
+
+# 校验 Token:成功返回 user_id,失败返回 nullptr
+fn token_verify(token) {
+    if (token == nullptr or token == "") {
+        return nullptr;
+    }
+    # 找到最后一个 "|"
+    let last = -1;
+    let i = 0;
+    let n = len(token);
+    while (i < n) {
+        if (token[i] == "|") {
+            last = i;
+        }
+        i = i + 1;
+    }
+    if (last < 0) {
+        return nullptr;
+    }
+    let sig = substring(token, last + 1, n - last - 1);
+    let payload = substring(token, 0, last);
+    # payload 内部还有一个 "|"
+    let p2 = payload;
+    let k = 0;
+    let m = len(p2);
+    let pipe2 = -1;
+    while (k < m) {
+        if (p2[k] == "|") {
+            pipe2 = k;
+        }
+        k = k + 1;
+    }
+    if (pipe2 < 0) {
+        return nullptr;
+    }
+    let user_id = substring(p2, 0, pipe2);
+    let exp_str = substring(p2, pipe2 + 1, m - pipe2 - 1);
+    let exp = int(exp_str);
+    if (time_now() > exp) {
+        return nullptr;
+    }
+    if (_sign(p2) != sig) {
+        return nullptr;
+    }
+    return user_id;
+}
+
+# 从 Authorization 头提取 token
+fn token_from_header(auth_header) {
+    if (auth_header == nullptr or auth_header == "") {
+        return nullptr;
+    }
+    let prefix = "Bearer ";
+    if (substring(auth_header, 0, 7) == prefix) {
+        return substring(auth_header, 7, len(auth_header) - 7);
+    }
+    return auth_header;
+}

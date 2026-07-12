@@ -1,0 +1,21 @@
+# T01 - Union declaration + UNION_MAKE construction + field access
+# Covers: union Name { Variant: fields; } (colon syntax), Name{Variant: values},
+#         union field access.
+union Shape {
+    Circle: r;
+    Rect: w, h;
+    Point;
+}
+
+let c = Shape{Circle: 7};
+print(c.__union__);
+print(c.__variant__);
+print(c.r);
+
+let r = Shape{Rect: 3, 4};
+print(r.__variant__);
+print(r.w);
+print(r.h);
+
+let p = Shape{Point};
+print(p.__variant__);

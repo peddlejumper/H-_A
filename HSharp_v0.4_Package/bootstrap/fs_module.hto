@@ -1,0 +1,430 @@
+# H# File System Module
+# Provides comprehensive file system operations and utilities
+
+# Constants (using let)
+let FS_PATH_SEPARATOR = "/";
+let FS_HIDDEN_PREFIX = ".";
+
+# Path Operations
+
+# Join multiple path components
+fn fs_path_join(path1, path2) {
+    return fs_join_path(path1, path2);
+}
+
+# Join multiple path components (array version)
+fn fs_path_join_many(paths_array) {
+    if (len(paths_array) == 0) {
+        return "";
+    }
+    let result = str(paths_array[0]);
+    let i = 1;
+    while (i < len(paths_array)) {
+        result = fs_path_join(result, str(paths_array[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+# Get absolute path
+fn fs_path_absolute(relative_path) {
+    let cwd = fs_get_cwd();
+    return fs_path_join(cwd, relative_path);
+}
+
+# Normalize path (remove redundant separators and resolve . and ..)
+fn fs_path_normalize(path) {
+    # Simple normalization - remove double slashes
+    let result = "";
+    let i = 0;
+    while (i < len(path)) {
+        if (path[i] == "/" and i + 1 < len(path) and path[i + 1] == "/") {
+            # Skip duplicate slash
+            i = i + 1;
+        } else {
+            result = result + path[i];
+            i = i + 1;
+        }
+    }
+    return result;
+}
+
+# Check if path is absolute
+fn fs_path_is_absolute(path) {
+    if (len(path) == 0) {
+        return false;
+    }
+    # Unix-style absolute path
+    if (path[0] == "/") {
+        return true;
+    }
+    # Windows-style absolute path
+    if (len(path) >= 3 and path[1] == ":" and (path[2] == "/" or path[2] == "\\")) {
+        return true;
+    }
+    return false;
+}
+
+# Get parent directory
+fn fs_path_parent(path) {
+    return fs_get_dirname(path);
+}
+
+# Get filename from path
+fn fs_path_filename(path) {
+    return fs_get_basename(path);
+}
+
+# Get filename without extension
+fn fs_path_stem(path) {
+    let basename = fs_get_basename(path);
+    let ext = fs_get_ext(basename);
+    if (len(ext) > 0) {
+        return substring(basename, 0, len(basename) - len(ext));
+    }
+    return basename;
+}
+
+# Get file extension
+fn fs_path_extension(path) {
+    return fs_get_ext(path);
+}
+
+# Check if file has specific extension
+fn fs_has_extension(path, extension) {
+    let ext = fs_get_ext(path);
+    return ext == extension or ext == "." + extension;
+}
+
+# Change file extension
+fn fs_change_extension(path, new_extension) {
+    let stem = fs_path_stem(path);
+    if (new_extension[0] != ".") {
+        new_extension = "." + new_extension;
+    }
+    return stem + new_extension;
+}
+
+# Directory Operations
+
+# Create single directory
+fn fs_dir_create(path) {
+    return fs_mkdir(path);
+}
+
+# Create directory recursively (all parent directories)
+fn fs_dir_create_recursive(path) {
+    return fs_mkdir(path);  # fs_mkdir already creates parents with exist_ok=True
+}
+
+# Check if directory exists
+fn fs_dir_exists(path) {
+    return fs_exists(path) and fs_is_dir(path);
+}
+
+# List files in directory
+fn fs_dir_list(path) {
+    return fs_list_dir(path);
+}
+
+# List only files in directory (not subdirectories)
+fn fs_dir_list_files(path) {
+    let all_items = fs_list_dir(path);
+    let files = [];
+    let i = 0;
+    while (i < len(all_items)) {
+        let item_path = fs_path_join(path, all_items[i]);
+        if (fs_is_file(item_path)) {
+            push(files, all_items[i]);
+        }
+        i = i + 1;
+    }
+    return files;
+}
+
+# List only directories in directory
+fn fs_dir_list_dirs(path) {
+    let all_items = fs_list_dir(path);
+    let dirs = [];
+    let i = 0;
+    while (i < len(all_items)) {
+        let item_path = fs_path_join(path, all_items[i]);
+        if (fs_is_dir(item_path)) {
+            push(dirs, all_items[i]);
+        }
+        i = i + 1;
+    }
+    return dirs;
+}
+
+# Remove empty directory
+fn fs_dir_remove(path) {
+    return fs_remove(path);
+}
+
+# Get current working directory
+fn fs_dir_current() {
+    return fs_get_cwd();
+}
+
+# Change current working directory
+fn fs_dir_change(path) {
+    return fs_chdir(path);
+}
+
+# File Operations
+
+# Check if file exists
+fn fs_file_exists(path) {
+    return fs_exists(path) and fs_is_file(path);
+}
+
+# Delete file
+fn fs_file_delete(path) {
+    if (fs_is_file(path)) {
+        return fs_remove(path);
+    }
+    return nullptr;
+}
+
+# Rename/move file
+fn fs_file_rename(old_path, new_path) {
+    # Read content from old file
+    let content = read_file(old_path);
+    # Write to new file
+    write_file(new_path, content);
+    # Delete old file
+    fs_remove(old_path);
+    return nullptr;
+}
+
+# Copy file
+fn fs_file_copy(source, destination) {
+    let content = read_file(source);
+    write_file(destination, content);
+    return nullptr;
+}
+
+# Get file size (by reading content)
+fn fs_file_size(path) {
+    let content = read_file(path);
+    return len(content);
+}
+
+# Check if file is empty
+fn fs_file_is_empty(path) {
+    let content = read_file(path);
+    return len(content) == 0;
+}
+
+# Search Operations
+
+# Find files by extension in directory
+fn fs_find_by_extension(directory, extension) {
+    let files = fs_dir_list_files(directory);
+    let matching = [];
+    let i = 0;
+    while (i < len(files)) {
+        if (fs_has_extension(files[i], extension)) {
+            push(matching, files[i]);
+        }
+        i = i + 1;
+    }
+    return matching;
+}
+
+# Find files by name pattern (simple contains check)
+fn fs_find_by_name(directory, pattern) {
+    let files = fs_dir_list_files(directory);
+    let matching = [];
+    let i = 0;
+    while (i < len(files)) {
+        if (str_contains(files[i], pattern)) {
+            push(matching, files[i]);
+        }
+        i = i + 1;
+    }
+    return matching;
+}
+
+# Find hidden files (starting with .)
+fn fs_find_hidden(directory) {
+    let all_items = fs_dir_list(directory);
+    let hidden = [];
+    let i = 0;
+    while (i < len(all_items)) {
+        if (len(all_items[i]) > 0 and all_items[i][0] == ".") {
+            push(hidden, all_items[i]);
+        }
+        i = i + 1;
+    }
+    return hidden;
+}
+
+# Utility Functions
+
+# Get file information as structured data
+fn fs_file_info(path) {
+    if (not fs_exists(path)) {
+        return nullptr;
+    }
+
+    let info_keys = ["path", "exists", "is_file", "is_dir", "size", "extension"];
+    let info_values = [
+        path,
+        fs_exists(path),
+        fs_is_file(path),
+        fs_is_dir(path),
+        fs_file_size(path),
+        fs_get_ext(path)
+    ];
+
+    return [info_keys, info_values];
+}
+
+# Walk directory tree (non-recursive, single level)
+fn fs_walk_directory(path) {
+    let result = [];
+    let items = fs_dir_list(path);
+    let i = 0;
+    while (i < len(items)) {
+        let item_path = fs_path_join(path, items[i]);
+        let item_type = "unknown";
+        if (fs_is_file(item_path)) {
+            item_type = "file";
+        } else if (fs_is_dir(item_path)) {
+            item_type = "directory";
+        }
+        push(result, [items[i], item_type]);
+        i = i + 1;
+    }
+    return result;
+}
+
+# Create a temporary file
+fn fs_temp_file(prefix) {
+    if (prefix == nullptr) {
+        prefix = "tmp";
+    }
+    let timestamp = time_now();
+    let filename = prefix + "_" + str(timestamp) + ".tmp";
+    let temp_path = fs_path_join(fs_dir_current(), filename);
+    io_file_create(temp_path);
+    return temp_path;
+}
+
+# Create a temporary directory
+fn fs_temp_dir(prefix) {
+    if (prefix == nullptr) {
+        prefix = "tmp";
+    }
+    let timestamp = time_now();
+    let dirname = prefix + "_" + str(timestamp);
+    let temp_path = fs_path_join(fs_dir_current(), dirname);
+    fs_dir_create(temp_path);
+    return temp_path;
+}
+
+# Clean up temporary file
+fn fs_cleanup_temp(path) {
+    return fs_remove(path);
+}
+
+# Check disk space (approximate, based on file sizes)
+fn fs_calculate_directory_size(path) {
+    let total_size = 0;
+    let files = fs_dir_list_files(path);
+    let i = 0;
+    while (i < len(files)) {
+        let file_path = fs_path_join(path, files[i]);
+        total_size = total_size + fs_file_size(file_path);
+        i = i + 1;
+    }
+    return total_size;
+}
+
+# Format file size for display
+fn fs_format_size(bytes) {
+    if (bytes < 1024) {
+        return str(bytes) + " B";
+    } else if (bytes < 1048576) {
+        return str(int(bytes / 1024)) + " KB";
+    } else if (bytes < 1073741824) {
+        return str(int(bytes / 1048576)) + " MB";
+    } else {
+        return str(int(bytes / 1073741824)) + " GB";
+    }
+}
+
+# Validate path
+fn fs_validate_path(path) {
+    # Check for invalid characters (simplified)
+    let invalid_chars = ["<", ">", ":", "\"", "|", "?", "*"];
+    let i = 0;
+    let found_invalid = false;
+    while (i < len(invalid_chars) and not found_invalid) {
+        if (str_contains(path, invalid_chars[i])) {
+            found_invalid = true;
+        }
+        i = i + 1;
+    }
+    return not found_invalid;
+}
+
+# Ensure directory exists (create if not)
+fn fs_ensure_dir(path) {
+    if (not fs_dir_exists(path)) {
+        fs_dir_create_recursive(path);
+    }
+    return nullptr;
+}
+
+# Count files in directory
+fn fs_count_files(path) {
+    let files = fs_dir_list_files(path);
+    return len(files);
+}
+
+# Count directories in directory
+fn fs_count_dirs(path) {
+    let dirs = fs_dir_list_dirs(path);
+    return len(dirs);
+}
+
+# Check if directory is empty
+fn fs_dir_is_empty(path) {
+    let items = fs_dir_list(path);
+    return len(items) == 0;
+}
+
+# String helper (needed for fs_find_by_name)
+fn str_contains(string, substr) {
+    let i = 0;
+    let max_pos = len(string) - len(substr);
+    let found = false;
+    while (i <= max_pos and not found) {
+        let match = true;
+        let j = 0;
+        while (j < len(substr) and match) {
+            if (string[i + j] != substr[j]) {
+                match = false;
+            }
+            j = j + 1;
+        }
+        if (match) {
+            found = true;
+        }
+        i = i + 1;
+    }
+    return found;
+}
+
+# Import IO module functions for file operations
+# Note: These would be available when io_module is loaded
+fn io_file_create(path) {
+    return write_file(path, "");
+}
+
+fn io_file_read(path) {
+    return read_file(path);
+}

@@ -1,0 +1,281 @@
+# T16 - async fn / await expr native syntax test
+# ─────────────────────────────────────────────────
+# Validates H#'s user-level async/await sugar on top of the low-level
+# `coro fn` API.  Each case prints `OK X/...` on success and `FAIL X/...`
+# on failure; the runner parses the `ASYNC_TEST : PASS=N FAIL=M` summary.
+#
+# NOTE on test framework: the `await` static check rejects any use of
+# `await` outside an `async fn` body, so the test helper has to be an
+# `async fn` itself and callers must `await` the result of each check.
+# That keeps the static check honest (every `await` in the test is
+# genuinely inside an `async fn` body) and doubles as a positive test
+# for the rule: any `await` outside would be a compile error.
+#
+# Conventions:
+#   A: declaring an `async fn` lowers it to a coro + is_async flag.
+#   B: calling an `async fn` returns a Future<T> (HFuture) on the stack.
+#   C: `await expr` unwraps the Future and yields the inner value.
+#   D: nested awaits — an async fn can call and await other async fns.
+#   E: `await` on a non-future is a runtime type error.
+#   F: positive assertion that `await` inside `async fn` compiles.
+#   G: `coro fn` is the low-level API and still works.
+#   H: `is_async` is observable on the function value (HFunction.isAsync).
+#   I: async fn can return values of different types (number, string,
+#      list, bool, null).
+
+# ─── Test framework (self-contained) ────────────────────────────────────
+let nchecks = 0;
+let nfail   = 0;
+let failed  = [];
+
+fn is_fn_local(v)    { return type(v) == "function"; }
+fn is_null_local(v)  { return v == nullptr; }
+fn is_async_local(v) { return is_fn_local(v) and v.is_async == true; }
+
+# `record` itself is an async fn so its body can use `await`.  Returns
+# 0 on pass, 1 on fail (no exception).  The caller still has to
+# `await` the call.
+async fn record(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        nchecks = nchecks + 1;
+        return 0;
+    } else {
+        print("FAIL " + name + " " + detail);
+        nfail = nfail + 1;
+        failed.append(name);
+        return 1;
+    }
+}
+
+# ─── A: declaring an async fn ────────────────────────────────────────────
+async fn async_identity(x) {
+    return x;
+}
+# The function object exists and is callable.  Calling `is_fn_local` is
+# synchronous and doesn't need `await`.
+let _a_decl_ok = is_fn_local(async_identity);
+if (_a_decl_ok) {
+    print("OK A/async_decl");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL A/async_decl is_fn(async_identity)=" + str(_a_decl_ok));
+    nfail = nfail + 1;
+    failed.append("A/async_decl");
+}
+
+# ─── B: calling an async fn returns a Future ────────────────────────────
+# The await unwraps the Future.  The HFuture wrapper is a runtime
+# implementation detail; the user-visible result is the inner value.
+let b_val = await async_identity(42);
+if (b_val == 42) {
+    print("OK B/async_call_returns_value");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL B/async_call_returns_value got " + str(b_val));
+    nfail = nfail + 1;
+    failed.append("B/async_call_returns_value");
+}
+
+# ─── C: await unwraps ───────────────────────────────────────────────────
+async fn async_add(a, b) {
+    return a + b;
+}
+let s = await async_add(10, 32);
+if (s == 42) {
+    print("OK C/await_arith");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL C/await_arith s=" + str(s));
+    nfail = nfail + 1;
+    failed.append("C/await_arith");
+}
+
+# ─── D: nested awaits across two async fns ──────────────────────────────
+async fn async_double(x) {
+    return x * 2;
+}
+async fn async_quad(x) {
+    # await inside this async fn body — must be allowed
+    let d = await async_double(x);
+    return d * 2;
+}
+let d_val = await async_quad(5);
+if (d_val == 20) {
+    print("OK D/nested_await");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL D/nested_await got " + str(d_val));
+    nfail = nfail + 1;
+    failed.append("D/nested_await");
+}
+
+# Multiple sequential awaits in one body.
+async fn async_sum_three(a, b, c) {
+    let aa = await async_identity(a);
+    let bb = await async_identity(b);
+    let cc = await async_identity(c);
+    return aa + bb + cc;
+}
+let d2 = await async_sum_three(1, 2, 3);
+if (d2 == 6) {
+    print("OK D/seq_awaits");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL D/seq_awaits got " + str(d2));
+    nfail = nfail + 1;
+    failed.append("D/seq_awaits");
+}
+
+# ─── E: await on a non-future is a runtime type error ───────────────────
+async fn await_a_number() {
+    # awaiting a non-future inside an async fn — the static check
+    # passes (we're in an async fn) but the VM raises at runtime.
+    return await 42;
+}
+let e_caught = false;
+try {
+    let _x = await await_a_number();
+} catch (e) {
+    e_caught = true;
+}
+if (e_caught) {
+    print("OK E/await_non_future_raises");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL E/await_non_future_raises did not raise");
+    nfail = nfail + 1;
+    failed.append("E/await_non_future_raises");
+}
+
+# ─── F: positive assertion that await inside async fn compiles ──────────
+# If the static check were missing, this file would still compile
+# (every `await` here is genuinely inside an async fn body), so the
+# successful compile of this whole test IS the positive confirmation
+# of the rule.  The negative case (`await` outside any async fn) is
+# rejected at compile time and would not produce a runnable hbc.
+async fn async_used_in_outer_await() {
+    return await async_identity(7);
+}
+let f_val = await async_used_in_outer_await();
+if (f_val == 7) {
+    print("OK F/await_in_async_compiles");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL F/await_in_async_compiles got " + str(f_val));
+    nfail = nfail + 1;
+    failed.append("F/await_in_async_compiles");
+}
+
+# ─── G: coro fn (low-level API) still works ─────────────────────────────
+coro fn coro_add(a, b) {
+    return a + b;
+}
+# coro fn has no automatic Future wrap — call returns the raw value.
+let raw = coro_add(3, 4);
+if (raw == 7) {
+    print("OK G/coro_fn_no_wrap");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL G/coro_fn_no_wrap raw=" + str(raw));
+    nfail = nfail + 1;
+    failed.append("G/coro_fn_no_wrap");
+}
+
+# Plain `fn` is the synchronous layer — also no Future wrap.
+fn plain_add(a, b) {
+    return a + b;
+}
+let raw2 = plain_add(5, 6);
+if (raw2 == 11) {
+    print("OK G/fn_no_wrap");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL G/fn_no_wrap raw2=" + str(raw2));
+    nfail = nfail + 1;
+    failed.append("G/fn_no_wrap");
+}
+
+# ─── H: is_async flag is observable on the function value ───────────────
+# The async fn was compiled with is_async=True, the coro fn with
+# is_async=False (and is_coro=True), the plain fn with neither.
+if (is_async_local(async_identity) == true) {
+    print("OK H/async_fn_flag");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL H/async_fn_flag is_async(async_identity)=" + str(is_async_local(async_identity)));
+    nfail = nfail + 1;
+    failed.append("H/async_fn_flag");
+}
+if (is_async_local(coro_add) == false) {
+    print("OK H/coro_fn_not_async");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL H/coro_fn_not_async is_async(coro_add)=" + str(is_async_local(coro_add)));
+    nfail = nfail + 1;
+    failed.append("H/coro_fn_not_async");
+}
+if (is_async_local(plain_add) == false) {
+    print("OK H/plain_fn_not_async");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL H/plain_fn_not_async is_async(plain_add)=" + str(is_async_local(plain_add)));
+    nfail = nfail + 1;
+    failed.append("H/plain_fn_not_async");
+}
+
+# ─── I: async fn can return values of different types ───────────────────
+async fn async_str()  { return "hello"; }
+async fn async_bool() { return true; }
+async fn async_null() { return nullptr; }
+async fn async_list() { return [1, 2, 3]; }
+
+let i_str  = await async_str();
+if (i_str == "hello") {
+    print("OK I/return_string");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL I/return_string got " + str(i_str));
+    nfail = nfail + 1;
+    failed.append("I/return_string");
+}
+
+let i_bool = await async_bool();
+if (i_bool == true) {
+    print("OK I/return_bool");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL I/return_bool got " + str(i_bool));
+    nfail = nfail + 1;
+    failed.append("I/return_bool");
+}
+
+let i_null = await async_null();
+if (is_null_local(i_null)) {
+    print("OK I/return_null");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL I/return_null got " + str(i_null));
+    nfail = nfail + 1;
+    failed.append("I/return_null");
+}
+
+let i_list = await async_list();
+if (len(i_list) == 3) {
+    print("OK I/return_list");
+    nchecks = nchecks + 1;
+} else {
+    print("FAIL I/return_list len=" + str(len(i_list)));
+    nfail = nfail + 1;
+    failed.append("I/return_list");
+}
+
+# ─── Summary ────────────────────────────────────────────────────────────
+print("ASYNC_TEST : PASS=" + str(nchecks) + " FAIL=" + str(nfail));
+if (nfail > 0) {
+    let i = 0;
+    while (i < len(failed)) {
+        print("  FAIL: " + failed[i]);
+        i = i + 1;
+    }
+}

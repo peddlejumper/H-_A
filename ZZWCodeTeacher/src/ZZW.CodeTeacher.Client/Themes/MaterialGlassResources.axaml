@@ -1,0 +1,112 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Light">
+      <Color x:Key="AppBackground">#F7F9FE</Color>
+
+      <Color x:Key="PanelBackground">#FDFBFF</Color>
+      <Color x:Key="InsetBackground">#EEF3FB</Color>
+      <Color x:Key="BorderDefault">#D9DEE8</Color>
+
+      <Color x:Key="GlassSurface">#DDFDFBFF</Color>
+      <Color x:Key="GlassSurfaceHover">#F4FFFFFF</Color>
+      <Color x:Key="GlassBorder">#99FFFFFF</Color>
+      <Color x:Key="GlassToolbar">#EAFDFBFF</Color>
+      <Color x:Key="GlassInset">#BFEFF4FC</Color>
+      <Color x:Key="GlassEditor">#BFEFF4FC</Color>
+
+      <Color x:Key="InkPrimary">#171A20</Color>
+      <Color x:Key="InkSecondary">#3F4652</Color>
+      <Color x:Key="InkTertiary">#687386</Color>
+      <Color x:Key="InkMuted">#8A94A6</Color>
+
+      <Color x:Key="BrandBlue">#415F91</Color>
+      <Color x:Key="BrandBlueHover">#284777</Color>
+      <Color x:Key="BrandBlueContainer">#D6E3FF</Color>
+      <Color x:Key="OnBrandBlue">#FFFFFF</Color>
+      <Color x:Key="OnBrandBlueContainer">#001B3E</Color>
+      <Color x:Key="StateLayer">#1F415F91</Color>
+      <Color x:Key="Scrim">#660F172A</Color>
+
+      <Color x:Key="ErrorRed">#BA1A1A</Color>
+      <Color x:Key="ErrorContainer">#FFDAD6</Color>
+      <Color x:Key="SuccessGreen">#2E7D32</Color>
+
+      <BoxShadows x:Key="Elevation1">0 1 2 0 #1A000000</BoxShadows>
+      <BoxShadows x:Key="Elevation2">0 2 6 0 #1F000000</BoxShadows>
+      <BoxShadows x:Key="Elevation3">0 6 16 0 #24000000</BoxShadows>
+      <BoxShadows x:Key="Elevation4">0 12 32 0 #2A000000</BoxShadows>
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Dark">
+      <Color x:Key="AppBackground">#101417</Color>
+
+      <Color x:Key="PanelBackground">#1B1F22</Color>
+      <Color x:Key="InsetBackground">#232A2F</Color>
+      <Color x:Key="BorderDefault">#3D454D</Color>
+
+      <Color x:Key="GlassSurface">#D91B1F22</Color>
+      <Color x:Key="GlassSurfaceHover">#EE242A2F</Color>
+      <Color x:Key="GlassBorder">#33FFFFFF</Color>
+      <Color x:Key="GlassToolbar">#E515191C</Color>
+      <Color x:Key="GlassInset">#A9262D32</Color>
+      <Color x:Key="GlassEditor">#A9262D32</Color>
+
+      <Color x:Key="InkPrimary">#E4E8EE</Color>
+      <Color x:Key="InkSecondary">#C5CBD5</Color>
+      <Color x:Key="InkTertiary">#9FA8B5</Color>
+      <Color x:Key="InkMuted">#747E8B</Color>
+
+      <Color x:Key="BrandBlue">#AAC7FF</Color>
+      <Color x:Key="BrandBlueHover">#D6E3FF</Color>
+      <Color x:Key="BrandBlueContainer">#284777</Color>
+      <Color x:Key="OnBrandBlue">#0A305F</Color>
+      <Color x:Key="OnBrandBlueContainer">#D6E3FF</Color>
+      <Color x:Key="StateLayer">#29AAC7FF</Color>
+      <Color x:Key="Scrim">#99000000</Color>
+
+      <Color x:Key="ErrorRed">#FFB4AB</Color>
+      <Color x:Key="ErrorContainer">#93000A</Color>
+      <Color x:Key="SuccessGreen">#8ED889</Color>
+
+      <BoxShadows x:Key="Elevation1">0 1 2 0 #50000000</BoxShadows>
+      <BoxShadows x:Key="Elevation2">0 2 8 0 #66000000</BoxShadows>
+      <BoxShadows x:Key="Elevation3">0 8 20 0 #73000000</BoxShadows>
+      <BoxShadows x:Key="Elevation4">0 16 36 0 #80000000</BoxShadows>
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+  <SolidColorBrush x:Key="AppBackgroundBrush" Color="{DynamicResource AppBackground}" />
+  <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{DynamicResource PanelBackground}" />
+  <SolidColorBrush x:Key="InsetBackgroundBrush" Color="{DynamicResource InsetBackground}" />
+  <SolidColorBrush x:Key="BorderDefaultBrush" Color="{DynamicResource BorderDefault}" />
+  <SolidColorBrush x:Key="InkPrimaryBrush" Color="{DynamicResource InkPrimary}" />
+  <SolidColorBrush x:Key="InkSecondaryBrush" Color="{DynamicResource InkSecondary}" />
+  <SolidColorBrush x:Key="InkTertiaryBrush" Color="{DynamicResource InkTertiary}" />
+  <SolidColorBrush x:Key="InkMutedBrush" Color="{DynamicResource InkMuted}" />
+  <SolidColorBrush x:Key="BrandBlueBrush" Color="{DynamicResource BrandBlue}" />
+  <SolidColorBrush x:Key="BrandBlueHoverBrush" Color="{DynamicResource BrandBlueHover}" />
+  <SolidColorBrush x:Key="BrandBlueContainerBrush" Color="{DynamicResource BrandBlueContainer}" />
+  <SolidColorBrush x:Key="OnBrandBlueBrush" Color="{DynamicResource OnBrandBlue}" />
+  <SolidColorBrush x:Key="OnBrandBlueContainerBrush" Color="{DynamicResource OnBrandBlueContainer}" />
+  <SolidColorBrush x:Key="StateLayerBrush" Color="{DynamicResource StateLayer}" />
+  <SolidColorBrush x:Key="ScrimBrush" Color="{DynamicResource Scrim}" />
+  <SolidColorBrush x:Key="ErrorRedBrush" Color="{DynamicResource ErrorRed}" />
+  <SolidColorBrush x:Key="ErrorContainerBrush" Color="{DynamicResource ErrorContainer}" />
+  <SolidColorBrush x:Key="SuccessGreenBrush" Color="{DynamicResource SuccessGreen}" />
+
+  <SolidColorBrush x:Key="GlassSurfaceBrush" Color="{DynamicResource GlassSurface}" />
+  <SolidColorBrush x:Key="GlassSurfaceHoverBrush" Color="{DynamicResource GlassSurfaceHover}" />
+  <SolidColorBrush x:Key="GlassBorderBrush" Color="{DynamicResource GlassBorder}" />
+  <SolidColorBrush x:Key="GlassToolbarBrush" Color="{DynamicResource GlassToolbar}" />
+  <SolidColorBrush x:Key="GlassInsetBrush" Color="{DynamicResource GlassInset}" />
+  <SolidColorBrush x:Key="GlassEditorBrush" Color="{DynamicResource GlassEditor}" />
+
+  <!-- CJK-friendly font stack (Inter for Latin, system fonts for 中文) -->
+  <FontFamily x:Key="AppFontFamily">Inter, PingFang SC, Hiragino Sans GB, Microsoft YaHei UI, sans-serif</FontFamily>
+  <FontFamily x:Key="CodeFontFamily">JetBrains Mono, Menlo, Consolas, monospace</FontFamily>
+
+</ResourceDictionary>

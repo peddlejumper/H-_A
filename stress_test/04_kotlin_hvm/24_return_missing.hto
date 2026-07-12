@@ -1,0 +1,17 @@
+# 24_return_missing.hto — RETURN_VALUE 缺失 (函数路径无 return)
+fn maybe(x) {
+    if (x > 0) {
+        return "positive";
+    }
+    # 非正数路径无 return -> 隐式返回 nullptr
+}
+print(maybe(5));
+print(maybe(-1));
+print(maybe(0));
+
+fn noReturn() {
+    print("only side effect");
+}
+let r = noReturn();
+print(r);
+print("done");

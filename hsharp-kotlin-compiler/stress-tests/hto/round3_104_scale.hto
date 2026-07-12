@@ -1,0 +1,450 @@
+# =====================================================================
+# Round 3 / #104 — 大规模数据结构与性能边界测试
+# Agent #104
+#
+# 测试领域 (25 项):
+#   S1  大 list 构建 (10000 元素 push)
+#   S2  大 list 求和 (10000 元素)
+#   S3  大 list 索引 (访问末尾元素)
+#   S4  大 list 切片 (中段切片)
+#   S5  大 list 迭代 (for x in big_list)
+#   S6  大 list 搜索 (线性搜索/contains)
+#   S7  大 dict (10000 个 key)
+#   S8  大 dict 查找 (d["key_5000"])
+#   S9  大 dict 迭代 (for k, v in d)
+#   S10 大 dict 删除 (删除 5000 个 key 后 len)
+#   S11 大字符串拼接 (10000 次 +)
+#   S12 大字符串重复 (str * 10000)
+#   S13 大字符串索引 (big_str[9999])
+#   S14 嵌套 list 深度 (10 层 [[[[[1]]]]])
+#   S15 嵌套 dict 深度 (10 层嵌套字典访问)
+#   S16 list of dicts (10000 个)
+#   S17 dict of lists ({"data": [1..1000]})
+#   S18 range(100000) 直接迭代
+#   S19 递归构建大 list (递归 1000 层每层 push)
+#   S20 大量小对象 (1000 个 class instance)
+#   S21 list sort 性能 (10000 元素排序)
+#   S22 list 反转 (10000 元素 reverse)
+#   S23 字符串 split 大量结果 (1000 段)
+#   S24 深拷贝大结构 (切片拷贝)
+#   S25 内存使用 (大 list 创建后删除再重建)
+#
+# 每个危险操作都用 try/catch 包裹, 保证测试运行到结束。
+# 输出的标记格式: "S##-label: <value>" 便于核对预期。
+# =====================================================================
+
+print("=== R3.104 START ===");
+
+# =====================================================================
+# S1 — 大 list 构建: for i in range(10000) { list.push(i); }
+# 预期: len == 10000
+# =====================================================================
+print("== S1 big-list-build ==");
+let big1 = [];
+for i in range(10000) { push(big1, i); }
+print("S1-len: " + str(len(big1)));              # 10000
+print("S1-first: " + str(big1[0]));              # 0
+print("S1-last: " + str(big1[9999]));            # 9999
+print("S1-neglast: " + str(big1[-1]));           # 9999
+
+# =====================================================================
+# S2 — 大 list 求和: sum of 10000 elements
+# 预期: 0+1+...+9999 = 49995000
+# =====================================================================
+print("== S2 big-list-sum ==");
+let sum2 = 0;
+for x in big1 { sum2 = sum2 + x; }
+print("S2-sum: " + str(sum2));                    # 49995000
+
+# =====================================================================
+# S3 — 大 list 索引: 访问最后一个元素 list[9999]
+# =====================================================================
+print("== S3 big-list-index ==");
+print("S3-idx9999: " + str(big1[9999]));          # 9999
+print("S3-idx5000: " + str(big1[5000]));          # 5000
+print("S3-idx0: " + str(big1[0]));                # 0
+# 越界访问应抛错
+let s3err = "no-err";
+try { let bad = big1[10000]; s3err = "got:" + str(bad); } catch (e) { s3err = "caught"; }
+print("S3-oob: " + s3err);                        # caught
+
+# =====================================================================
+# S4 — 大 list 切片: list[5000:5010]
+# =====================================================================
+print("== S4 big-list-slice ==");
+let sl4 = big1[5000:5010];
+print("S4-slice-len: " + str(len(sl4)));          # 10
+print("S4-slice-first: " + str(sl4[0]));          # 5000
+print("S4-slice-last: " + str(sl4[9]));           # 5009
+# 大切片
+let sl4b = big1[0:1000];
+print("S4-slice-1k-len: " + str(len(sl4b)));      # 1000
+# 步长切片
+let sl4c = big1[0:10:2];
+print("S4-slice-step: " + str(sl4c));             # [0, 2, 4, 6, 8]
+# 全切片拷贝
+let sl4d = big1[:];
+print("S4-fullcopy-len: " + str(len(sl4d)));      # 10000
+
+# =====================================================================
+# S5 — 大 list 迭代: for x in big_list (计数)
+# =====================================================================
+print("== S5 big-list-iterate ==");
+let cnt5 = 0;
+let acc5 = 0;
+for v in big1 { cnt5 = cnt5 + 1; acc5 = acc5 + v; }
+print("S5-count: " + str(cnt5));                  # 10000
+print("S5-acc: " + str(acc5));                    # 49995000
+
+# =====================================================================
+# S6 — 大 list 搜索: contains + 线性搜索
+# =====================================================================
+print("== S6 big-list-search ==");
+print("S6-contains-5000: " + str(big1.contains(5000)));    # true
+print("S6-contains-9999: " + str(big1.contains(9999)));    # true
+print("S6-contains-10000: " + str(big1.contains(10000)));  # false
+print("S6-in-5000: " + str(5000 in big1));                 # true
+print("S6-in-neg: " + str(-1 in big1));                    # false
+# 线性搜索 (手动)
+let found6 = -1;
+let idx6 = 0;
+for v in big1 {
+    if (v == 7777) { found6 = idx6; }
+    idx6 = idx6 + 1;
+}
+print("S6-linear-7777: " + str(found6));          # 7777
+
+# =====================================================================
+# S7 — 大 dict: 10000 个 key 的字典
+# =====================================================================
+print("== S7 big-dict-build ==");
+let d7 = {};
+for i in range(10000) { d7["key_" + str(i)] = i * 2; }
+print("S7-len: " + str(len(d7)));                 # 10000
+print("S7-has-0: " + str(d7.has_key("key_0")));   # true
+print("S7-has-9999: " + str(d7.has_key("key_9999"))); # true
+print("S7-has-10000: " + str(d7.has_key("key_10000"))); # false
+
+# =====================================================================
+# S8 — 大 dict 查找: d["key_5000"]
+# =====================================================================
+print("== S8 big-dict-lookup ==");
+print("S8-key0: " + str(d7["key_0"]));            # 0
+print("S8-key5000: " + str(d7["key_5000"]));      # 10000
+print("S8-key9999: " + str(d7["key_9999"]));      # 19998
+# get 默认值
+print("S8-get-missing: " + str(d7.get("missing")));          # null
+print("S8-get-missing-def: " + str(d7.get("missing", -1)));  # -1
+# 不存在键访问应抛错
+let s8err = "no-err";
+try { let bad = d7["no_such_key"]; s8err = "got:" + str(bad); } catch (e) { s8err = "caught"; }
+print("S8-missing-err: " + s8err);                # caught
+
+# =====================================================================
+# S9 — 大 dict 迭代: for k, v in d (计数 + 求和)
+# =====================================================================
+print("== S9 big-dict-iterate ==");
+let kc9 = 0;
+let vsum9 = 0;
+for k, v in d7 { kc9 = kc9 + 1; vsum9 = vsum9 + v; }
+print("S9-count: " + str(kc9));                   # 10000
+# vsum = 2 * (0+1+...+9999) = 2 * 49995000 = 99990000
+print("S9-vsum: " + str(vsum9));                  # 99990000
+# 仅 key 迭代
+let kc9b = 0;
+for k in d7 { kc9b = kc9b + 1; }
+print("S9-key-only-count: " + str(kc9b));         # 10000
+
+# =====================================================================
+# S10 — 大 dict 删除: 删除 5000 个 key 后 len
+# =====================================================================
+print("== S10 big-dict-remove ==");
+let d10 = {};
+for i in range(10000) { d10["k" + str(i)] = i; }
+print("S10-before: " + str(len(d10)));            # 10000
+for i in range(5000) { d10.remove("k" + str(i)); }
+print("S10-after: " + str(len(d10)));             # 5000
+print("S10-has-k0: " + str(d10.has_key("k0")));   # false
+print("S10-has-k5000: " + str(d10.has_key("k5000"))); # true
+print("S10-has-k9999: " + str(d10.has_key("k9999"))); # true
+# 再删除剩余
+for i in range(5000, 10000) { d10.remove("k" + str(i)); }
+print("S10-empty: " + str(len(d10)));             # 0
+print("S10-isempty: " + str(d10.is_empty()));     # true
+
+# =====================================================================
+# S11 — 大字符串拼接: 10000 次 "x" + "x" + ...
+# 预期: 长度 10000
+# =====================================================================
+print("== S11 big-str-concat ==");
+let s11 = "";
+for i in range(10000) { s11 = s11 + "x"; }
+print("S11-len: " + str(len(s11)));               # 10000
+print("S11-first: " + s11[0]);                    # x
+print("S11-last: " + s11[9999]);                  # x
+
+# =====================================================================
+# S12 — 大字符串重复: str * 10000
+# =====================================================================
+print("== S12 big-str-repeat ==");
+let s12 = "ab" * 10000;
+print("S12-len: " + str(len(s12)));               # 20000
+print("S12-first: " + s12[0]);                    # a
+print("S12-second: " + s12[1]);                   # b
+print("S12-last: " + s12[19999]);                 # b
+# 重复 0 次
+let s12b = "x" * 0;
+print("S12-zero-len: " + str(len(s12b)));         # 0
+# 重复 1 次
+let s12c = "y" * 1;
+print("S12-one: " + s12c);                        # y
+
+# =====================================================================
+# S13 — 大字符串索引: big_str[9999]
+# =====================================================================
+print("== S13 big-str-index ==");
+let s13 = "0123456789" * 1000;                    # 10000 字符
+print("S13-len: " + str(len(s13)));               # 10000
+print("S13-idx9999: " + s13[9999]);               # 9
+print("S13-idx0: " + s13[0]);                     # 0
+print("S13-idx5000: " + s13[5000]);               # 0
+print("S13-neg1: " + s13[-1]);                    # 9
+# 越界索引
+let s13err = "no-err";
+try { let bad = s13[10000]; s13err = "got:" + bad; } catch (e) { s13err = "caught"; }
+print("S13-oob: " + s13err);                      # caught
+# 大字符串切片
+let s13b = s13[1000:1010];
+print("S13-slice: " + s13b);                      # 0123456789
+
+# =====================================================================
+# S14 — 嵌套 list 深度: 10 层嵌套 [[[[[[1]]]]]]
+# =====================================================================
+print("== S14 nested-list-depth ==");
+let n14 = [[[[[[[[[[1]]]]]]]]]];
+print("S14-val: " + str(n14[0][0][0][0][0][0][0][0][0][0]));  # 1
+print("S14-depth1: " + str(len(n14)));            # 1
+print("S14-depth2: " + str(len(n14[0])));         # 1
+# 构建嵌套 list (函数式)
+fn nest_list(n, val) {
+    if (n == 0) { return val; }
+    return [nest_list(n - 1, val)];
+}
+let nl14 = nest_list(10, 42);
+# 逐层解套
+fn unwrap(x, depth) {
+    if (not (x is list)) { return depth; }
+    return unwrap(x[0], depth + 1);
+}
+print("S14-built-ok: " + str(nl14[0][0][0][0][0][0][0][0][0][0] == 42));  # true
+
+# =====================================================================
+# S15 — 嵌套 dict 深度: 10 层嵌套字典访问
+# =====================================================================
+print("== S15 nested-dict-depth ==");
+fn dict_chain(n) {
+    if (n == 0) { return {"val": 99}; }
+    return {"k": dict_chain(n - 1), "n": n};
+}
+let dc15 = dict_chain(10);
+print("S15-n: " + str(dc15["n"]));                # 10
+print("S15-k-n: " + str(dc15["k"]["n"]));         # 9
+print("S15-deep-n: " + str(dc15["k"]["k"]["k"]["k"]["k"]["n"]));  # 5
+# 走到底
+fn walk_dict(d, depth) {
+    if ("val" in d) { return depth; }
+    return walk_dict(d["k"], depth + 1);
+}
+print("S15-depth: " + str(walk_dict(dc15, 0)));   # 10
+print("S15-bottom-val: " + str(dc15["k"]["k"]["k"]["k"]["k"]["k"]["k"]["k"]["k"]["k"]["val"]));  # 99
+
+# =====================================================================
+# S16 — list of dicts: 10000 个 [{"k":1}, {"k":2}, ...]
+# =====================================================================
+print("== S16 list-of-dicts ==");
+let lod16 = [];
+for i in range(10000) { push(lod16, {"k": i, "v": i * i}); }
+print("S16-len: " + str(len(lod16)));             # 10000
+print("S16-first-k: " + str(lod16[0]["k"]));      # 0
+print("S16-first-v: " + str(lod16[0]["v"]));      # 0
+print("S16-last-k: " + str(lod16[9999]["k"]));    # 9999
+print("S16-last-v: " + str(lod16[9999]["v"]));    # 99980001
+# 求所有 v
+let vsum16 = 0;
+for item in lod16 { vsum16 = vsum16 + item["v"]; }
+print("S16-vsum: " + str(vsum16));                # sum of i*i for i in 0..9999
+
+# =====================================================================
+# S17 — dict of lists: {"data": [1,2,...,1000]}
+# =====================================================================
+print("== S17 dict-of-lists ==");
+let data17 = [];
+for i in range(1000) { push(data17, i + 1); }
+let d17 = {"data": data17, "meta": {"count": 1000}};
+print("S17-data-len: " + str(len(d17["data"])));  # 1000
+print("S17-data-first: " + str(d17["data"][0]));  # 1
+print("S17-data-last: " + str(d17["data"][999])); # 1000
+print("S17-meta-count: " + str(d17["meta"]["count"]));  # 1000
+# 求和
+let sum17 = 0;
+for v in d17["data"] { sum17 = sum17 + v; }
+print("S17-sum: " + str(sum17));                  # 500500
+
+# =====================================================================
+# S18 — range(100000) 直接迭代: 是否内存爆炸
+# =====================================================================
+print("== S18 range-100k ==");
+let cnt18 = 0;
+for i in range(100000) { cnt18 = cnt18 + 1; }
+print("S18-count: " + str(cnt18));                # 100000
+# range 直接求和
+let sum18 = 0;
+for i in range(100000) { sum18 = sum18 + i; }
+print("S18-sum: " + str(sum18));                  # 4999950000
+
+# =====================================================================
+# S19 — 递归构建大 list: 递归 1000 层每层 push
+# 注: 默认栈深约 ~700-1000 帧; 用 500 保证安全
+# =====================================================================
+print("== S19 recursive-list-build ==");
+fn build_big(n) {
+    if (n == 0) { return []; }
+    let r = build_big(n - 1);
+    push(r, n);
+    return r;
+}
+let rl19 = build_big(500);
+print("S19-len: " + str(len(rl19)));              # 500
+print("S19-first: " + str(rl19[0]));              # 1
+print("S19-last: " + str(rl19[499]));             # 500
+let sum19 = 0;
+for v in rl19 { sum19 = sum19 + v; }
+print("S19-sum: " + str(sum19));                  # 125250
+
+# =====================================================================
+# S20 — 大量小对象: 1000 个 class instance
+# =====================================================================
+print("== S20 many-instances ==");
+class Point {
+    let x = 0;
+    let y = 0;
+    fn init(px, py) { x = px; y = py; }
+    fn dist() { return x * x + y * y; }
+    # 诊断方法: 暴露 dist() 内部看到的 x, y
+    fn diag_xy() { return x; }
+    fn diag_yy() { return y; }
+}
+let pts20 = [];
+for i in range(1000) {
+    let p = new Point();
+    p.init(i, i);
+    push(pts20, p);
+}
+print("S20-len: " + str(len(pts20)));             # 1000
+print("S20-first-x: " + str(pts20[0].x));         # 0
+print("S20-last-x: " + str(pts20[999].x));        # 999
+print("S20-last-y: " + str(pts20[999].y));        # 999
+print("S20-last-dist: " + str(pts20[999].dist())); # 999*999*2 = 1996002
+# 诊断: dist() 内部看到的 x (BUG: 被全局 x=9999 遮蔽, 来自 S2 的 for x in big1)
+print("S20-dist-inner-x: " + str(pts20[999].diag_xy()));  # 预期 999; 实际 9999 (BUG)
+print("S20-dist-inner-y: " + str(pts20[999].diag_yy()));  # 999
+# 诊断: 外部手动计算 (正确, 因为不经过方法作用域)
+let diagX = pts20[999].x;
+let diagY = pts20[999].y;
+print("S20-manual: " + str(diagX * diagX + diagY * diagY));  # 1996002
+# 求所有 dist 之和
+let dsum20 = 0;
+for p in pts20 { dsum20 = dsum20 + p.dist(); }
+print("S20-dsum: " + str(dsum20));                # sum of 2*i*i for i in 0..999
+
+# =====================================================================
+# S21 — list sort 性能: 10000 元素排序
+# =====================================================================
+print("== S21 list-sort ==");
+let to_sort = [];
+for i in range(10000) { push(to_sort, (10000 - i)); }
+print("S21-before-first: " + str(to_sort[0]));    # 10000
+print("S21-before-last: " + str(to_sort[9999]));  # 1
+let s21err = "no-err";
+try { to_sort.sort(); s21err = "ok"; } catch (e) { s21err = "caught:" + e; }
+print("S21-sort-status: " + s21err);              # ok
+print("S21-after-first: " + str(to_sort[0]));     # 1
+print("S21-after-last: " + str(to_sort[9999]));   # 10000
+# 验证有序
+let ordered = true;
+let i21 = 1;
+while (i21 < 10000) {
+    if (to_sort[i21] < to_sort[i21 - 1]) { ordered = false; }
+    i21 = i21 + 1;
+}
+print("S21-ordered: " + str(ordered));            # true
+
+# =====================================================================
+# S22 — list 反转: 10000 元素 reverse
+# =====================================================================
+print("== S22 list-reverse ==");
+let to_rev = [];
+for i in range(10000) { push(to_rev, i); }
+print("S22-before-first: " + str(to_rev[0]));     # 0
+print("S22-before-last: " + str(to_rev[9999]));   # 9999
+let s22err = "no-err";
+try { to_rev.reverse(); s22err = "ok"; } catch (e) { s22err = "caught:" + e; }
+print("S22-rev-status: " + s22err);               # ok
+print("S22-after-first: " + str(to_rev[0]));      # 9999
+print("S22-after-last: " + str(to_rev[9999]));    # 0
+
+# =====================================================================
+# S23 — 字符串 split 大量结果: 1000 段
+# =====================================================================
+print("== S23 str-split ==");
+let parts23 = [];
+for i in range(1000) {
+    if (i > 0) { parts23 = parts23 + ","; }
+    parts23 = parts23 + str(i);
+}
+print("S23-src-len: " + str(len(parts23)));       # 2893
+let result23 = parts23.split(",");
+print("S23-parts-count: " + str(len(result23)));  # 1000
+print("S23-parts-first: " + result23[0]);         # 0
+print("S23-parts-last: " + result23[999]);        # 999
+print("S23-parts-500: " + result23[500]);         # 500
+
+# =====================================================================
+# S24 — 深拷贝大结构: 切片拷贝 (浅拷贝语义验证)
+# =====================================================================
+print("== S24 shallow-copy ==");
+let orig24 = [];
+for i in range(1000) { push(orig24, [i, i + 1]); }
+let cp24 = orig24[:];
+print("S24-orig-len: " + str(len(orig24)));       # 1000
+print("S24-copy-len: " + str(len(cp24)));         # 1000
+print("S24-equal: " + str(cp24 == orig24));       # true
+# 顶层修改不影响原
+cp24[0] = 999;
+print("S24-orig-first-after: " + str(orig24[0])); # [0, 1]
+print("S24-copy-first-after: " + str(cp24[0]));   # 999
+# 嵌套修改 — 浅拷贝应共享内层引用
+cp24[1][0] = 7777;
+print("S24-orig-nested-shared: " + str(orig24[1][0]));  # 7777 (shallow)
+
+# =====================================================================
+# S25 — 内存使用: 大 list 创建后删除, 内存是否释放 (重建)
+# =====================================================================
+print("== S25 memory-recycle ==");
+let big25 = [];
+for i in range(10000) { push(big25, i); }
+print("S25-build1-len: " + str(len(big25)));      # 10000
+# 清空 + 重建
+big25.clear();
+print("S25-after-clear: " + str(len(big25)));     # 0
+for i in range(20000) { push(big25, i); }
+print("S25-build2-len: " + str(len(big25)));      # 20000
+print("S25-build2-last: " + str(big25[19999]));   # 19999
+# 重新赋值
+big25 = [];
+print("S25-reassigned: " + str(len(big25)));      # 0
+for i in range(5000) { push(big25, i * 10); }
+print("S25-build3-len: " + str(len(big25)));      # 5000
+print("S25-build3-last: " + str(big25[4999]));    # 49990
+
+print("=== R3.104 DONE ===");

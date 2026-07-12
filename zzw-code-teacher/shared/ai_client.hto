@@ -1,0 +1,189 @@
+# shared/ai_client.hto
+# OpenAI 兼容 AI 客户端(只做"教练"角色,不写完整代码)
+# 提示词模板: hints / explain_error / review_code
+
+import "shared/json_utils.hto";
+import "shared/http_client.hto";
+import "shared/storage.hto";
+
+# ============= 配置 =============
+
+let _ai_cfg = {
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "api_key": "",
+    "model": "gpt-4o-mini",
+    "max_tokens": 1024,
+    "temperature": 0.3,
+    "system_prompt": ""
+};
+
+fn ai_configure(cfg) {
+    if (cfg != nullptr) {
+        if ("endpoint" in cfg) { _ai_cfg["endpoint"] = cfg["endpoint"]; }
+        if ("api_key" in cfg) { _ai_cfg["api_key"] = cfg["api_key"]; }
+        if ("model" in cfg) { _ai_cfg["model"] = cfg["model"]; }
+        if ("max_tokens" in cfg) { _ai_cfg["max_tokens"] = cfg["max_tokens"]; }
+        if ("temperature" in cfg) { _ai_cfg["temperature"] = cfg["temperature"]; }
+        if ("system_prompt" in cfg and cfg["system_prompt"] != "") {
+            _ai_cfg["system_prompt"] = cfg["system_prompt"];
+        }
+    }
+    return true;
+}
+
+fn ai_load_from_storage() {
+    let cfg = storage_load("config");
+    if (cfg != nullptr) {
+        if ("ai" in cfg) {
+            ai_configure(cfg["ai"]);
+        }
+    }
+    return true;
+}
+
+# ============= System Prompt 工厂 =============
+
+fn system_prompt_default() {
+    return "你是一名耐心的 H# 编程老师,正在辅导学员做 H# 编程题。\n" +
+        "你必须遵守以下铁律:\n" +
+        "1. 只给思路、定位、概念解释,严禁直接给出可粘贴的完整代码。\n" +
+        "2. 如果学员直接说'帮我写'/'给我答案',你必须拒绝并提示'请自己尝试,我可以提示思路'。\n" +
+        "3. 解释要引用具体行号或代码片段,让学员理解问题。\n" +
+        "4. 一次回答不超过 300 字,只回答与当前问题相关的部分。\n" +
+        "5. 使用中文回答。\n";
+}
+
+# ============= 调用 =============
+
+fn ai_chat(messages) {
+    if (_ai_cfg["api_key"] == "") {
+        return "⚠️ 未配置 AI Key,请在管理员端『设置』中填写 OpenAI 兼容 API Key。";
+    }
+    let sys = _ai_cfg["system_prompt"];
+    if (sys == nullptr or sys == "") {
+        sys = system_prompt_default();
+    }
+    # 构造 messages: [system, ...messages]
+    let req_messages = [{"role": "system", "content": sys}];
+    let i = 0;
+    while (i < len(messages)) {
+        req_messages.append(messages[i]);
+        i = i + 1;
+    }
+    let payload = {
+        "model": _ai_cfg["model"],
+        "messages": req_messages,
+        "max_tokens": _ai_cfg["max_tokens"],
+        "temperature": _ai_cfg["temperature"],
+        "stream": false
+    };
+    let body_text = json_stringify(payload);
+    let headers = [
+        ["Content-Type", "application/json"],
+        ["Authorization", "Bearer " + _ai_cfg["api_key"]]
+    ];
+    let resp = hc_post_json(_ai_cfg["endpoint"], body_text, headers);
+    if (resp == nullptr) {
+        return "⚠️ AI 调用失败:无响应";
+    }
+    if (http_get_status(resp) >= 400) {
+        return "⚠️ AI 调用失败(" + str(http_get_status(resp)) + "): " + http_get_body(resp);
+    }
+    let data = json_parse(http_get_body(resp));
+    if (data == nullptr) {
+        return "⚠️ AI 响应无法解析";
+    }
+    if ("choices" in data and len(data["choices"]) > 0) {
+        return data["choices"][0]["message"]["content"];
+    }
+    return "⚠️ AI 响应格式异常";
+}
+
+# ============= 业务提示词模板 =============
+
+# 学员请求"题目思路"时的 prompt
+fn ai_hint_problem(problem, user_code, history) {
+    let msgs = [];
+    let sample_input = "(无)";
+    let sample_output = "(无)";
+    if (len(problem["samples"]) > 0) {
+        sample_input = problem["samples"][0]["input"];
+        sample_output = problem["samples"][0]["output"];
+    }
+    msgs.append({
+        "role": "user",
+        "content":
+            "题目: " + problem["title"] + "\n" +
+            "难度: " + problem["difficulty"] + "\n" +
+            "描述: " + problem["description"] + "\n" +
+            "输入格式: " + problem["input_format"] + "\n" +
+            "输出格式: " + problem["output_format"] + "\n" +
+            "样例输入: " + sample_input + "\n" +
+            "样例输出: " + sample_output + "\n" +
+            "学员当前代码:\n```h#\n" + user_code + "\n```\n\n" +
+            "请给出思路提示(不要写完整代码)。"
+    });
+    if (history != nullptr) {
+        let i = 0;
+        while (i < len(history)) {
+            msgs.append(history[i]);
+            i = i + 1;
+        }
+    }
+    return ai_chat(msgs);
+}
+
+# 学员请求"错误解释"时的 prompt
+fn ai_explain_error(problem, user_code, error_msg, history) {
+    let msgs = [];
+    msgs.append({
+        "role": "user",
+        "content":
+            "学员提交了如下 H# 代码:\n```h#\n" + user_code + "\n```\n" +
+            "题目: " + problem["title"] + "\n" +
+            "评测结果: " + error_msg + "\n\n" +
+            "请定位可能出错的位置(行号),解释根因,给出排查方向,不要直接修复代码。"
+    });
+    if (history != nullptr) {
+        let i = 0;
+        while (i < len(history)) {
+            msgs.append(history[i]);
+            i = i + 1;
+        }
+    }
+    return ai_chat(msgs);
+}
+
+# 学员请求"代码审查"时的 prompt(只指出问题点,不给答案)
+fn ai_review_code(problem, user_code, history) {
+    let msgs = [];
+    msgs.append({
+        "role": "user",
+        "content":
+            "请审查以下 H# 学员代码,列出风格 / 可读性 / 边界条件 / 性能上的问题点(不必给修复代码)。\n\n" +
+            "题目: " + problem["title"] + "\n" +
+            "代码:\n```h#\n" + user_code + "\n```"
+    });
+    if (history != nullptr) {
+        let i = 0;
+        while (i < len(history)) {
+            msgs.append(history[i]);
+            i = i + 1;
+        }
+    }
+    return ai_chat(msgs);
+}
+
+# 自由提问
+fn ai_free_question(question, history) {
+    let msgs = [];
+    msgs.append({"role": "user", "content": question});
+    if (history != nullptr) {
+        let i = 0;
+        while (i < len(history)) {
+            msgs.append(history[i]);
+            i = i + 1;
+        }
+    }
+    return ai_chat(msgs);
+}

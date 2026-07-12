@@ -1,0 +1,89 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# common/theme.hto — 现代化暗色主题（Vercel / Linear 风格）
+# 克制、精致、灰阶为主，强调色用得节制
+# ═══════════════════════════════════════════════════════════════════════════
+
+let THEME = {
+    # ── 背景层次（由深到浅，每级差很小但可辨）──
+    "bg":              "#0a0a0a",   # 应用主背景（近黑）
+    "bg_elevated":     "#111111",   # 浮层背景
+    "surface":         "#161616",   # 卡片/面板表面
+    "surface_hover":   "#1c1c1c",   # 悬停态
+    "surface_active":  "#222222",   # 选中态
+    "inset":           "#0d0d0d",   # 凹陷区域（输入框/代码区）
+
+    # ── 边框（极微妙，1px 视觉）──
+    "border":          "#262626",   # 主边框
+    "border_subtle":   "#1f1f1f",   # 次要边框
+    "border_strong":   "#333333",   # 强调边框
+
+    # ── 文字层次 ──
+    "text":            "#ededed",   # 主文字（不纯白，减刺眼）
+    "text_secondary":  "#a1a1aa",   # 次要文字
+    "text_tertiary":   "#71717a",   # 弱化文字
+    "text_disabled":   "#52525b",   # 禁用文字
+
+    # ── 强调色（克制使用）──
+    "accent":          "#ffffff",   # 主按钮（Vercel 风格：白底黑字）
+    "accent_fg":       "#0a0a0a",   # 主按钮文字
+    "accent_hover":    "#e4e4e7",   # 主按钮悬停
+    "primary":         "#3b82f6",   # 链接/聚焦（蓝，少用）
+    "primary_subtle":  "#1e3a5f",   # 选中背景（蓝调暗）
+
+    # ── 语义色（饱和度降低，更专业）──
+    "success":         "#10b981",
+    "success_subtle":  "#0d3d2e",
+    "warning":         "#f59e0b",
+    "warning_subtle":  "#3d2e0d",
+    "danger":          "#ef4444",
+    "danger_subtle":   "#3d1515",
+    "info":            "#3b82f6",
+
+    # ── 代码语法高亮（低饱和）──
+    "code_keyword":    "#c084fc",
+    "code_string":     "#86efac",
+    "code_comment":    "#71717a",
+    "code_number":     "#fcd34d",
+    "code_function":   "#93c5fd",
+    "code_text":       "#e4e4e7",
+
+    # ── 难度色标（柔和）──
+    "diff_easy":       "#10b981",
+    "diff_medium":     "#f59e0b",
+    "diff_hard":       "#ef4444",
+
+    # ── 助手面板（不再叫"AI"，用中性紫调区分）──
+    "assistant_bg":    "#0f0f12",
+    "assistant_accent":"#a78bfa",
+    "bubble_user":     "#1e1e22",
+    "bubble_assistant":"#161618",
+
+    # ── 状态栏 ──
+    "statusbar_bg":    "#0a0a0a",
+    "statusbar_text":  "#71717a",
+    "statusbar_accent":"#10b981",
+
+    # ── 尺寸 ──
+    "radius_sm": 4,
+    "radius_md": 6,
+    "radius_lg": 8,
+    "gap_xs": 4,
+    "gap_sm": 8,
+    "gap_md": 12,
+    "gap_lg": 16,
+    "gap_xl": 24,
+    "font_size_xs": 10,
+    "font_size_sm": 11,
+    "font_size_base": 13,
+    "font_size_md": 14,
+    "font_size_lg": 16,
+    "font_size_xl": 20,
+    "font_size_2xl": 24,
+    "font_mono": "Menlo",
+    "font_ui": "PingFang SC",
+    "font_sans": "PingFang SC"
+};
+
+fn theme_get(key) {
+    return THEME[key];
+}

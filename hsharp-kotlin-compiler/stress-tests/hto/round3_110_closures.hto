@@ -1,0 +1,1273 @@
+# round3_110_closures.hto — 测试智能体 #110
+# 领域: 闭包与可变状态交互 (Closures & Mutable State Interaction)
+# H# v0.4.1
+#
+# 已知背景 (来自 round2_81 / 72 / 73):
+#   - 单闭包修改外部变量可工作 (counter 模式 1,2,3)
+#   - 多闭包共享同一变量 → BUG: 各自独立 snapshot (get 返回 0 而非 3)
+#   - 闭包捕获后外部再修改 → BUG: snapshot (返回旧值)
+#   - 闭包捕获参数后修改参数 → BUG: snapshot
+#   - 模块级 let 捕获后再修改 → BUG: snapshot
+#   - let-lambda 递归 → BUG: "Undefined name: fact"
+#   - 嵌套 fn 语句 (非 let-lambda) → BUG: "Undefined name: a"
+#
+# 本测试聚焦上述已知 bug 的最小复现 + 新边界场景。
+# 每个用例独立 try/catch 包裹避免整体中止；打印 "Txx:" 前缀，预期值在注释。
+
+# ============================================================
+# T01: 基本闭包捕获 — 闭包内修改外部变量，外部可见
+# 单闭包场景 (已知可工作). 预期: 1, 2, 5
+# ============================================================
+print("=== T01 basic capture ===");
+try {
+    fn mk01() {
+        let n = 0;
+        fn bump() { n = n + 1; return n; }
+        return bump;
+    }
+    let f01 = mk01();
+    print("T01: " + f01());   # 1
+    print("T01: " + f01());   # 2
+    fn mk01b() {
+        let n = 0;
+        fn bump() { n = n + 3; return n; }
+        return bump;
+    }
+    let f01b = mk01b();
+    print("T01: " + f01b());   # 3
+} catch (e) { print("T01-ERR: " + e); }
+
+# ============================================================
+# T02: 计数器模式 — 经典 counter
+# 预期: 1, 2, 3, 4, 5
+# ============================================================
+print("=== T02 counter ===");
+try {
+    fn mkCounter() {
+        let n = 0;
+        return fn() { n = n + 1; return n; };
+    }
+    let c = mkCounter();
+    print("T02: " + c());   # 1
+    print("T02: " + c());   # 2
+    print("T02: " + c());   # 3
+    print("T02: " + c());   # 4
+    print("T02: " + c());   # 5
+} catch (e) { print("T02-ERR: " + e); }
+
+# ============================================================
+# T03: 多闭包共享变量 — inc + get 共享 n
+# 预期 (by-ref): 1, 2, 3, 3
+# 实际 (snapshot bug): 1, 2, 3, 0
+# ============================================================
+print("=== T03 multi-closure shared var ===");
+try {
+    fn mkPair() {
+        let n = 0;
+        let inc = fn() { n = n + 1; return n; };
+        let get = fn() { return n; };
+        return [inc, get];
+    }
+    let p = mkPair();
+    let inc = p[0];
+    let get = p[1];
+    print("T03: " + inc());   # 1
+    print("T03: " + inc());   # 2
+    print("T03: " + inc());   # 3
+    print("T03: " + get());   # 3 (by-ref) ; 0 (snapshot bug)
+} catch (e) { print("T03-ERR: " + e); }
+
+# ============================================================
+# T04: 多闭包共享变量 — inc + dec + get (3 闭包)
+# 预期 (by-ref): 1, 2, 1, 0, 0
+# 实际 (snapshot bug): 1, 2, -1, -2, 0  (各闭包独立)
+# ============================================================
+print("=== T04 inc/dec/get shared ===");
+try {
+    fn mk04() {
+        let n = 0;
+        let inc = fn() { n = n + 1; return n; };
+        let dec = fn() { n = n - 1; return n; };
+        let get = fn() { return n; };
+        return {"inc": inc, "dec": dec, "get": get};
+    }
+    let c = mk04();
+    print("T04: " + c["inc"]());   # 1
+    print("T04: " + c["inc"]());   # 2
+    print("T04: " + c["dec"]());   # 1 (by-ref) ; -1 (snapshot)
+    print("T04: " + c["dec"]());   # 0 (by-ref) ; -2 (snapshot)
+    print("T04: " + c["get"]());   # 0 (by-ref) ; 0 (snapshot, coincidentally same)
+} catch (e) { print("T04-ERR: " + e); }
+
+# ============================================================
+# T05: 闭包捕获 dict — 闭包修改 dict 字段
+# dict 是引用类型，应可见. 预期: 1, 2, 3, {count:3}
+# ============================================================
+print("=== T05 closure captures dict ===");
+try {
+    fn mk05() {
+        let d = {"count": 0};
+        let bump = fn() { d["count"] = d["count"] + 1; return d["count"]; };
+        return bump;
+    }
+    let b = mk05();
+    print("T05: " + b());   # 1
+    print("T05: " + b());   # 2
+    print("T05: " + b());   # 3
+} catch (e) { print("T05-ERR: " + e); }
+
+# T05b: 闭包捕获 dict 后, 外部对同一 dict 引用修改 — 应可见
+print("=== T05b closure+ext dict ref ===");
+try {
+    let shared = {"v": 0};
+    let reader = fn() { return shared["v"]; };
+    let writer = fn(x) { shared["v"] = x; };
+    writer(42);
+    print("T05b: " + reader());   # 42
+    shared["v"] = 99;
+    print("T05b: " + reader());   # 99
+} catch (e) { print("T05b-ERR: " + e); }
+
+# ============================================================
+# T06: 闭包捕获 list — 闭包 push 到 list
+# list 是引用类型，push 应可见. 预期: [1], [1,2], [1,2,3]
+# ============================================================
+print("=== T06 closure captures list ===");
+try {
+    fn mk06() {
+        let lst = [];
+        let adder = fn(x) { push(lst, x); return lst; };
+        return adder;
+    }
+    let add = mk06();
+    print("T06: " + add(1));   # [1]
+    print("T06: " + add(2));   # [1, 2]
+    print("T06: " + add(3));   # [1, 2, 3]
+} catch (e) { print("T06-ERR: " + e); }
+
+# T06b: 闭包捕获 list 后, 外部 push 到同一 list — 闭包内 len 应见增长
+print("=== T06b closure+ext list ===");
+try {
+    let shared = [];
+    let reader = fn() { return len(shared); };
+    push(shared, 1);
+    print("T06b: " + reader());   # 1
+    push(shared, 2);
+    push(shared, 3);
+    print("T06b: " + reader());   # 3
+} catch (e) { print("T06b-ERR: " + e); }
+
+# ============================================================
+# T07: 循环中创建闭包 — 经典 JS 问题
+# 预期 (per-iteration binding): 1, 2, 3
+# 预期 (late binding): 3, 3, 3
+# H# round2_81 显示 1,2,3 (snapshot per iter)
+# ============================================================
+print("=== T07 closure in loop ===");
+try {
+    let fns = [];
+    for i in [1, 2, 3] {
+        push(fns, fn() { return i; });
+    }
+    print("T07: " + fns[0]());   # 1
+    print("T07: " + fns[1]());   # 2
+    print("T07: " + fns[2]());   # 3
+} catch (e) { print("T07-ERR: " + e); }
+
+# ============================================================
+# T08: 闭包捕获循环变量值 — 每个闭包捕获的 i 是否不同
+# 用 range() 而非 list literal. 预期: 0, 1, 2
+# ============================================================
+print("=== T08 closure range loop ===");
+try {
+    let fns = [];
+    for i in range(0, 3) {
+        push(fns, fn() { return i; });
+    }
+    print("T08: " + fns[0]());   # 0
+    print("T08: " + fns[1]());   # 1
+    print("T08: " + fns[2]());   # 2
+} catch (e) { print("T08-ERR: " + e); }
+
+# T08b: 循环中两个闭包捕获同一 i — 它们是否共享 (在同一 iteration)?
+# 这探测 "同一次迭代内的多闭包是否共享 cell"
+print("=== T08b two closures same iter ===");
+try {
+    let pairs = [];
+    for i in [1, 2, 3] {
+        let getter = fn() { return i; };
+        let setter = fn(v) { i = v; };
+        push(pairs, [getter, setter]);
+    }
+    # 调用 setter 改 i, 再调用 getter — 应该看到改后值 (若共享 cell)
+    pairs[0][1](100);
+    print("T08b: " + pairs[0][0]());   # 100 (共享) 或 1 (snapshot)
+    print("T08b: " + pairs[1][0]());   # 2 (不应被影响)
+} catch (e) { print("T08b-ERR: " + e); }
+
+# ============================================================
+# T09: 嵌套闭包 — 3 层闭包嵌套 (let-lambda 形式)
+# 预期: 6, 60, 1000
+# ============================================================
+print("=== T09 nested 3-layer ===");
+try {
+    fn L1(a) {
+        return fn(b) {
+            return fn(c) { return a + b + c; };
+        };
+    }
+    print("T09: " + L1(1)(2)(3));        # 6
+    print("T09: " + L1(10)(20)(30));     # 60
+    print("T09: " + L1(100)(300)(600));  # 1000
+} catch (e) { print("T09-ERR: " + e); }
+
+# T09b: 嵌套 fn 语句形式 (而非 let-lambda) — 已知 bug "Undefined name"
+print("=== T09b nested fn stmts ===");
+try {
+    fn outer(a) {
+        fn mid(b) {
+            fn inner(c) {
+                return a + b + c;
+            }
+            return inner;
+        }
+        return mid;
+    }
+    print("T09b: " + outer(1)(2)(3));   # 6 if works ; ERR if bug
+} catch (e) { print("T09b-ERR: " + e); }
+
+# T09c: 4 层嵌套闭包, 最内层修改最外层变量
+print("=== T09c 4-layer mutation ===");
+try {
+    fn mk09c() {
+        let n = 0;
+        fn L2() {
+            fn L3() {
+                fn L4() { n = n + 1; return n; }
+                return L4;
+            }
+            return L3;
+        }
+        return L2;
+    }
+    let deep = mk09c();
+    let innermost = deep()();
+    print("T09c: " + innermost());   # 1
+    print("T09c: " + innermost());   # 2
+    print("T09c: " + innermost());   # 3
+} catch (e) { print("T09c-ERR: " + e); }
+
+# ============================================================
+# T10: 闭包返回闭包 — 柯里化
+# fn(x) { return fn(y) { return x + y; }; }
+# 预期: 7, 13, 25
+# ============================================================
+print("=== T10 currying ===");
+try {
+    fn adder(x) {
+        return fn(y) { return x + y; };
+    }
+    let add5 = adder(5);
+    print("T10: " + add5(2));    # 7
+    print("T10: " + add5(8));    # 13
+    let add20 = adder(20);
+    print("T10: " + add20(5));   # 25
+    # 确保两个 adder 实例不互相影响
+    print("T10: " + add5(0));    # 5 (而非 25)
+} catch (e) { print("T10-ERR: " + e); }
+
+# ============================================================
+# T11: 闭包作为参数 — apply(f, x)
+# 预期: 11, hi!, 49
+# ============================================================
+print("=== T11 closure as arg ===");
+try {
+    fn apply(f, x) { return f(x); }
+    print("T11: " + apply(fn(x) { return x + 1; }, 10));     # 11
+    print("T11: " + apply(fn(s) { return s + "!"; }, "hi")); # hi!
+    print("T11: " + apply(fn(p) { return p * p; }, 7));      # 49
+} catch (e) { print("T11-ERR: " + e); }
+
+# T11b: 闭包作为参数, 且闭包本身捕获外层变量
+print("=== T11b closure arg with capture ===");
+try {
+    let multiplier = 10;
+    fn apply(f, x) { return f(x); }
+    print("T11b: " + apply(fn(x) { return x * multiplier; }, 5));   # 50
+    multiplier = 100;
+    print("T11b: " + apply(fn(x) { return x * multiplier; }, 5));   # 500 (by-ref) or 50 (snapshot)
+} catch (e) { print("T11b-ERR: " + e); }
+
+# ============================================================
+# T12: 闭包作为返回值 — 函数返回 lambda
+# 预期: 12, 24, 36
+# ============================================================
+print("=== T12 closure as return ===");
+try {
+    fn makeMul(k) { return fn(x) { return x * k; }; }
+    let dbl = makeMul(2);
+    let tpl = makeMul(3);
+    print("T12: " + dbl(6));    # 12
+    print("T12: " + tpl(8));    # 24
+    print("T12: " + dbl(18));   # 36
+} catch (e) { print("T12-ERR: " + e); }
+
+# ============================================================
+# T13: 闭包递归 — 闭包内调用自身 (通过变量名)
+# 已知 bug: "Undefined name: fact"
+# 预期: 1, 120, 3628800
+# ============================================================
+print("=== T13 lambda recursion ===");
+try {
+    let fact = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * fact(n - 1);
+    };
+    print("T13: " + fact(1));    # 1
+    print("T13: " + fact(5));    # 120
+    print("T13: " + fact(10));   # 3628800
+} catch (e) { print("T13-ERR: " + e); }
+
+# T13b: 闭包递归 (fib) — 应同 fact
+print("=== T13b fib recursion ===");
+try {
+    let fib = fn(n) {
+        if (n < 2) { return n; }
+        return fib(n - 1) + fib(n - 2);
+    };
+    print("T13b: " + fib(0));   # 0
+    print("T13b: " + fib(1));   # 1
+    print("T13b: " + fib(10));  # 55
+} catch (e) { print("T13b-ERR: " + e); }
+
+# T13c: 闭包递归 + 修改捕获变量 (accumulator 模式)
+print("=== T13c recursion + accumulator ===");
+try {
+    fn mk13c() {
+        let count = 0;
+        let rec = fn(n) {
+            count = count + 1;
+            if (n <= 1) { return 1; }
+            return n * rec(n - 1);
+        };
+        return [rec, fn() { return count; }];
+    }
+    let p = mk13c();
+    let rec = p[0];
+    let getCount = p[1];
+    print("T13c: " + rec(5));       # 120
+    print("T13c: " + getCount());  # 5 (递归 5 次) — 但因 snapshot 可能 0
+} catch (e) { print("T13c-ERR: " + e); }
+
+# ============================================================
+# T14: 闭包与类字段 — 类方法中创建闭包捕获 self
+# 预期: 99, 77, 42, 42
+# ============================================================
+print("=== T14 closure in class method ===");
+try {
+    class Box14 {
+        fn init(v) { self.v = v; }
+        fn getter() { return fn() { return self.v; }; }
+        fn setter() { return fn(x) { self.v = x; }; }
+    }
+    let b = new Box14(99);
+    let g = b.getter();
+    print("T14: " + g());    # 99
+    b.v = 77;
+    print("T14: " + g());    # 77
+    let s = b.setter();
+    s(42);
+    print("T14: " + g());    # 42
+    print("T14: " + b.v);    # 42
+} catch (e) { print("T14-ERR: " + e); }
+
+# T14b: 两个实例的 getter 不应互相干扰
+print("=== T14b two instances isolated ===");
+try {
+    class Box14b {
+        fn init(v) { self.v = v; }
+        fn getter() { return fn() { return self.v; }; }
+    }
+    let b1 = new Box14b(1);
+    let b2 = new Box14b(2);
+    let g1 = b1.getter();
+    let g2 = b2.getter();
+    print("T14b: " + g1());   # 1
+    print("T14b: " + g2());   # 2
+    b1.v = 10;
+    b2.v = 20;
+    print("T14b: " + g1());   # 10
+    print("T14b: " + g2());   # 20
+} catch (e) { print("T14b-ERR: " + e); }
+
+# ============================================================
+# T15: 闭包与全局变量 — 闭包修改全局变量
+# 预期 (by-ref): 1, 2, 10, 20
+# ============================================================
+print("=== T15 closure + global ===");
+let g15 = 0;
+try {
+    let bump15 = fn() { g15 = g15 + 1; return g15; };
+    print("T15: " + bump15());   # 1
+    print("T15: " + bump15());   # 2
+    g15 = 10;
+    print("T15: " + g15);        # 10
+    print("T15: " + bump15());   # 11 (by-ref) or 3 (snapshot)
+} catch (e) { print("T15-ERR: " + e); }
+
+# T15b: 模块级 let 捕获后外部修改 — snapshot bug
+print("=== T15b module let capture ===");
+let m15 = 100;
+try {
+    let reader15 = fn() { return m15; };
+    print("T15b: " + reader15());   # 100
+    m15 = 200;
+    print("T15b: " + reader15());   # 200 (by-ref) or 100 (snapshot bug)
+} catch (e) { print("T15b-ERR: " + e); }
+
+# ============================================================
+# T16: 闭包捕获后外部变量修改 — 复用 T15b 但更直接
+# let n = 1; let f = fn() { return n; }; n = 99; f()
+# 预期 (by-ref): 99 ; 实际 (snapshot): 1
+# ============================================================
+print("=== T16 capture then modify ===");
+try {
+    let n = 1;
+    let f = fn() { return n; };
+    print("T16: " + f());    # 1
+    n = 99;
+    print("T16: " + f());    # 99 (by-ref) ; 1 (snapshot bug)
+    n = 1000;
+    print("T16: " + f());    # 1000 (by-ref) ; 1 (snapshot bug)
+} catch (e) { print("T16-ERR: " + e); }
+
+# ============================================================
+# T17: 闭包捕获参数 — fn mk(x) { return fn() { return x; }; }
+# 预期: 5, 10, 15
+# ============================================================
+print("=== T17 capture param ===");
+try {
+    fn mk(x) { return fn() { return x; }; }
+    let g5 = mk(5);
+    let g10 = mk(10);
+    print("T17: " + g5());    # 5
+    print("T17: " + g10());   # 10
+    print("T17: " + g5());    # 5 (未被影响)
+} catch (e) { print("T17-ERR: " + e); }
+
+# T17b: 捕获参数后, 在 outer 函数内修改参数 — snapshot bug
+# fn f(a) { let g = fn() { return a; }; a = 100; return g(); }
+# 预期 (by-ref): 100 ; 实际 (snapshot): 1
+print("=== T17b capture param then modify ===");
+try {
+    fn f17b(a) {
+        let g = fn() { return a; };
+        a = 100;
+        return g();
+    }
+    print("T17b: " + f17b(1));   # 100 (by-ref) ; 1 (snapshot bug)
+} catch (e) { print("T17b-ERR: " + e); }
+
+# ============================================================
+# T18: 闭包捕获多个变量
+# 预期: 6, 100+200+300=600, abc
+# ============================================================
+print("=== T18 multi-var capture ===");
+try {
+    fn mk18() {
+        let a = 1;
+        let b = 2;
+        let c = 3;
+        return fn() { return a + b + c; };
+    }
+    print("T18: " + mk18()());   # 6
+    fn mk18b() {
+        let a = 100;
+        let b = 200;
+        let c = 300;
+        return fn() { return a + b + c; };
+    }
+    print("T18: " + mk18b()());  # 600
+    fn mk18c() {
+        let a = "a";
+        let b = "b";
+        let c = "c";
+        return fn() { return a + b + c; };
+    }
+    print("T18: " + mk18c()());  # abc
+} catch (e) { print("T18-ERR: " + e); }
+
+# T18b: 多变量捕获 + 修改其中一个 — 是否影响其他闭包
+print("=== T18b multi-var modify one ===");
+try {
+    fn mk18b() {
+        let a = 1;
+        let b = 2;
+        let getA = fn() { return a; };
+        let getB = fn() { return b; };
+        let setA = fn(x) { a = x; };
+        return [getA, getB, setA];
+    }
+    let p = mk18b();
+    let getA = p[0];
+    let getB = p[1];
+    let setA = p[2];
+    setA(100);
+    print("T18b: " + getA());   # 100 (by-ref) or 1 (snapshot)
+    print("T18b: " + getB());   # 2 (不应被影响)
+} catch (e) { print("T18b-ERR: " + e); }
+
+# ============================================================
+# T19: 闭包变量遮蔽 — 内外同名变量
+# 预期: inner=10, outer=1
+# ============================================================
+print("=== T19 shadowing ===");
+try {
+    let n = 1;
+    let f = fn() {
+        let n = 10;   # 遮蔽外层 n
+        return n;
+    };
+    print("T19: inner=" + f());   # 10
+    print("T19: outer=" + n);     # 1 (未被修改)
+} catch (e) { print("T19-ERR: " + e); }
+
+# T19b: 闭包内修改同名变量 — 是否修改外层?
+print("=== T19b shadowing modify ===");
+try {
+    let n = 1;
+    let f = fn() {
+        n = 99;   # 这修改的是外层 n (没有 let)
+        return n;
+    };
+    print("T19b: inner=" + f());   # 99
+    print("T19b: outer=" + n);     # 99 (被修改)
+} catch (e) { print("T19b-ERR: " + e); }
+
+# T19c: 函数参数遮蔽外层
+print("=== T19c param shadowing ===");
+try {
+    let x = 100;
+    fn f19c(x) {   # 参数 x 遮蔽外层
+        x = x + 1;
+        return x;
+    }
+    print("T19c: " + f19c(5));   # 6
+    print("T19c: " + x);         # 100 (未被影响)
+} catch (e) { print("T19c-ERR: " + e); }
+
+# ============================================================
+# T20: 闭包与 channel — 闭包操作 channel
+# 预期: sent=42, recv=42, size=0
+# ============================================================
+print("=== T20 closure + channel ===");
+try {
+    let ch = chan_new(5);
+    let sender = fn(v) { chan_send(ch, v); return "sent-" + v; };
+    let recver = fn() { return chan_recv(ch); };
+    print("T20: " + sender(42));   # sent-42
+    print("T20: " + recver());     # 42
+    print("T20: size=" + chan_size(ch));   # 0
+} catch (e) { print("T20-ERR: " + e); }
+
+# T20b: 闭包 + 多个 channel send/recv
+print("=== T20b closure multi chan ===");
+try {
+    let ch = chan_new(10);
+    let pusher = fn(x) { chan_send(ch, x); return chan_size(ch); };
+    print("T20b: " + pusher(1));   # 1
+    print("T20b: " + pusher(2));   # 2
+    print("T20b: " + pusher(3));   # 3
+    let drainer = fn() {
+        let sum = 0;
+        while (chan_size(ch) > 0) {
+            sum = sum + chan_recv(ch);
+        }
+        return sum;
+    };
+    print("T20b: " + drainer());   # 6
+} catch (e) { print("T20b-ERR: " + e); }
+
+# ============================================================
+# T21: 闭包内存 — 闭包持有大对象引用
+# 闭包持有 list, 外部置 null, 闭包仍可见原 list (除非也被 snapshot)
+# 预期: 100, 100, 100 (引用持有, GC 不应回收)
+# ============================================================
+print("=== T21 closure holds big ref ===");
+try {
+    fn mk21() {
+        let big = [];
+        let i = 0;
+        while (i < 100) { push(big, i); i = i + 1; }
+        return fn() { return len(big); };
+    }
+    let f = mk21();
+    print("T21: " + f());    # 100
+    print("T21: " + f());    # 100
+    print("T21: " + f());    # 100
+} catch (e) { print("T21-ERR: " + e); }
+
+# T21b: 闭包持有 list, 外部重新赋值 list — snapshot bug?
+print("=== T21b closure rebind big ===");
+try {
+    let big = [1, 2, 3];
+    let reader = fn() { return big; };
+    print("T21b: " + reader());   # [1, 2, 3]
+    big = [99, 100];
+    print("T21b: " + reader());   # [99, 100] (by-ref) or [1,2,3] (snapshot bug)
+} catch (e) { print("T21b-ERR: " + e); }
+
+# ============================================================
+# T22: 闭包链 — f1 调 f2 调 f3, 每层捕获不同变量
+# 预期: "a-b-c-end"
+# ============================================================
+print("=== T22 closure chain ===");
+try {
+    fn mk22() {
+        let a = "a";
+        let f1 = fn() {
+            let b = "b";
+            let f2 = fn() {
+                let c = "c";
+                let f3 = fn() {
+                    return a + "-" + b + "-" + c + "-end";
+                };
+                return f3();
+            };
+            return f2();
+        };
+        return f1();
+    }
+    print("T22: " + mk22());   # a-b-c-end
+} catch (e) { print("T22-ERR: " + e); }
+
+# T22b: 闭包链 + 各层修改各自变量
+print("=== T22b chain with mutation ===");
+try {
+    fn mk22b() {
+        let a = 0;
+        let f1 = fn() {
+            a = a + 1;
+            let b = 0;
+            let f2 = fn() {
+                b = b + 10;
+                return a * 100 + b;
+            };
+            return f2;
+        };
+        return [f1, a];
+    }
+    let p = mk22b();
+    let f1 = p[0];
+    let f2 = f1();
+    print("T22b: " + f2());    # 110 (a=1, b=10)
+    print("T22b: " + f2());    # 120 (a=1, b=20)
+    let f2b = f1();
+    print("T22b: " + f2b());   # 210 (a=2, b=10) — 若 a 是 by-ref
+} catch (e) { print("T22b-ERR: " + e); }
+
+# ============================================================
+# T23: 闭包 + match — 闭包内 match
+# 预期: one, two, default
+# ============================================================
+print("=== T23 closure + match ===");
+try {
+    fn mk23() {
+        return fn(x) {
+            return match x {
+                1 => "one",
+                2 => "two",
+                _ => "default"
+            };
+        };
+    }
+    let f = mk23();
+    print("T23: " + f(1));    # one
+    print("T23: " + f(2));    # two
+    print("T23: " + f(99));   # default
+} catch (e) { print("T23-ERR: " + e); }
+
+# T23b: 闭包捕获变量在 match guard 中使用
+print("=== T23b match guard with capture ===");
+try {
+    fn mk23b() {
+        let threshold = 5;
+        return fn(x) {
+            return match x {
+                v if v > threshold => "big",
+                v if v <= threshold => "small"
+            };
+        };
+    }
+    let f = mk23b();
+    print("T23b: " + f(10));   # big
+    print("T23b: " + f(3));    # small
+} catch (e) { print("T23b-ERR: " + e); }
+
+# ============================================================
+# T24: 闭包 + try/catch — 闭包内异常
+# 预期: caught-boom, 42, finally-ran
+# ============================================================
+print("=== T24 closure + try/catch ===");
+try {
+    fn safeCall(f) {
+        try { return f(); }
+        catch (e) { return "caught-" + e; }
+    }
+    print("T24: " + safeCall(fn() { throw "boom"; }));   # caught-boom
+    print("T24: " + safeCall(fn() { return 42; }));      # 42
+} catch (e) { print("T24-ERR: " + e); }
+
+# T24b: 闭包内 try/catch, catch 修改捕获变量 (无 finally 支持)
+print("=== T24b catch mutates capture (try-catch) ===");
+try {
+    fn mk24b() {
+        let n = 0;
+        let f = fn() {
+            try { n = n + 1; throw "x"; }
+            catch (e) { n = n + 100; }
+            return n;
+        };
+        return [f, fn() { return n; }];
+    }
+    let p = mk24b();
+    let f = p[0];
+    let get = p[1];
+    print("T24b: " + f());     # 101 (1 + 100)
+    print("T24b: " + get());   # 101 (by-ref) or 0 (snapshot)
+} catch (e) { print("T24b-ERR: " + e); }
+
+# T24c: 闭包内 throw 在 catch 中修改捕获变量
+print("=== T24c catch mutates capture ===");
+try {
+    fn mk24c() {
+        let n = 0;
+        let f = fn() {
+            try { throw "x"; }
+            catch (e) { n = n + 5; }
+            return n;
+        };
+        return [f, fn() { return n; }];
+    }
+    let p = mk24c();
+    let f = p[0];
+    let get = p[1];
+    print("T24c: " + f());     # 5
+    print("T24c: " + get());   # 5 (by-ref) or 0 (snapshot)
+} catch (e) { print("T24c-ERR: " + e); }
+
+# ============================================================
+# T25: 闭包与 concurrent — concurrent 块中闭包
+# 预期: r=15, after=15
+# ============================================================
+parallel fn t25_work(x) { return x * 3; }
+print("=== T25 closure in concurrent ===");
+try {
+    let captured = 5;
+    let f = fn() { return captured * 2; };
+    concurrent {
+        let fut = t25_work(10);
+        let r = await fut;
+        print("T25: r=" + r);        # 30
+        print("T25: f=" + f());       # 10
+    }
+    print("T25: after=" + f());       # 10
+} catch (e) { print("T25-ERR: " + e); }
+
+# T25b: concurrent 中通过闭包修改共享变量 (可能有 race)
+let t25b_counter = 0;
+parallel fn t25b_bump(n) {
+    let i = 0;
+    while (i < n) {
+        t25b_counter = t25b_counter + 1;
+        i = i + 1;
+    }
+    return t25b_counter;
+}
+print("=== T25b concurrent closure mutate ===");
+try {
+    concurrent {
+        let f1 = t25b_bump(100);
+        let f2 = t25b_bump(100);
+        let r1 = await f1;
+        let r2 = await f2;
+        print("T25b: r1=" + r1);
+        print("T25b: r2=" + r2);
+    }
+    print("T25b: counter=" + t25b_counter);   # 200 (理想) — race 可能让值 < 200
+} catch (e) { print("T25b-ERR: " + e); }
+
+# ============================================================
+# T26: 闭包捕获 self 后调用 self 的其他方法
+# 预期: 100, 200
+# ============================================================
+print("=== T26 closure calls self.method ===");
+try {
+    class Calc26 {
+        fn init(b) { self.base = b; }
+        fn add(x) { return self.base + x; }
+        fn adder() {
+            return fn(x) { return self.add(x); };
+        }
+    }
+    let c = new Calc26(100);
+    let add = c.adder();
+    print("T26: " + add(50));   # 150 (100+50)... wait expected says 100?
+    # 实际: 100 + 50 = 150
+    c.base = 200;
+    print("T26: " + add(50));   # 250 (200+50)
+} catch (e) { print("T26-ERR: " + e); }
+
+# ============================================================
+# T27: 闭包捕获 list 索引修改 (非 push)
+# 预期: [0,0,0] -> [10,20,30]
+# ============================================================
+print("=== T27 closure list idx modify ===");
+try {
+    fn mk27() {
+        let lst = [0, 0, 0];
+        let setter = fn(i, v) { lst[i] = v; return lst; };
+        return setter;
+    }
+    let s = mk27();
+    print("T27: " + s(0, 10));   # [10, 0, 0]
+    print("T27: " + s(1, 20));   # [10, 20, 0]
+    print("T27: " + s(2, 30));   # [10, 20, 30]
+} catch (e) { print("T27-ERR: " + e); }
+
+# ============================================================
+# T28: 闭包捕获 dict 嵌套字段
+# 预期: nested.y=1, nested.y=2
+# ============================================================
+print("=== T28 closure nested dict ===");
+try {
+    fn mk28() {
+        let cfg = {"outer": {"inner": 0}};
+        let bump = fn() {
+            cfg["outer"]["inner"] = cfg["outer"]["inner"] + 1;
+            return cfg["outer"]["inner"];
+        };
+        return bump;
+    }
+    let b = mk28();
+    print("T28: " + b());   # 1
+    print("T28: " + b());   # 2
+    print("T28: " + b());   # 3
+} catch (e) { print("T28-ERR: " + e); }
+
+# ============================================================
+# T29: 闭包作为 dict 值, 多个闭包共享同一变量
+# 类似 T03 但用 dict 包装. 预期: 1, 2, 2
+# ============================================================
+print("=== T29 closure dict shared ===");
+try {
+    fn mk29() {
+        let n = 0;
+        return {
+            "inc": fn() { n = n + 1; return n; },
+            "get": fn() { return n; }
+        };
+    }
+    let o = mk29();
+    print("T29: " + o["inc"]());   # 1
+    print("T29: " + o["inc"]());   # 2
+    print("T29: " + o["get"]());   # 2 (by-ref) or 0 (snapshot)
+} catch (e) { print("T29-ERR: " + e); }
+
+# ============================================================
+# T30: 闭包 + IIFE (立即执行)
+# 预期: 1, 7, 36
+# ============================================================
+print("=== T30 IIFE ===");
+try {
+    print("T30: " + (fn() { return 1; })());           # 1
+    print("T30: " + (fn(a, b) { return a + b; })(3, 4));  # 7
+    let v = (fn(n) { return n * n; })(6);
+    print("T30: " + v);    # 36
+} catch (e) { print("T30-ERR: " + e); }
+
+# T30b: IIFE 捕获外层变量
+print("=== T30b IIFE with capture ===");
+try {
+    let x = 10;
+    let r = (fn() { return x * 2; })();
+    print("T30b: " + r);   # 20
+    x = 20;
+    let r2 = (fn() { return x * 2; })();
+    print("T30b: " + r2);  # 40
+} catch (e) { print("T30b-ERR: " + e); }
+
+# ============================================================
+# T31: 闭包作为类字段 (field = lambda)
+# 预期: 5, 25
+# ============================================================
+print("=== T31 closure as field ===");
+try {
+    class Handler31 {
+        fn init() {
+            self.action = fn(x) { return x + 1; };
+        }
+    }
+    let h = new Handler31();
+    print("T31: " + h.action(4));   # 5
+    h.action = fn(x) { return x * x; };
+    print("T31: " + h.action(5));   # 25
+} catch (e) { print("T31-ERR: " + e); }
+
+# ============================================================
+# T32: 闭包循环中修改外层变量 — 循环变量被闭包修改
+# 预期: i 在每次迭代开始是 0,1,2; 若闭包修改 i 影响循环 → 0,2,4...
+# ============================================================
+print("=== T32 closure modifies loop var ===");
+try {
+    let log = [];
+    for i in [0, 1, 2] {
+        push(log, i);
+        let bump = fn() { i = i + 10; return i; };
+        bump();   # 修改 i — 是否影响下一次迭代?
+    }
+    print("T32: " + log);   # [0, 1, 2] (若 i 不被影响) 或 [0, 11, 22] (若影响)
+} catch (e) { print("T32-ERR: " + e); }
+
+# ============================================================
+# T33: 两个独立 counter 实例 (隔离测试)
+# 预期: c1: 1,2,3 ; c2: 1,2 ; c1: 4
+# ============================================================
+print("=== T33 independent counters ===");
+try {
+    fn mk33() {
+        let n = 0;
+        return fn() { n = n + 1; return n; };
+    }
+    let c1 = mk33();
+    let c2 = mk33();
+    print("T33: c1=" + c1());   # 1
+    print("T33: c1=" + c1());   # 2
+    print("T33: c1=" + c1());   # 3
+    print("T33: c2=" + c2());   # 1
+    print("T33: c2=" + c2());   # 2
+    print("T33: c1=" + c1());   # 4
+} catch (e) { print("T33-ERR: " + e); }
+
+# ============================================================
+# T34: 闭包返回多个值 (list of closures)
+# 预期: 1, 2, 3
+# ============================================================
+print("=== T34 return list of closures ===");
+try {
+    fn mk34() {
+        let n = 0;
+        let a = fn() { n = n + 1; return n; };
+        let b = fn() { n = n + 1; return n; };
+        let c = fn() { n = n + 1; return n; };
+        return [a, b, c];
+    }
+    let fs = mk34();
+    print("T34: " + fs[0]());   # 1
+    print("T34: " + fs[1]());   # 2 (by-ref, shared n) or 1 (snapshot)
+    print("T34: " + fs[2]());   # 3 (by-ref) or 1 (snapshot)
+} catch (e) { print("T34-ERR: " + e); }
+
+# ============================================================
+# T35: 闭包 compose (函数组合)
+# 预期: 7, 22, 13
+# ============================================================
+print("=== T35 compose ===");
+try {
+    fn compose(f, g) { return fn(x) { return f(g(x)); }; }
+    let add1 = fn(x) { return x + 1; };
+    let dbl = fn(x) { return x * 2; };
+    let h1 = compose(add1, dbl);
+    print("T35: " + h1(3));    # 7  (1 + 2*3)
+    let h2 = compose(dbl, add1);
+    print("T35: " + h2(10));   # 22 (2 * (10+1))
+    let h3 = compose(add1, compose(dbl, fn(x) { return x + 1; }));
+    print("T35: " + h3(5));    # 13 (1 + 2*(5+1))
+} catch (e) { print("T35-ERR: " + e); }
+
+# ============================================================
+# T36: 闭包 partial application
+# 预期: 3, PRE-FIX
+# ============================================================
+print("=== T36 partial application ===");
+try {
+    fn partial(f, a) { return fn(b) { return f(a, b); }; }
+    fn sub(a, b) { return a - b; }
+    fn cat(a, b) { return a + "-" + b; }
+    let minus5 = partial(sub, 5);
+    print("T36: " + minus5(2));   # 3
+    let prepend = partial(cat, "PRE");
+    print("T36: " + prepend("FIX"));   # PRE-FIX
+} catch (e) { print("T36-ERR: " + e); }
+
+# ============================================================
+# T37: 闭包捕获后, 在闭包内重新赋值整个 list (非 push)
+# 预期 (by-ref): 闭包内 rebind 不影响外部 list
+# ============================================================
+print("=== T37 closure rebinds captured list ===");
+try {
+    let lst = [1, 2, 3];
+    let rebinder = fn() { lst = [99, 100]; return lst; };
+    print("T37: " + rebinder());   # [99, 100]
+    print("T37: " + lst);          # [99, 100] (by-ref) or [1, 2, 3] (snapshot, rebind 不影响外)
+} catch (e) { print("T37-ERR: " + e); }
+
+# ============================================================
+# T38: 闭包修改捕获变量, 闭包返回前修改
+# fn mk() { let n=0; let f = fn() { n=n+1; return n; }; n=99; return f; }
+# 预期 (by-ref): 100 ; (snapshot): 1
+# ============================================================
+print("=== T38 modify after closure create ===");
+try {
+    fn mk38() {
+        let n = 0;
+        let f = fn() { n = n + 1; return n; };
+        n = 99;   # 在 closure 创建后修改
+        return f;
+    }
+    let f = mk38();
+    print("T38: " + f());   # 100 (by-ref) ; 1 (snapshot, 因为 closure 创建时 snapshot 了 0)
+} catch (e) { print("T38-ERR: " + e); }
+
+# ============================================================
+# T39: 闭包捕获从未在外层赋值过的变量 (仅闭包写入)
+# 预期: 1, 2, 3
+# ============================================================
+print("=== T39 closure-only write ===");
+try {
+    fn mk39() {
+        let n = 0;
+        let f = fn() { n = n + 1; return n; };
+        # n 在外层从未被修改, 仅 f 内部修改
+        return f;
+    }
+    let f = mk39();
+    print("T39: " + f());   # 1
+    print("T39: " + f());   # 2
+    print("T39: " + f());   # 3
+} catch (e) { print("T39-ERR: " + e); }
+
+# ============================================================
+# T40: 闭包链 — 3 层每层都修改最外层变量
+# 预期: 3
+# ============================================================
+print("=== T40 chain mutates outermost ===");
+try {
+    fn mk40() {
+        let n = 0;
+        let f1 = fn() {
+            n = n + 1;
+            let f2 = fn() {
+                n = n + 1;
+                let f3 = fn() {
+                    n = n + 1;
+                    return n;
+                };
+                return f3;
+            };
+            return f2;
+        };
+        return f1;
+    }
+    let f1 = mk40();
+    let f2 = f1();
+    let f3 = f2();
+    print("T40: " + f3());   # 3 (by-ref) ; 1 (snapshot, 各层独立)
+} catch (e) { print("T40-ERR: " + e); }
+
+# ============================================================
+# T41: 闭包 + 嵌套 dict 多层修改
+# 预期: count=3, items=[1,2,3]
+# ============================================================
+print("=== T41 closure nested dict deep ===");
+try {
+    let cfg = {"count": 0, "items": []};
+    let cfgMut = fn() {
+        cfg["count"] = cfg["count"] + 1;
+        push(cfg["items"], cfg["count"]);
+        return cfg["count"];
+    };
+    print("T41: " + cfgMut());   # 1
+    print("T41: " + cfgMut());   # 2
+    print("T41: " + cfgMut());   # 3
+    print("T41: " + cfg);        # {count:3, items:[1,2,3]}
+} catch (e) { print("T41-ERR: " + e); }
+
+# ============================================================
+# T42: 闭包捕获 union 类型变量
+# 预期: ok-int, ok-str
+# ============================================================
+print("=== T42 closure union capture ===");
+try {
+    fn mk42() {
+        let v = 0;
+        let setter = fn(x) { v = x; };
+        let getter = fn() { return v; };
+        return [setter, getter];
+    }
+    let p = mk42();
+    let setter = p[0];
+    let getter = p[1];
+    setter(42);
+    print("T42: " + getter());   # 42
+    setter("hello");
+    print("T42: " + getter());   # hello
+    setter([1, 2, 3]);
+    print("T42: " + getter());   # [1, 2, 3]
+} catch (e) { print("T42-ERR: " + e); }
+
+# ============================================================
+# T43: 闭包捕获 self, 在不同实例间不共享
+# 预期: b1.v=10, b2.v=20
+# ============================================================
+print("=== T43 self isolation ===");
+try {
+    class Box43 {
+        fn init(v) { self.v = v; }
+        fn setter() { return fn(x) { self.v = x; }; }
+        fn getter() { return fn() { return self.v; }; }
+    }
+    let b1 = new Box43(0);
+    let b2 = new Box43(0);
+    let s1 = b1.setter();
+    let s2 = b2.setter();
+    let g1 = b1.getter();
+    let g2 = b2.getter();
+    s1(10);
+    s2(20);
+    print("T43: b1.v=" + g1());   # 10
+    print("T43: b2.v=" + g2());   # 20
+    print("T43: b1.v=" + b1.v);   # 10
+    print("T43: b2.v=" + b2.v);   # 20
+} catch (e) { print("T43-ERR: " + e); }
+
+# ============================================================
+# T44: 闭包在循环中捕获 self — 每次迭代是否独立?
+# 预期: 1, 2, 3
+# ============================================================
+print("=== T44 closure self in loop ===");
+try {
+    class Box44 {
+        fn init(v) { self.v = v; }
+        fn getter() { return fn() { return self.v; }; }
+    }
+    let fns = [];
+    for i in [1, 2, 3] {
+        let b = new Box44(i);
+        push(fns, b.getter());
+    }
+    print("T44: " + fns[0]());   # 1
+    print("T44: " + fns[1]());   # 2
+    print("T44: " + fns[2]());   # 3
+} catch (e) { print("T44-ERR: " + e); }
+
+# ============================================================
+# T45: 闭包捕获函数 (函数作为一等公民)
+# 预期: 11, 22
+# ============================================================
+print("=== T45 closure captures function ===");
+try {
+    fn mk45() {
+        fn helper(x) { return x + 1; }
+        return fn(x) { return helper(x); };
+    }
+    let f = mk45();
+    print("T45: " + f(10));   # 11
+    print("T45: " + f(21));   # 22
+} catch (e) { print("T45-ERR: " + e); }
+
+# T45b: 闭包捕获 outer fn 后, outer fn 重定义 — 是否影响闭包?
+print("=== T45b fn redefine ===");
+try {
+    fn g45() { return 1; }
+    let f = fn() { return g45(); };
+    print("T45b: " + f());   # 1
+    # 不能在 H# 直接重定义函数, 跳过
+    print("T45b: " + f());   # 1
+} catch (e) { print("T45b-ERR: " + e); }
+
+# ============================================================
+# T46: 闭包返回 null / void (无 return)
+# 预期: null, null
+# ============================================================
+print("=== T46 closure returns null ===");
+try {
+    let f = fn() { let x = 1; };   # 无 return
+    let r = f();
+    print("T46: " + r);   # null
+    let g = fn() { return null; };
+    print("T46: " + g());   # null
+} catch (e) { print("T46-ERR: " + e); }
+
+# ============================================================
+# T47: 闭包参数默认值 — 闭包内参数默认
+# 预期: 11, 15, 25
+# ============================================================
+print("=== T47 closure default param ===");
+try {
+    fn mk47() {
+        return fn(x, y = 10) { return x + y; };
+    }
+    let f = mk47();
+    print("T47: " + f(1));      # 11
+    print("T47: " + f(5));      # 15
+    print("T47: " + f(5, 20));  # 25
+} catch (e) { print("T47-ERR: " + e); }
+
+# ============================================================
+# T48: 闭包 + variadic
+# 预期: 6, 10
+# ============================================================
+print("=== T48 closure variadic ===");
+try {
+    fn mk48() {
+        return fn(...xs) {
+            let t = 0;
+            for x in xs { t = t + x; }
+            return t;
+        };
+    }
+    let f = mk48();
+    print("T48: " + f(1, 2, 3));     # 6
+    print("T48: " + f(1, 2, 3, 4));  # 10
+} catch (e) { print("T48-ERR: " + e); }
+
+# ============================================================
+# T49: 闭包捕获 bool / null / string / float 各类型
+# 预期: true, null, hi, 3.14
+# ============================================================
+print("=== T49 closure mixed types ===");
+try {
+    fn mk49() {
+        let b = true;
+        let n = null;
+        let s = "hi";
+        let f = 3.14;
+        return fn() { return b + "|" + n + "|" + s + "|" + f; };
+    }
+    let f = mk49();
+    print("T49: " + f());   # true|null|hi|3.14
+} catch (e) { print("T49-ERR: " + e); }
+
+# ============================================================
+# T50: 闭包修改捕获变量 + 闭包内异常 — 变量是否回滚?
+# 预期: 1 (无回滚) or 0 (回滚)
+# ============================================================
+print("=== T50 mutation before throw ===");
+try {
+    fn mk50() {
+        let n = 0;
+        let f = fn() {
+            n = n + 1;
+            throw "after-mutate";
+        };
+        return [f, fn() { return n; }];
+    }
+    let p = mk50();
+    let f = p[0];
+    let get = p[1];
+    try { f(); } catch (e) {}
+    print("T50: " + get());   # 1 (by-ref, mutation 已发生) or 0 (snapshot/rollback)
+} catch (e) { print("T50-ERR: " + e); }
+
+print("=== ALL DONE ===");

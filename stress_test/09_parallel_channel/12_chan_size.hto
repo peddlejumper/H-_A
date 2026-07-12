@@ -1,0 +1,56 @@
+# 12 — chan_size reflects buffer state
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Unbounded
+let ch = chan_new(0);
+check("ub_empty_0", chan_size(ch) == 0, "size=" + str(chan_size(ch)));
+chan_send(ch, 1);
+check("ub_after_1", chan_size(ch) == 1, "size=" + str(chan_size(ch)));
+chan_send(ch, 2);
+chan_send(ch, 3);
+check("ub_after_3", chan_size(ch) == 3, "size=" + str(chan_size(ch)));
+let _ = chan_recv(ch);
+check("ub_after_recv", chan_size(ch) == 2, "size=" + str(chan_size(ch)));
+
+# Bounded
+let chb = chan_new(5);
+check("b_empty_0", chan_size(chb) == 0, "size=" + str(chan_size(chb)));
+chan_send(chb, "a");
+chan_send(chb, "b");
+check("b_after_2", chan_size(chb) == 2, "size=" + str(chan_size(chb)));
+let _b = chan_recv(chb);
+check("b_after_recv", chan_size(chb) == 1, "size=" + str(chan_size(chb)));
+
+# After close, size reflects remaining items
+let chc = chan_new(0);
+chan_send(chc, 10);
+chan_send(chc, 20);
+chan_close(chc);
+check("closed_size_2", chan_size(chc) == 2, "size=" + str(chan_size(chc)));
+let _c1 = chan_recv(chc);
+check("closed_size_1", chan_size(chc) == 1, "size=" + str(chan_size(chc)));
+let _c2 = chan_recv(chc);
+check("closed_size_0", chan_size(chc) == 0, "size=" + str(chan_size(chc)));
+
+# chan_size returns a number
+let s = chan_size(ch);
+check("size_is_number", type(s) == "number", "type=" + type(s));
+
+# try_send/try_recv also update size
+let chT = chan_new(2);
+chan_try_send(chT, 1);
+chan_try_send(chT, 2);
+check("try_size_2", chan_size(chT) == 2, "size=" + str(chan_size(chT)));
+chan_try_recv(chT);
+check("try_size_1", chan_size(chT) == 1, "size=" + str(chan_size(chT)));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

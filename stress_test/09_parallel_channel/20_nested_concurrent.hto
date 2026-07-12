@@ -1,0 +1,96 @@
+# 20 — nested concurrent blocks + exception propagation
+# Verifies that an exception in an inner concurrent block propagates
+# through the outer block, and that the outer block still observes its
+# own children correctly.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+@parallel fn worker(x) {
+    return x * x;
+}
+
+@parallel fn bad_worker() {
+    throw "inner-boom";
+}
+
+# Nested concurrent blocks — no exception
+let outer_sum = 0;
+concurrent {
+    let fa = worker(3);
+    let fb = worker(4);
+    let inner_sum = 0;
+    concurrent {
+        let fc = worker(5);
+        let fd = worker(6);
+        inner_sum = await fc + await fd;
+    }
+    outer_sum = await fa + await fb + inner_sum;
+}
+check("nested_no_exception", outer_sum == 9 + 16 + 25 + 36,
+      "outer_sum=" + str(outer_sum));
+
+# Inner block throws — should propagate out of the inner block AND the outer block
+let caught = false;
+let msg = "";
+try {
+    concurrent {
+        let fa = worker(10);
+        let inner_done = false;
+        concurrent {
+            let bf = bad_worker();
+            let _ = await bf;
+        }
+        let _ = await fa;
+    }
+} catch (e) {
+    caught = true;
+    msg = str(e);
+}
+check("nested_inner_exception_caught", caught, "not caught");
+check("nested_inner_exception_msg",    msg == "inner-boom", "msg=" + msg);
+
+# Outer block throws after inner completes
+let caught2 = false;
+let msg2 = "";
+try {
+    concurrent {
+        let inner_result = 0;
+        concurrent {
+            let fc = worker(7);
+            inner_result = await fc;
+        }
+        let bf = bad_worker();
+        let _ = await bf;
+    }
+} catch (e) {
+    caught2 = true;
+    msg2 = str(e);
+}
+check("nested_outer_exception_caught", caught2, "not caught");
+check("nested_outer_exception_msg",    msg2 == "inner-boom", "msg2=" + msg2);
+
+# Three levels of nesting
+let deep_sum = 0;
+concurrent {
+    let a = worker(1);
+    concurrent {
+        let b = worker(2);
+        concurrent {
+            let c = worker(3);
+            deep_sum = deep_sum + await c;
+        }
+        deep_sum = deep_sum + await b;
+    }
+    deep_sum = deep_sum + await a;
+}
+check("three_level_nested", deep_sum == 1 + 4 + 9, "deep_sum=" + str(deep_sum));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

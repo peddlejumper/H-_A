@@ -1,0 +1,14 @@
+# t06 - type pattern: is int / is float (edge cases)
+# Tests: is int on float 3.0, is float on integer 42
+fn typ(x) {
+    return match x {
+        is int as n => "int:" + str(n),
+        is float as f => "float:" + str(f),
+        _ => "other"
+    };
+}
+print("t06_isint_42:" + typ(42));
+print("t06_isint_3.0:" + typ(3.0));
+print("t06_isfloat_3.14:" + typ(3.14));
+print("t06_isfloat_7:" + typ(7));
+print("t06_isint_str:" + typ("x"));

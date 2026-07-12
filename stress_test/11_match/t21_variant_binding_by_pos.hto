@@ -1,0 +1,48 @@
+# t21 - CRITICAL: variant pattern binding is BY NAME not BY POSITION
+# When binding name differs from the union field name, the value is LOST (null).
+# HVM.kt matchPattern "variant": f.env[name] = ui.fields[name] — looks up field
+# by the BINDING name, not by position. So Ok(v) does ui.fields["v"] which is null
+# when the field is named "value".
+union Result {
+    Ok: value;
+    Err: message;
+}
+
+# Case A: binding name MATCHES field name → works
+fn unwrap_match(r) {
+    return match r {
+        Ok(value) => "ok:" + str(value),
+        Err(message) => "err:" + str(message)
+    };
+}
+# Case B: binding name DIFFERS from field name → binding is null
+fn unwrap_diff(r) {
+    return match r {
+        Ok(v) => "ok:" + str(v),
+        Err(m) => "err:" + str(m)
+    };
+}
+let ok = Result{Ok: 99};
+let err = Result{Err: "bad"};
+print("t21_match_ok:" + unwrap_match(ok));
+print("t21_match_err:" + unwrap_match(err));
+print("t21_diff_ok:" + unwrap_diff(ok));
+print("t21_diff_err:" + unwrap_diff(err));
+
+# Multi-field variant: positional binding
+union Pair {
+    P: first, second;
+}
+fn sum_match(p) {
+    return match p {
+        P(first, second) => first + second
+    };
+}
+fn sum_diff(p) {
+    return match p {
+        P(a, b) => a + b
+    };
+}
+let pr = Pair{P: 3, 4};
+print("t21_sum_match:" + str(sum_match(pr)));
+print("t21_sum_diff:" + str(sum_diff(pr)));

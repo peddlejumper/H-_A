@@ -1,0 +1,39 @@
+# D4: default parameters
+fn greet(name, greeting = "Hello") {
+    print(greeting + ", " + name + "!");
+}
+greet("Alice");
+greet("Bob", "Hi");
+greet("Carol", "Hey");
+
+# All-defaults corner case
+fn config(host = "localhost", port = 8080, debug = false) {
+    print(host);
+    print(port);
+    print(debug);
+}
+config();
+config("example.com");
+config("example.com", 9090);
+config("example.com", 9090, true);
+
+# Mixed: required + single default
+fn add(a, b, c = 0) {
+    return a + b + c;
+}
+print(add(1, 2));
+print(add(1, 2, 3));
+
+# String default + numeric default
+fn info(name = "anon", age = 0) {
+    return name + " is " + age;
+}
+print(info());
+print(info("Bob"));
+print(info("Bob", 25));
+
+# Error case: too few args
+fn need_two(a, b = 1) {
+    return a + b;
+}
+print(need_two(10));

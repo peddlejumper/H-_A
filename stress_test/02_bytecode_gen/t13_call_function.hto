@@ -1,0 +1,28 @@
+# t13_call_function.hto - CALL_FUNCTION 各路径
+fn add(a, b) {
+    return a + b;
+}
+fn greet() {
+    return "hello";
+}
+fn noargs() {
+    return 42;
+}
+print(add(3, 4));
+print(greet());
+print(noargs());
+
+# 递归 CALL_FUNCTION
+fn fact(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * fact(n - 1);
+}
+print(fact(5));
+
+# 嵌套 CALL_FUNCTION
+fn inc(x) { return x + 1; }
+fn double(x) { return x * 2; }
+print(inc(double(inc(5))));
+# inc(5)=6, double(6)=12, inc(12)=13

@@ -1,0 +1,7 @@
+# t16: await inside a coro fn (not async fn).
+# compiler.py:977-982: `coro fn` has in_async=False, so await
+# should be rejected at compile time (static error).
+coro fn c() {
+    return await 42;
+}
+print(c());

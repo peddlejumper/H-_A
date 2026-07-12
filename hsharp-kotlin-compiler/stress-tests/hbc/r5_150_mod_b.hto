@@ -1,0 +1,10 @@
+# r5_150_mod_b.hto — middle module B for nested-import chain (A -> B -> C)
+# B imports C; A (main) imports B.
+
+import "r5_150_mod_c.hbc";
+
+let r5_150_b_val = 200;
+
+fn r5_150_b() {
+    return r5_150_b_val;
+}

@@ -1,0 +1,21 @@
+# t10_empty_typeparam.hto — 空类型参数：class Empty<> / new Empty<>()
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Empty<> {
+    let x = 1;
+    fn get() { return self.x; }
+}
+
+try {
+    let e = new Empty<>();
+    print("10/empty_ok=" + str(e.get()));
+    check("10/empty_get", e.get() == 1);
+    print("10/empty_typeargs=" + str(e.__type_args__));
+} catch (err) {
+    print("10/empty_err=" + str(err));
+}
+
+print("10/done");

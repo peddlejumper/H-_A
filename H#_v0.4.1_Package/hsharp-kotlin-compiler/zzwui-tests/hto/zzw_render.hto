@@ -1,0 +1,1191 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# zzw_render.h — 100% H# Rendering Engine
+# Traverses the widget tree and renders using native primitives
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Default theme colors
+let RENDER_THEME = {
+    "bg": "#0f1119",
+    "surface": "#161a26",
+    "surface2": "#1e2240",
+    "border": "#252840",
+    "text": "#e0e0e0",
+    "text_secondary": "#6b7394",
+    "text_muted": "#4a5078",
+    "primary": "#6366f1",
+    "primary_hover": "#7c8cf8",
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "danger": "#ef4444",
+    "info": "#06b6d4",
+    "white": "#ffffff",
+    "black": "#000000"
+};
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ZzwRenderer — the main rendering engine
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ZzwRenderer {
+    let win_id = 0;
+    let theme = {};
+    let dirty = true;
+    let clip_stack = [];
+    let font_family = "Arial";
+    let default_font_size = 12;
+
+    fn init_renderer(win_id) {
+        self.win_id = win_id;
+        self.theme = RENDER_THEME;
+        self.dirty = true;
+        self.clip_stack = [];
+        self.font_family = "Arial";
+        self.default_font_size = 12;
+        return 0;
+    }
+
+    fn setTheme(theme_dict) {
+        self.theme = theme_dict;
+        self.dirty = true;
+        return 0;
+    }
+
+    fn getTheme() { return self.theme; }
+
+    fn setFont(family, size) {
+        self.font_family = family;
+        self.default_font_size = size;
+        return 0;
+    }
+
+    fn clear(color) {
+        let c = color;
+        if (c == "" or c == nullptr) { c = self.theme["bg"]; }
+        native_clear(self.win_id, c);
+        return 0;
+    }
+
+    fn fillRect(x, y, w, h, color) {
+        native_draw_rect(self.win_id, x, y, w, h, color, true);
+        return 0;
+    }
+
+    fn drawRect(x, y, w, h, color, line_width) {
+        native_draw_rect(self.win_id, x, y, w, h, color, false);
+        return 0;
+    }
+
+    fn fillRoundedRect(x, y, w, h, radius, color) {
+        native_draw_rounded_rect(self.win_id, x, y, w, h, radius, color, true);
+        return 0;
+    }
+
+    fn drawRoundedRect(x, y, w, h, radius, color) {
+        native_draw_rounded_rect(self.win_id, x, y, w, h, radius, color, false);
+        return 0;
+    }
+
+    fn drawLine(x1, y1, x2, y2, color, width) {
+        native_draw_line(self.win_id, x1, y1, x2, y2, color, width);
+        return 0;
+    }
+
+    fn fillCircle(cx, cy, r, color) {
+        native_draw_circle(self.win_id, cx, cy, r, color, true);
+        return 0;
+    }
+
+    fn drawCircle(cx, cy, r, color) {
+        native_draw_circle(self.win_id, cx, cy, r, color, false);
+        return 0;
+    }
+
+    fn drawText(x, y, text, color, font_size, bold) {
+        let fs = font_size;
+        if (fs <= 0) { fs = self.default_font_size; }
+        let b = bold;
+        if (b == nullptr) { b = false; }
+        let c = color;
+        if (c == "") { c = self.theme["text"]; }
+        native_draw_text(self.win_id, x, y, text, c, fs, b, self.font_family);
+        return 0;
+    }
+
+    fn drawTextCentered(x, y, text, color, font_size, bold) {
+        let fs = font_size;
+        if (fs <= 0) { fs = self.default_font_size; }
+        let b = bold;
+        if (b == nullptr) { b = false; }
+        let c = color;
+        if (c == "") { c = self.theme["text"]; }
+        native_draw_text_centered(self.win_id, x, y, text, c, fs, b);
+        return 0;
+    }
+
+    fn measureText(text, font_size, bold) {
+        let fs = font_size;
+        if (fs <= 0) { fs = self.default_font_size; }
+        let b = bold;
+        if (b == nullptr) { b = false; }
+        let result = native_measure_text(text, fs, b);
+        return result;
+    }
+
+    fn pushClip(x, y, w, h) {
+        push(self.clip_stack, {"x": x, "y": y, "w": w, "h": h});
+        native_set_clip(self.win_id, x, y, w, h);
+        return 0;
+    }
+
+    fn popClip() {
+        if (len(self.clip_stack) > 0) {
+            pop(self.clip_stack);
+        }
+        if (len(self.clip_stack) > 0) {
+            let c = self.clip_stack[len(self.clip_stack) - 1];
+            native_set_clip(self.win_id, c["x"], c["y"], c["w"], c["h"]);
+        } else {
+            native_clear_clip(self.win_id);
+        }
+        return 0;
+    }
+
+    fn drawArrow(x, y, direction, size, color) {
+        let s = size;
+        if (s <= 0) { s = 8; }
+        let h = s * 0.866;
+        let points = [];
+        if (direction == "down") {
+            push(points, [x, y]);
+            push(points, [x + s, y]);
+            push(points, [x + s/2, y + h]);
+        } else if (direction == "up") {
+            push(points, [x, y + h]);
+            push(points, [x + s, y + h]);
+            push(points, [x + s/2, y]);
+        } else if (direction == "right") {
+            push(points, [x, y]);
+            push(points, [x, y + s]);
+            push(points, [x + h, y + s/2]);
+        } else if (direction == "left") {
+            push(points, [x + h, y]);
+            push(points, [x + h, y + s]);
+            push(points, [x, y + s/2]);
+        }
+        native_draw_polygon(self.win_id, points, color, true);
+        return 0;
+    }
+
+    fn drawCheckMark(x, y, size, color) {
+        let s = size;
+        if (s <= 0) { s = 12; }
+        native_draw_line(self.win_id, x, y + s/2, x + s/3, y + s, color, 2);
+        native_draw_line(self.win_id, x + s/3, y + s, x + s, y, color, 2);
+        return 0;
+    }
+
+    fn drawScrollbar(x, y, w, h, thumb_pos, thumb_size, vertical) {
+        native_draw_rect(self.win_id, x, y, w, h, self.theme["surface2"], true);
+        if (vertical) {
+            native_draw_rect(self.win_id, x + 2, y + thumb_pos, w - 4, thumb_size, self.theme["border"], true);
+        } else {
+            native_draw_rect(self.win_id, x + thumb_pos, y + 2, thumb_size, h - 4, self.theme["border"], true);
+        }
+        return 0;
+    }
+
+    fn drawShadow(x, y, w, h, radius, intensity) {
+        let i = 0;
+        while (i < 4) {
+            let alpha = intensity * (4 - i) / 4;
+            let offset = i + 1;
+            native_draw_rounded_rect(self.win_id, x + offset, y + offset, w, h, radius, self.theme["black"], false);
+            i = i + 1;
+        }
+        return 0;
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ZzwWindow — the root window container
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ZzwWindow {
+    let win_id = 0;
+    let renderer = nullptr;
+    let root_widget = nullptr;
+    let width = 800;
+    let height = 600;
+    let title = "";
+    let bg_color = "#0f1119";
+    let running = false;
+    let children = [];
+    let on_close = nullptr;
+    let on_resize = nullptr;
+
+    fn init_zw(title, w, h) {
+        self.title = title;
+        self.width = w;
+        self.height = h;
+        self.bg_color = "#0f1119";
+        self.children = [];
+        self.running = false;
+        return 0;
+    }
+
+    fn open() {
+        self.win_id = native_create_window(self.title, self.width, self.height, self.bg_color);
+        self.renderer = ZzwRenderer();
+        self.renderer.init_renderer(self.win_id);
+        self.renderer.setTheme(RENDER_THEME);
+        self.running = true;
+        return 0;
+    }
+
+    fn close() {
+        self.running = false;
+        native_destroy_window(self.win_id);
+        return 0;
+    }
+
+    fn setRootWidget(widget) {
+        self.root_widget = widget;
+        widget.x = 0;
+        widget.y = 0;
+        widget.w = self.width;
+        widget.h = self.height;
+        return 0;
+    }
+
+    fn addWidget(widget) {
+        push(self.children, widget);
+        return 0;
+    }
+
+    fn setTitle(t) {
+        self.title = t;
+        if (self.win_id > 0) {
+            native_set_window_title(self.win_id, t);
+        }
+        return 0;
+    }
+
+    fn setSize(w, h) {
+        self.width = w;
+        self.height = h;
+        if (self.win_id > 0) {
+            native_set_window_size(self.win_id, w, h);
+        }
+        return 0;
+    }
+
+    fn setBgColor(color) {
+        self.bg_color = color;
+        return 0;
+    }
+
+    fn getRenderer() { return self.renderer; }
+
+    fn getWidth() { return self.width; }
+
+    fn getHeight() { return self.height; }
+
+    fn getWinId() { return self.win_id; }
+
+    fn setOnClose(callback) {
+        self.on_close = callback;
+        return 0;
+    }
+
+    fn setOnResize(callback) {
+        self.on_resize = callback;
+        return 0;
+    }
+
+    fn render() {
+        if (self.renderer == nullptr) { return 0; }
+        if (self.win_id <= 0) { return 0; }
+
+        self.renderer.clear(self.bg_color);
+
+        let i = 0;
+        while (i < len(self.children)) {
+            let child = self.children[i];
+            if (child != nullptr) {
+                child.render(self.renderer);
+            }
+            i = i + 1;
+        }
+
+        if (self.root_widget != nullptr) {
+            self.root_widget.render(self.renderer);
+        }
+
+        native_update(self.win_id);
+        return 0;
+    }
+
+    fn handleEvents() {
+        if (self.win_id <= 0) { return 0; }
+        let events = native_get_events(self.win_id);
+        let i = 0;
+        while (i < len(events)) {
+            let evt = events[i];
+            if (evt["type"] == "close") {
+                self.running = false;
+                if (self.on_close != nullptr) {
+                    self.on_close(self);
+                }
+            }
+            if (evt["type"] == "resize") {
+                self.width = evt["x"];
+                self.height = evt["y"];
+                if (self.on_resize != nullptr) {
+                    self.on_resize(self, evt["x"], evt["y"]);
+                }
+            }
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    fn run() {
+        self.open();
+        if (self.win_id <= 0) { return 0; }
+        self.running = true;
+        while (self.running) {
+            self.handleEvents();
+            self.render();
+            native_poll_events();
+        }
+        self.close();
+        return 0;
+    }
+
+    fn isRunning() { return self.running; }
+
+    fn stop() {
+        self.running = false;
+        return 0;
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# zzwUI base class render extension — adds render() dispatch
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn zzwui_render_widget(widget, renderer) {
+    if (widget == nullptr) { return 0; }
+    if (renderer == nullptr) { return 0; }
+
+    let x = widget.x;
+    let y = widget.y;
+    let w = widget.w;
+    let h = widget.h;
+    if (w <= 0) { w = 100; }
+    if (h <= 0) { h = 30; }
+
+    let wt = widget.widget_type;
+    if (wt == nullptr) { wt = "unknown"; }
+
+    # Default background based on widget type
+    if (wt == "Window" or wt == "Panel" or wt == "FlowPanel" or wt == "DockPanel" or wt == "GridPanel") {
+        # Container — render children
+        let i = 0;
+        while (i < len(widget.children)) {
+            let child = widget.children[i];
+            if (child != nullptr) {
+                zzwui_render_widget(child, renderer);
+            }
+            i = i + 1;
+        }
+        return 0;
+    }
+
+    if (wt == "Button" or wt == "ToggleButton" or wt == "IconButton" or wt == "SplitButton" or wt == "DropDownButton") {
+        zzwui_render_button(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Label" or wt == "RichLabel") {
+        zzwui_render_label(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "TextBox" or wt == "SearchBox" or wt == "PasswordBox" or wt == "WatermarkTextBox") {
+        zzwui_render_textbox(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "CheckBox") {
+        zzwui_render_checkbox(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "RadioButton") {
+        zzwui_render_radiobutton(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Slider") {
+        zzwui_render_slider(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ProgressBar" or wt == "CircularProgress") {
+        zzwui_render_progress(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ComboBox") {
+        zzwui_render_combobox(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ListBox") {
+        zzwui_render_listbox(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "TabControl") {
+        zzwui_render_tabcontrol(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "TreeView") {
+        zzwui_render_treeview(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "TableView" or wt == "DataGridView") {
+        zzwui_render_tableview(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ScrollView") {
+        zzwui_render_scrollview(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Splitter" or wt == "SplitPane") {
+        zzwui_render_splitter(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "StatusBar") {
+        zzwui_render_statusbar(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "MenuBar") {
+        zzwui_render_menubar(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ToolBar") {
+        zzwui_render_toolbar(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Separator") {
+        zzwui_render_separator(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Badge") {
+        zzwui_render_badge(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Notification") {
+        zzwui_render_notification(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "GroupBox" or wt == "Accordion") {
+        zzwui_render_groupbox(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Rating") {
+        zzwui_render_rating(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "SpinBox" or wt == "Stepper" or wt == "NumericUpDown") {
+        zzwui_render_spinbox(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ToggleSwitch") {
+        zzwui_render_toggleswitch(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "DatePicker" or wt == "TimePicker" or wt == "DateTimePicker") {
+        zzwui_render_datepicker(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ColorPicker") {
+        zzwui_render_colorpicker(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Image") {
+        zzwui_render_image(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Canvas") {
+        zzwui_render_canvas(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Dialog") {
+        zzwui_render_dialog(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Tooltip") {
+        zzwui_render_tooltip(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "ContextMenu") {
+        zzwui_render_contextmenu(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "Breadcrumb") {
+        zzwui_render_breadcrumb(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    if (wt == "LinkLabel") {
+        zzwui_render_linklabel(widget, renderer, x, y, w, h);
+        return 0;
+    }
+
+    # Default: render as a basic panel
+    renderer.fillRoundedRect(x, y, w, h, 4, renderer.theme["surface"]);
+    renderer.drawText(x + 4, y + 4, wt, renderer.theme["text_muted"], 11, false);
+
+    # Render children
+    let j = 0;
+    while (j < len(widget.children)) {
+        let child = widget.children[j];
+        if (child != nullptr) {
+            zzwui_render_widget(child, renderer);
+        }
+        j = j + 1;
+    }
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Individual Widget Renderers
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn zzwui_render_button(widget, renderer, x, y, w, h) {
+    let is_hover = false;
+    let is_checked = false;
+    if (widget.is_checked != nullptr) { is_checked = widget.is_checked; }
+
+    let bg = renderer.theme["primary"];
+    let text_color = renderer.theme["white"];
+    let radius = 6;
+
+    if (widget.widget_type == "ToggleButton") {
+        if (is_checked) {
+            bg = renderer.theme["primary"];
+        } else {
+            bg = renderer.theme["surface"];
+            text_color = renderer.theme["text"];
+        }
+    } else if (widget.widget_type == "IconButton") {
+        bg = renderer.theme["surface"];
+        text_color = renderer.theme["text"];
+        radius = 8;
+    } else if (widget.widget_type == "SplitButton" or widget.widget_type == "DropDownButton") {
+        bg = renderer.theme["surface"];
+        text_color = renderer.theme["text"];
+    }
+
+    renderer.fillRoundedRect(x, y, w, h, radius, bg);
+    renderer.drawRoundedRect(x, y, w, h, radius, renderer.theme["border"]);
+
+    if (widget.text != nullptr and widget.text != "") {
+        let tw = renderer.measureText(widget.text, 12, false);
+        let tw_val = tw[0];
+        let tx = x + (w - tw_val) / 2;
+        let ty = y + (h - 16) / 2;
+        if (tx < x + 4) { tx = x + 4; }
+        renderer.drawText(tx, ty, widget.text, text_color, 12, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_label(widget, renderer, x, y, w, h) {
+    let text = widget.text;
+    if (text == nullptr) { text = ""; }
+    let color = renderer.theme["text"];
+    if (widget.widget_type == "RichLabel") {
+        color = renderer.theme["primary"];
+    }
+    renderer.drawText(x, y + 2, text, color, 12, false);
+    return 0;
+}
+
+fn zzwui_render_textbox(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 6, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 6, renderer.theme["border"]);
+
+    let text = widget.text;
+    if (text == nullptr) { text = ""; }
+    let display_text = text;
+    if (widget.widget_type == "PasswordBox" and text != "") {
+        let dots = "";
+        let i = 0;
+        while (i < len(text)) {
+            dots = dots + "●";
+            i = i + 1;
+        }
+        display_text = dots;
+    }
+    if (widget.widget_type == "WatermarkTextBox" and text == "") {
+        if (widget.watermark != nullptr) {
+            display_text = widget.watermark;
+            renderer.drawText(x + 8, y + (h - 14) / 2, display_text, renderer.theme["text_muted"], 12, false);
+        }
+    } else {
+        renderer.drawText(x + 8, y + (h - 14) / 2, display_text, renderer.theme["text"], 12, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_checkbox(widget, renderer, x, y, w, h) {
+    let box_size = 16;
+    let cy = y + (h - box_size) / 2;
+    let is_checked = false;
+    if (widget.is_checked != nullptr) { is_checked = widget.is_checked; }
+
+    renderer.fillRoundedRect(x, cy, box_size, box_size, 3, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, cy, box_size, box_size, 3, renderer.theme["border"]);
+
+    if (is_checked) {
+        renderer.fillRoundedRect(x, cy, box_size, box_size, 3, renderer.theme["primary"]);
+        renderer.drawCheckMark(x + 2, cy + 2, 12, renderer.theme["white"]);
+    }
+
+    if (widget.text != nullptr and widget.text != "") {
+        renderer.drawText(x + box_size + 6, y + 1, widget.text, renderer.theme["text"], 12, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_radiobutton(widget, renderer, x, y, w, h) {
+    let r = 8;
+    let cy = y + h / 2;
+    let is_checked = false;
+    if (widget.is_checked != nullptr) { is_checked = widget.is_checked; }
+
+    renderer.fillCircle(x + r, cy, r, renderer.theme["surface"]);
+    renderer.drawCircle(x + r, cy, r, renderer.theme["border"]);
+
+    if (is_checked) {
+        renderer.fillCircle(x + r, cy, r - 4, renderer.theme["primary"]);
+    }
+
+    if (widget.text != nullptr and widget.text != "") {
+        renderer.drawText(x + r * 2 + 6, y + 1, widget.text, renderer.theme["text"], 12, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_slider(widget, renderer, x, y, w, h) {
+    let track_h = 4;
+    let track_y = y + h / 2 - track_h / 2;
+    let val = 0;
+    if (widget.val != nullptr) { val = widget.val; }
+    let min_val = 0;
+    if (widget.min_val != nullptr) { min_val = widget.min_val; }
+    let max_val = 100;
+    if (widget.max_val != nullptr) { max_val = widget.max_val; }
+
+    let ratio = (val - min_val) / (max_val - min_val);
+    if (ratio < 0) { ratio = 0; }
+    if (ratio > 1) { ratio = 1; }
+
+    renderer.fillRoundedRect(x, track_y, w, track_h, 2, renderer.theme["surface2"]);
+    renderer.fillRoundedRect(x, track_y, w * ratio, track_h, 2, renderer.theme["primary"]);
+
+    let handle_x = x + w * ratio - 6;
+    renderer.fillCircle(handle_x + 6, track_y + track_h / 2, 7, renderer.theme["primary"]);
+    return 0;
+}
+
+fn zzwui_render_progress(widget, renderer, x, y, w, h) {
+    let val = 0;
+    if (widget.val != nullptr) { val = widget.val; }
+    let max_val = 100;
+    if (widget.max_val != nullptr) { max_val = widget.max_val; }
+    let ratio = val / max_val;
+    if (ratio < 0) { ratio = 0; }
+    if (ratio > 1) { ratio = 1; }
+
+    if (widget.widget_type == "CircularProgress") {
+        let cx = x + w / 2;
+        let cy = y + h / 2;
+        let r = 20;
+        if (w < h) { r = w / 2 - 4; } else { r = h / 2 - 4; }
+        renderer.drawCircle(cx, cy, r, renderer.theme["surface2"]);
+        let pct = int(val * 100 / max_val);
+        let text = str(pct) + "%";
+        renderer.drawTextCentered(cx, cy, text, renderer.theme["text"], 10, true);
+    } else {
+        renderer.fillRoundedRect(x, y, w, h, 4, renderer.theme["surface2"]);
+        renderer.fillRoundedRect(x, y, w * ratio, h, 4, renderer.theme["primary"]);
+        let pct = int(val * 100 / max_val);
+        let text = str(pct) + "%";
+        let tw = renderer.measureText(text, 10, false);
+        let tw_val = tw[0];
+        renderer.drawText(x + (w - tw_val) / 2, y + 1, text, renderer.theme["white"], 10, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_combobox(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 6, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 6, renderer.theme["border"]);
+
+    let text = widget.text;
+    if (text == nullptr) { text = ""; }
+    renderer.drawText(x + 8, y + (h - 14) / 2, text, renderer.theme["text"], 12, false);
+
+    let arrow_x = x + w - 18;
+    let arrow_y = y + (h - 8) / 2;
+    renderer.drawArrow(arrow_x, arrow_y, "down", 8, renderer.theme["text_secondary"]);
+    return 0;
+}
+
+fn zzwui_render_listbox(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 6, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 6, renderer.theme["border"]);
+
+    if (widget.items != nullptr) {
+        let item_h = 22;
+        let i = 0;
+        while (i < len(widget.items) and i * item_h < h) {
+            let item = widget.items[i];
+            let item_text = item;
+            if (item != nullptr) {
+                if (item["text"] != nullptr) { item_text = item["text"]; }
+            }
+            if (i == widget.selected_index) {
+                renderer.fillRect(x + 2, y + 2 + i * item_h, w - 4, item_h, renderer.theme["primary"]);
+            }
+            renderer.drawText(x + 8, y + 4 + i * item_h, item_text, renderer.theme["text"], 12, false);
+            i = i + 1;
+        }
+    }
+    return 0;
+}
+
+fn zzwui_render_tabcontrol(widget, renderer, x, y, w, h) {
+    let tab_h = 30;
+    renderer.fillRect(x, y + tab_h, w, h - tab_h, renderer.theme["bg"]);
+
+    if (widget.tabs != nullptr) {
+        let tab_w = 80;
+        let i = 0;
+        while (i < len(widget.tabs) and i * tab_w < w) {
+            let tab = widget.tabs[i];
+            let tab_text = tab;
+            if (tab != nullptr) {
+                if (tab["text"] != nullptr) { tab_text = tab["text"]; }
+            }
+            let tx = x + i * tab_w;
+            let is_selected = false;
+            if (widget.selected_index != nullptr and i == widget.selected_index) {
+                is_selected = true;
+            }
+            if (is_selected) {
+                renderer.fillRect(tx, y, tab_w, tab_h, renderer.theme["surface"]);
+                renderer.drawLine(tx, y + tab_h, tx + tab_w, y + tab_h, renderer.theme["primary"], 2);
+            } else {
+                renderer.fillRect(tx, y, tab_w, tab_h, renderer.theme["bg"]);
+            }
+            let tw = renderer.measureText(tab_text, 12, false);
+            let tw_val = tw[0];
+            renderer.drawText(tx + (tab_w - tw_val) / 2, y + 8, tab_text, renderer.theme["text"], 12, false);
+            i = i + 1;
+        }
+    }
+    return 0;
+}
+
+fn zzwui_render_treeview(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 6, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 6, renderer.theme["border"]);
+
+    if (widget.items != nullptr) {
+        let item_h = 22;
+        let i = 0;
+        while (i < len(widget.items) and i * item_h < h) {
+            let item = widget.items[i];
+            let item_text = item;
+            if (item != nullptr) {
+                if (item["text"] != nullptr) { item_text = item["text"]; }
+            }
+            renderer.drawText(x + 8, y + 4 + i * item_h, item_text, renderer.theme["text"], 12, false);
+            i = i + 1;
+        }
+    }
+    return 0;
+}
+
+fn zzwui_render_tableview(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 6, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 6, renderer.theme["border"]);
+
+    if (widget.columns != nullptr) {
+        let col_w = w / len(widget.columns);
+        let header_h = 24;
+        renderer.fillRect(x, y, w, header_h, renderer.theme["surface2"]);
+        let i = 0;
+        while (i < len(widget.columns)) {
+            let col = widget.columns[i];
+            let col_text = col;
+            if (col != nullptr) {
+                if (col["title"] != nullptr) { col_text = col["title"]; }
+            }
+            renderer.drawText(x + 4 + i * col_w, y + 4, col_text, renderer.theme["text_secondary"], 11, true);
+            i = i + 1;
+        }
+    }
+    if (widget.rows != nullptr) {
+        let row_h = 22;
+        let r = 0;
+        while (r < len(widget.rows) and r * row_h + 24 < h) {
+            let row = widget.rows[r];
+            let c = 0;
+            let col_w = w / len(widget.columns);
+            while (c < len(row) and c < len(widget.columns)) {
+                let cell_text = str(row[c]);
+                renderer.drawText(x + 4 + c * col_w, y + 28 + r * row_h, cell_text, renderer.theme["text"], 11, false);
+                c = c + 1;
+            }
+            r = r + 1;
+        }
+    }
+    return 0;
+}
+
+fn zzwui_render_scrollview(widget, renderer, x, y, w, h) {
+    renderer.fillRect(x, y, w, h, renderer.theme["bg"]);
+
+    # Render children
+    let i = 0;
+    while (i < len(widget.children)) {
+        let child = widget.children[i];
+        if (child != nullptr) {
+            zzwui_render_widget(child, renderer);
+        }
+        i = i + 1;
+    }
+
+    # Scrollbar
+    let sb_w = 6;
+    renderer.drawScrollbar(x + w - sb_w, y, sb_w, h, 0, 40, true);
+    return 0;
+}
+
+fn zzwui_render_splitter(widget, renderer, x, y, w, h) {
+    renderer.fillRect(x, y, w, h, renderer.theme["surface"]);
+
+    # Render children
+    let i = 0;
+    while (i < len(widget.children)) {
+        let child = widget.children[i];
+        if (child != nullptr) {
+            zzwui_render_widget(child, renderer);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn zzwui_render_statusbar(widget, renderer, x, y, w, h) {
+    renderer.fillRect(x, y, w, h, renderer.theme["surface"]);
+    renderer.drawLine(x, y, x + w, y, renderer.theme["border"], 1);
+
+    if (widget.text != nullptr) {
+        renderer.drawText(x + 8, y + 2, widget.text, renderer.theme["text_secondary"], 11, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_menubar(widget, renderer, x, y, w, h) {
+    renderer.fillRect(x, y, w, h, renderer.theme["surface"]);
+    renderer.drawLine(x, y + h, x + w, y + h, renderer.theme["border"], 1);
+
+    if (widget.items != nullptr) {
+        let i = 0;
+        let offset_x = 0;
+        while (i < len(widget.items)) {
+            let item = widget.items[i];
+            let item_text = item;
+            if (item != nullptr) {
+                if (item["text"] != nullptr) { item_text = item["text"]; }
+            }
+            let tw = renderer.measureText(item_text, 12, false);
+            let tw_val = tw[0];
+            renderer.drawText(x + offset_x + 8, y + 3, item_text, renderer.theme["text"], 12, false);
+            offset_x = offset_x + tw_val + 20;
+            i = i + 1;
+        }
+    }
+    return 0;
+}
+
+fn zzwui_render_toolbar(widget, renderer, x, y, w, h) {
+    renderer.fillRect(x, y, w, h, renderer.theme["surface"]);
+    renderer.drawLine(x, y + h, x + w, y + h, renderer.theme["border"], 1);
+
+    # Render children
+    let i = 0;
+    while (i < len(widget.children)) {
+        let child = widget.children[i];
+        if (child != nullptr) {
+            zzwui_render_widget(child, renderer);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn zzwui_render_separator(widget, renderer, x, y, w, h) {
+    renderer.drawLine(x, y + h / 2, x + w, y + h / 2, renderer.theme["border"], 1);
+    return 0;
+}
+
+fn zzwui_render_badge(widget, renderer, x, y, w, h) {
+    let color = renderer.theme["danger"];
+    let text = "";
+    if (widget.text != nullptr) { text = widget.text; }
+    renderer.fillRoundedRect(x, y, w, h, 4, color);
+    let tw = renderer.measureText(text, 10, true);
+    let tw_val = tw[0];
+    renderer.drawText(x + (w - tw_val) / 2, y + 1, text, renderer.theme["white"], 10, true);
+    return 0;
+}
+
+fn zzwui_render_notification(widget, renderer, x, y, w, h) {
+    let bg = renderer.theme["surface"];
+    let border_color = renderer.theme["info"];
+    renderer.fillRoundedRect(x, y, w, h, 8, bg);
+    renderer.drawRoundedRect(x, y, w, h, 8, border_color);
+
+    if (widget.text != nullptr) {
+        renderer.drawText(x + 12, y + 8, widget.text, renderer.theme["text"], 12, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_groupbox(widget, renderer, x, y, w, h) {
+    renderer.drawRoundedRect(x, y, w, h, 8, renderer.theme["border"]);
+
+    if (widget.text != nullptr) {
+        renderer.drawText(x + 8, y - 2, widget.text, renderer.theme["text_secondary"], 11, true);
+    }
+
+    let i = 0;
+    while (i < len(widget.children)) {
+        let child = widget.children[i];
+        if (child != nullptr) {
+            zzwui_render_widget(child, renderer);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn zzwui_render_rating(widget, renderer, x, y, w, h) {
+    let val = 0;
+    if (widget.val != nullptr) { val = widget.val; }
+    let max_val = 5;
+    if (widget.max_val != nullptr) { max_val = widget.max_val; }
+
+    let star_color = "#f59e0b";
+    let star_size = 16;
+    let i = 0;
+    while (i < max_val) {
+        let sx = x + i * (star_size + 2);
+        let sc = renderer.theme["text_muted"];
+        if (i < val) { sc = star_color; }
+        renderer.drawText(sx, y, "★", sc, star_size, false);
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn zzwui_render_spinbox(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 6, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 6, renderer.theme["border"]);
+
+    let val = 0;
+    if (widget.val != nullptr) { val = widget.val; }
+    let text = str(val);
+    renderer.drawText(x + 6, y + (h - 14) / 2, text, renderer.theme["text"], 12, false);
+
+    let btn_w = 20;
+    renderer.fillRoundedRect(x + w - btn_w, y, btn_w, h / 2, 0, renderer.theme["surface2"]);
+    renderer.drawText(x + w - btn_w + 5, y - 2, "▲", renderer.theme["text_secondary"], 8, false);
+    renderer.fillRoundedRect(x + w - btn_w, y + h / 2, btn_w, h / 2, 0, renderer.theme["surface2"]);
+    renderer.drawText(x + w - btn_w + 5, y + h / 2 - 2, "▼", renderer.theme["text_secondary"], 8, false);
+    return 0;
+}
+
+fn zzwui_render_toggleswitch(widget, renderer, x, y, w, h) {
+    let track_w = 36;
+    let track_h = 20;
+    let cy = y + h / 2;
+    let is_checked = false;
+    if (widget.is_checked != nullptr) { is_checked = widget.is_checked; }
+
+    let track_color = renderer.theme["surface2"];
+    if (is_checked) { track_color = renderer.theme["primary"]; }
+
+    renderer.fillRoundedRect(x, cy - track_h / 2, track_w, track_h, 10, track_color);
+
+    let knob_x = x + 2;
+    if (is_checked) { knob_x = x + track_w - 18; }
+    renderer.fillCircle(knob_x + 8, cy, 8, renderer.theme["white"]);
+
+    if (widget.text != nullptr) {
+        renderer.drawText(x + track_w + 6, y + 1, widget.text, renderer.theme["text"], 12, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_datepicker(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 6, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 6, renderer.theme["border"]);
+
+    let text = "";
+    if (widget.selected_date != nullptr) { text = widget.selected_date; }
+    if (widget.selected_time != nullptr) { text = widget.selected_time; }
+    renderer.drawText(x + 8, y + (h - 14) / 2, text, renderer.theme["text"], 12, false);
+    renderer.drawText(x + w - 20, y + (h - 14) / 2, "📅", renderer.theme["text_secondary"], 12, false);
+    return 0;
+}
+
+fn zzwui_render_colorpicker(widget, renderer, x, y, w, h) {
+    let color = renderer.theme["primary"];
+    if (widget.color != nullptr) { color = widget.color; }
+    renderer.fillRoundedRect(x, y, w, h, 4, color);
+    renderer.drawRoundedRect(x, y, w, h, 4, renderer.theme["border"]);
+    return 0;
+}
+
+fn zzwui_render_image(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 4, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 4, renderer.theme["border"]);
+    if (widget.src != nullptr) {
+        renderer.drawText(x + 4, y + 4, widget.src, renderer.theme["text_muted"], 10, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_canvas(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 4, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 4, renderer.theme["border"]);
+    renderer.drawText(x + 4, y + 4, "Canvas", renderer.theme["text_muted"], 10, false);
+    return 0;
+}
+
+fn zzwui_render_dialog(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 12, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 12, renderer.theme["border"]);
+
+    if (widget.title != nullptr) {
+        renderer.fillRoundedRect(x, y, w, 32, 12, renderer.theme["surface2"]);
+        renderer.drawText(x + 12, y + 8, widget.title, renderer.theme["text"], 13, true);
+    }
+
+    let i = 0;
+    while (i < len(widget.children)) {
+        let child = widget.children[i];
+        if (child != nullptr) {
+            zzwui_render_widget(child, renderer);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn zzwui_render_tooltip(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 4, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 4, renderer.theme["border"]);
+    if (widget.text != nullptr) {
+        renderer.drawText(x + 4, y + 2, widget.text, renderer.theme["text"], 11, false);
+    }
+    return 0;
+}
+
+fn zzwui_render_contextmenu(widget, renderer, x, y, w, h) {
+    renderer.fillRoundedRect(x, y, w, h, 8, renderer.theme["surface"]);
+    renderer.drawRoundedRect(x, y, w, h, 8, renderer.theme["border"]);
+
+    if (widget.items != nullptr) {
+        let item_h = 24;
+        let i = 0;
+        while (i < len(widget.items)) {
+            let item = widget.items[i];
+            let item_text = item;
+            if (item != nullptr) {
+                if (item["text"] != nullptr) { item_text = item["text"]; }
+            }
+            renderer.drawText(x + 8, y + 4 + i * item_h, item_text, renderer.theme["text"], 12, false);
+            i = i + 1;
+        }
+    }
+    return 0;
+}
+
+fn zzwui_render_breadcrumb(widget, renderer, x, y, w, h) {
+    let offset_x = x;
+    if (widget.items != nullptr) {
+        let i = 0;
+        while (i < len(widget.items)) {
+            let item = widget.items[i];
+            let item_text = item;
+            if (item != nullptr) {
+                if (item["text"] != nullptr) { item_text = item["text"]; }
+            }
+            renderer.drawText(offset_x, y + 2, item_text, renderer.theme["primary"], 12, false);
+            let tw = renderer.measureText(item_text, 12, false);
+            let tw_val = tw[0];
+            offset_x = offset_x + tw_val + 4;
+            if (i < len(widget.items) - 1) {
+                renderer.drawText(offset_x, y + 2, " > ", renderer.theme["text_muted"], 12, false);
+                offset_x = offset_x + 20;
+            }
+            i = i + 1;
+        }
+    }
+    return 0;
+}
+
+fn zzwui_render_linklabel(widget, renderer, x, y, w, h) {
+    let text = widget.text;
+    if (text == nullptr) { text = ""; }
+    renderer.drawText(x, y + 2, text, renderer.theme["primary"], 12, false);
+    if (text != "") {
+        let tw = renderer.measureText(text, 12, false);
+        let tw_val = tw[0];
+        renderer.drawLine(x, y + 18, x + tw_val, y + 18, renderer.theme["primary"], 1);
+    }
+    return 0;
+}

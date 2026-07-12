@@ -1,0 +1,7 @@
+# test_dict.hto
+let d = {};
+d["a"] = 1;
+d["b"] = 2;
+print("a=" + str(d["a"]));
+print("b=" + str(d["b"]));
+print("sum=" + str(d["a"] + d["b"]));

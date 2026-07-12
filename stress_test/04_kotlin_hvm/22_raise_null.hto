@@ -1,0 +1,17 @@
+# 22_raise_null.hto — RAISE null / 数字 / 列表
+try {
+    throw nullptr;
+} catch (e) {
+    print("caught null: " + str(e));
+}
+try {
+    throw 404;
+} catch (e) {
+    print("caught num: " + str(e));
+}
+try {
+    throw [1, 2, 3];
+} catch (e) {
+    print("caught list: " + str(e));
+}
+print("done");

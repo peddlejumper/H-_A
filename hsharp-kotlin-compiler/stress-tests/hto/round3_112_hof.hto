@@ -1,0 +1,1134 @@
+# round3_112_hof.hto — 测试智能体 #112
+# 领域: 高阶函数与回调模式 (Higher-Order Functions & Callback Patterns)
+# H# v0.4.1
+#
+# 已知背景 (来自 round3_110 / 73 / 22):
+#   - lambda 内调用顶层函数: 已知 P0 bug (本测试验证当前状态)
+#   - 3 层嵌套 fn 语句 (outer→mid→inner) 引用最外层变量: "Undefined name" bug
+#   - let-lambda 递归 (fact/fib): "Undefined name" bug
+#   - 闭包 snapshot bug: 多闭包共享变量 / 捕获后外部修改 → 返回旧值
+#   - spread 调用 f(...args): 解析错误
+#
+# 测试方法:
+#   - 每个用例独立 try/catch 包裹, 打印 "Txx:" 前缀, 预期值在注释
+#   - 需调用其他函数的回调, 优先用顶层 fn 语句按名传递 (规避 P0 bug)
+#   - 同时测试已知 bug 场景以记录当前状态
+#   - 28 个模式覆盖任务列表全部条目
+
+# ============================================================
+# 顶层辅助函数 (供回调按名传递使用, 规避 lambda-calls-toplevel bug)
+# ============================================================
+fn double(x) { return x * 2; }
+fn inc(x) { return x + 1; }
+fn sq(x) { return x * x; }
+fn addTop(a, b) { return a + b; }
+fn subTop(a, b) { return a - b; }
+fn isEven(n) { return n % 2 == 0; }
+
+# ============================================================
+# T01: 函数作为参数 — apply(f, x)
+# 用顶层 fn 按名传递. 预期: 10, hi!, 49
+# ============================================================
+print("=== T01 fn as arg ===");
+try {
+    fn apply(f, x) { return f(x); }
+    print("T01: " + apply(double, 5));        # 10
+    print("T01: " + apply(fn(s) { return s + "!"; }, "hi"));   # hi!
+    print("T01: " + apply(sq, 7));             # 49
+} catch (e) { print("T01-ERR: " + e); }
+
+# T01b: lambda 调用顶层 fn (P0 bug 验证)
+# 预期 (修复后): 11 ; 实际 (bug): ERR
+print("=== T01b lambda calls toplevel ===");
+try {
+    fn topLevel1(x) { return x + 1; }
+    let f = fn(x) { return topLevel1(x); };
+    print("T01b: " + f(10));                    # 11
+} catch (e) { print("T01b-ERR: " + e); }
+
+# T01c: lambda 作为回调调用顶层 fn (P0 bug 验证 — 回调场景)
+print("=== T01c lambda cb calls toplevel ===");
+try {
+    fn apply(f, x) { return f(x); }
+    fn topLevel1c(x) { return x * 3; }
+    print("T01c: " + apply(fn(x) { return topLevel1c(x); }, 5));  # 15
+} catch (e) { print("T01c-ERR: " + e); }
+
+# ============================================================
+# T02: 函数作为返回值 — mkAdder (嵌套 fn 语句, 2 层)
+# 任务示例: fn mkAdder(n) { fn add(x) { return x + n; } return add; }
+# 预期: 7, 13, 25
+# ============================================================
+print("=== T02 fn as return (fn stmt) ===");
+try {
+    fn mkAdder(n) {
+        fn add(x) { return x + n; }
+        return add;
+    }
+    let add5 = mkAdder(5);
+    print("T02: " + add5(2));     # 7
+    print("T02: " + add5(8));     # 13
+    let add20 = mkAdder(20);
+    print("T02: " + add20(5));    # 25
+} catch (e) { print("T02-ERR: " + e); }
+
+# T02b: 函数作为返回值 — let-lambda 形式 (对照)
+print("=== T02b fn as return (let-lambda) ===");
+try {
+    fn mkAdderB(n) {
+        let add = fn(x) { return x + n; };
+        return add;
+    }
+    let add5 = mkAdderB(5);
+    print("T02b: " + add5(2));    # 7
+    print("T02b: " + add5(8));    # 13
+} catch (e) { print("T02b-ERR: " + e); }
+
+# ============================================================
+# T03: 柯里化 (3 层嵌套) — fn 语句形式
+# 任务示例: fn curry3(a) { fn mid(b) { fn inner(c) { return a + b + c; } return inner; } return mid; }
+# 已知 bug: 3 层嵌套 fn 语句引用最外层变量 → "Undefined name"
+# 预期 (修复): 6, 60 ; 实际 (bug): ERR
+# ============================================================
+print("=== T03 currying (fn stmt, 3-level) ===");
+try {
+    fn curry3(a) {
+        fn mid(b) {
+            fn inner(c) { return a + b + c; }
+            return inner;
+        }
+        return mid;
+    }
+    print("T03: " + curry3(1)(2)(3));      # 6
+    print("T03: " + curry3(10)(20)(30));   # 60
+} catch (e) { print("T03-ERR: " + e); }
+
+# T03b: 柯里化 — let-lambda 形式 (已知可工作)
+# 预期: 6, 60, 1000
+print("=== T03b currying (let-lambda) ===");
+try {
+    fn curry3b(a) {
+        let mid = fn(b) {
+            let inner = fn(c) { return a + b + c; };
+            return inner;
+        };
+        return mid;
+    }
+    print("T03b: " + curry3b(1)(2)(3));        # 6
+    print("T03b: " + curry3b(10)(20)(30));     # 60
+    print("T03b: " + curry3b(100)(300)(600));  # 1000
+} catch (e) { print("T03b-ERR: " + e); }
+
+# ============================================================
+# T04: 函数组合 — compose(f, g)
+# fn 语句形式: fn compose(f, g) { fn h(x) { return f(g(x)); } return h; }
+# 2 层嵌套, 引用外层参数 f, g. 预期: 7, 22, 13
+# ============================================================
+print("=== T04 compose (fn stmt) ===");
+try {
+    fn compose(f, g) {
+        fn h(x) { return f(g(x)); }
+        return h;
+    }
+    let h1 = compose(inc, double);     # inc(double(x))
+    print("T04: " + h1(3));            # 7  (1 + 2*3)
+    let h2 = compose(double, inc);     # double(inc(x))
+    print("T04: " + h2(10));           # 22 (2 * (10+1))
+    let h3 = compose(inc, compose(double, inc));  # inc(double(inc(x)))
+    print("T04: " + h3(5));            # 13 (1 + 2*(5+1))
+} catch (e) { print("T04-ERR: " + e); }
+
+# T04b: 函数组合 — let-lambda 形式 (对照)
+print("=== T04b compose (let-lambda) ===");
+try {
+    fn composeB(f, g) {
+        let h = fn(x) { return f(g(x)); };
+        return h;
+    }
+    print("T04b: " + composeB(inc, double)(3));    # 7
+    print("T04b: " + composeB(double, inc)(10));   # 22
+} catch (e) { print("T04b-ERR: " + e); }
+
+# ============================================================
+# T05: map 模式 — fn map(arr, f) { ... }
+# 预期: [2, 4, 6], [1, 4, 9], [2, 4, 6, 8, 10]
+# ============================================================
+print("=== T05 map ===");
+try {
+    fn map(arr, f) {
+        let r = [];
+        for x in arr { push(r, f(x)); }
+        return r;
+    }
+    print("T05: " + map([1, 2, 3], double));          # [2, 4, 6]
+    print("T05: " + map([1, 2, 3], sq));              # [1, 4, 9]
+    print("T05: " + map([1, 2, 3, 4, 5], fn(x) { return x * 2; }));  # [2, 4, 6, 8, 10]
+} catch (e) { print("T05-ERR: " + e); }
+
+# ============================================================
+# T06: filter 模式 — fn filter(arr, pred) { ... }
+# 预期: [2, 4], [1, 3, 5], []
+# ============================================================
+print("=== T06 filter ===");
+try {
+    fn filter(arr, pred) {
+        let r = [];
+        for x in arr { if (pred(x)) { push(r, x); } }
+        return r;
+    }
+    print("T06: " + filter([1, 2, 3, 4], isEven));            # [2, 4]
+    print("T06: " + filter([1, 2, 3, 4, 5], fn(x) { return x % 2 == 1; }));  # [1, 3, 5]
+    print("T06: " + filter([1, 2, 3], fn(x) { return x > 10; }));            # []
+} catch (e) { print("T06-ERR: " + e); }
+
+# ============================================================
+# T07: reduce/fold — fn reduce(arr, f, init) { ... }
+# 预期: 15, 120, 0
+# ============================================================
+print("=== T07 reduce ===");
+try {
+    fn reduce(arr, f, init) {
+        let acc = init;
+        for x in arr { acc = f(acc, x); }
+        return acc;
+    }
+    print("T07: " + reduce([1, 2, 3, 4, 5], addTop, 0));      # 15
+    print("T07: " + reduce([1, 2, 3, 4, 5], fn(a, b) { return a * b; }, 1));  # 120
+    print("T07: " + reduce([], addTop, 0));                    # 0
+    # max via reduce
+    print("T07: " + reduce([3, 1, 4, 1, 5, 9, 2, 6], fn(a, b) { if (a > b) { return a; } return b; }, 0));  # 9
+} catch (e) { print("T07-ERR: " + e); }
+
+# ============================================================
+# T08: forEach — fn each(arr, f) { for x in arr { f(x); } }
+# 用日志 list 记录副作用. 预期: [1, 4, 9, 16]
+# ============================================================
+print("=== T08 forEach ===");
+try {
+    fn each(arr, f) {
+        for x in arr { f(x); }
+    }
+    let log = [];
+    each([1, 2, 3, 4], fn(x) { push(log, x * x); });
+    print("T08: " + log);              # [1, 4, 9, 16]
+    # forEach 不返回值 (null)
+    fn eachNoret(arr, f) { for x in arr { f(x); } }
+    let r = eachNoret([1, 2], fn(x) { });
+    print("T08b: " + r);               # null
+} catch (e) { print("T08-ERR: " + e); }
+
+# ============================================================
+# T09: 偏应用 — 固定部分参数创建新函数
+# fn partial(f, a) { return fn(b) { return f(a, b); }; }
+# 预期: 3, PRE-FIX, 100
+# ============================================================
+print("=== T09 partial application ===");
+try {
+    fn partial(f, a) {
+        let bound = fn(b) { return f(a, b); };
+        return bound;
+    }
+    let minus5 = partial(subTop, 5);
+    print("T09: " + minus5(2));                  # 3  (5 - 2)
+    fn cat(a, b) { return a + "-" + b; }
+    let prepend = partial(cat, "PRE");
+    print("T09: " + prepend("FIX"));             # PRE-FIX
+    let add100 = partial(addTop, 100);
+    print("T09: " + add100(0));                  # 100
+} catch (e) { print("T09-ERR: " + e); }
+
+# ============================================================
+# T10: 递归高阶函数 — memoize(fib)
+# 用 dict 缓存. 注意: fib 用 fn 语句定义 (规避 lambda 递归 bug)
+# 预期: 55, 55, 55
+# ============================================================
+print("=== T10 memoize ===");
+try {
+    fn fib(n) {
+        if (n < 2) { return n; }
+        return fib(n - 1) + fib(n - 2);
+    }
+    fn memoize(f) {
+        let cache = {};
+        let wrapped = fn(n) {
+            let key = "" + n;
+            if (has_key(cache, key)) { return cache[key]; }
+            let v = f(n);
+            cache[key] = v;
+            return v;
+        };
+        return wrapped;
+    }
+    let mfib = memoize(fib);
+    print("T10: " + mfib(10));     # 55
+    print("T10: " + mfib(10));     # 55 (缓存命中)
+    print("T10: " + mfib(15));     # 610
+} catch (e) { print("T10-ERR: " + e); }
+
+# ============================================================
+# T11: 回调模式 — fn async_op(cb) { cb(42); }
+# 预期: got=42, got=hi, done
+# ============================================================
+print("=== T11 callback ===");
+try {
+    fn asyncOp(cb) { return cb(42); }
+    print("T11: got=" + asyncOp(fn(x) { return x; }));            # got=42
+    print("T11: got=" + asyncOp(fn(x) { return "hi"; }));        # got=hi
+    # 回调无返回值 (副作用)
+    let log = [];
+    fn fire(cb) { cb(99); return "done"; }
+    print("T11: " + fire(fn(x) { push(log, x); }));              # done
+    print("T11: log=" + log);                                     # log=[99]
+} catch (e) { print("T11-ERR: " + e); }
+
+# ============================================================
+# T12: 事件处理 — dict 存储回调
+# {"on_click": fn(x) { ... }}
+# 预期: clicked-btn, changed-5, none
+# ============================================================
+print("=== T12 event handlers ===");
+try {
+    let handlers = {
+        "on_click": fn(x) { return "clicked-" + x; },
+        "on_change": fn(x) { return "changed-" + x; }
+    };
+    print("T12: " + handlers["on_click"]("btn"));       # clicked-btn
+    print("T12: " + handlers["on_change"](5));          # changed-5
+    # 动态注册
+    handlers["on_submit"] = fn(x) { return "submit-" + x; };
+    print("T12: " + handlers["on_submit"]("form"));     # submit-form
+    # 未注册事件
+    fn dispatch(handlers, evt, x) {
+        let h = handlers[evt];
+        if (h != null) { return h(x); }
+        return "none";
+    }
+    print("T12: " + dispatch(handlers, "on_click", "x"));   # clicked-x
+    print("T12: " + dispatch(handlers, "on_unknown", "y")); # none
+} catch (e) { print("T12-ERR: " + e); }
+
+# ============================================================
+# T13: 策略模式 — 函数参数选择不同算法
+# fn calculate(a, b, strategy) { return strategy(a, b); }
+# 预期: 7, 3, 10, 4
+# ============================================================
+print("=== T13 strategy ===");
+try {
+    fn calculate(a, b, strategy) { return strategy(a, b); }
+    print("T13: " + calculate(3, 4, addTop));            # 7
+    print("T13: " + calculate(10, 3, subTop));           # 7  wait, 10-3=7
+    print("T13: " + calculate(2, 8, fn(a, b) { return a * b; }));  # 16
+    print("T13: " + calculate(20, 5, fn(a, b) { if (b == 0) { return -1; } return a / b; }));  # 4
+} catch (e) { print("T13-ERR: " + e); }
+
+# ============================================================
+# T14: 比较器 — fn sort(arr, cmp) { ... } 传入自定义比较
+# 选择排序. 预期: [1,1,2,3,4,5,6,9] 和 [9,6,5,4,3,2,1,1]
+# ============================================================
+print("=== T14 comparator sort ===");
+try {
+    fn sortBy(arr, cmp) {
+        let a = arr;
+        let n = len(a);
+        for i in range(0, n) {
+            let m = i;
+            for j in range(i + 1, n) {
+                if (cmp(a[j], a[m]) < 0) { m = j; }
+            }
+            if (m != i) {
+                let tmp = a[i];
+                a[i] = a[m];
+                a[m] = tmp;
+            }
+        }
+        return a;
+    }
+    let data = [3, 1, 4, 1, 5, 9, 2, 6];
+    print("T14 asc: " + sortBy(data, fn(x, y) { return x - y; }));    # [1, 1, 2, 3, 4, 5, 6, 9]
+    # 重新建数据避免原地排序残留
+    let data2 = [3, 1, 4, 1, 5, 9, 2, 6];
+    print("T14 desc: " + sortBy(data2, fn(x, y) { return y - x; }));  # [9, 6, 5, 4, 3, 2, 1, 1]
+    # 用顶层 fn 作比较器
+    fn cmpAsc(x, y) { return x - y; }
+    let data3 = [5, 2, 8, 1];
+    print("T14 topfn: " + sortBy(data3, cmpAsc));   # [1, 2, 5, 8]
+} catch (e) { print("T14-ERR: " + e); }
+
+# ============================================================
+# T15: 函数列表 — [fn, fn, fn] 依次调用
+# 预期: 1, 2, 3, 6
+# ============================================================
+print("=== T15 function list ===");
+try {
+    let fns = [fn() { return 1; }, fn() { return 2; }, fn() { return 3; }];
+    print("T15: " + fns[0]());       # 1
+    print("T15: " + fns[1]());       # 2
+    print("T15: " + fns[2]());       # 3
+    let total = 0;
+    for f in fns { total = total + f(); }
+    print("T15: " + total);          # 6
+    # 顶层 fn 列表
+    let topFns = [double, inc, sq];
+    print("T15: " + topFns[0](5));   # 10
+    print("T15: " + topFns[1](5));   # 6
+    print("T15: " + topFns[2](5));   # 25
+} catch (e) { print("T15-ERR: " + e); }
+
+# ============================================================
+# T16: 函数作为 dict 值 — {"add": fn(a,b){...}}
+# 预期: 7, 3, 10
+# ============================================================
+print("=== T16 fn as dict value ===");
+try {
+    let ops = {
+        "add": fn(a, b) { return a + b; },
+        "sub": fn(a, b) { return a - b; },
+        "mul": fn(a, b) { return a * b; }
+    };
+    print("T16: " + ops["add"](3, 4));    # 7
+    print("T16: " + ops["sub"](10, 7));   # 3
+    print("T16: " + ops["mul"](2, 5));    # 10
+    # 用顶层 fn 作 dict 值
+    let ops2 = {"d": double, "i": inc, "s": sq};
+    print("T16: " + ops2["d"](5));        # 10
+    print("T16: " + ops2["i"](5));        # 6
+    print("T16: " + ops2["s"](5));        # 25
+} catch (e) { print("T16-ERR: " + e); }
+
+# ============================================================
+# T17: 返回函数的函数返回函数 — 3 层 (let-lambda 形式)
+# fn gen() { return fn() { return fn() { return 42; }; }; }
+# 预期: 42, 100, x
+# ============================================================
+print("=== T17 3-level return chain ===");
+try {
+    fn gen() {
+        let mid = fn() {
+            let inner = fn() { return 42; };
+            return inner;
+        };
+        return mid;
+    }
+    print("T17: " + gen()()());          # 42
+    fn step1(x) {
+        let step2 = fn(y) {
+            let step3 = fn(z) { return x + y + z; };
+            return step3;
+        };
+        return step2;
+    }
+    print("T17: " + step1(1)(2)(3));     # 6
+    print("T17: " + step1(10)(20)(30));  # 60
+} catch (e) { print("T17-ERR: " + e); }
+
+# T17b: 3 层 fn 语句形式 (对照 — 已知 bug)
+print("=== T17b 3-level fn stmt ===");
+try {
+    fn genB() {
+        fn mid() {
+            fn inner() { return 42; }
+            return inner;
+        }
+        return mid;
+    }
+    print("T17b: " + genB()()());        # 42 if works
+} catch (e) { print("T17b-ERR: " + e); }
+
+# ============================================================
+# T18: 闭包捕获 + 高阶 — counter 经 HOF 传递
+# fn mk() { let n=0; fn inc() { n=n+1; return n; } return inc; }
+# 通过 HOF 包装. 预期: 1, 2, 3
+# ============================================================
+print("=== T18 closure + HOF ===");
+try {
+    fn mkCounter() {
+        let n = 0;
+        let inc = fn() { n = n + 1; return n; };
+        return inc;
+    }
+    let c = mkCounter();
+    # 通过 HOF 传递闭包
+    fn apply0(f) { return f(); }
+    print("T18: " + apply0(c));     # 1
+    print("T18: " + apply0(c));     # 2
+    print("T18: " + apply0(c));     # 3
+} catch (e) { print("T18-ERR: " + e); }
+
+# ============================================================
+# T19: 高阶 + try/catch — 回调中抛异常, HOF 捕获
+# 预期: caught-boom, 42, recovered
+# ============================================================
+print("=== T19 HOF + try/catch ===");
+try {
+    fn safeCall(f, x) {
+        try { return f(x); }
+        catch (e) { return "caught-" + e; }
+    }
+    print("T19: " + safeCall(fn(x) { throw "boom"; }, 1));    # caught-boom
+    print("T19: " + safeCall(fn(x) { return x * 6; }, 7));    # 42
+    # 回调内 try/catch 自处理
+    fn callWithFallback(f, x) {
+        let r = f(x);
+        return r;
+    }
+    fn risky(x) {
+        try { if (x < 0) { throw "neg"; } return x; }
+        catch (e) { return "recovered"; }
+    }
+    print("T19: " + callWithFallback(risky, -5));   # recovered
+    print("T19: " + callWithFallback(risky, 5));    # 5
+} catch (e) { print("T19-ERR: " + e); }
+
+# ============================================================
+# T20: 高阶 + 类型检查 — f is Function
+# 预期 (修复): true ; 实际 (bug): false
+# ============================================================
+print("=== T20 HOF + type check ===");
+try {
+    fn apply(f, x) {
+        if (f is Function) { return f(x); }
+        return "not-fn";
+    }
+    fn g(x) { return x + 1; }
+    print("T20: " + apply(g, 5));                # 6 (if is works) ; not-fn (bug)
+    print("T20: " + apply(fn(x) { return x * 2; }, 5));  # 10 (if is works) ; not-fn (bug)
+    print("T20: " + apply(42, 5));               # not-fn
+    print("T20 type: " + type(g));               # function
+    print("T20 type: " + type(42));              # number
+} catch (e) { print("T20-ERR: " + e); }
+
+# ============================================================
+# T21: 可变参数高阶 — fn apply_all(f, ...args)
+# 注意: f(...args) spread 调用已知解析错误, 用显式索引或固定 arity
+# 预期: 6, 10, wrapped-3
+# ============================================================
+print("=== T21 variadic HOF ===");
+try {
+    # 变参收集 OK
+    fn applyAll(f, ...args) {
+        let r = [];
+        for a in args { push(r, f(a)); }
+        return r;
+    }
+    print("T21: " + applyAll(sq, 1, 2, 3));    # [1, 4, 9]
+    print("T21: " + applyAll(double, 1, 2, 3, 4));  # [2, 4, 6, 8]
+    # f(...args) 形式 — 测试是否支持 (预期: 可能 ERR)
+    fn spreadCall(f, ...args) {
+        return f(args[0], args[1], args[2]);
+    }
+    fn sum3(a, b, c) { return a + b + c; }
+    print("T21: " + spreadCall(sum3, 1, 2, 3));  # 6
+} catch (e) { print("T21-ERR: " + e); }
+
+# T21b: spread 调用 f(...args) — 语法不支持 (解析错误, 无法编译)
+# 注: sum3(...args) 会导致 SyntaxError: Unexpected token ELLIPSIS
+# 此处无法用 try/catch 捕获 (解析阶段错误, 中止整个编译)
+# 已在 T21 中用 f(args[0], args[1], args[2]) 显式索引绕过
+print("=== T21b spread call (unsupported) ===");
+try {
+    fn sum3(a, b, c) { return a + b + c; }
+    let args = [1, 2, 3];
+    # spread 调用 sum3(...args) 不支持, 用显式索引
+    print("T21b: " + sum3(args[0], args[1], args[2]));     # 6
+    # apply 间接调用也不支持 spread
+    fn callWithList(f, args) {
+        return f(args[0], args[1], args[2]);
+    }
+    print("T21b: " + callWithList(sum3, [4, 5, 6]));       # 15
+} catch (e) { print("T21b-ERR: " + e); }
+
+# ============================================================
+# T22: 函数相等 — f == g 引用相等
+# 预期: true, false, true
+# ============================================================
+print("=== T22 fn equality ===");
+try {
+    fn f() { return 1; }
+    fn g() { return 1; }
+    let h = f;
+    print("T22 f==f: " + (f == f));     # true
+    print("T22 f==g: " + (f == g));     # false (不同函数)
+    print("T22 f==h: " + (f == h));     # true (同引用)
+    # lambda 相等 (每次创建新实例)
+    let l1 = fn() { return 1; };
+    let l2 = fn() { return 1; };
+    let l3 = l1;
+    print("T22 l1==l1: " + (l1 == l1));  # true
+    print("T22 l1==l2: " + (l1 == l2));  # false
+    print("T22 l1==l3: " + (l1 == l3));  # true
+    # 顶层 fn 作 dict 值后再取, 是否同引用
+    let d = {"f": f};
+    print("T22 f==d[f]: " + (f == d["f"]));  # true
+} catch (e) { print("T22-ERR: " + e); }
+
+# ============================================================
+# T23: 函数作为 channel 消息 — ch.send(fn(...))
+# 预期: 42, 8, sent=1
+# ============================================================
+print("=== T23 fn as channel msg ===");
+try {
+    let ch = chan_new(5);
+    chan_send(ch, fn(x) { return x + 1; });
+    let f = chan_recv(ch);
+    print("T23: " + f(41));             # 42
+    # 发送顶层 fn
+    chan_send(ch, double);
+    let g = chan_recv(ch);
+    print("T23: " + g(4));              # 8
+    # 多函数排队
+    let ch2 = chan_new(10);
+    chan_send(ch2, inc);
+    chan_send(ch2, sq);
+    print("T23: size=" + chan_size(ch2));   # 2
+    let f1 = chan_recv(ch2);
+    let f2 = chan_recv(ch2);
+    print("T23: " + f1(0));             # 1
+    print("T23: " + f2(3));             # 9
+} catch (e) { print("T23-ERR: " + e); }
+
+# ============================================================
+# T24: 高阶 + match — match 选择函数然后调用
+# 预期: 7, 7, 0, unknown
+# ============================================================
+print("=== T24 HOF + match ===");
+try {
+    fn pick(op) {
+        return match op {
+            "add" => addTop,
+            "sub" => subTop,
+            "dbl" => double,
+            _ => fn(a, b) { return 0; }
+        };
+    }
+    print("T24: " + pick("add")(3, 4));    # 7
+    print("T24: " + pick("sub")(10, 3));   # 7
+    print("T24: " + pick("mul")(3, 4));    # 0 (default)
+    print("T24: " + pick("dbl")(5));       # 0 (default, 双参 lambda 收到 1 参)
+    # match 直接返回 lambda 并立即调用
+    fn run(op, x) {
+        return match op {
+            "inc" => (fn(n) { return n + 1; }),
+            "dbl" => (fn(n) { return n * 2; }),
+            _ => (fn(n) { return 0; })
+        };
+    }
+    # 这里先取函数再调用
+    let h = run("inc", 0);
+    print("T24: " + h(5));                 # 6
+    let h2 = run("dbl", 0);
+    print("T24: " + h2(5));                # 10
+} catch (e) { print("T24-ERR: " + e); }
+
+# ============================================================
+# T25: 递归回调 — 回调内调用注册器
+# 注册器模式: register(name, cb); cb 调用 get(name) 获取其他回调
+# 预期: A-then-B, B-then-A, done
+# ============================================================
+print("=== T25 recursive callback ===");
+try {
+    let registry = {};
+    fn register(name, cb) { registry[name] = cb; }
+    fn callByName(name, x) {
+        let cb = registry[name];
+        if (cb != null) { return cb(x); }
+        return "none";
+    }
+    register("A", fn(x) {
+        return "A(" + x + ")-then-" + callByName("B", x);
+    });
+    register("B", fn(x) {
+        return "B(" + x + ")";
+    });
+    print("T25: " + callByName("A", 1));   # A(1)-then-B(1)
+    # A 调 B, B 调 A (递归)
+    let hits = [];
+    register("recur", fn(x) {
+        push(hits, x);
+        if (x > 0) { return callByName("recur", x - 1); }
+        return "done";
+    });
+    callByName("recur", 3);
+    print("T25: hits=" + hits);            # [3, 2, 1, 0]
+    print("T25: " + callByName("recur", 2));  # done
+} catch (e) { print("T25-ERR: " + e); }
+
+# ============================================================
+# T26: 高阶函数性能 — 10000 次 map
+# 预期: 10000, 199990000 (sum of 2*i for i in 0..9999 = 2 * 9999*10000/2)
+# ============================================================
+print("=== T26 HOF perf 10000 ===");
+try {
+    fn mapP(arr, f) {
+        let r = [];
+        for x in arr { push(r, f(x)); }
+        return r;
+    }
+    # 建 10000 元素 list
+    let big = [];
+    let i = 0;
+    while (i < 10000) { push(big, i); i = i + 1; }
+    let mapped = mapP(big, double);
+    print("T26: len=" + len(mapped));      # 10000
+    # 求和验证
+    fn sumArr(arr) {
+        let s = 0;
+        for x in arr { s = s + x; }
+        return s;
+    }
+    print("T26: sum=" + sumArr(mapped));   # 0+2+4+...+19998 = 2*(0+1+...+9999) = 9999*10000 = 99990000
+    # filter 性能
+    fn filterP(arr, pred) {
+        let r = [];
+        for x in arr { if (pred(x)) { push(r, x); } }
+        return r;
+    }
+    let evens = filterP(big, isEven);
+    print("T26: evens=" + len(evens));     # 5000
+} catch (e) { print("T26-ERR: " + e); }
+
+# ============================================================
+# T27: 函数默认参数 + 高阶 — fn apply(f, x = 10) { return f(x); }
+# 预期: 20, 10, 11
+# ============================================================
+print("=== T27 default param + HOF ===");
+try {
+    fn apply(f, x = 10) { return f(x); }
+    print("T27: " + apply(double));         # 20 (默认 x=10, double=20)
+    print("T27: " + apply(double, 5));      # 10
+    print("T27: " + apply(inc));            # 11
+    # 回调带默认参数
+    fn mkCb() {
+        let cb = fn(x, y = 100) { return x + y; };
+        return cb;
+    }
+    let cb = mkCb();
+    print("T27: " + cb(1));                 # 101
+    print("T27: " + cb(1, 2));              # 3
+} catch (e) { print("T27-ERR: " + e); }
+
+# ============================================================
+# T28: 嵌套函数传递 — 外层函数把内层函数传给另一个函数
+# fn outer() { fn inner() {...} return apply(inner); }
+# 预期: inner-ran, 42, nested
+# ============================================================
+print("=== T28 nested fn passing ===");
+try {
+    fn apply(f) { return f(); }
+    fn outer() {
+        let inner = fn() { return "inner-ran"; };
+        return apply(inner);
+    }
+    print("T28: " + outer());               # inner-ran
+    # 内层函数带参数, 传给 HOF
+    fn applyArg(f, x) { return f(x); }
+    fn outerB(n) {
+        let inner = fn(x) { return x * n; };
+        return applyArg(inner, 7);
+    }
+    print("T28: " + outerB(6));             # 42
+    # 两层嵌套函数互相传递
+    fn composer(f, g) {
+        let h = fn(x) { return f(g(x)); };
+        return h;
+    }
+    fn outerC() {
+        let a = fn(x) { return x + 1; };
+        let b = fn(x) { return x * 2; };
+        let combined = composer(a, b);
+        return combined(10);    # (10*2)+1 = 21
+    }
+    print("T28: " + outerC());              # 21
+    # fn 语句形式的内层函数传递 (2 层, 已知可工作)
+    fn outerD() {
+        fn inner() { return "nested"; }
+        return apply(inner);
+    }
+    print("T28: " + outerD());              # nested
+} catch (e) { print("T28-ERR: " + e); }
+
+# ============================================================
+# 额外边界用例
+# ============================================================
+
+# T29: 高阶函数返回多个函数 (list of fns from factory)
+print("=== T29 factory returns fn list ===");
+try {
+    fn mkOps() {
+        let n = 0;
+        let a = fn() { n = n + 1; return n; };
+        let b = fn() { n = n + 10; return n; };
+        return [a, b];
+    }
+    let ops = mkOps();
+    print("T29: " + ops[0]());    # 1
+    print("T29: " + ops[1]());    # 11 (若共享 n, by-ref) ; 10 (snapshot)
+    print("T29: " + ops[0]());    # 12 (by-ref) ; 2 (snapshot)
+} catch (e) { print("T29-ERR: " + e); }
+
+# T30: HOF 嵌套 — map(filter(reduce))
+print("=== T30 HOF pipeline ===");
+try {
+    fn mapX(arr, f) { let r = []; for x in arr { push(r, f(x)); } return r; }
+    fn filterX(arr, p) { let r = []; for x in arr { if (p(x)) { push(r, x); } } return r; }
+    fn reduceX(arr, f, init) { let a = init; for x in arr { a = f(a, x); } return a; }
+    # 偶数的平方和: 2^2+4^2+6^2+8^2+10^2 = 4+16+36+64+100 = 220
+    let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let result = reduceX(filterX(mapX(nums, sq), isEven), addTop, 0);
+    print("T30: " + result);    # 220
+} catch (e) { print("T30-ERR: " + e); }
+
+# T31: 函数作为类字段 + 通过 HOF 调用
+print("=== T31 class field callable via HOF ===");
+try {
+    class Handler {
+        fn init() { self.action = fn(x) { return x + 1; }; }
+    }
+    let h = new Handler();
+    fn apply(f, x) { return f(x); }
+    print("T31: " + apply(h.action, 5));     # 6
+    h.action = fn(x) { return x * x; };
+    print("T31: " + apply(h.action, 5));     # 25
+} catch (e) { print("T31-ERR: " + e); }
+
+# T32: 顶层 fn 通过 channel 传递后在并发环境调用
+print("=== T32 fn via channel in concurrent ===");
+try {
+    let ch = chan_new(1);
+    chan_send(ch, double);
+    concurrent {
+        let f = chan_recv(ch);
+        let r = f(21);
+        print("T32: " + r);     # 42
+    }
+} catch (e) { print("T32-ERR: " + e); }
+
+# T33: 回调链 — A 调 B 调 C, 每层 HOF
+print("=== T33 callback chain ===");
+try {
+    fn stepC(f) { return f("c"); }
+    fn stepB(f) { return stepC(fn(x) { return f("b->" + x); }); }
+    fn stepA(f) { return stepB(fn(x) { return f("a->" + x); }); }
+    let result = stepA(fn(x) { return "start->" + x; });
+    print("T33: " + result);    # start->a->b->c
+} catch (e) { print("T33-ERR: " + e); }
+
+# T34: HOF + match guard (match guard 捕获变量 — 已知 bug 验证)
+print("=== T34 HOF + match guard ===");
+try {
+    fn mkPred(threshold) {
+        let p = fn(x) {
+            return match x {
+                v if v > threshold => "big",
+                v if v <= threshold => "small"
+            };
+        };
+        return p;
+    }
+    let p = mkPred(5);
+    print("T34: " + p(10));     # big
+    print("T34: " + p(3));      # small
+} catch (e) { print("T34-ERR: " + e); }
+
+# T35: 函数作为 union payload (函数存入 union 实例字段)
+print("=== T35 fn in union payload ===");
+try {
+    union Opt {
+        Some: f;
+        None;
+    }
+    let s = Opt{Some: fn(x) { return x * 3; }};
+    let result = match s {
+        Some(f) => f(14),
+        None => 0
+    };
+    print("T35: " + result);    # 42
+    let n = Opt{None};
+    let r2 = match n {
+        Some(f) => f(1),
+        None => -1
+    };
+    print("T35: " + r2);        # -1
+} catch (e) { print("T35-ERR: " + e); }
+
+# T36: 高阶函数 curry 化工厂 — 任意二元函数转柯里化
+print("=== T36 curry factory ===");
+try {
+    fn curry2(f) {
+        let step1 = fn(a) {
+            let step2 = fn(b) { return f(a, b); };
+            return step2;
+        };
+        return step1;
+    }
+    let curriedAdd = curry2(addTop);
+    print("T36: " + curriedAdd(3)(4));      # 7
+    let curriedSub = curry2(subTop);
+    print("T36: " + curriedSub(10)(3));     # 7
+    fn mul(a, b) { return a * b; }
+    print("T36: " + curry2(mul)(5)(6));     # 30
+} catch (e) { print("T36-ERR: " + e); }
+
+# T37: 函数列表 reduce — 依次应用 [f1, f2, f3] 到初始值
+print("=== T37 fn list reduce ===");
+try {
+    fn pipe(fns, init) {
+        let acc = init;
+        for f in fns { acc = f(acc); }
+        return acc;
+    }
+    let pipeline = [double, inc, sq];   # ((double(5)=10) +1=11) ^2 = 121
+    print("T37: " + pipe(pipeline, 5));     # 121
+    let pipeline2 = [inc, inc, inc];
+    print("T37: " + pipe(pipeline2, 0));    # 3
+} catch (e) { print("T37-ERR: " + e); }
+
+# T38: HOF + 字符串方法 — map 对字符串列表
+print("=== T38 HOF on strings ===");
+try {
+    fn mapS(arr, f) { let r = []; for x in arr { push(r, f(x)); } return r; }
+    let words = ["hello", "world", "hi"];
+    print("T38: " + mapS(words, fn(s) { return len(s); }));    # [5, 5, 2]
+    print("T38: " + mapS(words, fn(s) { return s + "!"; }));   # [hello!, world!, hi!]
+    # 顶层 fn 处理字符串
+    fn shout(s) { return s + "!"; }
+    print("T38: " + mapS(words, shout));   # [hello!, world!, hi!]
+} catch (e) { print("T38-ERR: " + e); }
+
+# T39: 高阶函数 + 嵌套 dict — 回调操作嵌套结构
+print("=== T39 HOF nested dict ===");
+try {
+    fn updateDeep(obj, f) {
+        obj["count"] = f(obj["count"]);
+        return obj;
+    }
+    let cfg = {"count": 0, "name": "x"};
+    let inc1 = fn(x) { return x + 1; };
+    updateDeep(cfg, inc1);
+    print("T39: " + cfg["count"]);      # 1
+    updateDeep(cfg, inc1);
+    print("T39: " + cfg["count"]);      # 2
+    updateDeep(cfg, fn(x) { return x * 10; });
+    print("T39: " + cfg["count"]);      # 20
+    print("T39: " + cfg["name"]);       # x (未被影响)
+} catch (e) { print("T39-ERR: " + e); }
+
+# T40: HOF 递归 — 用 HOF 包装递归 (带计数)
+print("=== T40 HOF wraps recursion ===");
+try {
+    fn fib(n) {
+        if (n < 2) { return n; }
+        return fib(n - 1) + fib(n - 2);
+    }
+    # withCount 包装: 调用 f 并记录调用次数
+    fn withCount(f) {
+        let count = 0;
+        let wrapped = fn(n) {
+            count = count + 1;
+            return f(n);
+        };
+        let getCount = fn() { return count; };
+        return [wrapped, getCount];
+    }
+    let p = withCount(fib);
+    let wfib = p[0];
+    let getCount = p[1];
+    let r = wfib(10);
+    print("T40: fib(10)=" + r);           # 55
+    print("T40: calls=" + getCount());    # 1 (snapshot bug: 0) — 注意 f(n) 在 wrapped 内, count 在 wrapped 内自增
+} catch (e) { print("T40-ERR: " + e); }
+
+# T41: 闭包捕获循环变量 + 高阶 — 每次迭代创建不同闭包, 通过 HOF 调用
+print("=== T41 closure in loop via HOF ===");
+try {
+    fn applyN(f, n) { return f(n); }
+    let fns = [];
+    for i in [1, 2, 3] {
+        push(fns, fn(x) { return x + i; });
+    }
+    print("T41: " + applyN(fns[0], 10));   # 11 (i=1)
+    print("T41: " + applyN(fns[1], 10));   # 12 (i=2)
+    print("T41: " + applyN(fns[2], 10));   # 13 (i=3)
+} catch (e) { print("T41-ERR: " + e); }
+
+# T42: 多返回值 (返回 dict 含函数) — 类似对象方法
+print("=== T42 dict of fns as object ===");
+try {
+    fn makeObj(x) {
+        return {
+            "get": fn() { return x; },
+            "set": fn(v) { x = v; return x; },
+            "add": fn(d) { x = x + d; return x; }
+        };
+    }
+    let o = makeObj(10);
+    print("T42: " + o["get"]());       # 10
+    print("T42: " + o["add"](5));      # 15 (by-ref) or 10 (snapshot)
+    print("T42: " + o["get"]());       # 15 (by-ref) or 10 (snapshot)
+    print("T42: " + o["set"](100));    # 100 (by-ref) or 10 (snapshot)
+    print("T42: " + o["get"]());       # 100 (by-ref) or 10 (snapshot)
+} catch (e) { print("T42-ERR: " + e); }
+
+# T43: HOF + 并发 — 回调在 concurrent 块中执行
+print("=== T43 HOF in concurrent ===");
+parallel fn t43work(f, x) { return f(x); }
+try {
+    concurrent {
+        let fut = t43work(double, 21);
+        let r = await fut;
+        print("T43: " + r);            # 42
+        let r2 = await t43work(sq, 7);
+        print("T43: " + r2);           # 49
+    }
+} catch (e) { print("T43-ERR: " + e); }
+
+# T44: 函数作为 match 分支结果 (无 HOF 包装, 直接 match 返回 fn)
+print("=== T44 match returns fn directly ===");
+try {
+    fn getOp(name) {
+        return match name {
+            "inc" => inc,
+            "dbl" => double,
+            "sq" => sq,
+            _ => fn(x) { return x; }
+        };
+    }
+    print("T44: " + getOp("inc")(5));    # 6
+    print("T44: " + getOp("dbl")(5));    # 10
+    print("T44: " + getOp("sq")(5));     # 25
+    print("T44: " + getOp("x")(5));      # 5 (identity)
+} catch (e) { print("T44-ERR: " + e); }
+
+# T45: 高阶函数 + null 回调 (鲁棒性)
+print("=== T45 HOF null callback ===");
+try {
+    fn safeApply(f, x) {
+        if (f == null) { return "no-cb"; }
+        return f(x);
+    }
+    print("T45: " + safeApply(double, 5));      # 10
+    print("T45: " + safeApply(null, 5));        # no-cb
+    print("T45: " + safeApply(fn(x) { return x; }, 99));  # 99
+} catch (e) { print("T45-ERR: " + e); }
+
+# T46: 函数记忆化 (memoize) 缓存命中验证
+print("=== T46 memoize hit count ===");
+try {
+    fn slow(x) { return x * x; }
+    fn memoize(f) {
+        let cache = {};
+        let calls = 0;
+        let wrapped = fn(n) {
+            let key = "" + n;
+            if (has_key(cache, key)) { return cache[key]; }
+            calls = calls + 1;
+            let v = f(n);
+            cache[key] = v;
+            return v;
+        };
+        let getCalls = fn() { return calls; };
+        return [wrapped, getCalls];
+    }
+    let p = memoize(slow);
+    let mf = p[0];
+    let getCalls = p[1];
+    mf(3); mf(3); mf(3); mf(4); mf(4); mf(5);
+    # 3 个不同 key (3,4,5) → 3 次实际调用 (若 count 共享)
+    print("T46: calls=" + getCalls());   # 3 (by-ref) or 0 (snapshot)
+} catch (e) { print("T46-ERR: " + e); }
+
+# T47: 回调注册后注销
+print("=== T47 callback unregister ===");
+try {
+    let cbs = [];
+    fn register(cb) { push(cbs, cb); return len(cbs); }
+    fn unregister(cb) {
+        let idx = -1;
+        let i = 0;
+        while (i < len(cbs)) {
+            if (cbs[i] == cb) { idx = i; }
+            i = i + 1;
+        }
+        if (idx >= 0) {
+            # 移除: 把后面的前移
+            let j = idx;
+            while (j < len(cbs) - 1) { cbs[j] = cbs[j + 1]; j = j + 1; }
+            pop(cbs);
+        }
+        return len(cbs);
+    }
+    fn fireAll(x) {
+        let results = [];
+        for cb in cbs { push(results, cb(x)); }
+        return results;
+    }
+    let cb1 = fn(x) { return "cb1-" + x; };
+    let cb2 = fn(x) { return "cb2-" + x; };
+    register(cb1);
+    register(cb2);
+    print("T47: " + fireAll("a"));       # [cb1-a, cb2-a]
+    print("T47: after-unreg=" + unregister(cb1));   # 1
+    print("T47: " + fireAll("b"));       # [cb2-b]
+} catch (e) { print("T47-ERR: " + e); }
+
+# T48: 高阶函数 + list 方法 (sort 内置比较器?)
+print("=== T48 sort with HOF ===");
+try {
+    # 自写排序 (内置 sort 未必支持比较器)
+    fn sortWith(arr, cmp) {
+        let a = arr;
+        let n = len(a);
+        for i in range(0, n) {
+            for j in range(0, n - 1) {
+                if (cmp(a[j], a[j + 1]) > 0) {
+                    let t = a[j];
+                    a[j] = a[j + 1];
+                    a[j + 1] = t;
+                }
+            }
+        }
+        return a;
+    }
+    let data = [3, 1, 4, 1, 5, 9, 2, 6];
+    print("T48: " + sortWith(data, fn(x, y) { return x - y; }));  # [1, 1, 2, 3, 4, 5, 6, 9]
+    # 按字符串长度排序
+    let strs = ["bbb", "a", "cc", "dddd"];
+    print("T48: " + sortWith(strs, fn(x, y) { return len(x) - len(y); }));  # [a, cc, bbb, dddd]
+} catch (e) { print("T48-ERR: " + e); }
+
+# T49: HOF + 闭包计数器 (increment 然后 HOF 包装)
+print("=== T49 HOF wraps counter ===");
+try {
+    fn mkCounter() {
+        let n = 0;
+        let next = fn() { n = n + 1; return n; };
+        return next;
+    }
+    let counter = mkCounter();
+    fn repeat(f, times) {
+        let r = [];
+        let i = 0;
+        while (i < times) { push(r, f()); i = i + 1; }
+        return r;
+    }
+    print("T49: " + repeat(counter, 5));   # [1, 2, 3, 4, 5]
+} catch (e) { print("T49-ERR: " + e); }
+
+# T50: 深度嵌套 HOF — 5 层组合
+print("=== T50 deep HOF nesting ===");
+try {
+    fn compose(f, g) {
+        let h = fn(x) { return f(g(x)); };
+        return h;
+    }
+    # 5 层: inc(double(inc(double(inc(x)))))
+    let c1 = compose(inc, double);
+    let c2 = compose(c1, inc);
+    let c3 = compose(c2, double);
+    let c4 = compose(c3, inc);
+    # x=0: inc=1, double=2, inc=3, double=6, inc=7
+    print("T50: " + c4(0));     # 7
+    # x=1: inc=2, double=4, inc=5, double=10, inc=11
+    print("T50: " + c4(1));     # 11
+} catch (e) { print("T50-ERR: " + e); }
+
+print("=== ALL DONE ===");

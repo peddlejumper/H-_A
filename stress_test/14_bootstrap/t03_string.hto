@@ -1,0 +1,4 @@
+# 测试 03: 字符串字面量
+# 期望输出: hello
+let s = "hello";
+print(s);

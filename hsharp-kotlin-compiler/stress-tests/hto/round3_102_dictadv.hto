@@ -1,0 +1,640 @@
+# round3_102_dictadv.hto
+# 测试智能体 #102 — 字典高级操作与嵌套
+# 目标：探测 H# v0.4.1 dict（LinkedHashMap 保序，Kotlin VM）的嵌套/高级语义边界
+# 方法：每个用例打印 "T## TAG | observed | EXPECT=expected | PASS|FAIL"
+
+let stats = [0, 0];   # [pass, fail]
+fn report(tag, observed, expected) {
+    let ok = observed == expected;
+    if (ok) {
+        stats[0] = stats[0] + 1;
+    } else {
+        stats[1] = stats[1] + 1;
+    }
+    let status = "FAIL";
+    if (ok) { status = "PASS"; }
+    print("T" + tag + " | " + str(observed) + " | EXPECT=" + str(expected) + " | " + status);
+}
+
+# ============================================================
+# 1. 嵌套字典访问 d["a"]["b"]["c"]
+# ============================================================
+let d1 = {"a": {"b": {"c": 1}}};
+report("01-nested-read", d1["a"]["b"]["c"], 1);
+
+# 字面量嵌套混合类型
+let d1b = {"outer": {"inner": {"deep": 42, "list": [1, 2, 3]}}};
+report("01b-nested-mixed", d1b["outer"]["inner"]["deep"], 42);
+report("01c-nested-list-in-dict", d1b["outer"]["inner"]["list"][1], 2);
+
+# ============================================================
+# 2. 嵌套字典赋值 d["a"]["b"]["c"] = 999
+# ============================================================
+let d2 = {"a": {"b": {"c": 0}}};
+d2["a"]["b"]["c"] = 999;
+report("02-nested-write-3level", d2["a"]["b"]["c"], 999);
+
+# 嵌套赋值新增 key
+let d2b = {"x": {}};
+d2b["x"]["new_key"] = "hello";
+report("02b-nested-add-key", d2b["x"]["new_key"], "hello");
+
+# 嵌套赋值在空 dict 字面量上（逐层构造）
+let d2c = {};
+d2c["a"] = {};
+d2c["a"]["b"] = {};
+d2c["a"]["b"]["c"] = 42;
+report("02c-build-nested-from-empty", d2c["a"]["b"]["c"], 42);
+report("02d-build-nested-len", len(d2c["a"]["b"]), 1);
+
+# ============================================================
+# 3. 字典值是列表，修改 d["list"].push(4)
+# ============================================================
+let d3 = {"list": [1, 2, 3]};
+d3["list"].push(4);
+report("03-list-val-push", str(d3["list"]), "[1, 2, 3, 4]");
+report("03b-list-val-len", len(d3["list"]), 4);
+
+# 通过索引修改 list 元素
+d3["list"][0] = 99;
+report("03c-list-val-index-set", d3["list"][0], 99);
+
+# append 别名
+let d3d = {"l": [1]};
+d3d["l"].append(2);
+report("03d-list-val-append", str(d3d["l"]), "[1, 2]");
+
+# pop（此时 list = [99, 2, 3, 4]，pop 返回末尾 4）
+let d3e = d3["list"].pop();
+report("03e-list-val-pop", d3e, 4);
+report("03f-list-val-after-pop", str(d3["list"]), "[99, 2, 3]");
+
+# ============================================================
+# 4. 字典值是函数/lambda，调用 d["fn"](5)
+# ============================================================
+let d4 = {"fn": fn(x) { return x * 2; }};
+report("04-lambda-call-via-index", d4["fn"](5), 10);
+
+# 通过成员访问调用 d.fn(5)
+let d4b = {"inc": fn(x) { return x + 1; }};
+report("04b-lambda-call-via-member", d4b.inc(10), 11);
+
+# 多个 lambda 在同一 dict 中
+let d4c = {
+    "double": fn(x) { return x * 2; },
+    "square": fn(x) { return x * x; },
+    "negate": fn(x) { return -x; }
+};
+report("04c-multi-lambda-double", d4c["double"](3), 6);
+report("04d-multi-lambda-square", d4c["square"](4), 16);
+report("04e-multi-lambda-negate", d4c["negate"](7), -7);
+
+# lambda 捕获外部变量
+let factor = 10;
+let d4f = {"mul": fn(x) { return x * factor; }};
+report("04f-lambda-capture", d4f["mul"](5), 50);
+
+# ============================================================
+# 5. 字典作为函数参数（引用语义）
+# ============================================================
+fn bump_count(d) {
+    d["count"] = d["count"] + 1;
+}
+let d5 = {"count": 0};
+bump_count(d5);
+bump_count(d5);
+bump_count(d5);
+report("05-ref-param-mutate", d5["count"], 3);
+
+# 函数内新增 key 对外可见
+fn add_key(d, k, v) { d[k] = v; }
+let d5b = {"a": 1};
+add_key(d5b, "b", 2);
+report("05b-ref-add-key-visible", has_key(d5b, "b"), true);
+report("05c-ref-add-key-value", d5b["b"], 2);
+
+# 函数内删除 key 对外可见
+fn remove_key(d, k) { del d[k]; }
+let d5d = {"x": 1, "y": 2};
+remove_key(d5d, "x");
+report("05d-ref-del-visible", has_key(d5d, "x"), false);
+
+# 函数内修改嵌套 dict 对外可见
+fn set_inner(d) { d["a"]["b"] = 999; }
+let d5e = {"a": {"b": 0}};
+set_inner(d5e);
+report("05e-ref-nested-mutate", d5e["a"]["b"], 999);
+
+# ============================================================
+# 6. 字典复制：let d2 = d; 是引用还是拷贝？
+# ============================================================
+let d6_orig = {"a": 1, "b": 2};
+let d6_alias = d6_orig;
+d6_alias["a"] = 999;
+report("06-assign-is-ref", d6_orig["a"], 999);
+# 修改 alias 的 key 影响 orig
+d6_alias["c"] = 3;
+report("06b-alias-add-key", has_key(d6_orig, "c"), true);
+
+# 手动浅拷贝（逐 key 复制到新 dict）
+fn shallow_copy(d) {
+    let out = {};
+    let ks = keys(d);
+    let i = 0;
+    while (i < len(ks)) {
+        out[ks[i]] = d[ks[i]];
+        i = i + 1;
+    }
+    return out;
+}
+let d6c_orig = {"a": 1, "b": 2};
+let d6c_copy = shallow_copy(d6c_orig);
+d6c_copy["a"] = 777;
+report("06c-shallow-top-independent", d6c_orig["a"], 1);
+report("06d-shallow-copy-len", len(d6c_copy), 2);
+
+# 浅拷贝：嵌套 list 仍共享引用
+let d6e_orig = {"l": [1, 2]};
+let d6e_copy = shallow_copy(d6e_orig);
+d6e_copy["l"].push(99);
+report("06e-shallow-shared-nested", d6e_orig["l"][2], 99);
+
+# ============================================================
+# 7. del d[k] 后重新添加同 key — 位置（末尾还是原位？）
+# ============================================================
+let d7 = {"a": 1, "b": 2, "c": 3};
+del d7["b"];
+d7["b"] = 99;
+# LinkedHashMap：del 移除，重新 put 放到末尾
+let d7_order = "";
+for k, v in d7 { d7_order = d7_order + k; }
+report("07-del-readd-position", d7_order, "acb");
+report("07b-del-readd-value", d7["b"], 99);
+
+# ============================================================
+# 8. 字典 key 类型：整数、bool、null、浮点
+# ============================================================
+let d8 = {};
+d8[1] = "int";
+d8[true] = "bool";
+d8[null] = "null";
+d8[1.5] = "float";
+# 全部 coerce 成 string key
+report("08-int-key", d8[1], "int");
+report("08b-bool-key", d8[true], "bool");
+report("08c-null-key", d8[null], "null");
+report("08d-float-key", d8[1.5], "float");
+report("08e-mixed-key-len", len(d8), 4);
+
+# 字面量整数 key
+let d8f = {1: "one", 2: "two"};
+report("08f-int-literal-key", d8f[1], "one");
+report("08g-int-literal-len", len(d8f), 2);
+
+# ============================================================
+# 9. 整数 1 与字符串 "1" 是否冲突（key 强制成 string）
+# ============================================================
+let d9 = {};
+d9[1] = "from-int";
+d9["1"] = "from-str";
+report("09-int-str-collision", d9[1], "from-str");
+report("09b-int-str-same-slot", len(d9), 1);
+report("09c-int-str-in", 1 in d9, true);
+report("09d-int-str-in-str", "1" in d9, true);
+
+# 字面量同时含整数与字符串 key
+let d9e = "none";
+try {
+    let d9lit = {1: "num", "1": "str"};
+    d9e = str(len(d9lit)) + ":" + d9lit[1];
+} catch (e) {
+    d9e = "err";
+}
+report("09e-literal-mixed-keys", d9e, "1:str");
+
+# ============================================================
+# 10. 字典大小：1000+ key 性能
+# ============================================================
+let d10 = {};
+let i10 = 0;
+while (i10 < 1000) {
+    d10["k" + str(i10)] = i10;
+    i10 = i10 + 1;
+}
+report("10-big-dict-len", len(d10), 1000);
+report("10b-big-dict-first", d10["k0"], 0);
+report("10c-big-dict-mid", d10["k500"], 500);
+report("10d-big-dict-last", d10["k999"], 999);
+
+# 求和验证
+let d10_sum = 0;
+for k, v in d10 { d10_sum = d10_sum + v; }
+report("10e-big-dict-sum", d10_sum, 499500);
+
+# ============================================================
+# 11. 字典迭代顺序：多次迭代是否一致（插入序）
+# ============================================================
+let d11 = {"z": 1, "a": 2, "m": 3, "b": 4};
+let order_a = "";
+for k in d11 { order_a = order_a + k; }
+let order_b = "";
+for k in d11 { order_b = order_b + k; }
+report("11-iter-order-stable", order_a, order_b);
+report("11b-iter-order-insertion", order_a, "zamb");
+
+# ============================================================
+# 12. 字典迭代中修改（添加/删除 key）
+# ============================================================
+# 12a. 迭代中删除当前 key
+let d12 = {"a": 1, "b": 2, "c": 3};
+let d12_seen = "";
+for k, v in d12 {
+    d12_seen = d12_seen + k;
+    del d12[k];
+}
+report("12-iter-del-current-keys-seen", d12_seen, "abc");
+report("12b-iter-del-current-empty", len(d12), 0);
+
+# 12c. 迭代中添加新 key（快照语义，新 key 不被本次迭代访问）
+let d12c = {"a": 1, "b": 2};
+let d12c_seen = "";
+for k, v in d12c {
+    d12c_seen = d12c_seen + k;
+    d12c["new_" + k] = 999;
+    if (len(d12c) > 6) { break; }
+}
+report("12c-iter-add-snapshot-seen", d12c_seen, "ab");
+report("12d-iter-add-result-keys", str(keys(d12c)), "[a, b, new_a, new_b]");
+
+# 12e. 迭代中删除尚未访问的 key — 值变为 null（快照不变，值现取）
+let d12e = {"a": 1, "b": 2, "c": 3};
+let d12e_seen = "";
+let d12e_vals = "";
+for k, v in d12e {
+    d12e_seen = d12e_seen + k;
+    d12e_vals = d12e_vals + str(v) + ";";
+    if (k == "a") { del d12e["b"]; }
+}
+report("12e-iter-del-ahead-seen", d12e_seen, "abc");
+# b 已被 del，快照仍迭代 b，但值现取 → null
+report("12f-iter-del-ahead-vals", d12e_vals, "1;null;3;");
+
+# ============================================================
+# 13. items(d) 返回的 list 是否是快照
+# ============================================================
+let d13 = {"a": 1, "b": 2};
+let d13_items = items(d13);
+d13["c"] = 3;
+# items() 返回快照，添加 c 后旧 items 不变
+report("13-items-snapshot", str(d13_items), "[[a, 1], [b, 2]]");
+report("13b-items-after-add", len(d13_items), 2);
+report("13c-dict-after-add", len(d13), 3);
+
+# ============================================================
+# 14. keys(d) / values(d) 顺序是否对应
+# ============================================================
+let d14 = {"x": 10, "y": 20, "z": 30};
+let d14_ks = keys(d14);
+let d14_vs = values(d14);
+report("14-keys-idx0", d14_ks[0], "x");
+report("14b-values-idx0", d14_vs[0], 10);
+report("14c-keys-idx2", d14_ks[2], "z");
+report("14d-values-idx2", d14_vs[2], 30);
+
+# keys/values 长度一致
+report("14e-keys-values-len", len(d14_ks) == len(d14_vs), true);
+
+# ============================================================
+# 15. 空字典操作
+# ============================================================
+report("15-empty-len", len({}), 0);
+let d15 = {};
+report("15b-empty-keys", str(keys(d15)), "[]");
+report("15c-empty-values", str(values(d15)), "[]");
+report("15d-empty-items", str(items(d15)), "[]");
+report("15e-empty-has-key", has_key(d15, "x"), false);
+report("15f-empty-in", "x" in d15, false);
+
+# 空字典迭代不执行 body
+let d15g = 0;
+for k, v in d15 { d15g = d15g + 1; }
+report("15g-empty-iter-noop", d15g, 0);
+
+# 空字典 get
+let d15h = {};
+report("15h-empty-get", str(d15h.get("x")), "null");
+report("15i-empty-get-default", d15h.get("x", "D"), "D");
+
+# ============================================================
+# 16. 字典方法：.get / .remove / .put（put 是否支持？）
+# ============================================================
+let d16 = {"a": 1, "b": 2};
+report("16-get-exists", d16.get("a"), 1);
+report("16b-get-missing-default", d16.get("z", -1), -1);
+report("16c-get-missing-null", str(d16.get("z")), "null");
+
+# .remove
+d16.remove("a");
+report("16d-remove-then-has", has_key(d16, "a"), false);
+report("16e-remove-then-len", len(d16), 1);
+
+# .put 是否支持？
+let d16f = "none";
+try {
+    d16.put("c", 3);
+    d16f = "ok";
+} catch (e) {
+    d16f = "err";
+}
+report("16f-put-support", d16f, "err");
+
+# .clear
+let d16g = {"a": 1, "b": 2};
+d16g.clear();
+report("16g-clear-len", len(d16g), 0);
+
+# .contains 别名
+let d16h = {"a": 1};
+report("16h-contains-true", d16h.contains("a"), true);
+report("16i-contains-false", d16h.contains("z"), false);
+
+# ============================================================
+# 17. 字典合并：d1 + d2 或 merge(d1, d2)
+# ============================================================
+let d17a = {"a": 1};
+let d17b = {"b": 2};
+let d17_err = "none";
+try {
+    let d17_merged = d17a + d17b;
+} catch (e) {
+    d17_err = "err";
+}
+report("17-merge-plus-unsupported", d17_err, "err");
+
+# merge() 全局函数
+let d17c_err = "none";
+try {
+    let d17c_m = merge(d17a, d17b);
+} catch (e) {
+    d17c_err = "err";
+}
+report("17b-merge-fn-unsupported", d17c_err, "err");
+
+# 手动合并可用
+let d17d = {};
+let d17d_ks = keys(d17a);
+let i17 = 0;
+while (i17 < len(d17d_ks)) { d17d[d17d_ks[i17]] = d17a[d17d_ks[i17]]; i17 = i17 + 1; }
+let d17d_ks2 = keys(d17b);
+i17 = 0;
+while (i17 < len(d17d_ks2)) { d17d[d17d_ks2[i17]] = d17b[d17d_ks2[i17]]; i17 = i17 + 1; }
+report("17c-manual-merge-len", len(d17d), 2);
+report("17d-manual-merge-a", d17d["a"], 1);
+report("17e-manual-merge-b", d17d["b"], 2);
+
+# ============================================================
+# 18. str(d) 格式 — 是否有引号、是否可往返
+# ============================================================
+let d18 = {"a": 1, "b": 2};
+report("18-str-dict", str(d18), "{a: 1, b: 2}");
+
+let d18b = {};
+report("18b-str-empty", str(d18b), "{}");
+
+# 嵌套 dict str
+let d18c = {"a": {"b": 1}};
+report("18c-str-nested", str(d18c), "{a: {b: 1}}");
+
+# 字符串值是否加引号？（lossy 检查）
+let d18d = {"k": "v"};
+report("18d-str-string-val-no-quotes", str(d18d), "{k: v}");
+
+# list 值
+let d18e = {"l": [1, 2]};
+report("18e-str-list-val", str(d18e), "{l: [1, 2]}");
+
+# ============================================================
+# 19. 深层嵌套字典递归遍历
+# ============================================================
+let d19 = {"a": {"b": {"c": {"d": {"e": 42}}}}};
+report("19-deep-5level-read", d19["a"]["b"]["c"]["d"]["e"], 42);
+
+fn deep_get(d, path) {
+    let cur = d;
+    let i = 0;
+    while (i < len(path)) {
+        cur = cur[path[i]];
+        i = i + 1;
+    }
+    return cur;
+}
+let d19b = {"x": {"y": {"z": 99}}};
+report("19b-deep-get-fn", deep_get(d19b, ["x", "y", "z"]), 99);
+
+# 递归求和所有叶子值
+fn deep_sum(d) {
+    let total = 0;
+    let ks = keys(d);
+    let i = 0;
+    while (i < len(ks)) {
+        let v = d[ks[i]];
+        # 判断是否是 dict（用 type()）
+        if (type(v) == "dict") {
+            total = total + deep_sum(v);
+        } else {
+            total = total + v;
+        }
+        i = i + 1;
+    }
+    return total;
+}
+let d19c = {"a": 1, "b": {"c": 2, "d": {"e": 3}}};
+report("19c-deep-sum", deep_sum(d19c), 6);
+
+# ============================================================
+# 20. 字典作为类字段
+# ============================================================
+class Holder {
+    fn init(self) {
+        self.data = {"x": 1, "y": 2};
+    }
+    fn get(self, k) {
+        return self.data[k];
+    }
+    fn set(self, k, v) {
+        self.data[k] = v;
+    }
+    fn size(self) {
+        return len(self.data);
+    }
+}
+let h20 = new Holder();
+report("20-class-dict-field-get", h20.get("x"), 1);
+h20.set("z", 99);
+report("20b-class-dict-field-set", h20.get("z"), 99);
+report("20c-class-dict-field-size", h20.size(), 3);
+# 直接访问字段
+h20.data["w"] = 77;
+report("20d-class-dict-field-direct", h20.data["w"], 77);
+
+# ============================================================
+# 21. has_key vs in 操作符
+# ============================================================
+let d21 = {"a": 1, "b": 2};
+report("21-has-key-true", has_key(d21, "a"), true);
+report("21b-has-key-false", has_key(d21, "z"), false);
+report("21c-in-true", "a" in d21, true);
+report("21d-in-false", "z" in d21, false);
+
+# 一致性
+report("21e-has-key-in-consistent", has_key(d21, "a") == ("a" in d21), true);
+
+# not in（H# 不支持 "x not in y" 二元算子，仅支持一元 not；用 ! 改写）
+report("21f-not-in", !("z" in d21), true);
+
+# 整数 key 的 in
+let d21g = {};
+d21g[5] = "five";
+report("21g-int-in", 5 in d21g, true);
+report("21h-int-not-in", 6 in d21g, false);
+
+# ============================================================
+# 22. 字典值覆盖：同 key 多次赋值
+# ============================================================
+let d22 = {"k": 1};
+d22["k"] = 2;
+d22["k"] = 3;
+report("22-overwrite-value", d22["k"], 3);
+report("22b-overwrite-len", len(d22), 1);
+
+# 覆盖时类型变化
+let d22c = {"k": 1};
+d22c["k"] = "now-string";
+report("22c-overwrite-type-change", d22c["k"], "now-string");
+d22c["k"] = [1, 2];
+report("22d-overwrite-to-list", str(d22c["k"]), "[1, 2]");
+d22c["k"] = {"nested": 1};
+report("22e-overwrite-to-dict", d22c["k"]["nested"], 1);
+
+# 字面量重复 key 覆盖
+let d22f = {"a": 1, "a": 2, "a": 3};
+report("22f-literal-dup-key", d22f["a"], 3);
+report("22g-literal-dup-len", len(d22f), 1);
+
+# ============================================================
+# 23. 大量 key 删除后 len 准确性
+# ============================================================
+let d23 = {};
+let i23 = 0;
+while (i23 < 100) {
+    d23["k" + str(i23)] = i23;
+    i23 = i23 + 1;
+}
+# 删除一半
+let i23b = 0;
+while (i23b < 100) {
+    del d23["k" + str(i23b)];
+    i23b = i23b + 2;   # 删除偶数 key
+}
+report("23-del-half-len", len(d23), 50);
+# 验证偶数 key 已删，奇数 key 还在
+report("23b-del-even-gone", has_key(d23, "k0"), false);
+report("23c-del-even-gone2", has_key(d23, "k98"), false);
+report("23d-odd-remain", has_key(d23, "k1"), true);
+report("23e-odd-remain2", has_key(d23, "k99"), true);
+
+# 删除全部
+let d23f = {};
+let i23f = 0;
+while (i23f < 50) { d23f["k" + str(i23f)] = i23f; i23f = i23f + 1; }
+let i23g = 0;
+while (i23g < 50) { del d23f["k" + str(i23g)]; i23g = i23g + 1; }
+report("23f-del-all-len", len(d23f), 0);
+report("23g-del-all-empty", str(keys(d23f)), "[]");
+
+# del 不存在的 key 是 no-op（不创建 key）
+let d23h = {"a": 1};
+del d23h["nonexistent"];
+report("23h-del-missing-noop", len(d23h), 1);
+
+# ============================================================
+# 24. [额外] for k, v in items(d) 的解包语义
+#     （Python: k=key, v=value；但 H# list 两变量迭代 = index, element）
+# ============================================================
+let d24 = {"a": 1, "b": 2};
+let d24_first_k = "?";
+let d24_first_v = "?";
+for k, v in items(d24) {
+    d24_first_k = k;
+    d24_first_v = v;
+    break;
+}
+# items(d) 返回 list of [key, value] 对；两变量迭代 list 时
+# var1 = index(0), var2 = element([key,value])
+report("24-items-2var-k", str(d24_first_k), "0");
+report("24b-items-2var-v", str(d24_first_v), "[a, 1]");
+
+# 正确解包需用单变量 + 索引
+let d24c_k = "?";
+let d24c_v = "?";
+for pair in items(d24) {
+    d24c_k = pair[0];
+    d24c_v = pair[1];
+    break;
+}
+report("24c-items-unpack-k", d24c_k, "a");
+report("24d-items-unpack-v", d24c_v, 1);
+
+# 直接 for k,v in d 才是 key/value
+let d24e_k = "?";
+let d24e_v = "?";
+for k, v in d24 {
+    d24e_k = k;
+    d24e_v = v;
+    break;
+}
+report("24e-direct-iter-k", d24e_k, "a");
+report("24f-direct-iter-v", d24e_v, 1);
+
+# ============================================================
+# 25. [额外] del list[i] 语义（编译为 list.remove(i)，按值删）
+# ============================================================
+let d25 = [10, 20, 30];
+let d25_err = "none";
+try {
+    del d25[1];
+} catch (e) {
+    d25_err = "err";
+}
+# list.remove(1) 找值为 1 的元素，找不到 → 抛错
+report("25-del-list-idx-by-val", d25_err, "err");
+
+# 当列表恰好含等于 index 的值时“误中”
+let d25b = [0, 1, 2];
+let d25b_err = "none";
+let d25b_after = "?";
+try {
+    del d25b[0];   # list.remove(0) → 删掉值为 0 的元素（恰好 index 0）
+    d25b_after = str(d25b);
+} catch (e) {
+    d25b_err = "err";
+    d25b_after = "na";
+}
+report("25b-del-list-coincidental", d25b_after, "[1, 2]");
+report("25c-del-list-no-throw", d25b_err, "none");
+
+# ============================================================
+# 26. [额外] dict builtin 方法名遮蔽用户 entry
+# ============================================================
+let d26 = {"keys": "my-key-value"};
+# d26.keys() 调用 builtin keys()，而非返回 "my-key-value"
+let d26_keys = d26.keys();
+report("26-builtin-shadows-entry", str(d26_keys), "[keys]");
+# 但 d26["keys"] 直接索引仍返回用户值
+report("26b-index-bypasses-builtin", d26["keys"], "my-key-value");
+
+# ============================================================
+# 总结
+# ============================================================
+print("==== SUMMARY ====");
+print("PASS=" + str(stats[0]) + " FAIL=" + str(stats[1]));

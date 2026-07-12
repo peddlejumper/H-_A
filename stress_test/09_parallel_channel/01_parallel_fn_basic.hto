@@ -1,0 +1,65 @@
+# 01 — parallel fn declaration + call returns HFuture
+# Covers: parallel fn decl, call returns HFuture, await unwraps value
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+parallel fn add(x, y) {
+    return x + y;
+}
+
+parallel fn square(n) {
+    return n * n;
+}
+
+parallel fn noop() {
+    return 42;
+}
+
+# Calling a parallel fn returns an HFuture (not the resolved value)
+let f1 = add(3, 4);
+let f2 = square(9);
+let f3 = noop();
+check("returns_future_1", type(f1) == "future", "type=" + type(f1));
+check("returns_future_2", type(f2) == "future", "type=" + type(f2));
+check("returns_future_3", type(f3) == "future", "type=" + type(f3));
+
+# await unwraps
+check("await_add",      await f1 == 7,  "got " + str(await f1));
+check("await_square",   await f2 == 81, "got " + str(await f2));
+check("await_noop",     await f3 == 42, "got " + str(await f3));
+
+# await twice on same future (idempotent)
+check("await_idempotent", await f1 == 7, "second await=" + str(await f1));
+
+# parallel fn with string return
+parallel fn greet(name) {
+    return "hi " + name;
+}
+let fg = greet("world");
+check("await_string", await fg == "hi world", "got " + str(await fg));
+
+# parallel fn with list return
+parallel fn makelist(n) {
+    let r = [];
+    let i = 0;
+    while (i < n) {
+        push(r, i);
+        i = i + 1;
+    }
+    return r;
+}
+let fl = makelist(3);
+let vl = await fl;
+check("await_list_len", len(vl) == 3, "len=" + str(len(vl)));
+check("await_list_0",   vl[0] == 0,   "vl[0]=" + str(vl[0]));
+check("await_list_2",   vl[2] == 2,   "vl[2]=" + str(vl[2]));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

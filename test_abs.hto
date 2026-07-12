@@ -1,0 +1,2 @@
+# Test individual builtins
+print(abs(-5));

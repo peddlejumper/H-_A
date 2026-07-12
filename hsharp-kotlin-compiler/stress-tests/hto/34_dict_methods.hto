@@ -1,0 +1,17 @@
+# Phase A4: dict.get(k, default) and dict methods
+let d = {"name": "Alice", "age": 30};
+print(d.get("name"));
+print(d.get("missing"));
+print(d.get("missing", "N/A"));
+print(d.has_key("age"));
+print(d.has_key("xyz"));
+print(d.contains("name"));
+print(d.size());
+print(d.is_empty());
+let keys = d.keys();
+print(keys.len());
+print(keys[0]);
+print(keys[1]);
+let vals = d.values();
+print(vals[0]);
+print(vals[1]);

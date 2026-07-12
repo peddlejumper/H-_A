@@ -1,0 +1,78 @@
+# Mini bytecode VM in H# - demonstrates the execution model
+
+# A simple stack-based VM that executes a small instruction set
+fn run_vm(instructions, consts) {
+    let stack = [];
+    let pc = 0;
+    let env = {};
+    
+    while (pc < len(instructions)) {
+        let instr = instructions[pc];
+        let op = instr[0];
+        let arg = instr[1];
+        pc = pc + 1;
+        
+        if (op == "LOAD_CONST") {
+            push(stack, consts[arg]);
+        }
+        if (op == "LOAD_NAME") {
+            push(stack, env[arg]);
+        }
+        if (op == "STORE_NAME") {
+            env[arg] = pop(stack);
+        }
+        if (op == "BINARY_ADD") {
+            let b = pop(stack);
+            let a = pop(stack);
+            push(stack, a + b);
+        }
+        if (op == "BINARY_SUB") {
+            let b = pop(stack);
+            let a = pop(stack);
+            push(stack, a - b);
+        }
+        if (op == "BINARY_MUL") {
+            let b = pop(stack);
+            let a = pop(stack);
+            push(stack, a * b);
+        }
+        if (op == "PRINT") {
+            print(pop(stack));
+        }
+        if (op == "HALT") {
+            return nullptr;
+        }
+    }
+}
+
+# Bytecode for: let a = 10; let b = 20; print(a + b);
+let instrs = [
+    ["LOAD_CONST", 0],
+    ["STORE_NAME", "a"],
+    ["LOAD_CONST", 1],
+    ["STORE_NAME", "b"],
+    ["LOAD_NAME", "a"],
+    ["LOAD_NAME", "b"],
+    ["BINARY_ADD", nullptr],
+    ["PRINT", nullptr],
+    ["HALT", nullptr]
+];
+let consts = [10, 20];
+
+run_vm(instrs, consts);
+
+# Bytecode for: let x = 5; let y = 3; print(x * y);
+let instrs2 = [
+    ["LOAD_CONST", 0],
+    ["STORE_NAME", "x"],
+    ["LOAD_CONST", 1],
+    ["STORE_NAME", "y"],
+    ["LOAD_NAME", "x"],
+    ["LOAD_NAME", "y"],
+    ["BINARY_MUL", nullptr],
+    ["PRINT", nullptr],
+    ["HALT", nullptr]
+];
+let consts2 = [5, 3];
+
+run_vm(instrs2, consts2);

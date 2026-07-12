@@ -1,0 +1,835 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# H#ML v4 — Class Type Test Suite
+# ═══════════════════════════════════════════════════════════════════════════
+import "bootstrap/hsharpmyl.hto";
+
+let _test_count = 0;
+let _pass_count = 0;
+
+fn assert(condition, msg) {
+    _test_count = _test_count + 1;
+    if (condition) {
+        _pass_count = _pass_count + 1;
+        print("  PASS: " + msg);
+    } else {
+        print("  FAIL: " + msg);
+    }
+    return 0;
+}
+
+fn test_summary() {
+    print("");
+    print("Test Results: " + _pass_count + "/" + _test_count + " passed");
+    if (_pass_count == _test_count) {
+        print("ALL TESTS PASSED ✓");
+    } else {
+        let failed = _test_count - _pass_count;
+        print("FAILED: " + failed + " tests");
+    }
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 34: Deep Learning Layers
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 34: Deep Learning Layers ──");
+
+let dl = new DenseLayer();
+dl.init_dense(4, 3, nullptr, 0.01);
+assert(dl.input_dim == 4, "DenseLayer init_dense");
+assert(dl.output_dim == 3, "DenseLayer output_dim");
+
+let dp = new DropoutLayer();
+dp.init_dropout(0.5);
+assert(dp.rate == 0.5, "DropoutLayer init_dropout");
+
+let fl = new FlattenLayer();
+fl.init_flatten();
+assert(fl != nullptr, "FlattenLayer init_flatten");
+
+let ln = new LayerNorm();
+ln.init_layernorm(10);
+assert(ln.normalized_shape == 10, "LayerNorm init_layernorm");
+
+let emb = new EmbeddingLayer();
+emb.init_embedding(100, 32);
+assert(emb.num_embeddings == 100, "EmbeddingLayer init_embedding");
+assert(emb.embedding_dim == 32, "EmbeddingLayer embedding_dim");
+
+let rnn = new RNNCell();
+rnn.init_rnncell(16, 8);
+assert(rnn.input_size == 16, "RNNCell init_rnncell");
+assert(rnn.hidden_size == 8, "RNNCell hidden_size");
+
+let lstm = new LSTMCell();
+lstm.init_lstmcell(16, 8);
+assert(lstm.input_size == 16, "LSTMCell init_lstmcell");
+
+let gru = new GRUCell();
+gru.init_grucell(16, 8);
+assert(gru.hidden_size == 8, "GRUCell init_grucell");
+
+let attn = new AttentionLayer();
+attn.init_attention(64);
+assert(attn.d_model == 64, "AttentionLayer init_attention");
+
+let mha = new MultiHeadAttentionLayer();
+mha.init_multihead_attention(64, 8);
+assert(mha.n_heads == 8, "MultiHeadAttentionLayer init_multihead_attention");
+
+let seq = new SequentialModel();
+seq.init_sequential([dl, dp]);
+assert(seq.layers != nullptr, "SequentialModel init_sequential");
+
+let bn = new BatchNorm1D();
+bn.init_batchnorm1d(10, 0.9);
+assert(bn.num_features == 10, "BatchNorm1D init_batchnorm1d");
+
+let conv1d = new Conv1DLayer();
+conv1d.init_conv1d(3, 16, 3, 1);
+assert(conv1d.out_channels == 16, "Conv1DLayer init_conv1d");
+
+let conv2d = new Conv2DLayer();
+conv2d.init_conv2d(3, 16, 3, 1);
+assert(conv2d.out_channels == 16, "Conv2DLayer init_conv2d");
+
+let mp1 = new MaxPool1DLayer();
+mp1.init_maxpool1d(2, 2);
+assert(mp1.pool_size == 2, "MaxPool1DLayer init_maxpool1d");
+
+let mp2 = new MaxPool2DLayer();
+mp2.init_maxpool2d(2, 2);
+assert(mp2.pool_size == 2, "MaxPool2DLayer init_maxpool2d");
+
+let ap1 = new AvgPool1DLayer();
+ap1.init_avgpool1d(2, 2);
+assert(ap1.pool_size == 2, "AvgPool1DLayer init_avgpool1d");
+
+let ap2 = new AvgPool2DLayer();
+ap2.init_avgpool2d(2, 2);
+assert(ap2.pool_size == 2, "AvgPool2DLayer init_avgpool2d");
+
+let bn2 = new BatchNorm2D();
+bn2.init_batchnorm2d(16);
+assert(bn2.num_features == 16, "BatchNorm2D init_batchnorm2d");
+
+let res = new ResidualBlock();
+res.init_residual([dl]);
+assert(len(res.layers) == 1, "ResidualBlock init_residual");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 35: Activation Functions
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 35: Activation Functions ──");
+
+let relu = new ReLUActivation();
+relu.init_relu_act();
+assert(relu != nullptr, "ReLUActivation init_relu_act");
+
+let lrelu = new LeakyReLUActivation();
+lrelu.init_leaky_relu(0.01);
+assert(lrelu.alpha == 0.01, "LeakyReLUActivation init_leaky_relu");
+
+let elu = new ELUActivation();
+elu.init_elu(1.0);
+assert(elu.alpha == 1.0, "ELUActivation init_elu");
+
+let gelu = new GELUActivation();
+gelu.init_gelu();
+assert(gelu != nullptr, "GELUActivation init_gelu");
+
+let sig = new SigmoidActivation();
+sig.init_sigmoid_act();
+assert(sig != nullptr, "SigmoidActivation init_sigmoid_act");
+
+let tanh = new TanhActivation();
+tanh.init_tanh_act();
+assert(tanh != nullptr, "TanhActivation init_tanh_act");
+
+let soft = new SoftmaxActivation();
+soft.init_softmax_act();
+assert(soft != nullptr, "SoftmaxActivation init_softmax_act");
+
+let swish = new SwishActivation();
+swish.init_swish();
+assert(swish != nullptr, "SwishActivation init_swish");
+
+let mish = new MishActivation();
+mish.init_mish();
+assert(mish != nullptr, "MishActivation init_mish");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 36: Loss Functions
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 36: Loss Functions ──");
+
+let mse = new MSELoss();
+mse.init_mse_loss();
+assert(mse != nullptr, "MSELoss init_mse_loss");
+
+let mae = new MAELoss();
+mae.init_mae_loss();
+assert(mae != nullptr, "MAELoss init_mae_loss");
+
+let huber = new HuberLoss();
+huber.init_huber(1.0);
+assert(huber.delta == 1.0, "HuberLoss init_huber");
+
+let bce = new BinaryCrossEntropyLoss();
+bce.init_bce();
+assert(bce != nullptr, "BinaryCrossEntropyLoss init_bce");
+
+let cce = new CategoricalCrossEntropyLoss();
+cce.init_cce();
+assert(cce != nullptr, "CategoricalCrossEntropyLoss init_cce");
+
+let hinge = new HingeLoss();
+hinge.init_hinge();
+assert(hinge != nullptr, "HingeLoss init_hinge");
+
+let floss = new FocalLoss();
+floss.init_focal(2.0, 0.25);
+assert(floss.gamma == 2.0, "FocalLoss init_focal");
+assert(floss.alpha == 0.25, "FocalLoss alpha");
+
+let tloss = new TripletLoss();
+tloss.init_triplet(1.0);
+assert(tloss.margin == 1.0, "TripletLoss init_triplet");
+
+let kld = new KLDivergenceLoss();
+kld.init_kl_div();
+assert(kld != nullptr, "KLDivergenceLoss init_kl_div");
+
+let cosl = new CosineSimilarityLoss();
+cosl.init_cosine_loss();
+assert(cosl != nullptr, "CosineSimilarityLoss init_cosine_loss");
+
+let qloss = new QuantileLoss();
+qloss.init_quantile(0.5);
+assert(qloss.quantile == 0.5, "QuantileLoss init_quantile");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 37: Extended Optimizers
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 37: Extended Optimizers ──");
+
+let adamax = new AdaMaxOptimizer();
+adamax.init_adamax(0.002, 0.9, 0.999);
+assert(adamax.lr == 0.002, "AdaMaxOptimizer init_adamax");
+
+let nadam = new NadamOptimizer();
+nadam.init_nadam(0.002, 0.9, 0.999);
+assert(nadam.lr == 0.002, "NadamOptimizer init_nadam");
+
+let radam = new RAdamOptimizer();
+radam.init_radam(0.001, 0.9, 0.999);
+assert(radam.lr == 0.001, "RAdamOptimizer init_radam");
+
+let sgdw = new SGDWMomentum();
+sgdw.init_sgdw(0.01, 0.9, 0.0001);
+assert(sgdw.weight_decay == 0.0001, "SGDWMomentum init_sgdw");
+
+let nov = new NovogradOptimizer();
+nov.init_novograd(0.001, 0.9, 0.999, 0.0001);
+assert(nov.weight_decay == 0.0001, "NovogradOptimizer init_novograd");
+
+let lars = new LARS();
+lars.init_lars(0.01, 0.9, 0.0001, 0.001);
+assert(lars.trust_coef == 0.001, "LARS init_lars");
+
+let lamb = new LambOptimizerWrapper();
+lamb.init_lamb(0.001, 0.9, 0.999, 0.01);
+assert(lamb.weight_decay == 0.01, "LambOptimizerWrapper init_lamb");
+
+let adab = new AdaBoundOptimizer();
+adab.init_adabound(0.001, 0.1, 0.001);
+assert(adab.final_lr == 0.1, "AdaBoundOptimizer init_adabound");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 38: Regularization & Normalization
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 38: Regularization & Normalization ──");
+
+let l1 = new L1Regularizer();
+l1.init_l1(0.01);
+assert(l1.lambda_val == 0.01, "L1Regularizer init_l1");
+
+let l2 = new L2Regularizer();
+l2.init_l2(0.01);
+assert(l2.lambda_val == 0.01, "L2Regularizer init_l2");
+
+let l1l2 = new L1L2Regularizer();
+l1l2.init_l1l2(0.01, 0.01);
+assert(l1l2.l1 == 0.01, "L1L2Regularizer init_l1l2");
+
+let gn = new GaussianNoise();
+gn.init_gaussian_noise(0.1);
+assert(gn.stddev == 0.1, "GaussianNoise init_gaussian_noise");
+
+let gd = new GaussianDropout();
+gd.init_gaussian_dropout(0.5);
+assert(gd.rate == 0.5, "GaussianDropout init_gaussian_dropout");
+
+let gc = new GradientClipping();
+gc.init_gradient_clip(1.0);
+assert(gc.clip_value == 1.0, "GradientClipping init_gradient_clip");
+
+let wd = new WeightDecay();
+wd.init_weight_decay(0.0001);
+assert(wd.rate == 0.0001, "WeightDecay init_weight_decay");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 39: Feature Engineering & Preprocessing
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 39: Feature Engineering & Preprocessing ──");
+
+let rs = new RobustScaler();
+rs.init_robust_scaler();
+assert(rs != nullptr, "RobustScaler init_robust_scaler");
+
+let mas = new MaxAbsScaler();
+mas.init_maxabs_scaler();
+assert(mas != nullptr, "MaxAbsScaler init_maxabs_scaler");
+
+let norm = new Normalizer();
+norm.init_normalizer("l2");
+assert(norm.norm == "l2", "Normalizer init_normalizer");
+
+let binarizer = new Binarizer();
+binarizer.init_binarizer(0.5);
+assert(binarizer.threshold == 0.5, "Binarizer init_binarizer");
+
+let qt = new QuantileTransformer();
+qt.init_quantile_transformer(1000);
+assert(qt.n_quantiles == 1000, "QuantileTransformer init_quantile_transformer");
+
+let pt = new PowerTransformer();
+pt.init_power_transformer("yeo-johnson");
+assert(pt.method == "yeo-johnson", "PowerTransformer init_power_transformer");
+
+let kbins = new KBinsDiscretizer();
+kbins.init_kbins(10);
+assert(kbins.n_bins == 10, "KBinsDiscretizer init_kbins");
+
+let pf = new PolynomialFeatures();
+pf.init_polynomial(2, true);
+assert(pf.degree == 2, "PolynomialFeatures init_polynomial");
+
+let ohe = new OneHotEncoder();
+ohe.init_onehot();
+assert(ohe != nullptr, "OneHotEncoder init_onehot");
+
+let te = new TargetEncoder();
+te.init_target_encoder();
+assert(te != nullptr, "TargetEncoder init_target_encoder");
+
+let lb = new LabelBinarizer();
+lb.init_label_binarizer();
+assert(lb != nullptr, "LabelBinarizer init_label_binarizer");
+
+let st = new SplineTransformer();
+st.init_spline(5, 3);
+assert(st.n_knots == 5, "SplineTransformer init_spline");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 40: Model Selection & Cross-Validation
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 40: Model Selection & Cross-Validation ──");
+
+let kf = new KFold();
+kf.init_kfold(5, true, 42);
+assert(kf.n_splits == 5, "KFold init_kfold");
+assert(kf.shuffle == true, "KFold shuffle");
+
+let skf = new StratifiedKFold();
+skf.init_stratified_kfold(5, true);
+assert(skf.n_splits == 5, "StratifiedKFold init_stratified_kfold");
+
+let tss = new TimeSeriesSplit();
+tss.init_ts_split(5);
+assert(tss.n_splits == 5, "TimeSeriesSplit init_ts_split");
+
+let loo = new LeaveOneOut();
+loo.init_loo();
+assert(loo != nullptr, "LeaveOneOut init_loo");
+
+let lpo = new LeavePOut();
+lpo.init_lpo(2);
+assert(lpo.p == 2, "LeavePOut init_lpo");
+
+let ss = new ShuffleSplit();
+ss.init_shuffle_split(10, 0.2);
+assert(ss.n_splits == 10, "ShuffleSplit init_shuffle_split");
+
+let rkf = new RepeatedKFold();
+rkf.init_repeated_kfold(5, 3);
+assert(rkf.n_repeats == 3, "RepeatedKFold init_repeated_kfold");
+
+let tts = new TrainTestSplit();
+tts.init_train_test_split(0.2, true);
+assert(tts.test_size == 0.2, "TrainTestSplit init_train_test_split");
+
+let cv = new CrossValidate();
+cv.init_cross_validate(5, "accuracy");
+assert(cv.cv == 5, "CrossValidate init_cross_validate");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 41: Evaluation Metrics
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 41: Evaluation Metrics ──");
+
+let acc = new AccuracyScore();
+acc.init_accuracy_score();
+assert(acc != nullptr, "AccuracyScore init_accuracy_score");
+
+let prec = new PrecisionScore();
+prec.init_precision_score();
+assert(prec != nullptr, "PrecisionScore init_precision_score");
+
+let rec = new RecallScore();
+rec.init_recall_score();
+assert(rec != nullptr, "RecallScore init_recall_score");
+
+let f1 = new F1ScoreMetric();
+f1.init_f1_score();
+assert(f1 != nullptr, "F1ScoreMetric init_f1_score");
+
+let fb = new FBetaScore();
+fb.init_fbeta(0.5);
+assert(fb.beta == 0.5, "FBetaScore init_fbeta");
+
+let roc = new ROCAUCScore();
+roc.init_roc_auc();
+assert(roc != nullptr, "ROCAUCScore init_roc_auc");
+
+let cm = new ConfusionMatrixMetric();
+cm.init_confusion_matrix_metric();
+assert(cm != nullptr, "ConfusionMatrixMetric init_confusion_matrix_metric");
+
+let cr = new ClassificationReport();
+cr.init_classification_report();
+assert(cr != nullptr, "ClassificationReport init_classification_report");
+
+let mse_m = new MeanSquaredErrorMetric();
+mse_m.init_mse_metric();
+assert(mse_m != nullptr, "MeanSquaredErrorMetric init_mse_metric");
+
+let mae_m = new MeanAbsoluteErrorMetric();
+mae_m.init_mae_metric();
+assert(mae_m != nullptr, "MeanAbsoluteErrorMetric init_mae_metric");
+
+let rmse = new RMSE();
+rmse.init_rmse();
+assert(rmse != nullptr, "RMSE init_rmse");
+
+let r2 = new R2ScoreMetric();
+r2.init_r2_score_metric();
+assert(r2 != nullptr, "R2ScoreMetric init_r2_score_metric");
+
+let mape = new MeanAbsolutePercentageError();
+mape.init_mape();
+assert(mape != nullptr, "MeanAbsolutePercentageError init_mape");
+
+let ll = new LogLossMetric();
+ll.init_log_loss();
+assert(ll != nullptr, "LogLossMetric init_log_loss");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 42: Ensemble Methods
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 42: Ensemble Methods ──");
+
+let rfc = new RandomForestClassifier();
+rfc.init_random_forest_classifier(100, 10, 2, "sqrt");
+assert(rfc.n_estimators == 100, "RandomForestClassifier init");
+assert(rfc.max_features == "sqrt", "RandomForestClassifier max_features");
+
+let rfr = new RandomForestRegressor();
+rfr.init_random_forest_regressor(100, 10, 2, "sqrt");
+assert(rfr.n_estimators == 100, "RandomForestRegressor init");
+
+let etc = new ExtraTreesClassifier();
+etc.init_extra_trees(100, 10);
+assert(etc.n_estimators == 100, "ExtraTreesClassifier init_extra_trees");
+
+let etr = new ExtraTreesRegressor();
+etr.init_extra_trees_reg(100, 10);
+assert(etr.n_estimators == 100, "ExtraTreesRegressor init_extra_trees_reg");
+
+let sc = new StackingClassifier();
+sc.init_stacking_classifier([rfc, etc], rfc);
+assert(sc.base_estimators != nullptr, "StackingClassifier init");
+
+let sr = new StackingRegressor();
+sr.init_stacking_regressor([rfr, etr], rfr);
+assert(sr.base_estimators != nullptr, "StackingRegressor init");
+
+let bc = new BlendingClassifier();
+bc.init_blending([rfc, etc], rfc, 0.2);
+assert(bc.holdout_ratio == 0.2, "BlendingClassifier init_blending");
+
+let we = new WeightedEnsemble();
+we.init_weighted_ensemble([rfc, etc], [0.6, 0.4]);
+assert(we.weights != nullptr, "WeightedEnsemble init_weighted_ensemble");
+
+let hgb_c = new HistGradientBoostingClassifier();
+hgb_c.init_hist_gradient_boosting(100, 0.1, 3);
+assert(hgb_c.learning_rate == 0.1, "HistGradientBoostingClassifier init");
+
+let hgb_r = new HistGradientBoostingRegressor();
+hgb_r.init_hist_gradient_boosting_reg(100, 0.1, 3);
+assert(hgb_r.learning_rate == 0.1, "HistGradientBoostingRegressor init");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 43: Dimensionality Reduction
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 43: Dimensionality Reduction ──");
+
+let svd = new TruncatedSVD();
+svd.init_truncated_svd(10, 5);
+assert(svd.n_components == 10, "TruncatedSVD init_truncated_svd");
+
+let nmf = new NMFDecomposition();
+nmf.init_nmf(10, 200);
+assert(nmf.n_components == 10, "NMFDecomposition init_nmf");
+
+let lda = new LatentDirichletAllocation();
+lda.init_lda(10, 100);
+assert(lda.n_topics == 10, "LatentDirichletAllocation init_lda");
+
+let ica = new FastICA();
+ica.init_fast_ica(10, 200);
+assert(ica.n_components == 10, "FastICA init_fast_ica");
+
+let iso = new Isomap();
+iso.init_isomap(2, 5);
+assert(iso.n_neighbors == 5, "Isomap init_isomap");
+
+let mds = new MDS();
+mds.init_mds(2, 300);
+assert(mds.n_components == 2, "MDS init_mds");
+
+let tsne = new TSNE();
+tsne.init_tsne(2, 30.0, 1000, 200.0);
+assert(tsne.perplexity == 30.0, "TSNE init_tsne");
+assert(tsne.learning_rate == 200.0, "TSNE learning_rate");
+
+let kpca = new KernelPCA();
+kpca.init_kernel_pca(10, "rbf", 1.0);
+assert(kpca.kernel == "rbf", "KernelPCA init_kernel_pca");
+
+let spca = new SparsePCA();
+spca.init_sparse_pca(10, 1.0, 100);
+assert(spca.alpha == 1.0, "SparsePCA init_sparse_pca");
+
+let ipca = new IncrementalPCA();
+ipca.init_incremental_pca(10, 100);
+assert(ipca.batch_size == 100, "IncrementalPCA init_incremental_pca");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 44: Extended Linear Models
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 44: Extended Linear Models ──");
+
+let ridge = new RidgeRegression();
+ridge.init_ridge_regression(1.0, 1000, 0.01);
+assert(ridge.alpha == 1.0, "RidgeRegression init_ridge_regression");
+
+let lasso = new LassoRegression();
+lasso.init_lasso_regression(1.0, 1000, 0.01);
+assert(lasso.alpha == 1.0, "LassoRegression init_lasso_regression");
+
+let enet = new ElasticNetRegression();
+enet.init_elastic_net(1.0, 0.5, 1000, 0.01);
+assert(enet.l1_ratio == 0.5, "ElasticNetRegression init_elastic_net");
+
+let br = new BayesianRidgeRegression();
+br.init_bayesian_ridge(1.0, 1.0, 1.0, 1.0, 300);
+assert(br.max_iter == 300, "BayesianRidgeRegression init_bayesian_ridge");
+
+let sgdr = new SGDRegressorModel();
+sgdr.init_sgd_regressor("squared_loss", "l2", 0.0001, 1000, 0.01);
+assert(sgdr.loss == "squared_loss", "SGDRegressorModel init_sgd_regressor");
+
+let sgdc = new SGDClassifierModel();
+sgdc.init_sgd_classifier("hinge", "l2", 0.0001, 1000, 0.01);
+assert(sgdc.loss == "hinge", "SGDClassifierModel init_sgd_classifier");
+
+let per = new PerceptronClassifier();
+per.init_perceptron(1000, 0.01);
+assert(per.max_iter == 1000, "PerceptronClassifier init_perceptron");
+
+let pac = new PassiveAggressiveClassifier();
+pac.init_passive_aggressive_clf(1.0, 1000);
+assert(pac.C == 1.0, "PassiveAggressiveClassifier init");
+
+let par = new PassiveAggressiveRegressor();
+par.init_passive_aggressive_reg(1.0, 0.1, 1000);
+assert(par.C == 1.0, "PassiveAggressiveRegressor init");
+
+let hr = new HuberRegressor();
+hr.init_huber_regressor(1.35, 1000, 0.01);
+assert(hr.epsilon == 1.35, "HuberRegressor init_huber_regressor");
+
+let qr = new QuantileRegressor();
+qr.init_quantile_regressor(0.5, 1000, 0.01);
+assert(qr.quantile == 0.5, "QuantileRegressor init_quantile_regressor");
+
+let larsr = new LarsRegression();
+larsr.init_lars(10, 500);
+assert(larsr.n_nonzero_coefs == 10, "LarsRegression init_lars");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 45: Nearest Neighbors & Prototype
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 45: Nearest Neighbors & Prototype ──");
+
+let knn_r = new KNNRegressor();
+knn_r.init_knn_regressor(5, "uniform");
+assert(knn_r.n_neighbors == 5, "KNNRegressor init_knn_regressor");
+
+let rnc = new RadiusNeighborsClassifier();
+rnc.init_radius_neighbors_clf(1.0, -1);
+assert(rnc.radius == 1.0, "RadiusNeighborsClassifier init");
+
+let rnr = new RadiusNeighborsRegressor();
+rnr.init_radius_neighbors_reg(1.0);
+assert(rnr.radius == 1.0, "RadiusNeighborsRegressor init");
+
+let nc = new NearestCentroid();
+nc.init_nearest_centroid();
+assert(nc != nullptr, "NearestCentroid init_nearest_centroid");
+
+let lvq = new LVQ();
+lvq.init_lvq(5, 0.01, 100);
+assert(lvq.n_prototypes == 5, "LVQ init_lvq");
+
+let kmed = new KMedoids();
+kmed.init_kmedoids(3, 100);
+assert(kmed.n_clusters == 3, "KMedoids init_kmedoids");
+
+let bt = new BallTree();
+bt.init_ball_tree(40);
+assert(bt.leaf_size == 40, "BallTree init_ball_tree");
+
+let kdt = new KDTree();
+kdt.init_kd_tree(40);
+assert(kdt.leaf_size == 40, "KDTree init_kd_tree");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 46: Naive Bayes & Bayesian
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 46: Naive Bayes & Bayesian ──");
+
+let gnb = new GaussianNB();
+gnb.init_gaussian_nb();
+assert(gnb != nullptr, "GaussianNB init_gaussian_nb");
+
+let mnb = new MultinomialNB();
+mnb.init_multinomial_nb(1.0);
+assert(mnb.alpha == 1.0, "MultinomialNB init_multinomial_nb");
+
+let bnb = new BernoulliNB();
+bnb.init_bernoulli_nb(1.0, 0.0);
+assert(bnb.alpha == 1.0, "BernoulliNB init_bernoulli_nb");
+
+let cnb = new ComplementNB();
+cnb.init_complement_nb(1.0);
+assert(cnb.alpha == 1.0, "ComplementNB init_complement_nb");
+
+let catnb = new CategoricalNB();
+catnb.init_categorical_nb(1.0);
+assert(catnb.alpha == 1.0, "CategoricalNB init_categorical_nb");
+
+let bgmm = new BayesianGaussianMixtureModel();
+bgmm.init_bayesian_gmm(3, 100, 1.0, 0.001);
+assert(bgmm.n_components == 3, "BayesianGaussianMixtureModel init");
+
+let blr = new BayesianLinearRegressionModel();
+blr.init_bayesian_lr(1.0, 1.0);
+assert(blr.prior_precision == 1.0, "BayesianLinearRegressionModel init");
+
+let gpc = new GaussianProcessClassifier();
+gpc.init_gaussian_process_clf("rbf");
+assert(gpc.kernel == "rbf", "GaussianProcessClassifier init");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 47: Anomaly Detection
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 47: Anomaly Detection ──");
+
+let iforest = new IsolationForest();
+iforest.init_isolation_forest(100, 256, 0.1);
+assert(iforest.n_estimators == 100, "IsolationForest init_isolation_forest");
+assert(iforest.contamination == 0.1, "IsolationForest contamination");
+
+let lof = new LocalOutlierFactor();
+lof.init_lof(20, 0.1);
+assert(lof.n_neighbors == 20, "LocalOutlierFactor init_lof");
+
+let ee = new EllipticEnvelope();
+ee.init_elliptic_envelope(0.1);
+assert(ee.contamination == 0.1, "EllipticEnvelope init_elliptic_envelope");
+
+let ocs = new OneClassSVM();
+ocs.init_one_class_svm(0.5, "rbf", 1.0);
+assert(ocs.nu == 0.5, "OneClassSVM init_one_class_svm");
+
+let rc = new RobustCovariance();
+rc.init_robust_covariance(0.1);
+assert(rc.contamination == 0.1, "RobustCovariance init_robust_covariance");
+
+let db_out = new DBSCANOutlierDetector();
+db_out.init_dbscan_outlier(0.5, 5);
+assert(db_out.eps == 0.5, "DBSCANOutlierDetector init_dbscan_outlier");
+
+let hbos = new HBOS();
+hbos.init_hbos(10);
+assert(hbos.n_bins == 10, "HBOS init_hbos");
+
+let abod = new ABOD();
+abod.init_abod(10);
+assert(abod.n_neighbors == 10, "ABOD init_abod");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 48: Pipeline & Workflow
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 48: Pipeline & Workflow ──");
+
+let pv = new PipelineVerbose();
+pv.init_pipeline_verbose([rs, ohe], true);
+assert(pv.verbose == true, "PipelineVerbose init_pipeline_verbose");
+
+let fu = new FeatureUnionExtended();
+fu.init_feature_union([rs, ohe], [1.0, 1.0]);
+assert(fu.transformers != nullptr, "FeatureUnionExtended init_feature_union");
+
+let pp = new ParallelPipeline();
+pp.init_parallel_pipeline([rfc, etc]);
+assert(pp.estimators != nullptr, "ParallelPipeline init_parallel_pipeline");
+
+let dag = new DAGPipeline();
+dag.init_dag_pipeline();
+assert(dag != nullptr, "DAGPipeline init_dag_pipeline");
+
+let cmx = new TransformerMixin();
+cmx.init_transformer_mixin();
+assert(cmx != nullptr, "TransformerMixin init_transformer_mixin");
+
+let emx = new EstimatorMixin();
+emx.init_estimator_mixin();
+assert(emx != nullptr, "EstimatorMixin init_estimator_mixin");
+
+let me = new MetaEstimator();
+me.init_meta_estimator(rfc);
+assert(me.base_estimator != nullptr, "MetaEstimator init_meta_estimator");
+
+let cc = new CalibratedClassifier();
+cc.init_calibrated_clf(rfc, "sigmoid");
+assert(cc.method == "sigmoid", "CalibratedClassifier init_calibrated_clf");
+
+let vr = new VotingRegressor();
+vr.init_voting_regressor([rfr, etr], [1.0, 1.0]);
+assert(vr.estimators != nullptr, "VotingRegressor init_voting_regressor");
+
+let scv = new StackingCV();
+scv.init_stacking_cv([rfc, etc], rfc, 5);
+assert(scv.cv == 5, "StackingCV init_stacking_cv");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 49: Data Utilities
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 49: Data Utilities ──");
+
+let dl2 = new DataLoader();
+dl2.init_data_loader([[1,2],[3,4]], [0,1], 2, true);
+assert(dl2.batch_size == 2, "DataLoader init_data_loader");
+assert(dl2.shuffle == true, "DataLoader shuffle");
+
+let bg = new BatchGenerator();
+bg.init_batch_generator([[1,2],[3,4],[5,6]], 2);
+assert(bg.batch_size == 2, "BatchGenerator init_batch_generator");
+
+let ds = new Dataset();
+ds.init_dataset([[1,2],[3,4]], [0,1], ["x1","x2"], "test dataset");
+assert(ds.feature_names != nullptr, "Dataset init_dataset");
+
+let lds = new LabeledDataset();
+lds.init_labeled_dataset([[1,2],[3,4]], [0,1], ["cat","dog"]);
+assert(lds.labels != nullptr, "LabeledDataset init_labeled_dataset");
+
+let isamp = new ImbalancedSampler();
+isamp.init_imbalanced_sampler("oversample");
+assert(isamp.strategy == "oversample", "ImbalancedSampler init_imbalanced_sampler");
+
+let ssamp = new StratifiedSampler();
+ssamp.init_stratified_sampler(5);
+assert(ssamp.n_splits == 5, "StratifiedSampler init_stratified_sampler");
+
+let tvs = new TrainValSplit();
+tvs.init_train_val_split(0.2, 0.1, true);
+assert(tvs.test_size == 0.2, "TrainValSplit init_train_val_split");
+
+let sd = new ShuffleData();
+sd.init_shuffle_data(42);
+assert(sd.random_state == 42, "ShuffleData init_shuffle_data");
+
+let dn = new DataNormalizer();
+dn.init_data_normalizer("minmax");
+assert(dn.method == "minmax", "DataNormalizer init_data_normalizer");
+
+let fs = new FeatureSelector();
+fs.init_feature_selector("variance", 0.01);
+assert(fs.method == "variance", "FeatureSelector init_feature_selector");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 50: Model Persistence & Deployment
+# ═══════════════════════════════════════════════════════════════════════════
+print("── Section 50: Model Persistence & Deployment ──");
+
+let ms = new ModelSaver();
+ms.init_model_saver();
+assert(ms != nullptr, "ModelSaver init_model_saver");
+
+let ml = new ModelLoader();
+ml.init_model_loader();
+assert(ml != nullptr, "ModelLoader init_model_loader");
+
+let ckpt = new Checkpoint();
+ckpt.init_checkpoint("./checkpoints", 5);
+assert(ckpt.max_to_keep == 5, "Checkpoint init_checkpoint");
+
+let es = new EarlyStopping();
+es.init_early_stopping(10, 0.001);
+assert(es.patience == 10, "EarlyStopping init_early_stopping");
+assert(es.min_delta == 0.001, "EarlyStopping min_delta");
+
+let rlrp = new ReduceLROnPlateau();
+rlrp.init_reduce_lr_plateau(0.5, 5, 0.0001);
+assert(rlrp.factor == 0.5, "ReduceLROnPlateau init_reduce_lr_plateau");
+assert(rlrp.min_lr == 0.0001, "ReduceLROnPlateau min_lr");
+
+let mc = new ModelCheckpoint();
+mc.init_model_checkpoint(true);
+assert(mc.save_best_only == true, "ModelCheckpoint init_model_checkpoint");
+
+let tbl = new TensorBoardLogger();
+tbl.init_tensorboard_logger("./logs");
+assert(tbl.log_dir == "./logs", "TensorBoardLogger init_tensorboard_logger");
+
+let csvl = new CSVLogger();
+csvl.init_csv_logger("./logs/training.csv");
+assert(csvl.log_path == "./logs/training.csv", "CSVLogger init_csv_logger");
+
+let lcb = new LambdaCallback();
+lcb.init_lambda_callback(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+assert(lcb != nullptr, "LambdaCallback init_lambda_callback");
+
+let cbl = new CallbackList();
+cbl.init_callback_list([es, mc]);
+assert(cbl.callbacks != nullptr, "CallbackList init_callback_list");
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Summary
+# ═══════════════════════════════════════════════════════════════════════════
+test_summary();

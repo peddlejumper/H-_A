@@ -1,0 +1,11 @@
+# 17_call_func_0args.hto — CALL_FUNCTION 0 参数
+fn ping() {
+    return "pong";
+}
+print(ping());
+fn nada() {
+    print("side effect");
+    # 无 return -> RETURN_VALUE 缺失
+}
+nada();
+print("done");

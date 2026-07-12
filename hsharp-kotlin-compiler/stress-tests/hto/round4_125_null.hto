@@ -1,0 +1,185 @@
+# ============================================================
+# round4_125_null.hto — null 值语义深度测试
+# 测试智能体 Round 4 #125。覆盖 task 列出的 10 个子领域 (S1-S10)。
+#
+# 核心探测目标: null 的比较/算术/集合/条件/字符串/is/match/传播语义。
+# 每个 probe 用 try/catch 包住, 输出 r125_<name>:<result>。
+# 注: H# lambda 须 fn(params) { body }，无 expr-body。
+# 注: 已知 round3_116 记录 `null is null` 为 PARSE ERROR (null 是关键字)。
+# ============================================================
+
+# ============================================================
+# 工具: 安全执行包装
+# ============================================================
+fn safe(label, f) {
+    try {
+        let r = f();
+        print(label + ":" + str(r));
+    } catch (e) {
+        print(label + ":EXC[" + str(e) + "]");
+    }
+}
+
+# ============================================================
+# === S1: null 比较 ===
+# ============================================================
+print("=== S1. null comparison ===");
+safe("r125_s1_eq_null_null", fn() { return null == null; });
+safe("r125_s1_eq_null_0", fn() { return null == 0; });
+safe("r125_s1_eq_null_emptystr", fn() { return null == ""; });
+safe("r125_s1_eq_null_false", fn() { return null == false; });
+safe("r125_s1_neq_null_null", fn() { return null != null; });
+safe("r125_s1_eq_null_emptylist", fn() { return null == []; });
+safe("r125_s1_eq_null_emptydict", fn() { return null == {}; });
+
+# ============================================================
+# === S2: null 算术 ===
+# ============================================================
+print("=== S2. null arithmetic ===");
+safe("r125_s2_null_plus_1", fn() { return null + 1; });
+safe("r125_s2_null_minus_1", fn() { return null - 1; });
+safe("r125_s2_null_mul_0", fn() { return null * 0; });
+safe("r125_s2_null_div_1", fn() { return null / 1; });
+safe("r125_s2_1_plus_null", fn() { return 1 + null; });
+safe("r125_s2_null_plus_null", fn() { return null + null; });
+safe("r125_s2_null_mod_2", fn() { return null % 2; });
+
+# ============================================================
+# === S3: null 在集合中 ===
+# ============================================================
+print("=== S3. null in collections ===");
+safe("r125_s3_list_with_nulls", fn() { return [null, 1, null]; });
+safe("r125_s3_dict_with_null_val", fn() { return {"k": null}; });
+safe("r125_s3_len_null_null", fn() { return len([null, null]); });
+safe("r125_s3_list_index_null", fn() { let xs = [null, 1]; return xs[0]; });
+safe("r125_s3_dict_get_null_val", fn() { let d = {"k": null}; return d["k"]; });
+safe("r125_s3_null_in_list", fn() { return null in [null, 1]; });
+safe("r125_s3_null_in_dict_keys", fn() { return "k" in {"k": null}; });
+
+# ============================================================
+# === S4: null 作为字典键 ===
+# ============================================================
+print("=== S4. null as dict key ===");
+safe("r125_s4_null_key_create", fn() { return {null: "nothing"}; });
+safe("r125_s4_null_key_get", fn() { let d = {null: "nothing"}; return d[null]; });
+safe("r125_s4_null_key_set", fn() { let d = {}; d[null] = "v"; return d[null]; });
+safe("r125_s4_null_key_in", fn() { let d = {null: "v"}; return null in d; });
+
+# ============================================================
+# === S5: null 在条件中 ===
+# ============================================================
+print("=== S5. null in conditions ===");
+safe("r125_s5_if_null", fn() { if (null) { return "truthy"; } return "falsy"; });
+safe("r125_s5_not_null", fn() { if (!null) { return "not-null-true"; } return "not-null-false"; });
+safe("r125_s5_null_and_true", fn() { return null and true; });
+safe("r125_s5_null_or_1", fn() { return null or 1; });
+safe("r125_s5_true_and_null", fn() { return true and null; });
+safe("r125_s5_1_or_null", fn() { return 1 or null; });
+safe("r125_s5_null_and_null", fn() { return null and null; });
+safe("r125_s5_null_or_null", fn() { return null or null; });
+safe("r125_s5_while_null", fn() { let i = 0; while (null) { i = i + 1; } return i; });
+
+# ============================================================
+# === S6: null 字符串拼接 ===
+# ============================================================
+print("=== S6. null string concat ===");
+safe("r125_s6_str_plus_null", fn() { return "x" + null; });
+safe("r125_s6_null_plus_str", fn() { return null + "x"; });
+safe("r125_s6_str_null", fn() { return str(null); });
+safe("r125_s6_null_in_fmt", fn() { return "v=" + str(null) + "|end"; });
+safe("r125_s6_null_plus_emptystr", fn() { return null + ""; });
+safe("r125_s6_emptystr_plus_null", fn() { return "" + null; });
+
+# ============================================================
+# === S7: type(null) ===
+# ============================================================
+print("=== S7. type(null) ===");
+safe("r125_s7_type_null", fn() { return type(null); });
+safe("r125_s7_type_null_eq_null_str", fn() { return type(null) == "null"; });
+safe("r125_s7_type_null_eq_none_str", fn() { return type(null) == "none"; });
+safe("r125_s7_type_null_eq_object_str", fn() { return type(null) == "object"; });
+safe("r125_s7_type_let_null", fn() { let x = null; return type(x); });
+
+# ============================================================
+# === S8: null 与 is ===
+# 注: round3_116 记录 `null is null` 为 PARSE ERROR (null 是关键字,
+# is 后只接受 IDENTIFIER)。PARSE ERROR 阻止整个文件编译, 故此处
+# 注释掉 `is null` / `is "null"` 形式, 仅保留 `is <IDENTIFIER>` 形式。
+# 已注释的用例作为 BUG 记录在报告中。
+# ============================================================
+print("=== S8. null with is ===");
+# PARSE ERROR: `null is null` — null 是关键字, is 后只接受 IDENTIFIER
+# safe("r125_s8_null_is_null", fn() { return null is null; });
+# PARSE ERROR: `x is null`
+# safe("r125_s8_x_is_null", fn() { let x = null; return x is null; });
+# PARSE ERROR: `null is "null"` — "null" 是字符串字面量, 非 IDENTIFIER
+# safe("r125_s8_null_is_str", fn() { return null is "null"; });
+safe("r125_s8_null_is_int", fn() { return null is int; });
+safe("r125_s8_null_is_Object", fn() { return null is Object; });
+# PARSE ERROR: `1 is null`
+# safe("r125_s8_1_is_null", fn() { return 1 is null; });
+safe("r125_s8_null_is_str_type", fn() { return null is str; });
+safe("r125_s8_null_is_bool", fn() { return null is bool; });
+safe("r125_s8_null_is_list", fn() { return null is list; });
+safe("r125_s8_null_is_dict", fn() { return null is dict; });
+
+# ============================================================
+# === S9: null 在 match 中 ===
+# 注: round3_116 记录 match-pattern parser 接受 null 关键字。
+# ============================================================
+print("=== S9. null in match ===");
+fn match_null(x) {
+    return match x {
+        null => "is-null",
+        _ => "not-null"
+    };
+}
+safe("r125_s9_match_null_lit", fn() { return match_null(null); });
+safe("r125_s9_match_int", fn() { return match_null(1); });
+safe("r125_s9_match_str", fn() { return match_null("hi"); });
+safe("r125_s9_match_let_null", fn() { let x = null; return match_null(x); });
+safe("r125_s9_match_false", fn() { return match_null(false); });
+safe("r125_s9_match_0", fn() { return match_null(0); });
+
+# 多分支: null / 0 / 其他
+fn match_multi(x) {
+    return match x {
+        null => "null-branch",
+        0 => "zero-branch",
+        _ => "other"
+    };
+}
+safe("r125_s9_multi_null", fn() { return match_multi(null); });
+safe("r125_s9_multi_0", fn() { return match_multi(0); });
+safe("r125_s9_multi_5", fn() { return match_multi(5); });
+
+# ============================================================
+# === S10: null 传播 ===
+# ============================================================
+print("=== S10. null propagation ===");
+fn return_null() { return null; }
+fn return_one() { return 1; }
+fn identity(x) { return x; }
+fn use_arg(x) { return x + 1; }
+
+# 函数返回 null, 调用者对结果操作
+safe("r125_s10_ret_null_str", fn() { let r = return_null(); return "got:" + str(r); });
+safe("r125_s10_ret_null_arith", fn() { let r = return_null(); return r + 1; });
+safe("r125_s10_ret_null_eq", fn() { let r = return_null(); return r == null; });
+safe("r125_s10_ret_null_type", fn() { let r = return_null(); return type(r); });
+
+# null 作为参数传入函数
+safe("r125_s10_null_arg_identity", fn() { return identity(null); });
+safe("r125_s10_null_arg_use", fn() { return use_arg(null); });
+safe("r125_s10_null_arg_str", fn() { return str(null); });
+safe("r125_s10_null_arg_len", fn() { return len(null); });
+
+# null 链式: 返回 null 的函数结果再传入
+safe("r125_s10_chain_null", fn() { return identity(return_null()); });
+safe("r125_s10_chain_null_arith", fn() { let r = identity(return_null()); return r + 1; });
+
+# null 作为 list/dict 元素再操作
+safe("r125_s10_null_in_list_len", fn() { let xs = [return_null(), 1, return_null()]; return len(xs); });
+safe("r125_s10_null_in_dict_get", fn() { let d = {"k": return_null()}; return d["k"]; });
+
+print("=== r125 done ===");

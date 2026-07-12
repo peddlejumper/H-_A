@@ -1,0 +1,12 @@
+# t11: async fn that throws an exception.
+# The throw should propagate through the await.
+async fn bad() {
+    throw "boom";
+}
+try {
+    let r = await bad();
+    print(r);
+} catch (e) {
+    print("caught:");
+    print(e);
+}

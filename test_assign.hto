@@ -1,0 +1,4 @@
+# test_assign.hto
+let d = {};
+d["a"] = 1;
+print(d["a"]);

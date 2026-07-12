@@ -1,0 +1,6 @@
+# t02: await unwraps the HFuture produced by async fn.
+async fn foo() {
+    return 42;
+}
+let x = await foo();
+print(x);

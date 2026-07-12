@@ -1,0 +1,8 @@
+# 06 - for over range with start
+# 目的: range(start, stop) 迭代触发 fixForLoopJumps
+let sum2 = 0;
+for i in range(3, 7) {
+    sum2 = sum2 + i;
+}
+print("sum=" + str(sum2));
+print("expected=18");

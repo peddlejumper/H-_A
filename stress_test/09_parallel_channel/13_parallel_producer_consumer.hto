@@ -1,0 +1,131 @@
+# 13 — parallel + Channel: producer/consumer collaboration
+# Spawns N producers and M consumers via @parallel; they communicate via a
+# shared channel.  Joins via concurrent { }.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Single producer, single consumer
+@parallel fn producer(ch, n) {
+    let i = 0;
+    while (i < n) {
+        chan_send(ch, i);
+        i = i + 1;
+    }
+    chan_close(ch);
+    return 0;
+}
+
+@parallel fn consumer(ch) {
+    let sum = 0;
+    let done = false;
+    while (done == false) {
+        let caught = false;
+        let v = 0;
+        try {
+            v = chan_recv(ch);
+        } catch (e) {
+            caught = true;
+        }
+        if (caught) {
+            done = true;
+        } else {
+            sum = sum + v;
+        }
+    }
+    return sum;
+}
+
+let ch = chan_new(0);
+let pf = producer(ch, 100);
+let cf = consumer(ch);
+let produced_ok = await pf;
+let total = await cf;
+check("producer_consumer_sum", total == 4950, "total=" + str(total));
+
+# Multiple producers feeding one consumer through one channel.
+# Each producer sends a range and closes when done. We use a sentinel
+# (negative number) per producer so the consumer knows when all are done.
+@parallel fn producer_n(ch, start, count, id) {
+    let i = 0;
+    while (i < count) {
+        chan_send(ch, start + i);
+        i = i + 1;
+    }
+    chan_send(ch, -1 - id);   # sentinel: id 0 -> -1, id 1 -> -2, etc.
+    return 0;
+}
+
+@parallel fn consumer_n(ch, nproducers) {
+    let sum = 0;
+    let producers_done = 0;
+    while (producers_done < nproducers) {
+        let v = chan_recv(ch);
+        if (v < 0) {
+            producers_done = producers_done + 1;
+        } else {
+            sum = sum + v;
+        }
+    }
+    return sum;
+}
+
+let ch2 = chan_new(0);
+concurrent {
+    let p1 = producer_n(ch2, 0,   50, 0);
+    let p2 = producer_n(ch2, 100, 50, 1);
+    let p3 = producer_n(ch2, 200, 50, 2);
+    let c1 = consumer_n(ch2, 3);
+    let _ = await p1;
+    let _ = await p2;
+    let _ = await p3;
+    let total2 = await c1;
+    check("multi_producer_sum", total2 == (0+49)*50/2 + (100+149)*50/2 + (200+249)*50/2,
+          "total2=" + str(total2));
+}
+
+# Bounded channel forces real backpressure (producer blocks on send when full).
+@parallel fn bounded_producer(ch, n) {
+    let i = 0;
+    while (i < n) {
+        chan_send(ch, i);
+        i = i + 1;
+    }
+    chan_close(ch);
+    return n;
+}
+
+@parallel fn bounded_consumer(ch) {
+    let count = 0;
+    let done = false;
+    while (done == false) {
+        let caught = false;
+        try {
+            let _ = chan_recv(ch);
+        } catch (e) {
+            caught = true;
+        }
+        if (caught) {
+            done = true;
+        } else {
+            count = count + 1;
+        }
+    }
+    return count;
+}
+
+let ch3 = chan_new(4);   # small bound forces blocking
+let pf3 = bounded_producer(ch3, 500);
+let cf3 = bounded_consumer(ch3);
+let _p3 = await pf3;
+let count3 = await cf3;
+check("bounded_pc_count", count3 == 500, "count3=" + str(count3));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

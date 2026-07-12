@@ -1,0 +1,14 @@
+# Phase A2: optional chaining `a?.b`
+class Box {
+    let val = 0;
+    fn get(self) { return val; }
+}
+let b = new Box();
+b.val = 42;
+print(b?.val);
+print(b?.get());
+
+# `?` on a failing access should propagate (return the error value)
+let n = null;
+let r = n?.foo;
+print(r);

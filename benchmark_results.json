@@ -1,0 +1,99 @@
+{
+  "lexer_1000fns": {
+    "min": 0.0,
+    "avg": 0.0,
+    "max": 0.001
+  },
+  "parser_500fns": {
+    "min": 28.092,
+    "avg": 28.475,
+    "max": 28.794
+  },
+  "compiler_500fns": {
+    "min": 54.938,
+    "avg": 55.505,
+    "max": 56.215
+  },
+  "bytecode_arithmetic": {
+    "min": 28.207,
+    "avg": 28.545,
+    "max": 28.679
+  },
+  "bytecode_fib25": {
+    "min": 1447.41,
+    "avg": 1457.928,
+    "max": 1481.88
+  },
+  "bytecode_ternary": {
+    "min": 14.898,
+    "avg": 15.282,
+    "max": 16.684
+  },
+  "bytecode_quaternary": {
+    "min": 21.369,
+    "avg": 21.626,
+    "max": 21.926
+  },
+  "interp_arithmetic": {
+    "min": 20.289,
+    "avg": 20.412,
+    "max": 20.535
+  },
+  "interp_fib20": {
+    "min": 94.945,
+    "avg": 95.886,
+    "max": 96.954
+  },
+  "interp_ternary": {
+    "min": 3.905,
+    "avg": 4.12,
+    "max": 4.456
+  },
+  "cvm_startup": {
+    "avg": 3.872
+  },
+  "dzzw_spawn_await": {
+    "avg": 11.032,
+    "ok": true
+  },
+  "dzzw_parallel_map": {
+    "avg": 5.059,
+    "ok": true
+  },
+  "dzzw_channels": {
+    "avg": 5.142,
+    "ok": true
+  },
+  "dzzw_mutex": {
+    "avg": 4.902,
+    "ok": true
+  },
+  "dzzw_work_stealing": {
+    "avg": 3.84,
+    "ok": true,
+    "steals": ""
+  },
+  "sequential_heavy": {
+    "min": 461.447,
+    "avg": 476.712,
+    "max": 520.57
+  },
+  "parallel_heavy": {
+    "avg": 29.886,
+    "ok": true
+  },
+  "hsml_matrix": {
+    "min": 0.432,
+    "avg": 0.445,
+    "max": 0.476
+  },
+  "sysinfo": {
+    "os": "Darwin",
+    "machine": "arm64",
+    "processor": "arm",
+    "python": "3.13.0",
+    "hostname": "peddlejumperdeMacBook-Pro.local",
+    "cpu_count": 10
+  },
+  "timestamp": "2026-06-07 10:56:06"
+}

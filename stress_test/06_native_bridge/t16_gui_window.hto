@@ -1,0 +1,32 @@
+# t16 — GUI: native_create_window 0x0, native_parse_color invalid color
+print("== t16 gui window/color ==");
+try {
+    let id = gui_create_window("w", 0, 0);
+    print("gui_create_window 0x0 id=" + str(id));
+    gui_set_window_size(id, 0, 0);
+    print("gui_get_window_size=" + str(gui_get_window_size(id)));
+    gui_destroy_window(id);
+} catch (e) {
+    print("gui window 0x0 ERR: " + str(e));
+}
+# valid color
+try {
+    print("gui_parse_color(\"#FF0000\")=" + str(gui_parse_color("#FF0000")));
+    print("gui_parse_color(\"#00ff00\")=" + str(gui_parse_color("#00ff00")));
+} catch (e) {
+    print("gui_parse_color(valid) ERR: " + str(e));
+}
+# INVALID color string (non-hex) — Kotlin does hex.toInt(16) -> may throw NumberFormatException
+try {
+    print("gui_parse_color(\"notacolor\")=" + str(gui_parse_color("notacolor")));
+} catch (e) {
+    print("gui_parse_color(invalid) ERR: " + str(e));
+}
+try {
+    print("gui_parse_color(\"#GGGGGG\")=" + str(gui_parse_color("#GGGGGG")));
+} catch (e) {
+    print("gui_parse_color(#GGGGGG) ERR: " + str(e));
+}
+# measure_text stub
+print("gui_measure_text=" + str(gui_measure_text("hello", 12, 0)));
+print("gui_get_screen_size=" + str(gui_get_screen_size()));

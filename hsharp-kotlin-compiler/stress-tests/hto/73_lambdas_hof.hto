@@ -1,0 +1,272 @@
+# T73 - Lambda & Higher-order functions (stress)
+# Covers: HOF param, return-value lambda, map/filter/reduce, compose,
+# partial application, lambda arrays/dicts, f()() chains, loop-variable
+# capture, shared capture, multi-level closure, comparator sort,
+# class-field callable, method-returned lambda, lambda+default/variadic,
+# and lambda recursion via named variable (known-bug isolated at end).
+
+# ============================================================
+# Case 1: Lambda as parameter — apply(f, x)
+# ============================================================
+fn apply(f, x) {
+    return f(x);
+}
+print(apply(fn(x) { return x + 1; }, 5));
+print(apply(fn(s) { return s + "!"; }, "hi"));
+print(apply(fn(p) { return p * p; }, 7));
+
+# ============================================================
+# Case 2: Lambda as return value — factory, plus f()() immediate call
+# ============================================================
+fn makeMul(k) {
+    return fn(x) { return x * k; };
+}
+let triple = makeMul(3);
+let half = makeMul(0.5);
+print(triple(4));
+print(half(10));
+print(makeMul(2)(20));
+
+# ============================================================
+# Case 3: map / filter / reduce hand-written, composed pipeline
+# sum of squares of evens: 4+16+36+64+100 = 220
+# ============================================================
+fn map(f, lst) {
+    let out = [];
+    for x in lst { push(out, f(x)); }
+    return out;
+}
+fn filter(f, lst) {
+    let out = [];
+    for x in lst { if (f(x)) { push(out, x); } }
+    return out;
+}
+fn reduce(f, lst, init) {
+    let acc = init;
+    for x in lst { acc = f(acc, x); }
+    return acc;
+}
+let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let pipeline = reduce(fn(a, b) { return a + b; },
+                     filter(fn(x) { return x % 2 == 0; },
+                           map(fn(x) { return x * x; }, nums)),
+                     0);
+print(pipeline);
+
+# ============================================================
+# Case 4: Function composition, including nested compose
+# ============================================================
+fn compose(f, g) {
+    return fn(x) { return f(g(x)); };
+}
+let addOne = fn(x) { return x + 1; };
+let doubleIt = fn(x) { return x * 2; };
+print(compose(addOne, doubleIt)(5));
+print(compose(doubleIt, addOne)(5));
+print(compose(fn(x) { return x + 100; }, fn(x) { return x - 1; })(10));
+let c3 = compose(compose(addOne, doubleIt), addOne);
+print(c3(5));
+
+# ============================================================
+# Case 5: Partial application partial(f, a) = fn(b) { f(a, b) }
+# ============================================================
+fn partial(f, a) {
+    return fn(b) { return f(a, b); };
+}
+fn sub(a, b) { return a - b; }
+fn cat(a, b) { return a + "-" + b; }
+let minus5 = partial(sub, 5);
+print(minus5(2));
+let prepend = partial(cat, "PRE");
+print(prepend("FIX"));
+
+# ============================================================
+# Case 6: Lambda array — list of lambdas, iterate & call
+# ============================================================
+let fns = [fn() { return 1; }, fn() { return 2; }, fn() { return 3; }];
+print(fns[0]());
+print(fns[1]());
+print(fns[2]());
+let total = 0;
+for f in fns { total = total + f(); }
+print(total);
+
+# ============================================================
+# Case 7: Lambda dict values — call by key
+# ============================================================
+let ops = {
+    "inc": fn(x) { return x + 1; },
+    "dec": fn(x) { return x - 1; },
+    "sq":  fn(x) { return x * x; }
+};
+print(ops["inc"](10));
+print(ops["dec"](10));
+print(ops["sq"](6));
+
+# ============================================================
+# Case 8: f()()() chain — immediate call of returned lambda, deep
+# ============================================================
+fn gen() {
+    return fn() { return fn() { return 42; }; };
+}
+print(gen()()());
+fn step1() { return fn(x) { return x + 1; }; }
+print(step1()(99));
+
+# ============================================================
+# Case 9: Lambda capturing loop variable
+# Expected: 0, 1, 2 (each closure captures its own i)
+# Classic bug: all print 2 (capture-by-reference of mutable var)
+# ============================================================
+let closures = [];
+for i in range(0, 3) {
+    push(closures, fn() { return i; });
+}
+print(closures[0]());
+print(closures[1]());
+print(closures[2]());
+
+# ============================================================
+# Case 10: Multiple lambdas sharing capture (bag with add/count/first)
+# ============================================================
+fn makeBag() {
+    let items = [];
+    return {
+        "add":   fn(x) { push(items, x); return len(items); },
+        "count": fn()  { return len(items); },
+        "first": fn()  { if (len(items) > 0) { return items[0]; } return null; }
+    };
+}
+let bag = makeBag();
+print(bag["add"](10));
+print(bag["add"](20));
+print(bag["count"]());
+print(bag["first"]());
+
+# ============================================================
+# Case 11: Multi-level closure capture (3 levels deep)
+# outer -> mid -> inner all capture their enclosing vars
+# Expected: 6, 60
+# ============================================================
+try {
+    fn outer(a) {
+        fn mid(b) {
+            fn inner(c) {
+                return a + b + c;
+            }
+            return inner;
+        }
+        return mid;
+    }
+    print(outer(1)(2)(3));
+    print(outer(10)(20)(30));
+} catch (e) {
+    print("case11-error: " + e);
+}
+
+# ============================================================
+# Case 12: Comparator-based sort using a lambda comparator
+# Hand-written selection sort: sorted ascending/descending via lambda
+# Expected: [1,1,2,3,4,5,6,9] and [9,6,5,4,3,2,1,1]
+# ============================================================
+try {
+    fn sortBy(arr, cmp) {
+        let a = arr;
+        let n = len(a);
+        for i in range(0, n) {
+            let m = i;
+            for j in range(i + 1, n) {
+                if (cmp(a[j], a[m]) < 0) { m = j; }
+            }
+            if (m != i) {
+                let tmp = a[i];
+                a[i] = a[m];
+                a[m] = tmp;
+            }
+        }
+        return a;
+    }
+    let data = [3, 1, 4, 1, 5, 9, 2, 6];
+    print(sortBy(data, fn(x, y) { return x - y; }));
+    print(sortBy(data, fn(x, y) { return y - x; }));
+} catch (e) {
+    print("case12-error: " + e);
+}
+
+# ============================================================
+# Case 13: Lambda + default param / variadic combined with HOF wrap,
+#          class field as callable, method returning a lambda
+# Expected: 15, 7, 105, 112, handle:go
+# ============================================================
+try {
+    fn withDefault(x, y = 10) { return x + y; }
+    let wrap = fn(f) { return fn(a) { return f(a); }; };
+    print(wrap(withDefault)(5));
+
+    fn variadicSum(...xs) {
+        let t = 0;
+        for v in xs { t = t + v; }
+        return t;
+    }
+    print(wrap(variadicSum)(7));
+
+    class Calculator {
+        let base = 0;
+        fn init(b) { base = b; }
+        fn adder() {
+            return fn(x) { return base + x; };
+        }
+        fn op() {
+            return fn(x, y) { return base + x * y; };
+        }
+    }
+    let calc = new Calculator();
+    calc.init(100);
+    print(calc.adder()(5));
+    print(calc.op()(3, 4));
+
+    class Handler {
+        let action = 0;
+    }
+    let h = new Handler();
+    h.action = fn(s) { return "handle:" + s; };
+    print(h.action("go"));
+} catch (e) {
+    print("case13-error: " + e);
+}
+
+# ============================================================
+# Case 14: Lambda recursion via named variable (ISOLATED — known bug)
+# let fact = fn(n) { ... fact(n-1) ... };
+# Expected: 1, 120, 3628800
+# ============================================================
+try {
+    let fact = fn(n) {
+        if (n <= 1) { return 1; }
+        return n * fact(n - 1);
+    };
+    print(fact(1));
+    print(fact(5));
+    print(fact(10));
+} catch (e) {
+    print("case14-error: " + e);
+}
+
+# ============================================================
+# Case 15: Lambda capturing a mutable variable, then mutating it,
+#          then calling the lambda (by-ref vs by-val semantics test)
+# Python closures capture by-reference (cell): expected 0, 99, 99, 99
+# By-value snapshot semantics would give:     0, 99, 0, 0
+# ============================================================
+try {
+    let captured = 0;
+    let getCaptured = fn() { return captured; };
+    print(getCaptured());
+    captured = 99;
+    print(captured);
+    print(getCaptured());
+    captured = 200;
+    print(getCaptured());
+} catch (e) {
+    print("case15-error: " + e);
+}

@@ -1,0 +1,411 @@
+# T-Round4-130 — 集合变异与别名 (collection mutation & aliasing)
+# 子领域: S1..S10
+# 策略: 对可能无限循环的用例加 guard 计数器, 防止挂起测试
+
+# ============================================================
+# S1: 迭代中修改列表 (for x in lst { push(lst, x); })
+# 预期: 若快照迭代 -> 终止, 长度翻倍; 若 live 迭代 -> 无限循环
+# 用 guard 防止挂死; 若 guard 触发说明是 live 迭代
+# ============================================================
+print("=== S1 iter-modify-list ===");
+
+# S1.1: push 自身元素 — 快照 vs live
+let s1a = [1, 2, 3];
+let s1a_guard = 0;
+let s1a_iters = 0;
+for x in s1a {
+    s1a_iters = s1a_iters + 1;
+    s1a_guard = s1a_guard + 1;
+    if (s1a_guard > 100) { break; }
+    push(s1a, x);
+}
+print("S1.1 iters=" + str(s1a_iters) + " len=" + str(len(s1a)));
+# 预期(快照): iters=3, len=6 ; 预期(live): iters=101 (guard触发)
+
+# S1.2: 先快照副本, 遍历副本修改原列表 — 安全做法对照
+let s1b = [10, 20, 30];
+let s1b_copy = s1b[:];
+for x in s1b_copy { push(s1b, x); }
+print("S1.2 orig-after=" + str(s1b));
+# 预期: [10, 20, 30, 10, 20, 30]
+
+# S1.3: 迭代中 push 全新元素 (非自身), 用 guard 保护
+let s1c = [1];
+let s1c_guard = 0;
+let s1c_iters = 0;
+for x in s1c {
+    s1c_iters = s1c_iters + 1;
+    s1c_guard = s1c_guard + 1;
+    if (s1c_guard > 50) { break; }
+    push(s1c, x + 1);
+}
+print("S1.3 iters=" + str(s1c_iters) + " len=" + str(len(s1c)));
+# 预期(快照): iters=1, len=2 ; 预期(live): iters=51
+
+# S1.4: 迭代中修改自身元素值 (索引赋值, 不增长度)
+let s1d = [1, 2, 3, 4];
+let s1d_idx = 0;
+for x in s1d {
+    if (s1d_idx < len(s1d)) { s1d[s1d_idx] = x * 10; }
+    s1d_idx = s1d_idx + 1;
+}
+print("S1.4 list=" + str(s1d));
+# 预期: [10, 20, 30, 40]
+
+# ============================================================
+# S2: 迭代中修改字典 (for k in d { d["new"] = 1; })
+# 预期: 快照迭代 -> 终止; live 迭代 -> ConcurrentModification 或无限
+# ============================================================
+print("=== S2 iter-modify-dict ===");
+
+# S2.1: 迭代中添加新键 — 是否报错/无限/继续
+let s2a = {"a": 1, "b": 2};
+let s2a_err = "no-err";
+let s2a_count = 0;
+let s2a_guard = 0;
+try {
+    for k in s2a {
+        s2a_guard = s2a_guard + 1;
+        if (s2a_guard > 100) { break; }
+        s2a_count = s2a_count + 1;
+        s2a["new_" + str(s2a_count)] = s2a_count;
+    }
+} catch (e) { s2a_err = "caught:" + str(e); }
+print("S2.1 err=" + s2a_err + " count=" + str(s2a_count) + " len=" + str(len(s2a)));
+# 预期(快照): err=no-err, count=2, len=4 (原2键+新2键)
+
+# S2.2: 迭代中修改已存在键的值 — 应安全
+let s2b = {"x": 10, "y": 20, "z": 30};
+let s2b_err = "no-err";
+try {
+    for k in s2b { s2b[k] = s2b[k] * 2; }
+} catch (e) { s2b_err = "caught:" + str(e); }
+print("S2.2 err=" + s2b_err + " x=" + str(s2b["x"]) + " y=" + str(s2b["y"]) + " z=" + str(s2b["z"]));
+# 预期: err=no-err, x=20, y=40, z=60
+
+# S2.3: 迭代中删除当前键 — 是否安全
+let s2c = {"a": 1, "b": 2, "c": 3};
+let s2c_err = "no-err";
+let s2c_seen = [];
+try {
+    for k in s2c {
+        push(s2c_seen, k);
+        s2c.remove(k);
+    }
+} catch (e) { s2c_err = "caught:" + str(e); }
+print("S2.3 err=" + s2c_err + " seen=" + str(s2c_seen) + " len=" + str(len(s2c)));
+# 预期(快照): err=no-err, seen含全部键, len=0
+
+# ============================================================
+# S3: 列表别名 — a=[1,2]; b=a; b[0]=99; a[0]变99吗?
+# 预期: 引用语义, a[0]=99
+# ============================================================
+print("=== S3 list-alias ===");
+
+# S3.1: 基础别名 — 索引赋值经别名影响原列表
+let s3a_orig = [1, 2, 3];
+let s3a_alias = s3a_orig;
+s3a_alias[0] = 99;
+print("S3.1 orig[0]=" + str(s3a_orig[0]) + " alias[0]=" + str(s3a_alias[0]));
+# 预期(引用): orig[0]=99, alias[0]=99
+
+# S3.2: 别名 push — push 经别名影响原列表
+let s3b_orig = [1, 2];
+let s3b_alias = s3b_orig;
+push(s3b_alias, 3);
+print("S3.2 orig=" + str(s3b_orig) + " len=" + str(len(s3b_orig)));
+# 预期(引用): orig=[1,2,3], len=3
+
+# S3.3: 别名 pop — pop 经别名影响原列表
+let s3c_orig = [10, 20, 30];
+let s3c_alias = s3c_orig;
+let s3c_popped = s3c_alias.pop();
+print("S3.3 popped=" + str(s3c_popped) + " orig=" + str(s3c_orig));
+# 预期(引用): popped=30, orig=[10,20]
+
+# S3.4: 别名后对别名重新赋值 — 不应影响原 (重绑定 vs 变异)
+let s3d_orig = [1, 2, 3];
+let s3d_alias = s3d_orig;
+s3d_alias = [100, 200];
+print("S3.4 orig=" + str(s3d_orig) + " alias=" + str(s3d_alias));
+# 预期: orig=[1,2,3] (不变), alias=[100,200]
+
+# ============================================================
+# S4: 字典别名 — a={"k":1}; b=a; b["k"]=99; a["k"]变99吗?
+# 预期: 引用语义, a["k"]=99
+# ============================================================
+print("=== S4 dict-alias ===");
+
+# S4.1: 基础别名 — 索引赋值经别名影响原字典
+let s4a_orig = {"k": 1};
+let s4a_alias = s4a_orig;
+s4a_alias["k"] = 99;
+print("S4.1 orig[k]=" + str(s4a_orig["k"]) + " alias[k]=" + str(s4a_alias["k"]));
+# 预期(引用): orig[k]=99, alias[k]=99
+
+# S4.2: 别名添加新键
+let s4b_orig = {"a": 1};
+let s4b_alias = s4b_orig;
+s4b_alias["b"] = 2;
+print("S4.2 orig-len=" + str(len(s4b_orig)) + " orig-has-b=" + str(s4b_orig.has_key("b")));
+# 预期(引用): orig-len=2, orig-has-b=true
+
+# S4.3: 别名 remove
+let s4c_orig = {"a": 1, "b": 2};
+let s4c_alias = s4c_orig;
+s4c_alias.remove("a");
+print("S4.3 orig-has-a=" + str(s4c_orig.has_key("a")) + " orig-len=" + str(len(s4c_orig)));
+# 预期(引用): orig-has-a=false, orig-len=1
+
+# S4.4: 别名后重绑定 — 不影响原
+let s4d_orig = {"k": 1};
+let s4d_alias = s4d_orig;
+s4d_alias = {"k": 999};
+print("S4.4 orig[k]=" + str(s4d_orig["k"]) + " alias[k]=" + str(s4d_alias["k"]));
+# 预期: orig[k]=1, alias[k]=999
+
+# ============================================================
+# S5: 列表拷贝 (浅) — a=[1,2]; b=a[:]; b[0]=99; a[0]不变?
+# 预期: 浅拷贝, 顶层独立
+# ============================================================
+print("=== S5 list-copy ===");
+
+# S5.1: 切片拷贝 — 顶层索引赋值独立
+let s5a_orig = [1, 2, 3];
+let s5a_copy = s5a_orig[:];
+s5a_copy[0] = 99;
+print("S5.1 orig[0]=" + str(s5a_orig[0]) + " copy[0]=" + str(s5a_copy[0]));
+# 预期: orig[0]=1, copy[0]=99
+
+# S5.2: list() 构造拷贝 — 独立
+let s5b_orig = [10, 20];
+let s5b_copy = list(s5b_orig);
+s5b_copy[0] = 999;
+print("S5.2 orig[0]=" + str(s5b_orig[0]) + " copy[0]=" + str(s5b_copy[0]));
+# 预期: orig[0]=10, copy[0]=999
+
+# S5.3: 拷贝后 push — 独立
+let s5c_orig = [1];
+let s5c_copy = s5c_orig[:];
+push(s5c_copy, 2);
+print("S5.3 orig=" + str(s5c_orig) + " copy=" + str(s5c_copy));
+# 预期: orig=[1], copy=[1,2]
+
+# S5.4: 拷贝后 pop — 独立
+let s5d_orig = [1, 2, 3];
+let s5d_copy = s5d_orig[:];
+s5d_copy.pop();
+print("S5.4 orig=" + str(s5d_orig) + " copy=" + str(s5d_copy));
+# 预期: orig=[1,2,3], copy=[1,2]
+
+# ============================================================
+# S6: 字典拷贝 — dict.copy()? 手动 for 拷贝
+# 预期: 浅拷贝后独立
+# ============================================================
+print("=== S6 dict-copy ===");
+
+# S6.1: .copy() 方法是否存在
+let s6a_orig = {"k": 1};
+let s6a_err = "no-err";
+let s6a_copy = null;
+try {
+    s6a_copy = s6a_orig.copy();
+} catch (e) { s6a_err = "caught:" + str(e); }
+print("S6.1 err=" + s6a_err);
+# 预期: 若支持则 no-err; 否则 caught
+
+# S6.1b: 若 .copy() 成功, 验证独立性
+if (s6a_err == "no-err" && s6a_copy != null) {
+    s6a_copy["k"] = 99;
+    print("S6.1b orig[k]=" + str(s6a_orig["k"]) + " copy[k]=" + str(s6a_copy["k"]));
+} else {
+    print("S6.1b copy() unavailable, skipped");
+}
+# 预期(若支持): orig[k]=1, copy[k]=99
+
+# S6.2: dict() 构造拷贝 — 独立
+let s6b_orig = {"a": 1, "b": 2};
+let s6b_err = "no-err";
+let s6b_copy = null;
+try {
+    s6b_copy = dict(s6b_orig);
+} catch (e) { s6b_err = "caught:" + str(e); }
+print("S6.2 err=" + s6b_err);
+if (s6b_err == "no-err") {
+    s6b_copy["a"] = 999;
+    print("S6.2b orig[a]=" + str(s6b_orig["a"]) + " copy[a]=" + str(s6b_copy["a"]));
+}
+# 预期: orig[a]=1, copy[a]=999
+
+# S6.3: 手动 for-k 拷贝 — 独立
+let s6c_orig = {"x": 10, "y": 20, "z": 30};
+let s6c_copy = {};
+for k in s6c_orig { s6c_copy[k] = s6c_orig[k]; }
+s6c_copy["x"] = 999;
+s6c_copy["w"] = 40;
+print("S6.3 orig-x=" + str(s6c_orig["x"]) + " orig-len=" + str(len(s6c_orig)) + " copy-x=" + str(s6c_copy["x"]) + " copy-len=" + str(len(s6c_copy)));
+# 预期: orig-x=10, orig-len=3, copy-x=999, copy-len=4
+
+# S6.4: 手动 for k,v 拷贝
+let s6d_orig = {"p": 1, "q": 2};
+let s6d_copy = {};
+for k, v in s6d_orig { s6d_copy[k] = v; }
+s6d_copy["p"] = 100;
+print("S6.4 orig-p=" + str(s6d_orig["p"]) + " copy-p=" + str(s6d_copy["p"]));
+# 预期: orig-p=1, copy-p=100
+
+# ============================================================
+# S7: 嵌套列表共享 — a=[[1,2],[3,4]]; b=a[:]; b[0][0]=99; a[0][0]变吗?
+# 预期: 浅拷贝, 嵌套列表仍共享 -> a[0][0]=99
+# ============================================================
+print("=== S7 nested-shared ===");
+
+# S7.1: 浅拷贝嵌套 — 修改嵌套元素经副本影响原
+let s7a_orig = [[1, 2], [3, 4]];
+let s7a_copy = s7a_orig[:];
+s7a_copy[0][0] = 99;
+print("S7.1 orig[0][0]=" + str(s7a_orig[0][0]) + " copy[0][0]=" + str(s7a_copy[0][0]));
+# 预期(浅拷贝): orig[0][0]=99, copy[0][0]=99
+
+# S7.2: 浅拷贝嵌套 — 顶层替换独立
+let s7b_orig = [[1, 2], [3, 4]];
+let s7b_copy = s7b_orig[:];
+s7b_copy[0] = [99, 99];
+print("S7.2 orig=" + str(s7b_orig) + " copy=" + str(s7b_copy));
+# 预期: orig=[[1,2],[3,4]], copy=[[99,99],[3,4]]
+
+# S7.3: 别名嵌套 — 直接共享
+let s7c_orig = [[1, 2], [3, 4]];
+let s7c_alias = s7c_orig;
+s7c_alias[1][1] = 777;
+print("S7.3 orig[1][1]=" + str(s7c_orig[1][1]));
+# 预期(引用): orig[1][1]=777
+
+# S7.4: 浅拷贝后 push 到嵌套子列表 — 共享
+let s7d_orig = [[1], [2]];
+let s7d_copy = s7d_orig[:];
+push(s7d_copy[0], 99);
+print("S7.4 orig[0]=" + str(s7d_orig[0]) + " copy[0]=" + str(s7d_copy[0]));
+# 预期(浅拷贝): orig[0]=[1,99], copy[0]=[1,99]
+
+# ============================================================
+# S8: 迭代中删除 — for x in lst { if (x>2) lst.remove(x); }
+# 预期: 快照安全; live 可能漏删或抛错
+# ============================================================
+print("=== S8 iter-remove ===");
+
+# S8.1: 迭代中删除元素 — 行为
+let s8a = [1, 2, 3, 4, 5];
+let s8a_err = "no-err";
+let s8a_iters = 0;
+let s8a_guard = 0;
+try {
+    for x in s8a {
+        s8a_guard = s8a_guard + 1;
+        if (s8a_guard > 100) { break; }
+        s8a_iters = s8a_iters + 1;
+        if (x > 2) { s8a.remove(x); }
+    }
+} catch (e) { s8a_err = "caught:" + str(e); }
+print("S8.1 err=" + s8a_err + " iters=" + str(s8a_iters) + " list=" + str(s8a));
+# 预期(快照): err=no-err, iters=5, list=[1,2,4] (删3删5)
+
+# S8.2: 迭代副本删除原 — 安全做法对照
+let s8b = [1, 2, 3, 4, 5];
+let s8b_copy = s8b[:];
+for x in s8b_copy {
+    if (x > 2) { s8b.remove(x); }
+}
+print("S8.2 list=" + str(s8b));
+# 预期: [1, 2] (删3,4,5)
+
+# S8.3: 迭代中删除当前元素 — 行为
+let s8c = [10, 20, 30];
+let s8c_err = "no-err";
+let s8c_seen = [];
+try {
+    for x in s8c {
+        push(s8c_seen, x);
+        s8c.remove(x);
+    }
+} catch (e) { s8c_err = "caught:" + str(e); }
+print("S8.3 err=" + s8c_err + " seen=" + str(s8c_seen) + " list=" + str(s8c));
+# 预期(快照): err=no-err, seen=[10,20,30], list=[]
+
+# ============================================================
+# S9: 函数参数变异 — fn modify(l) { push(l, 99); } 原列表变吗?
+# 预期: 引用传递, 原列表变
+# ============================================================
+print("=== S9 fn-list-mutate ===");
+
+fn s9_modify(l) {
+    push(l, 99);
+    return len(l);
+}
+
+# S9.1: push 经函数参数影响原列表
+let s9a = [1, 2, 3];
+let s9a_ret = s9_modify(s9a);
+print("S9.1 ret=" + str(s9a_ret) + " list=" + str(s9a));
+# 预期(引用): ret=4, list=[1,2,3,99]
+
+# S9.2: 索引赋值经函数参数
+fn s9_set(l, i, v) { l[i] = v; }
+let s9b = [1, 2, 3];
+s9_set(s9b, 1, 99);
+print("S9.2 list=" + str(s9b));
+# 预期(引用): [1, 99, 3]
+
+# S9.3: pop 经函数参数
+fn s9_pop(l) { return l.pop(); }
+let s9c = [10, 20, 30];
+let s9c_popped = s9_pop(s9c);
+print("S9.3 popped=" + str(s9c_popped) + " list=" + str(s9c));
+# 预期(引用): popped=30, list=[10,20]
+
+# S9.4: 函数内重绑定参数 — 不影响原
+fn s9_rebind(l) { l = [100, 200]; return l; }
+let s9d = [1, 2, 3];
+let s9d_ret = s9_rebind(s9d);
+print("S9.4 orig=" + str(s9d) + " ret=" + str(s9d_ret));
+# 预期: orig=[1,2,3], ret=[100,200]
+
+# ============================================================
+# S10: 字典参数变异 — fn modify(d) { d["new"]=1; } 原字典变吗?
+# 预期: 引用传递, 原字典变
+# ============================================================
+print("=== S10 fn-dict-mutate ===");
+
+fn s10_modify(d) {
+    d["new"] = 1;
+    return len(d);
+}
+
+# S10.1: 添加新键经函数参数
+let s10a = {"a": 1, "b": 2};
+let s10a_ret = s10_modify(s10a);
+print("S10.1 ret=" + str(s10a_ret) + " has-new=" + str(s10a.has_key("new")) + " len=" + str(len(s10a)));
+# 预期(引用): ret=3, has-new=true, len=3
+
+# S10.2: 修改已存在键
+fn s10_set(d, k, v) { d[k] = v; }
+let s10b = {"k": 1};
+s10_set(s10b, "k", 99);
+print("S10.2 k=" + str(s10b["k"]));
+# 预期(引用): 99
+
+# S10.3: remove 经函数参数
+fn s10_remove(d, k) { d.remove(k); }
+let s10c = {"a": 1, "b": 2};
+s10_remove(s10c, "a");
+print("S10.3 has-a=" + str(s10c.has_key("a")) + " len=" + str(len(s10c)));
+# 预期(引用): has-a=false, len=1
+
+# S10.4: 函数内重绑定参数 — 不影响原
+fn s10_rebind(d) { d = {"x": 999}; return d; }
+let s10d = {"k": 1};
+let s10d_ret = s10_rebind(s10d);
+print("S10.4 orig-k=" + str(s10d["k"]) + " ret-x=" + str(s10d_ret["x"]));
+# 预期: orig-k=1, ret-x=999
+
+print("=== S1..S10 DONE ===");

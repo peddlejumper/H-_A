@@ -1,0 +1,10 @@
+# 测试 range, type, abs, min, max
+print(range(5));
+print(type(42));
+print(type("hi"));
+print(abs(-7));
+print(min(3, 7));
+print(max(3, 7));
+let d = {"a": 1};
+print(dict_has(d, "a"));
+print(dict_has(d, "b"));

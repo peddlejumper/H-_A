@@ -1,0 +1,45 @@
+# 15 - 嵌套函数内 for (closure 捕获 + for)
+# 目的: 闭包内 for 循环，验证 fixForLoopJumps 作用于嵌套函数 bytecode
+fn make_counter(start, step) {
+    return fn(limit) {
+        let out = [];
+        let i = start;
+        let collected = 0;
+        for x in range(limit) {
+            collected = collected + 1;
+            push(out, i + x * step);
+        }
+        print("inner_collected=" + str(collected));
+        return out;
+    };
+}
+
+let f = make_counter(10, 3);
+let r = f(5);
+print("result=" + str(r));
+print("expected_result=[10, 13, 16, 19, 22]");
+
+# 多次调用同一闭包，验证 for 状态隔离
+let r2 = f(3);
+print("result2=" + str(r2));
+print("expected_result2=[10, 13, 16]");
+
+# 闭包内嵌套 for
+fn make_grid(rows, cols) {
+    return fn() {
+        let grid = [];
+        for i in range(rows) {
+            let row = [];
+            for j in range(cols) {
+                push(row, i * cols + j);
+            }
+            push(grid, row);
+        }
+        return grid;
+    };
+}
+
+let g = make_grid(2, 3);
+let grid = g();
+print("grid=" + str(grid));
+print("expected_grid=[[0, 1, 2], [3, 4, 5]]");

@@ -1,0 +1,6 @@
+# t06: multiple consecutive awaits in one expression.
+async fn a() { return 1; }
+async fn b() { return 2; }
+async fn c() { return 3; }
+let r = await a() + await b() + await c();
+print(r);

@@ -7,17 +7,14 @@ _MODULO = getattr(TokenType, '_MOD', getattr(TokenType, 'MODULO', '%'))
 class CompileError(Exception):
     pass
 
-class SuperExpression(AST):
-    def __init__(self, method_name, args):
-        self.method_name = method_name
-        self.args = args
-
-class InstanceOfExpression(AST):
-    def __init__(self, expr, type_name):
-        self.expr = expr
-        self.type_name = type_name
+# NOTE: SuperExpression and InstanceOfExpression are imported from h_ast
+# via `from h_ast import *`.  Do NOT redefine them here — a local class
+# would shadow the imported one and `isinstance(expr, SuperExpression)`
+# would never match parser-produced nodes (class identity mismatch).
 
 class Compiler:
+    _destructure_counter = 0
+
     def __init__(self, use_hcompiler=False):
         self.use_hcompiler = use_hcompiler
         self.consts = []
@@ -26,6 +23,12 @@ class Compiler:
         self.interfaces = {}
         self.pending_breaks = []
         self.pending_continues = []
+        # Track active try-blocks for break/continue cleanup.  Each
+        # entry is the loop_depth at which the try was entered; when a
+        # break/continue crosses a try boundary we must emit POP_EXCEPT
+        # so the exception handler stack does not leak.
+        self.try_stack = []
+        self.loop_depth = 0
 
     def _backpatch_breaks(self, target, old_breaks, old_continues):
         for pos in self.pending_breaks:
@@ -49,6 +52,15 @@ class Compiler:
     def emit(self, opname, arg=None):
         self.instructions.append((opname, arg))
 
+    def _unique_destructure_temp(self):
+        """Generate a fresh, collision-resistant name for the synthetic
+        variable that holds the RHS of a destructuring `let`."""
+        # Use a module-level counter so two destructures in the same
+        # scope don't share the same temp.
+        n = Compiler._destructure_counter
+        Compiler._destructure_counter += 1
+        return f"__destr_{n}__"
+
     def compile(self, program):
         # program: Program AST
         for stmt in program.statements:
@@ -58,7 +70,7 @@ class Compiler:
 
     def _find_free_vars_in_stmt(self, node, bound):
         free = set()
-        from h_ast import Identifier, LetStatement, Function, Lambda, BlockStatement, CallExpression, MemberExpression
+        from h_ast import Identifier, LetStatement, Function, Lambda, BlockStatement, CallExpression, MemberExpression, DestructureLet
         def visit(n, local_bound):
             if isinstance(n, Identifier):
                 if n.name not in local_bound:
@@ -67,6 +79,12 @@ class Compiler:
                 visit(n.value, local_bound)
                 local_bound = set(local_bound)
                 local_bound.add(n.name)
+            elif isinstance(n, DestructureLet):
+                visit(n.value, local_bound)
+                local_bound = set(local_bound)
+                for nm in n.names:
+                    if nm is not None:
+                        local_bound.add(nm)
             elif isinstance(n, Function):
                 return
             elif isinstance(n, Lambda):
@@ -94,10 +112,28 @@ class Compiler:
         return list(free)
 
     def compile_stmt(self, stmt):
-        from h_ast import ClassDeclaration, AssignmentMember, MemberExpression, NewExpression, UnionDeclaration, UnionConstructExpression
+        from h_ast import ClassDeclaration, AssignmentMember, MemberExpression, NewExpression, UnionDeclaration, UnionConstructExpression, DestructureLet
         if isinstance(stmt, LetStatement):
             self.compile_expr(stmt.value)
             self.emit('STORE_NAME', stmt.name)
+        elif isinstance(stmt, DestructureLet):
+            # `let [a, b, c] = expr;`
+            # Evaluate RHS once into a synthetic temp, then index it
+            # for each slot.  Using a temp (rather than DUP_TOP) keeps
+            # us independent of stack-manipulation opcodes.
+            self.compile_expr(stmt.value)
+            tmp = self._unique_destructure_temp()
+            self.emit('STORE_NAME', tmp)
+            for i, name in enumerate(stmt.names):
+                if name is None:
+                    continue
+                self.emit('LOAD_NAME', tmp)
+                self.emit('LOAD_CONST', self.add_const(i))
+                self.emit('GET_ITEM')
+                self.emit('STORE_NAME', name)
+            # Drop the temp so it doesn't leak into the user's namespace
+            # visibly (it remains in `bound` but that's fine — the name
+            # is mangled enough not to collide with user code).
         elif isinstance(stmt, PrintStatement):
             self.compile_expr(stmt.expr)
             self.emit('PRINT')
@@ -108,6 +144,26 @@ class Compiler:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
             func_obj = {'args': stmt.params, 'bytecode': comp.instructions, 'consts': comp.consts}
+            # Default values for trailing parameters (literal-only).
+            if getattr(stmt, 'defaults', None):
+                defaults_json = []
+                for d in stmt.defaults:
+                    if isinstance(d, BooleanLiteral):
+                        defaults_json.append(bool(d.value))
+                    elif isinstance(d, NumberLiteral):
+                        defaults_json.append(d.value)
+                    elif isinstance(d, StringLiteral):
+                        defaults_json.append(d.value)
+                    elif isinstance(d, NullLiteral):
+                        defaults_json.append(None)
+                    else:
+                        raise Exception(
+                            f"Default argument for '{stmt.name}' must be a "
+                            f"literal (number/string/bool/null); got "
+                            f"{type(d).__name__}")
+                func_obj['defaults'] = defaults_json
+            if getattr(stmt, 'is_variadic', False):
+                func_obj['is_variadic'] = True
             idx = self.add_const(func_obj)
             self.emit('LOAD_CONST', idx)
             self.emit('STORE_NAME', stmt.name)
@@ -124,6 +180,7 @@ class Compiler:
             old_continues = self.pending_continues
             self.pending_breaks = []
             self.pending_continues = [start]
+            self.loop_depth += 1
 
             for s in stmt.body.statements:
                 self.compile_stmt(s)
@@ -131,6 +188,7 @@ class Compiler:
             end = len(self.instructions)
             self.instructions[jmp_false_pos] = ('JUMP_IF_FALSE', end)
 
+            self.loop_depth -= 1
             self._backpatch_breaks(end, old_breaks, old_continues)
         elif isinstance(stmt, IfStatement):
             self.compile_expr(stmt.condition)
@@ -174,12 +232,38 @@ class Compiler:
                     for sub in s.body.statements:
                         comp.compile_stmt(sub)
                     comp.emit('RETURN_VALUE')
-                    func_obj = {'args': s.params, 'bytecode': comp.instructions, 'consts': comp.consts}
+                    func_obj = {'args': s.params, 'bytecode': comp.instructions, 'consts': comp.consts, 'name': s.name}
+                    # Default values for trailing parameters (literal-only).
+                    if getattr(s, 'defaults', None):
+                        defaults_json = []
+                        for d in s.defaults:
+                            if isinstance(d, BooleanLiteral):
+                                defaults_json.append(bool(d.value))
+                            elif isinstance(d, NumberLiteral):
+                                defaults_json.append(d.value)
+                            elif isinstance(d, StringLiteral):
+                                defaults_json.append(d.value)
+                            elif isinstance(d, NullLiteral):
+                                defaults_json.append(None)
+                            else:
+                                raise Exception(
+                                    f"Default argument for '{s.name}' must be a "
+                                    f"literal (number/string/bool/null); got "
+                                    f"{type(d).__name__}")
+                        func_obj['defaults'] = defaults_json
+                    if getattr(s, 'is_variadic', False):
+                        func_obj['is_variadic'] = True
                     if getattr(s, 'is_static', False):
                         # store static methods as top-level attributes on the class object
                         # they will be callable via ClassName.method(...)
                         methods.setdefault('__static__', {})[s.name] = func_obj
                     else:
+                        # Store methods under their declared name.  The VM's
+                        # CALL_NEW looks up the constructor under both
+                        # `__init__` and `init` (see HVM.callNew and
+                        # bytecode.py CALL_NEW), so both `fn init(...)`
+                        # and `fn __init__(...)` work as constructors, and
+                        # explicit `p.init(3, 4)` calls still resolve.
                         methods[s.name] = func_obj
                 elif isinstance(s, FieldDeclaration):
                     # only support literal defaults at compile time
@@ -275,9 +359,14 @@ class Compiler:
         elif isinstance(stmt, TryStatement):
             setup_pos = len(self.instructions)
             self.emit('SETUP_EXCEPT', None)
+            # Record the loop depth at which this try was entered so
+            # that break/continue emitted inside the body can decide
+            # whether they cross the try boundary and need a POP_EXCEPT.
+            self.try_stack.append(self.loop_depth)
             for s in stmt.body.statements:
                 self.compile_stmt(s)
             self.emit('POP_EXCEPT')
+            self.try_stack.pop()
             self.emit('JUMP', None)
             jump_pos = len(self.instructions) - 1
             handler_start = len(self.instructions)
@@ -309,19 +398,28 @@ class Compiler:
             self.compile_expr(stmt.iterable)
             self.emit('LOAD_CONST', iter_idx)
             self.emit('FOR_ITER', None)
-            for_start = len(self.instructions)
+            # for_start points AT the FOR_ITER instruction so that the
+            # loop-back JUMP and `continue` re-enter through FOR_ITER
+            # (which advances the iterator / tests for exhaustion).
+            # Previously this pointed one past FOR_ITER, skipping the
+            # advance and producing an infinite loop on the first
+            # element; the Kotlin HbcReader worked around this with
+            # fixForLoopJumps, but the Python VM had no such fix.
+            for_start = len(self.instructions) - 1
 
             old_breaks = self.pending_breaks
             old_continues = self.pending_continues
             self.pending_breaks = []
             self.pending_continues = [for_start]
+            self.loop_depth += 1
 
             for s in stmt.body.statements:
                 self.compile_stmt(s)
             self.emit('JUMP', for_start)
             for_end = len(self.instructions)
-            self.instructions[for_start - 1] = ('FOR_ITER', for_end)
+            self.instructions[for_start] = ('FOR_ITER', for_end)
 
+            self.loop_depth -= 1
             self._backpatch_breaks(for_end, old_breaks, old_continues)
         elif isinstance(stmt, ModuleDeclaration):
             for s in stmt.body.statements:
@@ -367,14 +465,60 @@ class Compiler:
             self.emit('LOAD_CONST', idx)
             self.emit('STORE_NAME', stmt.name)
         elif isinstance(stmt, ContinueStatement):
+            # If we're inside a try block that was entered within the
+            # current loop, jumping back to the loop header crosses the
+            # try boundary — emit POP_EXCEPT for each such active try so
+            # the runtime exception-handler stack does not leak.
+            for d in self.try_stack:
+                if d == self.loop_depth:
+                    self.emit('POP_EXCEPT')
             if self.pending_continues:
                 target = self.pending_continues[-1]
                 self.emit('JUMP', target)
             else:
                 self.emit('CONTINUE', None)
         elif isinstance(stmt, BreakStatement):
+            for d in self.try_stack:
+                if d == self.loop_depth:
+                    self.emit('POP_EXCEPT')
             self.pending_breaks.append(len(self.instructions))
             self.emit('BREAK', None)
+        elif isinstance(stmt, DeleteStatement):
+            # `del x` / `del obj.attr` / `del arr[i]` — the VM has no
+            # dedicated DELETE opcode, so lower `del` to a null store:
+            #   del x     ->  x = null
+            #   del o.a   ->  o.a = null
+            #   del a[i]  ->  a[i] = null
+            target = stmt.target
+            if isinstance(target, Identifier):
+                self.emit('LOAD_CONST', self.add_const(None))
+                self.emit('STORE_NAME', target.name)
+            elif isinstance(target, MemberExpression):
+                self.compile_expr(target.left)
+                self.emit('LOAD_CONST', self.add_const(None))
+                self.emit('STORE_ATTR', target.name)
+            elif isinstance(target, IndexExpression):
+                # `del a[i]` — emit DELETE_ITEM, which the Kotlin HVM
+                # dispatches by runtime type: for lists it removes by
+                # INDEX (with negative-index support, out-of-range
+                # raises); for dicts it removes by KEY.  Stack layout
+                # is [..., target, idx], which is exactly what the two
+                # compile_expr calls below produce.  This replaces the
+                # old `a.remove(i)` lowering which was wrong for lists
+                # (remove(x) deletes the first element with VALUE x,
+                # not at INDEX x).
+                # NOTE: the Python VM in bytecode.py does not yet
+                # implement DELETE_ITEM; `del a[i]` run there will
+                # raise "Unknown opcode: DELETE_ITEM".  Add DELETE_ITEM
+                # support to bytecode.py separately if Python-VM
+                # testing of `del` is needed.
+                self.compile_expr(target.left)
+                self.compile_expr(target.index)
+                self.emit('DELETE_ITEM', None)
+            else:
+                raise CompileError(
+                    f"del target must be identifier, member, or index; "
+                    f"got {type(target).__name__}")
         else:
             # expression statements
             self.compile_expr(stmt)
@@ -404,6 +548,27 @@ class Compiler:
             # capture free vars from current compilation scope
             freevars = self._find_free_vars_in_stmt(expr, expr.params)
             func_obj = {'args': expr.params, 'bytecode': comp.instructions, 'consts': comp.consts, 'freevars': freevars}
+            # Default values for trailing parameters (literal-only),
+            # mirroring the Function-statement handling above.
+            if getattr(expr, 'defaults', None):
+                defaults_json = []
+                for d in expr.defaults:
+                    if isinstance(d, BooleanLiteral):
+                        defaults_json.append(bool(d.value))
+                    elif isinstance(d, NumberLiteral):
+                        defaults_json.append(d.value)
+                    elif isinstance(d, StringLiteral):
+                        defaults_json.append(d.value)
+                    elif isinstance(d, NullLiteral):
+                        defaults_json.append(None)
+                    else:
+                        raise Exception(
+                            f"Default argument for lambda must be a "
+                            f"literal (number/string/bool/null); got "
+                            f"{type(d).__name__}")
+                func_obj['defaults'] = defaults_json
+            if getattr(expr, 'is_variadic', False):
+                func_obj['is_variadic'] = True
             idx = self.add_const(func_obj)
             self.emit('LOAD_CONST', idx)
         elif isinstance(expr, ArrayLiteral):
@@ -427,7 +592,8 @@ class Compiler:
             op = expr.op
             if op in (TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH, TokenType.MOD,
                       TokenType.EQEQ, TokenType.BANGEQ, TokenType.GT, TokenType.LT, TokenType.GTE, TokenType.LTE,
-                      TokenType.BITAND, TokenType.BITOR, TokenType.BITXOR, TokenType.LSHIFT, TokenType.RSHIFT):
+                      TokenType.BITAND, TokenType.BITOR, TokenType.BITXOR, TokenType.LSHIFT, TokenType.RSHIFT,
+                      TokenType.IN):
                 # simple binary ops: compile left then right
                 self.compile_expr(expr.left)
                 self.compile_expr(expr.right)

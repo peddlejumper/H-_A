@@ -1,0 +1,40 @@
+# t13_str_slice.hto - 字符串切片边界
+# 测试字符串切片的各种边界情况
+let s = "Hello, World!";
+print("len=");
+print(len(s));
+print("full=");
+print(s);
+try {
+    let sub = s[0];
+    print("s[0]=");
+    print(sub);
+} catch (e) {
+    print("s[0] caught: ");
+    print(e);
+}
+try {
+    let sub = s[4];
+    print("s[4]=");
+    print(sub);
+} catch (e) {
+    print("s[4] caught: ");
+    print(e);
+}
+try {
+    let sub = s[len(s)];
+    print("s[len] no throw: ");
+    print(sub);
+} catch (e) {
+    print("s[len] caught: ");
+    print(e);
+}
+try {
+    let sub = s[100];
+    print("s[100] no throw: ");
+    print(sub);
+} catch (e) {
+    print("s[100] caught: ");
+    print(e);
+}
+print("done");

@@ -1,0 +1,788 @@
+# ============================================================
+# round3_113_serial.hto — 序列化往返与格式化一致性 (Agent #113, Round 3)
+# 领域: str() / fmt() / print() 序列化格式 & int()/float() 反序列化往返
+# 设计原则: 每个 case 独立编号; try/catch 包裹可能抛错或崩溃的项;
+#           先打印预期注释, 后打印实际结果。
+# 关键约束:
+#   - lexer 不支持科学计数法字面量 (1e20), 用 pow()/乘法构造
+#   - HNumber 内部为 Double, 运行时无法区分 int 与 float
+#   - print() 隐式调用 str()
+#   - 已知行为: str(容器) 中字符串值/键不加引号
+# ============================================================
+
+print("===== R3-113 SERIALIZATION ROUND-TRIP & FORMAT CONSISTENCY =====");
+
+# =============================================================
+# Section 1: 整数 str()/int() 往返
+# =============================================================
+print("[S1.01 str(123)]                  expect='123']");
+print(str(123));
+
+print("[S1.02 int('123')]                expect=123]");
+print(int("123"));
+
+print("[S1.03 int(str(123))]             expect=123]");
+print(int(str(123)));
+
+print("[S1.04 str(int('456'))]           expect='456']");
+print(str(int("456")));
+
+print("[S1.05 str(0)]                    expect='0']");
+print(str(0));
+
+print("[S1.06 str(-42)]                  expect='-42']");
+print(str(-42));
+
+print("[S1.07 str(1000000)]              expect='1000000']");
+print(str(1000000));
+
+print("[S1.08 int('0')]                  expect=0]");
+print(int("0"));
+
+print("[S1.09 int('-99')]                expect=-99]");
+print(int("-99"));
+
+print("[S1.10 int(str(-77))]             expect=-77]");
+print(int(str(-77)));
+
+# int() 解析失败行为
+try {
+    print("[S1.11 int('abc')]              expect=err]");
+    print(int("abc"));
+} catch (e) {
+    print("[S1.11 int('abc')-err] " + str(e));
+}
+
+try {
+    print("[S1.12 int('12.5')]             expect=err-or-12]");
+    print(int("12.5"));
+} catch (e) {
+    print("[S1.12 int('12.5')-err] " + str(e));
+}
+
+try {
+    print("[S1.13 int('')]                 expect=err]");
+    print(int(""));
+} catch (e) {
+    print("[S1.13 int('')-err] " + str(e));
+}
+
+try {
+    print("[S1.14 int(' 12 ')]             expect=err-or-12]");
+    print(int(" 12 "));
+} catch (e) {
+    print("[S1.14 int(' 12 ')-err] " + str(e));
+}
+
+try {
+    print("[S1.15 int('+5')]               expect=err-or-5]");
+    print(int("+5"));
+} catch (e) {
+    print("[S1.15 int('+5')-err] " + str(e));
+}
+
+# =============================================================
+# Section 2: 浮点 str()/float() 往返
+# =============================================================
+print("[S2.01 str(3.14)]                 expect='3.14']");
+print(str(3.14));
+
+print("[S2.02 float('3.14')]             expect=3.14]");
+print(float("3.14"));
+
+print("[S2.03 float(str(3.14))]          expect=3.14]");
+print(float(str(3.14)));
+
+print("[S2.04 str(float('2.5'))]         expect='2.5']");
+print(str(float("2.5")));
+
+print("[S2.05 str(0.5)]                  expect='0.5']");
+print(str(0.5));
+
+print("[S2.06 str(-1.25)]                expect='-1.25']");
+print(str(-1.25));
+
+print("[S2.07 float('0') ]               expect=0-or-0.0]");
+print(float("0"));
+
+print("[S2.08 float('-2.5')]             expect=-2.5]");
+print(float("-2.5"));
+
+# 浮点整数显示: 3.0 → "3" 还是 "3.0"?
+print("[S2.09 str(3.0)]                  expect='3'-or-'3.0' (KEY)]");
+print(str(3.0));
+
+print("[S2.10 str(100.0)]                expect='100'-or-'100.0' (KEY)]");
+print(str(100.0));
+
+print("[S2.11 str(0.0)]                  expect='0'-or-'0.0']");
+print(str(0.0));
+
+# float() 解析失败
+try {
+    print("[S2.12 float('abc')]            expect=err]");
+    print(float("abc"));
+} catch (e) {
+    print("[S2.12 float('abc')-err] " + str(e));
+}
+
+try {
+    print("[S2.13 float('')]               expect=err]");
+    print(float(""));
+} catch (e) {
+    print("[S2.13 float('')-err] " + str(e));
+}
+
+try {
+    print("[S2.14 float('12')]             expect=12-or-12.0]");
+    print(float("12"));
+} catch (e) {
+    print("[S2.14 float('12')-err] " + str(e));
+}
+
+try {
+    print("[S2.15 float('1e5')]            expect=err-or-100000 (sci-not-in-str)]");
+    print(float("1e5"));
+} catch (e) {
+    print("[S2.15 float('1e5')-err] " + str(e));
+}
+
+# =============================================================
+# Section 3: 布尔 str()
+# =============================================================
+print("[S3.01 str(true)]                 expect='true']");
+print(str(true));
+
+print("[S3.02 str(false)]                expect='false']");
+print(str(false));
+
+print("[S3.03 str(true==false)]          expect='false']");
+print(str(true == false));
+
+print("[S3.04 str(1==1)]                 expect='true']");
+print(str(1 == 1));
+
+# =============================================================
+# Section 4: null str()
+# =============================================================
+print("[S4.01 str(null)]                 expect='null']");
+print(str(null));
+
+# =============================================================
+# Section 5-6: 列表 str()
+# =============================================================
+print("[S5.01 str([1,2,3])]              expect='[1, 2, 3]']");
+print(str([1, 2, 3]));
+
+print("[S5.02 str([])]                   expect='[]']");
+print(str([]));
+
+print("[S5.03 str([1])]                  expect='[1]']");
+print(str([1]));
+
+print("[S5.04 str([1, 2, 3])]            spaced-literal]");
+print(str([1, 2, 3]));
+
+print("[S6.01 str([1,'a',true,null])]    mixed-list (strings-no-quotes)]");
+print(str([1, "a", true, null]));
+
+print("[S6.02 str(['a','b'])]            string-list (no quotes)]");
+print(str(["a", "b"]));
+
+print("[S6.03 str([true,false])]         bool-list]");
+print(str([true, false]));
+
+print("[S6.04 str([1.5, 2.0])]           float-list (2.0 key)]");
+print(str([1.5, 2.0]));
+
+print("[S6.05 str([[1,2],[3,4]])]        nested-list]");
+print(str([[1, 2], [3, 4]]));
+
+print("[S6.06 str([[]])]                 nested-empty]");
+print(str([[]]));
+
+print("[S6.07 str([1, [2, [3, [4]]]]))]  deep-nested]");
+print(str([1, [2, [3, [4]]]]));
+
+# =============================================================
+# Section 7-8: 字典 str()
+# =============================================================
+print("[S7.01 str({'a':1})]              expect='{a: 1}'-or-other]");
+print(str({"a": 1}));
+
+print("[S7.02 str({})]                   expect='{}']");
+print(str({}));
+
+print("[S7.03 str({'a':1,'b':2})]        two-keys]");
+print(str({"a": 1, "b": 2}));
+
+print("[S7.04 str({'key':'val'})]        string-val (no quotes known)]");
+print(str({"key": "val"}));
+
+print("[S8.01 str({'a':{'b':[1,2]}})]    nested-dict]");
+print(str({"a": {"b": [1, 2]}}));
+
+print("[S8.02 str({1:'one'})]            int-key]");
+print(str({1: "one"}));
+
+print("[S8.03 str({true:1})]             bool-key]");
+print(str({true: 1}));
+
+# =============================================================
+# Section 9: 字符串 str() (不加引号)
+# =============================================================
+print("[S9.01 str('hello')]              expect='hello' (no quotes)]");
+print(str("hello"));
+
+print("[S9.02 str('with spaces')]        expect='with spaces']");
+print(str("with spaces"));
+
+print("[S9.03 str('')]                   expect='']");
+print(str(""));
+
+print("[S9.04 str('123')]                expect='123']");
+print(str("123"));
+
+print("[S9.05 str('a\"b') ]              quote-inside]");
+print(str("a\"b"));
+
+# =============================================================
+# Section 10: print() 隐式 str() 一致性
+# =============================================================
+print("[S10.01 print(123)]               vs print(str(123))]");
+print(123);
+print(str(123));
+
+print("[S10.02 print(3.14)]              vs print(str(3.14))]");
+print(3.14);
+print(str(3.14));
+
+print("[S10.03 print(true)]              vs print(str(true))]");
+print(true);
+print(str(true));
+
+print("[S10.04 print(null)]              vs print(str(null))]");
+print(null);
+print(str(null));
+
+print("[S10.05 print([1,2,3])]           vs print(str([1,2,3]))]");
+print([1, 2, 3]);
+print(str([1, 2, 3]));
+
+print("[S10.06 print({'a':1})]           vs print(str({'a':1}))]");
+print({"a": 1});
+print(str({"a": 1}));
+
+print("[S10.07 print('hello')]           vs print(str('hello'))]");
+print("hello");
+print(str("hello"));
+
+print("[S10.08 print([])]                empty-list]");
+print([]);
+
+print("[S10.09 print({})]                empty-dict]");
+print({});
+
+# =============================================================
+# Section 11: fmt() 基础与一致性
+# =============================================================
+print("[S11.01 fmt('{0}',123)]           vs str(123)]");
+print(fmt("{0}", 123));
+print(str(123));
+
+print("[S11.02 fmt('{0}',3.14)]          vs str(3.14)]");
+print(fmt("{0}", 3.14));
+print(str(3.14));
+
+print("[S11.03 fmt('{0}',true)]          vs str(true)]");
+print(fmt("{0}", true));
+print(str(true));
+
+print("[S11.04 fmt('{0}',null)]          vs str(null)]");
+print(fmt("{0}", null));
+print(str(null));
+
+print("[S11.05 fmt('{0} {1}','a','b')]   expect='a b']");
+print(fmt("{0} {1}", "a", "b"));
+
+print("[S11.06 fmt('{0}-{0}-{1}','a','b')]  reuse-index]");
+print(fmt("{0}-{0}-{1}", "a", "b"));
+
+print("[S11.07 fmt('no placeholders')]   expect='no placeholders']");
+print(fmt("no placeholders"));
+
+print("[S11.08 fmt('{0}',[1,2])]         fmt-on-list]");
+print(fmt("{0}", [1, 2]));
+
+print("[S11.09 fmt('{0}',{'a':1})]       fmt-on-dict]");
+print(fmt("{0}", {"a": 1}));
+
+print("[S11.10 fmt('{0}+{1}={2}',1,2,3)] multi-args]");
+print(fmt("{0}+{1}={2}", 1, 2, 3));
+
+print("[S11.11 fmt('{0}','str')]         fmt-on-string]");
+print(fmt("{0}", "str"));
+
+print("[S11.12 fmt('') ]                 empty-format]");
+print(fmt(""));
+
+# =============================================================
+# Section 12: fmt() 边界 / 错误行为
+# =============================================================
+try {
+    print("[S12.01 fmt('{0} {1}','a')]    insufficient-args]");
+    print(fmt("{0} {1}", "a"));
+} catch (e) {
+    print("[S12.01 fmt-insufficient-err] " + str(e));
+}
+
+try {
+    print("[S12.02 fmt('{0}','a','b')]    excessive-args]");
+    print(fmt("{0}", "a", "b"));
+} catch (e) {
+    print("[S12.02 fmt-excessive-err] " + str(e));
+}
+
+try {
+    print("[S12.03 fmt('{5}','a')]        index-out-of-bounds]");
+    print(fmt("{5}", "a"));
+} catch (e) {
+    print("[S12.03 fmt-index-oob-err] " + str(e));
+}
+
+try {
+    print("[S12.04 fmt('{{0}}','a')]      escape-braces]");
+    print(fmt("{{0}}", "a"));
+} catch (e) {
+    print("[S12.04 fmt-escape-err] " + str(e));
+}
+
+try {
+    print("[S12.05 fmt('{}','a')]         auto-index]");
+    print(fmt("{}", "a"));
+} catch (e) {
+    print("[S12.05 fmt-auto-index-err] " + str(e));
+}
+
+try {
+    print("[S12.06 fmt('{0}','a')]        no-args-missing]");
+    print(fmt("{0}"));
+} catch (e) {
+    print("[S12.06 fmt-no-args-err] " + str(e));
+}
+
+try {
+    print("[S12.07 fmt('{0}{1}{2}',1,2)]  partial-insufficient]");
+    print(fmt("{0}{1}{2}", 1, 2));
+} catch (e) {
+    print("[S12.07 fmt-partial-err] " + str(e));
+}
+
+try {
+    print("[S12.08 fmt('{-1}','a')]       negative-index]");
+    print(fmt("{-1}", "a"));
+} catch (e) {
+    print("[S12.08 fmt-neg-index-err] " + str(e));
+}
+
+try {
+    print("[S12.09 fmt('{a}','a')]        non-numeric-index]");
+    print(fmt("{a}", "a"));
+} catch (e) {
+    print("[S12.09 fmt-nonnumeric-err] " + str(e));
+}
+
+try {
+    print("[S12.10 fmt('{0'],'a')]        unclosed-brace]");
+    print(fmt("{0", "a"));
+} catch (e) {
+    print("[S12.10 fmt-unclosed-err] " + str(e));
+}
+
+# =============================================================
+# Section 13: 拼接 + str()
+# =============================================================
+print("[S13.01 'x='+str(42)]             expect='x=42']");
+print("x=" + str(42));
+
+print("[S13.02 'v='+str(true)]           expect='v=true']");
+print("v=" + str(true));
+
+print("[S13.03 'n='+str(null)]           expect='n=null']");
+print("n=" + str(null));
+
+print("[S13.04 'L='+str([1,2])]          expect='L=[1, 2]']");
+print("L=" + str([1, 2]));
+
+print("[S13.05 'd='+str({'a':1})]        expect='d={a: 1}'-or-other]");
+print("d=" + str({"a": 1}));
+
+print("[S13.06 str(1)+str(2)]            expect='12']");
+print(str(1) + str(2));
+
+# =============================================================
+# Section 14: 精度 / 特殊浮点 str()
+# =============================================================
+print("[S14.01 str(0.1+0.2)]             expect='0.30000000000000004']");
+print(str(0.1 + 0.2));
+
+print("[S14.02 str(1.0-0.9)]             precision]");
+print(str(1.0 - 0.9));
+
+print("[S14.03 str(0.5+0.25)]            expect='0.75']");
+print(str(0.5 + 0.25));
+
+print("[S14.04 str(1.0/3.0)]             repeating-decimal]");
+print(str(1.0 / 3.0));
+
+print("[S14.05 str(2.0/3.0)]             repeating-decimal-2]");
+print(str(2.0 / 3.0));
+
+print("[S14.06 str(10.0/1.0)]            expect='10'-or-'10.0']");
+print(str(10.0 / 1.0));
+
+print("[S14.07 str(1.0+1.0)]             expect='2'-or-'2.0']");
+print(str(1.0 + 1.0));
+
+# 科学计数法 (lexer 不支持 1e20, 用 pow/乘法构造)
+let BIG_NUM = pow(10, 20);
+print("[S14.08 str(1e20 via pow)]        expect=1E20-or-100000000000000000000]");
+print(str(BIG_NUM));
+
+let SMALL_NUM = 1.0 / pow(10, 10);
+print("[S14.09 str(1e-10 via div)]       expect=1.0E-10-or-0.0000000001]");
+print(str(SMALL_NUM));
+
+let BIGGER = pow(10, 30);
+print("[S14.10 str(1e30 via pow)]        expect=sci-notation]");
+print(str(BIGGER));
+
+# 负零
+print("[S14.11 str(-0.0 literal)]        parser: -0.0 → 0-0.0 = +0.0]");
+print(str(-0.0));
+
+let NEG_ZERO = (0 - 1) * 0;
+print("[S14.12 str(real -0.0)]           expect='0'-or-'-0.0']");
+print(str(NEG_ZERO));
+
+print("[S14.13 str(0.0)]                 expect='0'-or-'0.0']");
+print(str(0.0));
+
+# =============================================================
+# Section 15: float() 往返保真度 (key consistency check)
+# =============================================================
+print("[S15.01 float(str(0.1+0.2))==0.1+0.2  expect=true]");
+print(float(str(0.1 + 0.2)) == 0.1 + 0.2);
+
+print("[S15.02 float(str(3.14))==3.14         expect=true]");
+print(float(str(3.14)) == 3.14);
+
+print("[S15.03 float(str(2.5))==2.5           expect=true]");
+print(float(str(2.5)) == 2.5);
+
+print("[S15.04 int(str(42))==42               expect=true]");
+print(int(str(42)) == 42);
+
+print("[S15.05 int(str(-99))==-99             expect=true]");
+print(int(str(-99)) == -99);
+
+# =============================================================
+# Section 16: 嵌套深度 str() — 10 层嵌套列表
+# =============================================================
+let L16 = [1, [2, [3, [4, [5, [6, [7, [8, [9, [10]]]]]]]]]];
+print("[S16.01 str-10-level-nested-list]");
+print(str(L16));
+
+# =============================================================
+# Section 17: str() 对函数 (closure / fn literal)
+# =============================================================
+fn id_fn(x) { return x; }
+try {
+    print("[S17.01 str(fn)]                behavior-check]");
+    print(str(id_fn));
+} catch (e) {
+    print("[S17.01 str(fn)-err] " + str(e));
+}
+
+try {
+    print("[S17.02 str(fn-literal)]        anonymous-fn]");
+    let f = fn(y) { return y + 1; };
+    print(str(f));
+} catch (e) {
+    print("[S17.02 str(fn-literal)-err] " + str(e));
+}
+
+try {
+    print("[S17.03 print(fn)]              print-direct]");
+    print(id_fn);
+} catch (e) {
+    print("[S17.03 print(fn)-err] " + str(e));
+}
+
+# =============================================================
+# Section 18: str() 对类实例
+# =============================================================
+class Point113 {
+    let x = 0;
+    let y = 0;
+}
+let p18 = new Point113();
+p18.x = 3;
+p18.y = 4;
+try {
+    print("[S18.01 str(class-instance)]    behavior-check]");
+    print(str(p18));
+} catch (e) {
+    print("[S18.01 str(class)-err] " + str(e));
+}
+
+try {
+    print("[S18.02 print(class-instance)]  print-direct]");
+    print(p18);
+} catch (e) {
+    print("[S18.02 print(class)-err] " + str(e));
+}
+
+# =============================================================
+# Section 19: 空容器区分
+# =============================================================
+print("[S19.01 str([])=='[]'  ]          " + str(str([]) == "[]"));
+print("[S19.02 str({})=='{}'  ]          " + str(str({}) == "{}"));
+print("[S19.03 str([])==str({})]         expect=false " + str(str([]) == str({})));
+
+# =============================================================
+# Section 20: 循环引用 — 移至文件最末尾 (会导致 fatal 不可捕获崩溃)
+# 见 Section 31。
+# =============================================================
+
+# =============================================================
+# Section 21: fmt() 与 str() 对容器格式一致性
+# =============================================================
+print("[S21.01 fmt-vs-str-list]          expect-equal]");
+print(fmt("{0}", [1, 2, 3]));
+print(str([1, 2, 3]));
+
+print("[S21.02 fmt-vs-str-dict]          expect-equal]");
+print(fmt("{0}", {"a": 1}));
+print(str({"a": 1}));
+
+print("[S21.03 fmt-vs-str-bool]          expect-equal]");
+print(fmt("{0}", true));
+print(str(true));
+
+print("[S21.04 fmt-vs-str-null]          expect-equal]");
+print(fmt("{0}", null));
+print(str(null));
+
+print("[S21.05 fmt-vs-str-int]           expect-equal]");
+print(fmt("{0}", 42));
+print(str(42));
+
+print("[S21.06 fmt-vs-str-float]         expect-equal]");
+print(fmt("{0}", 3.14));
+print(str(3.14));
+
+# =============================================================
+# Section 22: print() 多参数 — parser 层面拒绝 (parse error, 无法在
+# 运行时测试)。改为拼接对比以记录单参行为。
+# =============================================================
+print("[S22.01 print-concat-vs-fmt]    behavior-check]");
+print("a" + "b" + "c");
+print(fmt("{0}{1}{2}", "a", "b", "c"));
+
+# =============================================================
+# Section 23: int() / float() 边界数值
+# =============================================================
+try {
+    print("[S23.01 int(123.99)]           expect=123-truncate]");
+    print(int(123.99));
+} catch (e) {
+    print("[S23.01 int(123.99)-err] " + str(e));
+}
+
+try {
+    print("[S23.02 int(-123.99)]          expect=-123-truncate]");
+    print(int(-123.99));
+} catch (e) {
+    print("[S23.02 int(-123.99)-err] " + str(e));
+}
+
+try {
+    print("[S23.03 int(0.999)]            expect=0]");
+    print(int(0.999));
+} catch (e) {
+    print("[S23.03 int(0.999)-err] " + str(e));
+}
+
+try {
+    print("[S23.04 int(0)]                expect=0]");
+    print(int(0));
+} catch (e) {
+    print("[S23.04 int(0)-err] " + str(e));
+}
+
+try {
+    print("[S23.05 float(42)]             expect=42.0-or-42]");
+    print(float(42));
+} catch (e) {
+    print("[S23.05 float(42)-err] " + str(e));
+}
+
+try {
+    print("[S23.06 float(0)]              expect=0.0-or-0]");
+    print(float(0));
+} catch (e) {
+    print("[S23.06 float(0)-err] " + str(e));
+}
+
+# =============================================================
+# Section 24: int() / float() 对非字符串
+# =============================================================
+try {
+    print("[S24.01 int(true)]             expect=err-or-1]");
+    print(int(true));
+} catch (e) {
+    print("[S24.01 int(true)-err] " + str(e));
+}
+
+try {
+    print("[S24.02 int(null)]             expect=err]");
+    print(int(null));
+} catch (e) {
+    print("[S24.02 int(null)-err] " + str(e));
+}
+
+try {
+    print("[S24.03 float(true)]           expect=err-or-1]");
+    print(float(true));
+} catch (e) {
+    print("[S24.03 float(true)-err] " + str(e));
+}
+
+try {
+    print("[S24.04 float(null)]           expect=err]");
+    print(float(null));
+} catch (e) {
+    print("[S24.04 float(null)-err] " + str(e));
+}
+
+try {
+    print("[S24.05 int([1])]              expect=err]");
+    print(int([1]));
+} catch (e) {
+    print("[S24.05 int([1])-err] " + str(e));
+}
+
+try {
+    print("[S24.06 int({'a':1})]          expect=err]");
+    print(int({"a": 1}));
+} catch (e) {
+    print("[S24.06 int(dict)-err] " + str(e));
+}
+
+# =============================================================
+# Section 25: str() 与 len() 一致性
+# =============================================================
+print("[S25.01 len(str(123))==3]        " + str(len(str(123)) == 3));
+print("[S25.02 len(str('hello'))==5]    " + str(len(str("hello")) == 5));
+print("[S25.03 len(str(true))==4]       " + str(len(str(true)) == 4));
+print("[S25.04 len(str(null))==4]       " + str(len(str(null)) == 4));
+
+# =============================================================
+# Section 26: 字符串内特殊字符 str() 是否转义
+# =============================================================
+let s26a = "a\nb";
+print("[S26.01 str('a\\nb')-raw]         expect='a\\nb'-or-'a<nl>b']");
+print(str(s26a));
+
+let s26b = "a\tb";
+print("[S26.02 str('a\\tb')-raw]         expect='a\\tb'-or-'a<tab>b']");
+print(str(s26b));
+
+let s26c = "a\"b";
+print("[S26.03 str('a\"b')-raw]          expect='a\"b']");
+print(str(s26c));
+
+# 容器内的字符串特殊字符是否转义
+print("[S26.04 str(['a\\nb'])]           container-escape]");
+print(str(["a\nb"]));
+
+print("[S26.05 str({'k':'a\\nb'})]       dict-escape]");
+print(str({"k": "a\nb"}));
+
+# =============================================================
+# Section 27: 大型容器 str() 性能/正确性
+# =============================================================
+let L27 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+print("[S27.01 str-20-elem-list]");
+print(str(L27));
+
+let d27 = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5};
+print("[S27.02 str-5-key-dict]");
+print(str(d27));
+
+# =============================================================
+# Section 28: str() 对 返回值 / 表达式
+# =============================================================
+print("[S28.01 str(1+2)]                expect='3']");
+print(str(1 + 2));
+
+print("[S28.02 str(1.5*2)]              expect='3'-or-'3.0']");
+print(str(1.5 * 2));
+
+print("[S28.03 str(10/2)]               int-div]");
+print(str(10 / 2));
+
+print("[S28.04 str(10.0/2.0)]           float-div]");
+print(str(10.0 / 2.0));
+
+print("[S28.05 str([1,2][0])]           index-expr]");
+print(str([1, 2][0]));
+
+print("[S28.06 str(len('abc'))]         call-expr]");
+print(str(len("abc")));
+
+# =============================================================
+# Section 29: fmt 嵌套调用
+# =============================================================
+print("[S29.01 fmt('{0}', fmt('{0}', 1))]  nested-fmt]");
+print(fmt("{0}", fmt("{0}", 1)));
+
+print("[S29.02 fmt('{0}{1}', str(1), str(2))]  fmt-with-str]");
+print(fmt("{0}{1}", str(1), str(2)));
+
+print("[S29.03 str(fmt('{0}', 5))]       str-of-fmt]");
+print(str(fmt("{0}", 5)));
+
+# =============================================================
+# Section 30: 长字符串 / 重复
+# =============================================================
+let long30 = "a" * 50;
+print("[S30.01 str(long-50a)]           len=" + str(len(str(long30))));
+print("[S30.02 str(long-50a)-len-eq]    " + str(len(str(long30)) == 50));
+
+print("===== R3-113 DONE (pre-cyclic) =====");
+
+# =============================================================
+# Section 31: 循环引用 — fatal 不可捕获崩溃测试 (放最后)
+# 已知: 会导致 "Error: null" 并终止进程, try/catch 无法捕获。
+# =============================================================
+try {
+    print("[S31.01 str-cyclic-list]        may-hang-or-err]");
+    let cyc = [1, 2, 3];
+    cyc.append(cyc);
+    print(str(cyc));
+} catch (e) {
+    print("[S31.01 cyclic-err] " + str(e));
+}
+
+try {
+    print("[S31.02 str-cyclic-dict]        may-hang-or-err]");
+    let d31 = {"a": 1};
+    d31["self"] = d31;
+    print(str(d31));
+} catch (e) {
+    print("[S31.02 cyclic-dict-err] " + str(e));
+}
+
+print("===== R3-113 ALL DONE =====");

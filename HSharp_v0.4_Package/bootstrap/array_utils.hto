@@ -1,0 +1,463 @@
+# H# Array/List Utility Library
+# Common array manipulation functions implemented in H#
+
+fn arr_map(arr, func) {
+    # Apply function to each element and return new array
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(result, func(arr[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_filter(arr, predicate) {
+    # Filter array elements based on predicate function
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_reduce(arr, reducer, initial_value) {
+    # Reduce array to a single value
+    let accumulator = initial_value;
+    let i = 0;
+    while (i < len(arr)) {
+        accumulator = reducer(accumulator, arr[i]);
+        i = i + 1;
+    }
+    return accumulator;
+}
+
+fn arr_for_each(arr, func) {
+    # Execute function for each element (no return value)
+    let i = 0;
+    while (i < len(arr)) {
+        func(arr[i]);
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn arr_find(arr, predicate) {
+    # Find first element that matches predicate
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            return arr[i];
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+fn arr_find_index(arr, predicate) {
+    # Find index of first element that matches predicate
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn arr_every(arr, predicate) {
+    # Check if all elements match predicate
+    let i = 0;
+    while (i < len(arr)) {
+        if (not predicate(arr[i])) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+fn arr_some(arr, predicate) {
+    # Check if at least one element matches predicate
+    let i = 0;
+    while (i < len(arr)) {
+        if (predicate(arr[i])) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn arr_includes(arr, value) {
+    # Check if array includes a value
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] == value) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn arr_index_of(arr, value) {
+    # Find index of first occurrence of value
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] == value) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fn arr_last_index_of(arr, value) {
+    # Find index of last occurrence of value
+    let i = len(arr) - 1;
+    while (i >= 0) {
+        if (arr[i] == value) {
+            return i;
+        }
+        i = i - 1;
+    }
+    return -1;
+}
+
+fn arr_slice(arr, start, end) {
+    # Extract a portion of array
+    if (end == nullptr) {
+        end = len(arr);
+    }
+    
+    if (start < 0) {
+        start = len(arr) + start;
+    }
+    if (end < 0) {
+        end = len(arr) + end;
+    }
+    
+    let result = [];
+    let i = start;
+    while (i < end and i < len(arr)) {
+        push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_splice(arr, start, delete_count, items) {
+    # Remove and/or insert elements at specified position
+    if (delete_count == nullptr) {
+        delete_count = len(arr) - start;
+    }
+    if (items == nullptr) {
+        items = [];
+    }
+    
+    let deleted = arr_slice(arr, start, start + delete_count);
+    
+    # Build new array
+    let before = arr_slice(arr, 0, start);
+    let after = arr_slice(arr, start + delete_count, len(arr));
+    
+    # Concatenate: before + items + after
+    let result = [];
+    let i = 0;
+    while (i < len(before)) {
+        push(result, before[i]);
+        i = i + 1;
+    }
+    
+    i = 0;
+    while (i < len(items)) {
+        push(result, items[i]);
+        i = i + 1;
+    }
+    
+    i = 0;
+    while (i < len(after)) {
+        push(result, after[i]);
+        i = i + 1;
+    }
+    
+    # Update original array by reference
+    let j = 0;
+    while (j < len(arr)) {
+        pop(arr);
+    }
+    
+    i = 0;
+    while (i < len(result)) {
+        push(arr, result[i]);
+        i = i + 1;
+    }
+    
+    return deleted;
+}
+
+fn arr_concat(arr1, arr2) {
+    # Concatenate two arrays
+    let result = [];
+    let i = 0;
+    while (i < len(arr1)) {
+        push(result, arr1[i]);
+        i = i + 1;
+    }
+    
+    i = 0;
+    while (i < len(arr2)) {
+        push(result, arr2[i]);
+        i = i + 1;
+    }
+    
+    return result;
+}
+
+fn arr_flatten(arr, depth) {
+    # Flatten nested arrays
+    if (depth == nullptr) {
+        depth = 1;
+    }
+    
+    if (depth <= 0) {
+        return arr;
+    }
+    
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (is_array(arr[i])) {
+            let flattened = arr_flatten(arr[i], depth - 1);
+            let j = 0;
+            while (j < len(flattened)) {
+                push(result, flattened[j]);
+                j = j + 1;
+            }
+        } else {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    
+    return result;
+}
+
+fn arr_unique(arr) {
+    # Remove duplicate values
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (not arr_includes(result, arr[i])) {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn arr_chunk(arr, size) {
+    # Split array into chunks of specified size
+    if (size <= 0) {
+        return [];
+    }
+    
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        let chunk = arr_slice(arr, i, i + size);
+        push(result, chunk);
+        i = i + size;
+    }
+    
+    return result;
+}
+
+fn arr_zip(arrays) {
+    # Zip multiple arrays together
+    if (len(arrays) == 0) {
+        return [];
+    }
+    
+    # Find minimum length
+    let min_len = len(arrays[0]);
+    let i = 1;
+    while (i < len(arrays)) {
+        if (len(arrays[i]) < min_len) {
+            min_len = len(arrays[i]);
+        }
+        i = i + 1;
+    }
+    
+    let result = [];
+    let j = 0;
+    while (j < min_len) {
+        let group = [];
+        i = 0;
+        while (i < len(arrays)) {
+            push(group, arrays[i][j]);
+            i = i + 1;
+        }
+        push(result, group);
+        j = j + 1;
+    }
+    
+    return result;
+}
+
+fn arr_reverse(arr) {
+    # Reverse array in place
+    let left = 0;
+    let right = len(arr) - 1;
+    
+    while (left < right) {
+        let temp = arr[left];
+        arr[left] = arr[right];
+        arr[right] = temp;
+        left = left + 1;
+        right = right - 1;
+    }
+    
+    return arr;
+}
+
+fn arr_sort(arr, comparator) {
+    # Sort array using comparison function
+    # Simple bubble sort implementation
+    if (comparator == nullptr) {
+        # Default numeric comparison
+        comparator = fn(a, b) {
+            return a - b;
+        };
+    }
+    
+    let n = len(arr);
+    let swapped = true;
+    
+    while (swapped) {
+        swapped = false;
+        let i = 0;
+        while (i < n - 1) {
+            if (comparator(arr[i], arr[i + 1]) > 0) {
+                let temp = arr[i];
+                arr[i] = arr[i + 1];
+                arr[i + 1] = temp;
+                swapped = true;
+            }
+            i = i + 1;
+        }
+        n = n - 1;
+    }
+    
+    return arr;
+}
+
+fn arr_min(arr) {
+    # Find minimum value in array
+    if (len(arr) == 0) {
+        return nullptr;
+    }
+    
+    let min_val = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        if (arr[i] < min_val) {
+            min_val = arr[i];
+        }
+        i = i + 1;
+    }
+    
+    return min_val;
+}
+
+fn arr_max(arr) {
+    # Find maximum value in array
+    if (len(arr) == 0) {
+        return nullptr;
+    }
+    
+    let max_val = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        if (arr[i] > max_val) {
+            max_val = arr[i];
+        }
+        i = i + 1;
+    }
+    
+    return max_val;
+}
+
+fn arr_sum(arr) {
+    # Calculate sum of all elements
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        total = total + arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+fn arr_average(arr) {
+    # Calculate average of all elements
+    if (len(arr) == 0) {
+        return 0;
+    }
+    return arr_sum(arr) / len(arr);
+}
+
+fn arr_range(start, end, step) {
+    # Generate array of numbers in range
+    if (step == nullptr) {
+        step = 1;
+    }
+    
+    let result = [];
+    
+    if (step > 0) {
+        let i = start;
+        while (i < end) {
+            push(result, i);
+            i = i + step;
+        }
+    } else {
+        let i = start;
+        while (i > end) {
+            push(result, i);
+            i = i + step;
+        }
+    }
+    
+    return result;
+}
+
+fn arr_fill(arr, value, start, end) {
+    # Fill array with a value
+    if (start == nullptr) {
+        start = 0;
+    }
+    if (end == nullptr) {
+        end = len(arr);
+    }
+    
+    let i = start;
+    while (i < end and i < len(arr)) {
+        arr[i] = value;
+        i = i + 1;
+    }
+    
+    return arr;
+}
+
+fn is_array(value) {
+    # Check if value is an array
+    # This would need runtime support, for now use type checking
+    return value != nullptr and len(value) != nullptr;
+}

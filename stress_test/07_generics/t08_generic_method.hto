@@ -1,0 +1,31 @@
+# t08_generic_method.hto — 泛型方法调用：obj.method<T>(args)
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+class Calc {
+    fn add(a, b) { return a + b; }
+    fn echo<T>(x) { return x; }
+}
+
+let c = new Calc();
+check("8/plain_method", c.add(2, 3) == 5);
+
+# 泛型方法调用 obj.echo<int>(99)
+try {
+    let r = c.echo<int>(99);
+    print("8/echo_result=" + str(r));
+    check("8/echo_int", r == 99);
+} catch (err) {
+    print("8/echo_err=" + str(err));
+}
+
+# 链式：c.echo<string>("x") 拼接
+try {
+    let s = c.echo<string>("ab") + "cd";
+    print("8/echo_str=" + str(s));
+    check("8/echo_str", s == "abcd");
+} catch (err) {
+    print("8/echo_str_err=" + str(err));
+}

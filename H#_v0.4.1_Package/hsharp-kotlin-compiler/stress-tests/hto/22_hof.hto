@@ -1,0 +1,23 @@
+# T22 - Higher-order functions
+fn map(f, lst) {
+    let out = [];
+    for x in lst { push(out, f(x)); }
+    return out;
+}
+fn filter(f, lst) {
+    let out = [];
+    for x in lst { if (f(x)) { push(out, x); } }
+    return out;
+}
+fn reduce(f, lst, init) {
+    let acc = init;
+    for x in lst { acc = f(acc, x); }
+    return acc;
+}
+let nums = [1, 2, 3, 4, 5];
+let squared = map(fn(x) { return x * x; }, nums);
+print(squared);
+let evens = filter(fn(x) { return x % 2 == 0; }, nums);
+print(evens);
+let sum = reduce(fn(a, b) { return a + b; }, nums, 0);
+print(sum);

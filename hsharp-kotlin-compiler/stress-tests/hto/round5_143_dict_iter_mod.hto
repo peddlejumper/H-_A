@@ -1,0 +1,837 @@
+# round5_143_dict_iter_mod.hto
+# 测试智能体 #143 — 字典迭代与修改 (dict iteration & modification)
+# 目标: 探测 H# v0.4.1 字典迭代、迭代中修改、keys/values、get 默认值、
+#       嵌套字典、键类型、copy 浅拷贝、dict 合并、大字典、删除、in、
+#       比较、字面量边界、传参语义
+#
+# 已知背景 (源码审查 HVM.kt / HValue.kt):
+#   - HDict 内部用 MutableMap<String, HValue> (LinkedHashMap 保插入序)
+#   - forIterFirst (HVM.kt:2302) 对 HDict 在迭代开始时做 keys.toList() 快照
+#    -> 迭代中新增/删除的键不会出现在本次迭代中 (与 Python RuntimeError 语义不同)
+#   - callDictMethod (HVM.kt:1048): get/has_key/contains/size/keys/values/
+#    items/clear/remove/copy
+#   - copy (HVM.kt:1101): HDict(self.entries.toMutableMap()) -> 浅拷贝 (值引用共享)
+#   - del d[key] (DELETE_ITEM, HVM.kt:224): target.entries.remove(coerceKey(idx))
+#    -> 键不存在时静默忽略 (Python 抛 KeyError)
+#   - dict + dict (binAdd, HVM.kt:1832): 合并, 后者覆盖前者
+#   - HValueOps.equals (HValue.kt:470): dict 比较看 size+逐键值, 顺序无关
+#   - parser.py dict_literal (1492): 不支持尾逗号 (逗号后必须跟 key 表达式)
+#   - dictKeyOf vs coerceKey: 已对齐 (都用 toDisplayString), 1->"1" 非 "1.0"
+#
+# 方法: 每个用例打印 "S## TAG | observed | EXPECT=expected | PASS|FAIL"
+
+let stats = [0, 0];
+fn report(tag, observed, expected) {
+    let ok = observed == expected;
+    if (ok) {
+        stats[0] = stats[0] + 1;
+    } else {
+        stats[1] = stats[1] + 1;
+    }
+    let status = "FAIL";
+    if (ok) { status = "PASS"; }
+    print("S" + tag + " | " + str(observed) + " | EXPECT=" + str(expected) + " | " + status);
+}
+
+# ============================================================
+# S1: 迭代顺序 — 插入序, 多次迭代稳定性, 覆盖/删除/重添位置
+# ============================================================
+print("=== S1: iteration order ===");
+let s1 = {"a": 1, "b": 2, "c": 3, "d": 4};
+let s1order1 = "";
+for k in s1 { s1order1 = s1order1 + k; }
+report("1.01-iter-insertion-order", s1order1, "abcd");
+
+# 多次迭代顺序一致
+let s1order2 = "";
+for k in s1 { s1order2 = s1order2 + k; }
+report("1.02-iter-stable-across-runs", s1order2, "abcd");
+
+# 覆盖已存在 key -> 位置不变 (Python 语义)
+let s1b = {"x": 1, "y": 2, "z": 3};
+s1b["y"] = 999;
+let s1border = "";
+for k in s1b { s1border = s1border + k; }
+report("1.03-overwrite-keeps-position", s1border, "xyz");
+report("1.04-overwrite-value", s1b["y"], 999);
+
+# 删除后重新添加 -> 末尾 (Python 语义)
+let s1c = {"a": 1, "b": 2, "c": 3};
+del s1c["b"];
+let s1corder1 = "";
+for k in s1c { s1corder1 = s1corder1 + k; }
+report("1.05-after-del-order", s1corder1, "ac");
+s1c["b"] = 99;
+let s1corder2 = "";
+for k in s1c { s1corder2 = s1corder2 + k; }
+report("1.06-del-readd-at-end", s1corder2, "acb");
+
+# 字面量重复 key -> 保留首次位置, 值为最后赋值
+let s1d = {"a": 1, "b": 2, "a": 3, "c": 4};
+let s1dorder = "";
+for k in s1d { s1dorder = s1dorder + k; }
+report("1.07-literal-dup-key-order", s1dorder, "abc");
+report("1.08-literal-dup-key-value", s1d["a"], 3);
+report("1.09-literal-dup-key-len", len(s1d), 3);
+
+# for k,v 同步迭代 — 顺序与值对应
+let s1e = {"p": 10, "q": 20, "r": 30};
+let s1epairs = "";
+for k, v in s1e { s1epairs = s1epairs + k + "=" + str(v) + ";"; }
+report("1.10-for-kv-pairs-order", s1epairs, "p=10;q=20;r=30;");
+
+# ============================================================
+# S2: 迭代中修改 — 新增键/删除当前键/修改现有值
+#   预期 (Python): 迭代中改变字典大小会抛 RuntimeError
+#   预期 (H#): 迭代开始时做 keys 快照, 新增/删除不反映, 不抛错
+# ============================================================
+print("=== S2: modify during iteration ===");
+
+# S2.01-S2.03: 迭代中新增键 -> 快照不含新键, 不抛错
+let s2 = {"a": 1, "b": 2, "c": 3};
+let s2visited = "";
+let s2err = "none";
+try {
+    for k in s2 {
+        s2visited = s2visited + k;
+        if (k == "a") {
+            s2["new_key"] = 99;   # 迭代中新增
+        }
+    }
+} catch (e) {
+    s2err = "err";
+}
+report("2.01-iter-add-no-throw", s2err, "none");
+report("2.02-iter-add-visited-snapshot", s2visited, "abc");
+report("2.03-iter-add-key-exists-after", s2["new_key"], 99);
+report("2.04-iter-add-len-after", len(s2), 4);
+
+# S2.05-S2.07: 迭代中删除当前键 -> 快照仍遍历, 不抛错
+let s2b = {"a": 1, "b": 2, "c": 3, "d": 4};
+let s2bvisited = "";
+let s2berr = "none";
+try {
+    for k in s2b {
+        s2bvisited = s2bvisited + k;
+        del s2b[k];   # 删除当前键
+    }
+} catch (e) {
+    s2berr = "err";
+}
+report("2.05-iter-del-current-no-throw", s2berr, "none");
+report("2.06-iter-del-current-visited", s2bvisited, "abcd");
+report("2.07-iter-del-current-len-after", len(s2b), 0);
+
+# S2.08-S2.09: 迭代中删除未访问的键 -> 快照仍会访问 (键已不在 dict, 值变 null)
+let s2c = {"a": 1, "b": 2, "c": 3};
+let s2cvals = "";
+let s2cerr = "none";
+try {
+    for k, v in s2c {
+        if (k == "a") {
+            del s2c["c"];   # 删除未访问的键
+        }
+        s2cvals = s2cvals + k + ":" + str(v) + ";";
+    }
+} catch (e) {
+    s2cerr = "err";
+}
+report("2.08-iter-del-ahead-no-throw", s2cerr, "none");
+# 快照仍包含 "c", 但 dict 已无 "c", v 取 dict.entries[key] ?: HNull
+report("2.09-iter-del-ahead-val-null", s2cvals, "a:1;b:2;c:null;");
+
+# S2.10-S2.11: 迭代中修改现有键的值 -> 快照不变, v 取最新值
+let s2d = {"a": 1, "b": 2, "c": 3};
+let s2dvals = "";
+for k, v in s2d {
+    if (k == "a") {
+        s2d["b"] = 999;   # 修改未访问键的值
+    }
+    s2dvals = s2dvals + k + ":" + str(v) + ";";
+}
+report("2.10-iter-modify-ahead-seen", s2dvals, "a:1;b:999;c:3;");
+
+# S2.12: 迭代中修改当前键的值 -> v 已绑定, 不受影响
+let s2e = {"a": 1, "b": 2};
+let s2evals = "";
+for k, v in s2e {
+    if (k == "a") {
+        s2e["a"] = 100;
+    }
+    s2evals = s2evals + k + ":" + str(v) + ";";
+}
+report("2.12-iter-modify-current-v-bound", s2evals, "a:1;b:2;");
+
+# ============================================================
+# S3: keys/values — 空字典, 单键, 多键, 返回类型, 顺序对应
+# ============================================================
+print("=== S3: keys/values ===");
+
+# 空字典
+let s3empty = {};
+let s3ekeys = s3empty.keys();
+let s3evals = s3empty.values();
+report("3.01-empty-keys-len", len(s3ekeys), 0);
+report("3.02-empty-values-len", len(s3evals), 0);
+
+# 单键
+let s3one = {"only": 42};
+let s3onekeys = s3one.keys();
+let s3onevals = s3one.values();
+report("3.03-single-keys-len", len(s3onekeys), 1);
+report("3.04-single-keys-0", s3onekeys[0], "only");
+report("3.05-single-values-0", s3onevals[0], 42);
+
+# 多键 — keys() 返回 HList (列表), 顺序与插入序一致
+let s3 = {"a": 1, "b": 2, "c": 3};
+let s3keys = s3.keys();
+let s3vals = s3.values();
+report("3.06-multi-keys-len", len(s3keys), 3);
+report("3.07-multi-keys-is-list", s3keys.len() == 3, true);
+report("3.08-multi-keys-0", s3keys[0], "a");
+report("3.09-multi-keys-2", s3keys[2], "c");
+report("3.10-multi-vals-0", s3vals[0], 1);
+report("3.11-multi-vals-2", s3vals[2], 3);
+
+# keys/values 顺序对应
+let s3b = {"p": 10, "q": 20, "r": 30, "s": 40};
+let s3bkeys = s3b.keys();
+let s3bvals = s3b.values();
+let s3bpairs = "";
+for i in range(len(s3bkeys)) {
+    s3bpairs = s3bpairs + s3bkeys[i] + "=" + str(s3bvals[i]) + ";";
+}
+report("3.12-keys-values-aligned", s3bpairs, "p=10;q=20;r=30;s=40;");
+
+# keys 返回的列表是快照还是视图? 修改原 dict 后旧 keys 列表应不变
+let s3c = {"a": 1, "b": 2};
+let s3ckeys = s3c.keys();
+s3c["c"] = 3;
+report("3.13-keys-snapshot-not-view-len", len(s3ckeys), 2);
+report("3.14-keys-snapshot-0", s3ckeys[0], "a");
+
+# keys 元素类型: 整数键会被转字符串 (coerceKey -> "1")
+let s3d = {1: "a", 2: "b"};
+let s3dkeys = s3d.keys();
+report("3.15-int-keys-become-str", s3dkeys[0], "1");
+report("3.16-int-keys-become-str-2", s3dkeys[1], "2");
+
+# ============================================================
+# S4: get 默认值 — d.get(missing), d.get(missing, default), d.get(present, default)
+# ============================================================
+print("=== S4: get with default ===");
+let s4 = {"a": 1, "b": 2};
+
+# 不存在的键, 无默认值 -> null
+report("4.01-get-missing-no-default", s4.get("missing"), null);
+# 不存在的键, 有默认值 -> 默认值
+report("4.02-get-missing-with-default", s4.get("missing", "DEF"), "DEF");
+# 存在的键, 有默认值 -> 实际值 (忽略默认值)
+report("4.03-get-present-with-default", s4.get("a", "DEF"), 1);
+# 存在的键, 无默认值 -> 实际值
+report("4.04-get-present-no-default", s4.get("a"), 1);
+# 默认值为 null
+report("4.05-get-missing-null-default", s4.get("missing", null), null);
+# 默认值为 0
+report("4.06-get-missing-zero-default", s4.get("missing", 0), 0);
+# 默认值为 false
+report("4.07-get-missing-false-default", s4.get("missing", false), false);
+# 默认值为列表
+report("4.08-get-missing-list-default", s4.get("missing", [1, 2]), [1, 2]);
+
+# 整数键 get
+let s4b = {1: "one", 2: "two"};
+report("4.09-get-int-key", s4b.get(1), "one");
+report("4.10-get-int-key-missing", s4b.get(3, "none"), "none");
+
+# bool 键 get
+let s4c = {true: "yes"};
+report("4.11-get-bool-key", s4c.get(true), "yes");
+report("4.12-get-bool-key-missing", s4c.get(false, "no"), "no");
+
+# null 键 get
+let s4d = {null: "nil"};
+report("4.13-get-null-key", s4d.get(null), "nil");
+
+# get 参数个数错误 (0 个或 3 个) -> 应抛错
+let s4eargerr = "none";
+try { let r = s4.get(); } catch (e) { s4eargerr = "err"; }
+report("4.14-get-zero-args-throws", s4eargerr, "err");
+
+let s4fargerr = "none";
+try { let r = s4.get("a", "b", "c"); } catch (e) { s4fargerr = "err"; }
+report("4.15-get-three-args-throws", s4fargerr, "err");
+
+# ============================================================
+# S5: 嵌套字典 — 多层访问/赋值/删除/混合
+# ============================================================
+print("=== S5: nested dict ===");
+let s5 = {"a": {"b": {"c": 42}}};
+report("5.01-nested-access-3-level", s5["a"]["b"]["c"], 42);
+report("5.02-nested-access-2-level", s5["a"]["b"], {"c": 42});
+
+# 嵌套赋值
+s5["a"]["b"]["c"] = 100;
+report("5.03-nested-assign-3-level", s5["a"]["b"]["c"], 100);
+
+# 嵌套新增键
+s5["a"]["b"]["new"] = "x";
+report("5.04-nested-add-key", s5["a"]["b"]["new"], "x");
+report("5.05-nested-add-key-len", len(s5["a"]["b"]), 2);
+
+# 嵌套新增整个子字典
+s5["a"]["d"] = {"e": 5};
+report("5.06-nested-add-subdict", s5["a"]["d"]["e"], 5);
+
+# 嵌套删除
+let s5b = {"a": {"b": 1, "c": 2, "d": 3}};
+del s5b["a"]["c"];
+report("5.07-nested-del-key", s5b["a"]["b"], 1);
+report("5.08-nested-del-key-gone", "c" in s5b["a"], false);
+report("5.09-nested-del-key-len", len(s5b["a"]), 2);
+
+# 删除整个子字典
+del s5b["a"];
+report("5.10-del-subdict", "a" in s5b, false);
+report("5.11-del-subdict-len", len(s5b), 0);
+
+# 深层嵌套访问不存在的键 -> 抛错
+let s5c = {"a": {"b": 1}};
+let s5cerr = "none";
+try { let r = s5c["a"]["nope"]["deep"]; } catch (e) { s5cerr = "err"; }
+report("5.12-deep-missing-key-throws", s5cerr, "err");
+
+# 嵌套字典与列表混合
+let s5d = {"list": [1, 2, {"inner": "val"}]};
+report("5.13-nested-list-dict-access", s5d["list"][2]["inner"], "val");
+s5d["list"][2]["inner"] = "changed";
+report("5.14-nested-list-dict-assign", s5d["list"][2]["inner"], "changed");
+s5d["list"][0] = 99;
+report("5.15-nested-list-element-assign", s5d["list"][0], 99);
+
+# ============================================================
+# S6: 键类型 — 字符串/数字/bool/null/混合 (含冲突)
+#   注: coerceKey 把所有键转 string, 故 true 与 "true" 冲突, null 与 "null" 冲突
+# ============================================================
+print("=== S6: key types & collisions ===");
+
+# 字符串键
+let s6 = {"name": "Alice", "age": 30};
+report("6.01-str-key", s6["name"], "Alice");
+report("6.02-str-key-in", "age" in s6, true);
+
+# 数字键 (整数)
+let s6b = {1: "a", 2: "b", 3: "c"};
+report("6.03-int-key", s6b[1], "a");
+report("6.04-int-key-in", 2 in s6b, true);
+report("6.05-int-key-len", len(s6b), 3);
+
+# 负数键
+let s6c = {-1: "neg", -2: "neg2"};
+report("6.06-neg-key", s6c[-1], "neg");
+report("6.07-neg-key-in", -2 in s6c, true);
+
+# 浮点键
+let s6d = {1.5: "f", 2.5: "g"};
+report("6.08-float-key", s6d[1.5], "f");
+report("6.09-float-key-in", 2.5 in s6d, true);
+
+# bool 键
+let s6e = {true: "yes", false: "no"};
+report("6.10-bool-key-true", s6e[true], "yes");
+report("6.11-bool-key-false", s6e[false], "no");
+report("6.12-bool-key-len", len(s6e), 2);
+
+# null 键
+let s6f = {null: "nothing"};
+report("6.13-null-key", s6f[null], "nothing");
+report("6.14-null-key-in", null in s6f, true);
+report("6.15-null-key-len", len(s6f), 1);
+
+# 冲突: true 与 "true"
+let s6g = {};
+s6g[true] = "from-bool";
+s6g["true"] = "from-str";
+report("6.16-bool-str-collision", s6g[true], "from-str");
+report("6.17-bool-str-collision-len", len(s6g), 1);
+
+# 冲突: null 与 "null"
+let s6h = {};
+s6h[null] = "from-null";
+s6h["null"] = "from-str";
+report("6.18-null-str-collision", s6h[null], "from-str");
+report("6.19-null-str-collision-len", len(s6h), 1);
+
+# 冲突: 1 与 1.0 (HNumber 存 Double, toDisplayString 都产生 "1")
+let s6i = {};
+s6i[1] = "from-int";
+s6i[1.0] = "from-float";
+report("6.20-int-float-collision", s6i[1], "from-float");
+report("6.21-int-float-collision-len", len(s6i), 1);
+
+# 混合键类型在同一字典
+let s6j = {1: "int", "1": "str", true: "bool"};
+# 1 与 "1" 冲突 -> "str" 覆盖; true -> "true" 单独
+report("6.22-mixed-collision-d1", s6j[1], "str");
+report("6.23-mixed-bool", s6j[true], "bool");
+report("6.24-mixed-len", len(s6j), 2);
+
+# ============================================================
+# S7: copy 浅拷贝 — 修改副本顶层不影响原, 嵌套对象引用共享
+# ============================================================
+print("=== S7: copy (shallow) ===");
+let s7orig = {"a": 1, "b": 2, "c": 3};
+let s7copy = s7orig.copy();
+
+# 副本与原相等 (内容)
+report("7.01-copy-equal", s7copy == s7orig, true);
+# 副本与原不是同一对象 (无 === 运算符, 用修改行为判断)
+
+# 修改副本顶层: 新增键
+s7copy["d"] = 4;
+report("7.02-copy-add-not-affect-orig", "d" in s7orig, false);
+report("7.03-copy-add-in-copy", "d" in s7copy, true);
+report("7.04-copy-add-orig-len", len(s7orig), 3);
+report("7.05-copy-add-copy-len", len(s7copy), 4);
+
+# 修改副本顶层: 删除键
+let s7orig2 = {"a": 1, "b": 2, "c": 3};
+let s7copy2 = s7orig2.copy();
+del s7copy2["a"];
+report("7.06-copy-del-not-affect-orig", "a" in s7orig2, true);
+report("7.07-copy-del-in-copy", "a" in s7copy2, false);
+
+# 修改副本顶层: 覆盖值
+let s7orig3 = {"a": 1, "b": 2};
+let s7copy3 = s7orig3.copy();
+s7copy3["a"] = 999;
+report("7.08-copy-overwrite-not-affect-orig", s7orig3["a"], 1);
+report("7.09-copy-overwrite-in-copy", s7copy3["a"], 999);
+
+# 浅拷贝: 嵌套对象引用共享 — 修改嵌套字典影响原
+let s7orig4 = {"nested": {"x": 1}};
+let s7copy4 = s7orig4.copy();
+s7copy4["nested"]["x"] = 999;
+report("7.10-shallow-nested-shared-orig", s7orig4["nested"]["x"], 999);
+report("7.11-shallow-nested-shared-copy", s7copy4["nested"]["x"], 999);
+
+# 浅拷贝: 嵌套列表引用共享
+let s7orig5 = {"list": [1, 2, 3]};
+let s7copy5 = s7orig5.copy();
+s7copy5["list"][0] = 99;
+report("7.12-shallow-list-shared-orig", s7orig5["list"][0], 99);
+report("7.13-shallow-list-shared-copy", s7copy5["list"][0], 99);
+
+# 浅拷贝: 顶层值是数字 (不可变), 副本修改不影响
+let s7orig6 = {"n": 10, "s": "str"};
+let s7copy6 = s7orig6.copy();
+s7copy6["n"] = 20;
+s7copy6["s"] = "new";
+report("7.14-scalar-not-shared-n", s7orig6["n"], 10);
+report("7.15-scalar-not-shared-s", s7orig6["s"], "str");
+
+# 空字典 copy
+let s7empty = {};
+let s7emptycopy = s7empty.copy();
+report("7.16-empty-copy-len", len(s7emptycopy), 0);
+
+# copy 后原 dict 修改不影响 copy (反向)
+let s7orig7 = {"a": 1};
+let s7copy7 = s7orig7.copy();
+s7orig7["a"] = 100;
+report("7.17-orig-mod-not-affect-copy", s7copy7["a"], 1);
+
+# ============================================================
+# S8: dict 合并 — + 运算符, 手动合并
+# ============================================================
+print("=== S8: dict merge ===");
+
+# + 运算符: 合并两个 dict, 后者覆盖前者
+let s8a = {"a": 1, "b": 2};
+let s8b = {"b": 3, "c": 4};
+let s8merged = s8a + s8b;
+report("8.01-merge-len", len(s8merged), 3);
+report("8.02-merge-a", s8merged["a"], 1);
+report("8.03-merge-b-overwritten", s8merged["b"], 3);
+report("8.04-merge-c", s8merged["c"], 4);
+
+# + 合并不修改原 dict
+report("8.05-merge-orig-a-unchanged", s8a["b"], 2);
+
+# + 空字典合并
+let s8c = {"a": 1};
+let s8cmerged = s8c + {};
+report("8.06-merge-empty-right", s8cmerged, {"a": 1});
+let s8dmerged = {} + s8c;
+report("8.07-merge-empty-left", s8dmerged, {"a": 1});
+
+# + 两个空字典
+let s8emerged = {} + {};
+report("8.08-merge-both-empty", len(s8emerged), 0);
+
+# + 合并顺序: 结果顺序 = 左边全部 + 右边新增的
+let s8e = {"x": 1, "y": 2};
+let s8f = {"z": 3, "w": 4};
+let s8ef = s8e + s8f;
+let s8eforder = "";
+for k in s8ef { s8eforder = s8eforder + k; }
+report("8.09-merge-order", s8eforder, "xyzw");
+
+# + 合并冲突键的顺序: 冲突键保留左边位置, 值取右边
+let s8g = {"a": 1, "b": 2};
+let s8h = {"b": 99, "c": 3};
+let s8gh = s8g + s8h;
+let s8ghorder = "";
+for k in s8gh { s8ghorder = s8ghorder + k; }
+report("8.10-merge-conflict-order", s8ghorder, "abc");
+report("8.11-merge-conflict-value", s8gh["b"], 99);
+
+# dict + 非dict -> 抛错
+let s8err = "none";
+try { let r = {"a": 1} + [1, 2]; } catch (e) { s8err = "err"; }
+report("8.12-dict-plus-list-throws", s8err, "err");
+
+# 手动合并: 遍历赋值
+let s8i = {"a": 1};
+let s8j = {"b": 2, "c": 3};
+for k, v in s8j { s8i[k] = v; }
+report("8.13-manual-merge-len", len(s8i), 3);
+report("8.14-manual-merge-b", s8i["b"], 2);
+report("8.15-manual-merge-c", s8i["c"], 3);
+
+# ============================================================
+# S9: dict 大小 — 空 len==0, 大字典 1000 键
+# ============================================================
+print("=== S9: dict size ===");
+
+# 空字典
+let s9empty = {};
+report("9.01-empty-len", len(s9empty), 0);
+report("9.02-empty-is-empty-method", s9empty.is_empty(), true);
+report("9.03-empty-size-method", s9empty.size(), 0);
+
+# 单键
+let s9one = {"a": 1};
+report("9.04-single-len", len(s9one), 1);
+report("9.05-single-is-empty", s9one.is_empty(), false);
+
+# 大字典 1000 键
+let s9big = {};
+for i in range(1000) {
+    s9big["key" + str(i)] = i * 2;
+}
+report("9.06-big-1000-len", len(s9big), 1000);
+report("9.07-big-first", s9big["key0"], 0);
+report("9.08-big-mid", s9big["key500"], 1000);
+report("9.09-big-last", s9big["key999"], 1998);
+
+# 大字典求和
+let s9sum = 0;
+for k, v in s9big { s9sum = s9sum + v; }
+# sum = 2 * (0 + 1 + ... + 999) = 2 * 999*1000/2 = 999000
+report("9.10-big-sum", s9sum, 999000);
+
+# 大字典删除若干键
+del s9big["key0"];
+del s9big["key999"];
+del s9big["key500"];
+report("9.11-big-after-del-len", len(s9big), 997);
+report("9.12-big-after-del-key0-gone", "key0" in s9big, false);
+report("9.13-big-after-del-key500-gone", "key500" in s9big, false);
+
+# 大字典迭代次数 == len
+let s9count = 0;
+for k in s9big { s9count = s9count + 1; }
+report("9.14-big-iter-count-equals-len", s9count, len(s9big));
+
+# ============================================================
+# S10: dict 删除 — del d[key], 删除不存在键, 删除后迭代
+# ============================================================
+print("=== S10: dict delete ===");
+let s10 = {"a": 1, "b": 2, "c": 3, "d": 4};
+report("10.01-del-before-len", len(s10), 4);
+del s10["b"];
+report("10.02-del-after-len", len(s10), 3);
+report("10.03-del-key-gone", "b" in s10, false);
+report("10.04-del-other-keys-intact-a", s10["a"], 1);
+report("10.05-del-other-keys-intact-c", s10["c"], 3);
+report("10.06-del-other-keys-intact-d", s10["d"], 4);
+
+# 删除后再访问 -> 抛错
+let s10err = "none";
+try { let r = s10["b"]; } catch (e) { s10err = "err"; }
+report("10.07-del-access-throws", s10err, "err");
+
+# 删除不存在的键
+#   预期 (Python): 抛 KeyError
+#   预期 (H#): 静默忽略 (DELETE_ITEM 用 entries.remove, 返回 null 不抛)
+let s10b = {"a": 1};
+let s10berr = "none";
+try {
+    del s10b["nonexistent"];
+} catch (e) {
+    s10berr = "err";
+}
+report("10.08-del-missing-no-throw", s10berr, "none");
+report("10.09-del-missing-len-unchanged", len(s10b), 1);
+
+# 删除所有键
+let s10c = {"a": 1, "b": 2, "c": 3};
+del s10c["a"];
+del s10c["b"];
+del s10c["c"];
+report("10.10-del-all-len", len(s10c), 0);
+report("10.11-del-all-is-empty", s10c.is_empty(), true);
+
+# 删除后迭代
+let s10d = {"a": 1, "b": 2, "c": 3, "e": 5};
+del s10d["b"];
+let s10dorder = "";
+for k in s10d { s10dorder = s10dorder + k; }
+report("10.12-del-then-iter-order", s10dorder, "ace");
+
+# remove() 方法 vs del 语句 — 行为应一致
+let s10e = {"a": 1, "b": 2, "c": 3};
+s10e.remove("b");
+report("10.13-remove-method-len", len(s10e), 2);
+report("10.14-remove-method-gone", "b" in s10e, false);
+
+# remove() 不存在的键 -> 不抛错, 返回 null
+let s10f = {"a": 1};
+let s10ferr = "none";
+let s10fret = "none";
+try {
+    s10fret = s10f.remove("missing");
+} catch (e) {
+    s10ferr = "err";
+}
+report("10.15-remove-missing-no-throw", s10ferr, "none");
+report("10.16-remove-missing-returns-null", s10fret, null);
+
+# clear() 清空
+let s10g = {"a": 1, "b": 2, "c": 3};
+s10g.clear();
+report("10.17-clear-len", len(s10g), 0);
+report("10.18-clear-is-empty", s10g.is_empty(), true);
+
+# ============================================================
+# S11: in 操作符 — 存在/不存在/值类型检查
+# ============================================================
+print("=== S11: in operator ===");
+let s11 = {"a": 1, "b": 2, "c": 3};
+
+# 存在的键
+report("11.01-in-present-a", "a" in s11, true);
+report("11.02-in-present-b", "b" in s11, true);
+report("11.03-in-present-c", "c" in s11, true);
+
+# 不存在的键
+report("11.04-in-missing", "z" in s11, false);
+report("11.05-in-empty-str", "" in s11, false);
+
+# 整数键 in
+let s11b = {1: "a", 2: "b"};
+report("11.06-in-int-present", 1 in s11b, true);
+report("11.07-in-int-missing", 3 in s11b, false);
+
+# bool 键 in
+let s11c = {true: "yes"};
+report("11.08-in-bool-present", true in s11c, true);
+report("11.09-in-bool-missing", false in s11c, false);
+
+# null 键 in
+let s11d = {null: "nil"};
+report("11.10-in-null-present", null in s11d, true);
+
+# not in
+report("11.11-not-in-missing", ("z" in s11) == false, true);
+let s11notIn = !("z" in s11);
+report("11.12-not-in-operator", s11notIn, true);
+
+# in 检查的是键, 不是值
+report("11.13-in-checks-key-not-value-1", 1 in s11, false);
+report("11.14-in-checks-key-not-value-2", 2 in s11, false);
+
+# in on 空字典
+let s11empty = {};
+report("11.15-in-empty", "a" in s11empty, false);
+
+# in 与 has_key/contains 一致性
+let s11e = {"a": 1, "b": 2};
+report("11.16-in-vs-has-key-a", ("a" in s11e) == s11e.has_key("a"), true);
+report("11.17-in-vs-contains-a", ("a" in s11e) == s11e.contains("a"), true);
+report("11.18-in-vs-has-key-missing", ("z" in s11e) == s11e.has_key("z"), true);
+
+# ============================================================
+# S12: dict 比较 — ==, 不同顺序相同内容, 嵌套, 类型
+# ============================================================
+print("=== S12: dict comparison ===");
+
+# 相同内容
+report("12.01-eq-same-content", {"a": 1, "b": 2} == {"a": 1, "b": 2}, true);
+
+# 不同顺序相同内容 -> 相等 (HValueOps.equals 逐键比较)
+report("12.02-eq-diff-order-same-content", {"a": 1, "b": 2} == {"b": 2, "a": 1}, true);
+
+# 不同内容
+report("12.03-neq-diff-content", {"a": 1} == {"a": 2}, false);
+report("12.04-neq-diff-key", {"a": 1} == {"b": 1}, false);
+
+# 不同大小
+report("12.05-neq-diff-size", {"a": 1} == {"a": 1, "b": 2}, false);
+
+# 空字典
+report("12.06-eq-empty", {} == {}, true);
+report("12.07-neq-empty-vs-nonempty", {} == {"a": 1}, false);
+
+# 嵌套字典比较
+report("12.08-eq-nested", {"a": {"b": 1}} == {"a": {"b": 1}}, true);
+report("12.09-neq-nested", {"a": {"b": 1}} == {"a": {"b": 2}}, false);
+
+# 值类型敏感: 1 != true, 1 != "1"
+report("12.10-neq-int-vs-bool-val", {"a": 1} == {"a": true}, false);
+report("12.11-neq-int-vs-str-val", {"a": 1} == {"a": "1"}, false);
+
+# != 运算符
+report("12.12-neq-operator", {"a": 1} != {"a": 2}, true);
+report("12.13-eq-operator-neq-false", {"a": 1} != {"a": 1}, false);
+
+# dict vs list -> false
+report("12.14-dict-vs-list", {"a": 1} == ["a", 1], false);
+
+# dict vs null -> false
+report("12.15-dict-vs-null", {} == null, false);
+
+# 变量比较
+let s12a = {"x": 1, "y": 2};
+let s12b = {"y": 2, "x": 1};
+report("12.16-var-eq-diff-order", s12a == s12b, true);
+
+# 自身比较
+let s12c = {"a": 1};
+report("12.17-self-eq", s12c == s12c, true);
+
+# ============================================================
+# S13: dict 字面量边界 — 空 {}, 单键, 尾逗号, 重复键
+# ============================================================
+print("=== S13: dict literal edge ===");
+
+# 空字典
+let s13e = {};
+report("13.01-empty-literal-len", len(s13e), 0);
+report("13.02-empty-literal-is-empty", s13e.is_empty(), true);
+
+# 单键
+let s13s = {"only": 1};
+report("13.03-single-literal-len", len(s13s), 1);
+report("13.04-single-literal-access", s13s["only"], 1);
+
+# 单键带尾逗号 (Python 允许 {"a":1,})
+#   预期 (H# parser.py:1500): 逗号后必须跟 key 表达式 -> 编译期错误
+#   注: 尾逗号是编译期 parse 错误, H# try-catch 捕获不到, 会导致整个文件编译失败,
+#   故此处不直接测试; 用单独的 _probe143_trailing_comma.hto 验证 (编译失败即确认 bug)
+print("13.05-trailing-comma | SKIPPED (compile-time error, see _probe143_trailing_comma.hto) | EXPECT=err");
+
+# 重复键字面量 (保留首次位置, 值为最后)
+let s13dup = {"a": 1, "a": 2, "a": 3};
+report("13.07-dup-key-len", len(s13dup), 1);
+report("13.08-dup-key-value", s13dup["a"], 3);
+
+# 重复键不同类型但 coerceKey 冲突 {"a":1, true:2} (a 与 true 不冲突)
+let s13mix = {"a": 1, true: 2};
+report("13.09-mix-no-collision-len", len(s13mix), 2);
+# 1 与 1.0 冲突 -> 值为最后赋值 "b", len=1
+report("13.10-int-float-dup-collision-len", len({1: "a", 1.0: "b"}), 1);
+report("13.11-int-float-dup-collision-value", {1: "a", 1.0: "b"}[1], "b");
+
+# 空字典赋值后访问
+let s13empty2 = {};
+s13empty2["k"] = "v";
+report("13.11-empty-then-add", s13empty2["k"], "v");
+report("13.12-empty-then-add-len", len(s13empty2), 1);
+
+# 字面量中值为复杂表达式
+let s13expr = {"sum": 1 + 2, "list": [1, 2, 3]};
+report("13.13-expr-value-sum", s13expr["sum"], 3);
+report("13.14-expr-value-list", s13expr["list"], [1, 2, 3]);
+
+# 字面量键为表达式
+let s13k = "dyn";
+let s13exprk = {s13k: 1};
+report("13.15-expr-key", s13exprk["dyn"], 1);
+
+# ============================================================
+# S14: dict as 函数参数 — 传引用还是传值
+# ============================================================
+print("=== S14: dict as function param ===");
+
+# 修改参数影响原 dict (引用语义)
+fn modifyDict(d, key, val) {
+    d[key] = val;
+}
+let s14a = {"a": 1};
+modifyDict(s14a, "b", 2);
+report("14.01-param-modify-affects-orig", s14a["b"], 2);
+report("14.02-param-modify-orig-len", len(s14a), 2);
+
+# 在函数内删除参数的键 -> 影响原
+fn deleteKey(d, key) {
+    del d[key];
+}
+let s14b = {"a": 1, "b": 2};
+deleteKey(s14b, "a");
+report("14.03-param-del-affects-orig", "a" in s14b, false);
+report("14.04-param-del-orig-len", len(s14b), 1);
+
+# 在函数内 clear -> 影响原
+fn clearDict(d) {
+    d.clear();
+}
+let s14c = {"a": 1, "b": 2};
+clearDict(s14c);
+report("14.05-param-clear-affects-orig", len(s14c), 0);
+
+# 在函数内 copy 并修改 -> 不影响原
+fn copyAndModify(d) {
+    let c = d.copy();
+    c["new"] = 99;
+    return c;
+}
+let s14d = {"a": 1};
+let s14dret = copyAndModify(s14d);
+report("14.06-copy-in-fn-orig-unchanged", "new" in s14d, false);
+report("14.07-copy-in-fn-ret-has-new", s14dret["new"], 99);
+
+# 函数返回 dict -> 调用方可修改, 影响函数内? (返回后函数栈已销毁)
+fn makeDict(a, b) {
+    return {"a": a, "b": b};
+}
+let s14e = makeDict(10, 20);
+s14e["c"] = 30;
+report("14.08-returned-dict-modifiable", s14e["c"], 30);
+report("14.09-returned-dict-a", s14e["a"], 10);
+
+# dict 作为参数 + 嵌套修改
+fn modifyNested(d) {
+    d["outer"]["inner"] = "modified";
+}
+let s14f = {"outer": {"inner": "orig"}};
+modifyNested(s14f);
+report("14.10-nested-param-modify", s14f["outer"]["inner"], "modified");
+
+# dict 重新赋值参数变量不影响原 (变量重新绑定)
+fn rebindDict(d) {
+    d = {"new": 1};
+    return d;
+}
+let s14g = {"a": 1};
+let s14gret = rebindDict(s14g);
+report("14.11-rebind-not-affect-orig", s14g["a"], 1);
+report("14.12-rebind-ret", s14gret["new"], 1);
+
+# ============================================================
+# 总结
+# ============================================================
+print("==== SUMMARY ====");
+print("PASS=" + str(stats[0]) + " FAIL=" + str(stats[1]));
+print("==== round5_143 DONE ====");

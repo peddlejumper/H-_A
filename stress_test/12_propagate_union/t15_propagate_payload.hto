@@ -1,0 +1,18 @@
+# T15 - ? payload equals the thrown value (verify payload unpacking)
+fn throw_num()   { throw 12345; return 0; }
+fn throw_str()   { throw "boom"; return ""; }
+fn throw_list()  { throw [1, 2, 3]; return []; }
+
+let n = throw_num()?;
+print(n);
+print(n == 12345);
+
+let s = throw_str()?;
+print(s);
+print(s == "boom");
+
+let l = throw_list()?;
+print(l);
+print(l[0]);
+print(l[1]);
+print(l[2]);

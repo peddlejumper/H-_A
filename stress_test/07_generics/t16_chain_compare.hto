@@ -1,0 +1,27 @@
+# t16_chain_compare.hto — `<` 链式 / 类型参数与比较混合
+fn check(name, cond) {
+    if (cond) { print("OK " + name); }
+    else { print("FAIL " + name); }
+}
+
+fn identity<T>(x) { return x; }
+let a = 1;
+let b = 2;
+let c = 3;
+
+check("16/cmp_basic", (a < b) == true);
+check("16/ident_in_arg", identity<bool>(a < b) == true);
+check("16/ident_right", (a < identity<int>(b)) == true);
+check("16/ident_both", (identity<int>(a) < identity<int>(b)) == true);
+
+# 链式比较 a < b < c
+try {
+    let r = a < b < c;
+    print("16/chain_result=" + str(r));
+} catch (err) {
+    print("16/chain_err=" + str(err));
+}
+
+# 三元中的比较与类型参数
+let r2 = (a < b) ? identity<int>(100) : identity<int>(200);
+check("16/ternary", r2 == 100);

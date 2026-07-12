@@ -1,0 +1,30 @@
+import "bootstrap/d3system.hto";
+
+3dsizepower TestSpace {
+    public abs{T, T, size}
+    public size[auto{size=auto^3d}]
+
+    region TestZone(0, 0, 0, 100, 100, 100) {
+        fn hello(x, y, z) {
+            print("TestZone hello!");
+        }
+    }
+}
+
+em3d ExtendedSpace extends TestSpace {
+    region WarpGate(50, 0, 50, 150, 100, 150) {
+        fn activate() {
+            print("WarpGate activated!");
+        }
+    }
+}
+
+d3_size_power_get_info(TestSpace);
+d3_size_power_get_info(ExtendedSpace);
+
+let found = d3_find_region_by_point(TestSpace, 50, 50, 50);
+print("Point (50,50,50) in region: ");
+print(found.name);
+
+let vol = d3_system_summary(TestSpace);
+print("Test complete!");

@@ -1,0 +1,100 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+             x:Class="ZZW.CodeTeacher.Client.Views.ExternalPanelView"
+             x:DataType="vm:ExternalPanelViewModel">
+
+  <DockPanel LastChildFill="True">
+
+    <Border DockPanel.Dock="Top" Classes="toolbar" Padding="12,8">
+      <StackPanel Spacing="6">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Button Classes="primary" Content="飞书登录" Command="{Binding LoginFeishuCommand}" />
+          <Button Classes="secondary" Content="洛谷登录" Command="{Binding LoginLuoguCommand}" />
+          <Border Classes="badge" Margin="6,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="{Binding CurrentPlatform, StringFormat=当前: {0}}"
+                       Foreground="{DynamicResource OnBrandBlueContainerBrush}" FontSize="11" />
+          </Border>
+        </StackPanel>
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBox Grid.Column="0" x:Name="LuoguSearchBox" Watermark="洛谷题号(如 P1001)或关键字…"
+                   FontSize="11" />
+          <Button Grid.Column="1" Classes="secondary" Content="搜索"
+                  Command="{Binding SearchLuoguCommand}"
+                  CommandParameter="{Binding #LuoguSearchBox.Text}" Margin="4,0,0,0" />
+          <Button Grid.Column="2" Classes="secondary" Content="跳转题目"
+                  Command="{Binding OpenLuoguProblemCommand}"
+                  CommandParameter="{Binding #LuoguSearchBox.Text}" Margin="4,0,0,0" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- 地址栏 -->
+    <Border DockPanel.Dock="Top" Classes="glass-inset" Padding="12,7" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Column="0" Text="地址" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Text="{Binding DisplayAddress}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11"
+                   Margin="6,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+        <Button Grid.Column="2" Classes="secondary" Content="在浏览器中打开"
+                Command="{Binding OpenInSystemBrowserCommand}" Margin="4,0,0,0" Padding="8,3" />
+      </Grid>
+    </Border>
+
+    <!-- 内容 -->
+    <Border Background="Transparent">
+      <ScrollViewer>
+        <StackPanel Margin="12" Spacing="10">
+
+          <!-- 当前平台状态 -->
+          <Border Classes="card" Padding="14">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="section" Text="第三方平台" />
+              <TextBlock Text="{Binding PlatformStatus}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
+          <!-- 飞书 -->
+          <Border Classes="card" Padding="14">
+            <StackPanel Spacing="6">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="section" Text="飞书" VerticalAlignment="Center" />
+                <Border Classes="badge" Padding="8,2">
+                  <TextBlock Text="{Binding FeishuStatus}" Foreground="{DynamicResource SuccessGreen}" FontSize="11" />
+                </Border>
+              </StackPanel>
+              <TextBlock Text="点击「飞书登录」后,飞书网页版将在系统浏览器中打开,你可在此登录并使用飞书。"
+                         Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" TextWrapping="Wrap" />
+              <Button Classes="secondary" Content="打开飞书" Command="{Binding LoginFeishuCommand}"
+                      HorizontalAlignment="Left" Margin="0,3,0,0" />
+            </StackPanel>
+          </Border>
+
+          <!-- 洛谷 -->
+          <Border Classes="card" Padding="14">
+            <StackPanel Spacing="6">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="section" Text="洛谷题库" VerticalAlignment="Center" />
+                <Border Classes="badge" Padding="8,2">
+                  <TextBlock Text="{Binding LuoguStatus}" Foreground="{DynamicResource SuccessGreen}" FontSize="11" />
+                </Border>
+              </StackPanel>
+              <TextBlock Text="点击「洛谷登录」在系统浏览器中打开洛谷,可浏览/搜索/提交第三方题库题目。上方搜索框可按题号或关键字跳转。"
+                         Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" TextWrapping="Wrap" />
+              <Button Classes="secondary" Content="打开洛谷" Command="{Binding LoginLuoguCommand}"
+                      HorizontalAlignment="Left" Margin="0,3,0,0" />
+            </StackPanel>
+          </Border>
+
+          <!-- 说明 -->
+          <Border Classes="glass-inset" Padding="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="说明" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" FontWeight="SemiBold" />
+              <TextBlock Text="第三方平台通过系统浏览器打开。飞书登录后可在浏览器中使用飞书完整功能;洛谷登录后可浏览题库、查看题解、提交代码。"
+                         Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </DockPanel>
+</UserControl>

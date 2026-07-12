@@ -1,0 +1,144 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+             xmlns:cvt="using:ZZW.CodeTeacher.Client.Converters"
+             xmlns:svc="using:ZZW.CodeTeacher.Client.Services"
+             x:Class="ZZW.CodeTeacher.Client.Views.AiSettingsView"
+             x:DataType="vm:AiSettingsViewModel">
+
+  <Grid Background="Transparent">
+    <ScrollViewer Padding="0">
+      <StackPanel Margin="20,16" Spacing="12" MaxWidth="760" HorizontalAlignment="Stretch">
+
+        <!-- 顶栏 -->
+        <DockPanel LastChildFill="False" Margin="0,0,0,6">
+          <Button DockPanel.Dock="Left" Classes="secondary" Content="保存并关闭"
+                  Command="{Binding BackCommand}" />
+          <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0" VerticalAlignment="Center">
+            <Border Classes="title-dot" />
+            <TextBlock Classes="title" Text="AI 接入设置" VerticalAlignment="Center" />
+          </StackPanel>
+        </DockPanel>
+
+        <!-- 提供商选择 -->
+        <Border Classes="panel" Padding="16">
+          <StackPanel Spacing="10">
+            <TextBlock Classes="section" Text="选择 AI 提供商" />
+            <Grid ColumnDefinitions="220,*,Auto" Margin="0">
+              <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Text="提供商" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+                <ComboBox ItemsSource="{Binding Providers}"
+                          SelectedItem="{Binding SelectedProvider}"
+                          MinWidth="200">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="svc:AiProvider">
+                      <TextBlock Text="{Binding .}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
+              <Border Grid.Column="1" Classes="glass-inset" BorderThickness="1"
+                      Padding="10,8" Margin="12,14,0,0">
+                <TextBlock Text="{Binding ProviderGuide}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11" TextWrapping="Wrap" />
+              </Border>
+              <Button Grid.Column="2" Classes="secondary" Content="恢复该提供商默认值"
+                      Command="{Binding LoadProviderDefaultCommand}"
+                      VerticalAlignment="Bottom" Margin="6,0,0,0" />
+            </Grid>
+
+            <!-- 启用开关 -->
+            <CheckBox Content="启用 AI 教练(保存后即时生效)"
+                      IsChecked="{Binding Enabled}"
+                      Foreground="{DynamicResource InkPrimaryBrush}" FontSize="12" Margin="0,3,0,0" />
+          </StackPanel>
+        </Border>
+
+        <!-- 接口配置 -->
+        <Border Classes="panel" Padding="16">
+          <StackPanel Spacing="10">
+            <TextBlock Classes="section" Text="接口配置" />
+
+            <!-- Endpoint -->
+            <StackPanel Spacing="4">
+              <TextBlock Text="Chat Completions Endpoint (完整 URL)" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+              <TextBox Text="{Binding Endpoint}" Watermark="https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+                       FontFamily="{StaticResource CodeFontFamily}" FontSize="11" />
+            </StackPanel>
+
+            <!-- API Key -->
+            <StackPanel Spacing="4">
+              <TextBlock Text="API Key / 接入凭证" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+              <TextBox Text="{Binding ApiKey}" Watermark="sk-... / ep-... / 应用凭证"
+                       PasswordChar="•"
+                       FontFamily="{StaticResource CodeFontFamily}" FontSize="11" />
+            </StackPanel>
+
+            <!-- Model -->
+            <StackPanel Spacing="4">
+              <TextBlock Text="模型 ID / 接入点 ID" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+              <TextBox Text="{Binding Model}" Watermark="doubao-seed-1-6-251015 / gpt-4o-mini / ep-xxx"
+                       FontFamily="{StaticResource CodeFontFamily}" FontSize="11" />
+            </StackPanel>
+
+            <!-- 温度 / MaxTokens / 超时 -->
+            <Grid ColumnDefinitions="*,*,*" Margin="0,3,0,0" RowDefinitions="Auto,Auto">
+              <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,6,0">
+                <TextBlock Text="温度 (0-2)" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+                <NumericUpDown Value="{Binding Temperature}" Minimum="0" Maximum="2" Increment="0.1" FormatString="0.0" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="4" Margin="6,0,6,0">
+                <TextBlock Text="最大输出 Token" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+                <NumericUpDown Value="{Binding MaxTokens}" Minimum="64" Maximum="32768" Increment="128" />
+              </StackPanel>
+              <StackPanel Grid.Column="2" Spacing="4" Margin="6,0,0,0">
+                <TextBlock Text="请求超时 (秒)" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+                <NumericUpDown Value="{Binding TimeoutSeconds}" Minimum="5" Maximum="300" Increment="5" />
+              </StackPanel>
+            </Grid>
+
+            <!-- 系统提示 -->
+            <StackPanel Spacing="4" Margin="0,3,0,0">
+              <TextBlock Text="自定义系统提示 (可选;留空使用内置教学 prompt)" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="12" />
+              <TextBox Text="{Binding SystemPrompt}" Watermark="你是一位专业的编程教学 AI 教练…"
+                       AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" MaxHeight="120"
+                       FontSize="11" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- 测试 + 保存 -->
+        <Border Classes="panel" Padding="16">
+          <StackPanel Spacing="10">
+            <TextBlock Classes="section" Text="测试与保存" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="测试连接" Command="{Binding TestConnectionCommand}"
+                      IsEnabled="{Binding !IsTesting}" />
+              <Button Classes="primary" Content="保存配置" Command="{Binding SaveCommand}" />
+              <TextBlock Text="{Binding IsTesting, StringFormat={}{0:#测试中…;测试中…;}}"
+                         Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <!-- 测试结果 -->
+            <Border IsVisible="{Binding TestResult, Converter={x:Static cvt:NullToBoolConverter.Instance}}"
+                    Classes="glass-inset" Padding="12,9" BorderThickness="1"
+                    BorderBrush="{Binding TestOk, Converter={x:Static cvt:BoolToTestResultBrushConverter.Instance}}">
+              <TextBlock Text="{Binding TestResult}" Foreground="{DynamicResource InkPrimaryBrush}" FontSize="12" TextWrapping="Wrap" />
+            </Border>
+          </StackPanel>
+        </Border>
+
+        <!-- 配置文件路径 -->
+        <Border Classes="glass-inset" Padding="12,8">
+          <StackPanel Spacing="2">
+            <TextBlock Text="配置文件位置" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+            <TextBlock Text="{Binding SettingsPath}" Foreground="{DynamicResource InkSecondaryBrush}" FontSize="11"
+                       FontFamily="{StaticResource CodeFontFamily}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+            <TextBlock Text="API Key 存储在本地,请妥善保管。删除此文件可重置 AI 配置。"
+                       Foreground="{DynamicResource InkMutedBrush}" FontSize="10" Margin="0,3,0,0" />
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

@@ -1,0 +1,65 @@
+# 11 — chan_close then chan_recv still reads remaining items
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# Fill, close, drain
+let ch = chan_new(0);
+chan_send(ch, 1);
+chan_send(ch, 2);
+chan_send(ch, 3);
+chan_close(ch);
+check("size_after_close", chan_size(ch) == 3, "size=" + str(chan_size(ch)));
+let r1 = chan_recv(ch);
+let r2 = chan_recv(ch);
+let r3 = chan_recv(ch);
+check("recv_1", r1 == 1, "r1=" + str(r1));
+check("recv_2", r2 == 2, "r2=" + str(r2));
+check("recv_3", r3 == 3, "r3=" + str(r3));
+check("size_after_drain", chan_size(ch) == 0, "size=" + str(chan_size(ch)));
+
+# recv on closed+empty channel raises (per impl)
+let caught = false;
+try {
+    let v = chan_recv(ch);
+} catch (e) {
+    caught = true;
+}
+check("recv_closed_empty_raises", caught, "no exception");
+
+# Bounded channel: same semantics
+let chb = chan_new(5);
+chan_send(chb, "a");
+chan_send(chb, "b");
+chan_close(chb);
+let ba = chan_recv(chb);
+let bb = chan_recv(chb);
+check("bounded_recv_a", ba == "a", "ba=" + str(ba));
+check("bounded_recv_b", bb == "b", "bb=" + str(bb));
+let caught2 = false;
+try {
+    let v = chan_recv(chb);
+} catch (e) {
+    caught2 = true;
+}
+check("bounded_recv_closed_empty_raises", caught2, "no exception");
+
+# Close empty channel, recv raises
+let che = chan_new(0);
+chan_close(che);
+let caught3 = false;
+try {
+    let v = chan_recv(che);
+} catch (e) {
+    caught3 = true;
+}
+check("recv_close_empty_raises", caught3, "no exception");
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

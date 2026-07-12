@@ -1,0 +1,13 @@
+# test_elseif.hto
+fn f(c) {
+    if (c == "a") {
+        return 1;
+    } else if (c == "b") {
+        return 2;
+    } else {
+        return 3;
+    }
+}
+print(f("a"));
+print(f("b"));
+print(f("c"));

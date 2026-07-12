@@ -1,0 +1,1361 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# H# zzwUI ↔ Java 协同开发库测试
+# ═══════════════════════════════════════════════════════════════════════════
+
+import "bootstrap/hwdui_java.hto";
+
+let _test_count = 0;
+let _pass_count = 0;
+
+fn assert(condition, msg) {
+    _test_count = _test_count + 1;
+    if (condition) {
+        _pass_count = _pass_count + 1;
+        print("  PASS: " + msg);
+    } else {
+        print("  FAIL: " + msg);
+    }
+    return 0;
+}
+
+fn test_summary() {
+    print("");
+    print("═══════════════════════════════════");
+    let failed = _test_count - _pass_count;
+    print("  Tests: " + _test_count + " | Passed: " + _pass_count + " | Failed: " + failed);
+    if (failed == 0) {
+        print("  Result: ALL TESTS PASSED");
+    } else {
+        print("  Result: " + failed + " TEST(S) FAILED");
+    }
+    print("═══════════════════════════════════");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 1: Core Interop Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_type_info() {
+    let ti = new JavaTypeInfo();
+    ti.init_j_type("String", "java.lang", "rt.jar");
+    assert(ti.getTypeName() == "String", "JavaTypeInfo.getTypeName");
+    assert(ti.getPackageName() == "java.lang", "JavaTypeInfo.getPackageName");
+    assert(ti.getJarSource() == "rt.jar", "JavaTypeInfo.getJarSource");
+    assert(ti.getFullName() == "java.lang.String", "JavaTypeInfo.getFullName");
+    ti.setPrimitive(true);
+    assert(ti.isPrimitive() == true, "JavaTypeInfo.setPrimitive");
+    ti.setGeneric(true);
+    assert(ti.isGeneric() == true, "JavaTypeInfo.isGeneric");
+    ti.setEnum(true);
+    assert(ti.isEnum() == true, "JavaTypeInfo.setEnum");
+    ti.setAnnotation(true);
+    assert(ti.isAnnotation() == true, "JavaTypeInfo.isAnnotation");
+    ti.setInterface(true);
+    assert(ti.isInterface() == true, "JavaTypeInfo.isInterface");
+    ti.addGenericArg("T");
+    let args = ti.getGenericArgs();
+    assert(len(args) == 1, "JavaTypeInfo.addGenericArg");
+    ti.setSuperClass("java.lang.Object");
+    assert(ti.getSuperClass() == "java.lang.Object", "JavaTypeInfo.setSuperClass");
+    ti.addModifier("public");
+    let mods = ti.getModifiers();
+    assert(len(mods) == 1, "JavaTypeInfo.addModifier");
+    return 0;
+}
+
+fn test_java_type_mapper() {
+    let m = new JavaTypeMapper();
+    m.init_mapper();
+    let jtype = m.toJava("int");
+    assert(jtype == "int", "TypeMapper: int → int");
+    jtype = m.toJava("float");
+    assert(jtype == "double", "TypeMapper: float → double");
+    jtype = m.toJava("string");
+    assert(jtype == "java.lang.String", "TypeMapper: string → String");
+    jtype = m.toJava("bool");
+    assert(jtype == "boolean", "TypeMapper: bool → boolean");
+    jtype = m.toJava("list");
+    assert(jtype == "java.util.ArrayList", "TypeMapper: list → ArrayList");
+    jtype = m.toJava("dict");
+    assert(jtype == "java.util.HashMap", "TypeMapper: dict → HashMap");
+    let hs_type = m.toHSharp("java.lang.String");
+    assert(hs_type == "string", "TypeMapper: String → string");
+    hs_type = m.toHSharp("java.lang.Integer");
+    assert(hs_type == "int32", "TypeMapper: Integer → int32");
+    assert(m.isPrimitive("int") == true, "TypeMapper.isPrimitive: int");
+    assert(m.isPrimitive("java.lang.String") == false, "TypeMapper.isPrimitive: String");
+    m.registerCustom("MyType", "com.example.MyType");
+    let mapped = m.toJava("MyType");
+    assert(mapped == "com.example.MyType", "TypeMapper: custom mapping");
+    return 0;
+}
+
+fn test_java_value() {
+    let v = new JavaValue();
+    v.init_jval(42, "int");
+    assert(v.getValue() == 42, "JavaValue.getValue");
+    assert(v.getTypeName() == "int", "JavaValue.getTypeName");
+    assert(v.isNull() == false, "JavaValue.isNull");
+    assert(v.asInt() == 42, "JavaValue.asInt");
+    let v2 = new JavaValue();
+    v2.init_jval(nullptr, "java.lang.Object");
+    assert(v2.isNull() == true, "JavaValue.isNull true");
+    assert(v2.asInt() == 0, "JavaValue.asInt nullptr→0");
+    assert(v2.asString() == "", "JavaValue.asString nullptr→empty");
+    assert(v2.asBool() == false, "JavaValue.asBool nullptr→false");
+    let v3 = new JavaValue();
+    v3.init_jval(3.14, "double");
+    v3.setPrimitive(true);
+    assert(v3.isPrimitive() == true, "JavaValue.setPrimitive");
+    assert(v3.asFloat() == 3.14, "JavaValue.asFloat");
+    let v4 = new JavaValue();
+    v4.init_jval([1, 2, 3], "java.util.List");
+    let lst = v4.asList();
+    assert(lst != nullptr, "JavaValue.asList");
+    let v5 = new JavaValue();
+    v5.init_jval({"a": 1}, "java.util.Map");
+    let d = v5.asDict();
+    assert(d != nullptr, "JavaValue.asDict");
+    return 0;
+}
+
+fn test_java_invoke() {
+    let inv = new JavaInvoke();
+    inv.init_invoke("toString", []);
+    assert(inv.getMethodName() == "toString", "JavaInvoke.getMethodName");
+    assert(inv.getArgCount() == 0, "JavaInvoke.getArgCount");
+    assert(inv.isStatic() == false, "JavaInvoke.isStatic default");
+    inv.setStatic(true);
+    assert(inv.isStatic() == true, "JavaInvoke.setStatic");
+    inv.setTimeout(5000);
+    assert(inv.getTimeout() == 5000, "JavaInvoke.setTimeout");
+    inv.setGetter("name");
+    assert(inv.isGetter() == true, "JavaInvoke.setGetter");
+    assert(inv.getPropertyName() == "name", "JavaInvoke.getPropertyName");
+    let inv2 = new JavaInvoke();
+    inv2.init_invoke("setName", ["Alice"]);
+    inv2.setSetter("name", "Bob");
+    assert(inv2.isSetter() == true, "JavaInvoke.setSetter");
+    assert(len(inv2.getArgs()) == 1, "JavaInvoke.setSetter args");
+    return 0;
+}
+
+fn test_java_result() {
+    let r = new JavaResult();
+    r.init_result();
+    assert(r.isSuccess() == false, "JavaResult.isSuccess default");
+    r.setSuccess(42);
+    assert(r.isSuccess() == true, "JavaResult.setSuccess");
+    assert(r.getValue() == 42, "JavaResult.getValue");
+    assert(r.isException() == false, "JavaResult.isException");
+    r.setError("Something wrong", "RuntimeException");
+    assert(r.isSuccess() == false, "JavaResult.setError");
+    assert(r.getError() == "Something wrong", "JavaResult.getError");
+    assert(r.getErrorType() == "RuntimeException", "JavaResult.getErrorType");
+    r.setCallId(7);
+    assert(r.getCallId() == 7, "JavaResult.setCallId");
+    r.setDuration(150);
+    assert(r.getDuration() == 150, "JavaResult.setDuration");
+    let val = r.unwrap();
+    assert(val == nullptr, "JavaResult.unwrap on error");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 2: Object Bridge Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_object() {
+    let obj = new JavaObject();
+    obj.init_jobj(100, "java.util.ArrayList");
+    assert(obj.getObjectId() == 100, "JavaObject.getObjectId");
+    assert(obj.getTypeName() == "java.util.ArrayList", "JavaObject.getTypeName");
+    assert(obj.isDisposed() == false, "JavaObject.isDisposed");
+    obj.setProperty("capacity", 16);
+    assert(obj.getProperty("capacity") == 16, "JavaObject.setProperty/getProperty");
+    assert(obj.hasProperty("capacity") == true, "JavaObject.hasProperty");
+    assert(obj.hasProperty("nonexistent") == false, "JavaObject.hasProperty false");
+    obj.cacheMethod("add");
+    obj.cacheMethod("remove");
+    assert(obj.hasMethod("add") == true, "JavaObject.hasMethod");
+    assert(obj.hasMethod("clear") == false, "JavaObject.hasMethod false");
+    obj.setRemote("localhost:1099");
+    assert(obj.isRemote() == true, "JavaObject.isRemote");
+    assert(obj.getRemoteEndpoint() == "localhost:1099", "JavaObject.getRemoteEndpoint");
+    obj.dispose();
+    assert(obj.isDisposed() == true, "JavaObject.dispose");
+    return 0;
+}
+
+fn test_java_object_cache() {
+    let cache = new JavaObjectCache();
+    cache.init_cache();
+    let obj1 = new JavaObject();
+    obj1.init_jobj(0, "String");
+    let id1 = cache.add(obj1);
+    assert(id1 == 1, "JavaObjectCache.add id=1");
+    let retrieved = cache.get(id1);
+    assert(retrieved != nullptr, "JavaObjectCache.get");
+    assert(retrieved.getTypeName() == "String", "JavaObjectCache.get type");
+    assert(cache.getCount() == 1, "JavaObjectCache.getCount");
+    assert(cache.contains(id1) == true, "JavaObjectCache.contains");
+    cache.remove(id1);
+    assert(cache.contains(id1) == false, "JavaObjectCache.remove");
+    assert(cache.getCount() == 0, "JavaObjectCache empty after remove");
+    let obj2 = new JavaObject();
+    obj2.init_jobj(0, "Integer");
+    cache.add(obj2);
+    cache.clear();
+    assert(cache.getCount() == 0, "JavaObjectCache.clear");
+    return 0;
+}
+
+fn test_java_jar_info() {
+    let jar = new JavaJarInfo();
+    jar.init_jar("guava", "31.1", "/libs/guava.jar");
+    assert(jar.getName() == "guava", "JavaJarInfo.getName");
+    assert(jar.getVersion() == "31.1", "JavaJarInfo.getVersion");
+    assert(jar.getPath() == "/libs/guava.jar", "JavaJarInfo.getPath");
+    assert(jar.isLoaded() == false, "JavaJarInfo.isLoaded default");
+    jar.setLoaded(true);
+    assert(jar.isLoaded() == true, "JavaJarInfo.setLoaded");
+    jar.setModule(true);
+    assert(jar.isModule() == true, "JavaJarInfo.isModule");
+    jar.setModuleName("com.google.common");
+    assert(jar.getModuleName() == "com.google.common", "JavaJarInfo.getModuleName");
+    let ti = new JavaTypeInfo();
+    ti.init_j_type("Lists", "com.google.common.collect", "guava");
+    jar.addType(ti);
+    assert(jar.getTypeCount() == 1, "JavaJarInfo.addType");
+    let found = jar.getType("Lists");
+    assert(found != nullptr, "JavaJarInfo.getType");
+    jar.addDependency("jsr305");
+    assert(jar.getDependencyCount() == 1, "JavaJarInfo.addDependency");
+    return 0;
+}
+
+fn test_java_class_loader() {
+    let loader = new JavaClassLoader();
+    loader.init_loader();
+    let jar = new JavaJarInfo();
+    jar.init_jar("test-lib", "1.0", "/libs/test.jar");
+    loader.register(jar);
+    assert(loader.getJarCount() == 1, "JavaClassLoader.register");
+    let loaded = loader.load("test-lib");
+    assert(loaded != nullptr, "JavaClassLoader.load");
+    assert(loader.isLoaded("test-lib") == true, "JavaClassLoader.isLoaded");
+    assert(loader.getLoadedCount() == 1, "JavaClassLoader.getLoadedCount");
+    loader.unload("test-lib");
+    assert(loader.isLoaded("test-lib") == false, "JavaClassLoader.unload");
+    loader.addClassPathEntry("/custom/classes");
+    loader.clear();
+    assert(loader.getJarCount() == 0, "JavaClassLoader.clear");
+    return 0;
+}
+
+fn test_java_constructor() {
+    let ctor = new JavaConstructor();
+    ctor.init_ctor("java.util.ArrayList");
+    ctor.addParam("int", "initialCapacity");
+    assert(ctor.getParamCount() == 1, "JavaConstructor.addParam");
+    assert(ctor.getParamType(0) == "int", "JavaConstructor.getParamType");
+    assert(ctor.getParamNames()[0] == "initialCapacity", "JavaConstructor.getParamNames");
+    return 0;
+}
+
+fn test_java_method() {
+    let m = new JavaMethod();
+    m.init_method("add", "boolean");
+    m.addParam("java.lang.Object", "element");
+    m.setStatic(false);
+    m.setSynchronized(true);
+    m.setVisibility("public");
+    m.addAnnotation("@Override");
+    m.addThrows("IllegalArgumentException");
+    assert(m.getName() == "add", "JavaMethod.getName");
+    assert(m.getReturnType() == "boolean", "JavaMethod.getReturnType");
+    assert(m.getParamCount() == 1, "JavaMethod.getParamCount");
+    assert(m.isStatic() == false, "JavaMethod.isStatic");
+    assert(m.isSynchronized() == true, "JavaMethod.isSynchronized");
+    assert(m.getVisibility() == "public", "JavaMethod.getVisibility");
+    assert(m.hasAnnotation("@Override") == true, "JavaMethod.hasAnnotation");
+    return 0;
+}
+
+fn test_java_field() {
+    let f = new JavaField();
+    f.init_field("MAX_VALUE", "int");
+    f.setStatic(true);
+    f.setFinal(true);
+    f.setVisibility("public");
+    assert(f.getName() == "MAX_VALUE", "JavaField.getName");
+    assert(f.getType() == "int", "JavaField.getType");
+    assert(f.isStatic() == true, "JavaField.isStatic");
+    assert(f.isFinal() == true, "JavaField.isFinal");
+    f.setTransient(true);
+    assert(f.isTransient() == true, "JavaField.isTransient");
+    f.setVolatile(true);
+    assert(f.isVolatile() == true, "JavaField.isVolatile");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 3: Event Bridge Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_event() {
+    let evt = new JavaEvent();
+    evt.init_event("actionPerformed", "java.awt.event.ActionListener");
+    assert(evt.getName() == "actionPerformed", "JavaEvent.getName");
+    assert(evt.getListenerType() == "java.awt.event.ActionListener", "JavaEvent.getListenerType");
+    assert(evt.getListenerCount() == 0, "JavaEvent.getListenerCount");
+    assert(evt.isStatic() == false, "JavaEvent.isStatic default");
+    evt.setStatic(true);
+    assert(evt.isStatic() == true, "JavaEvent.setStatic");
+    evt.setRemote(true);
+    assert(evt.isRemote() == true, "JavaEvent.setRemote");
+    let listener = new JavaEventListener();
+    listener.init_listener("actionPerformed", fn(sender, args) { return 0; });
+    evt.addListener(listener);
+    assert(evt.getListenerCount() == 1, "JavaEvent.addListener");
+    evt.removeListener(listener);
+    assert(evt.getListenerCount() == 0, "JavaEvent.removeListener");
+    return 0;
+}
+
+fn test_java_event_listener() {
+    let count = 0;
+    let l = new JavaEventListener();
+    l.init_listener("click", fn(sender, args) { count = count + 1; return 0; });
+    assert(l.getEventName() == "click", "JavaEventListener.getEventName");
+    assert(l.isActive() == true, "JavaEventListener.isActive default");
+    l.setId(5);
+    assert(l.getId() == 5, "JavaEventListener.setId");
+    l.setActive(false);
+    assert(l.isActive() == false, "JavaEventListener.setActive");
+    l.setOneShot(true);
+    assert(l.isOneShot() == true, "JavaEventListener.isOneShot");
+    l.setActive(true);
+    l.onEvent(nullptr, {});
+    assert(count == 1, "JavaEventListener.onEvent calls callback");
+    assert(l.isActive() == false, "JavaEventListener one-shot deactivates");
+    return 0;
+}
+
+fn test_java_cross_event_bus() {
+    let bus = new JavaCrossEventBus();
+    bus.init_cross_bus();
+    let received = false;
+    let listener = bus.subscribe("test.event", fn(sender, args) {
+        received = true;
+        return 0;
+    });
+    assert(listener != nullptr, "JavaCrossEventBus.subscribe");
+    bus.publish("test.event", "mysender", {"data": 42});
+    assert(received == true, "JavaCrossEventBus.publish");
+    bus.unsubscribe("test.event", listener);
+    bus.clearEvent("test.event");
+    assert(bus.getEventCount() == 0, "JavaCrossEventBus.clearEvent");
+    bus.enableBridge();
+    assert(bus.isBridgeEnabled() == true, "JavaCrossEventBus.enableBridge");
+    bus.disableBridge();
+    assert(bus.isBridgeEnabled() == false, "JavaCrossEventBus.disableBridge");
+    bus.clear();
+    return 0;
+}
+
+fn test_java_ui_dispatcher() {
+    let disp = new JavaUIDispatcher();
+    disp.init_dispatcher();
+    let ran = false;
+    disp.invokeLater(fn() { ran = true; return 0; });
+    assert(disp.getQueueSize() == 1, "JavaUIDispatcher.invokeLater");
+    disp.processQueue();
+    assert(ran == true, "JavaUIDispatcher.processQueue");
+    assert(disp.getQueueSize() == 0, "JavaUIDispatcher.processQueue clears done");
+    disp.invoke(fn() { return 0; });
+    disp.clear();
+    assert(disp.getQueueSize() == 0, "JavaUIDispatcher.clear");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 4: UI Bridge Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_zwui_java_control_bridge() {
+    let hw = {"x": 0, "y": 0, "width": 100, "height": 50, "text": "Hello"};
+    let jc = {"x": 10, "y": 20, "width": 200, "height": 100, "text": ""};
+    let bridge = new ZzwUIJavaControlBridge();
+    bridge.init_bridge(hw, jc);
+    bridge.bindProperty("width", "width");
+    bridge.bindProperty("height", "height");
+    assert(bridge.isEnabled() == true, "ZzwUIJavaControlBridge.isEnabled");
+    bridge.syncToJava();
+    assert(jc["width"] == 100, "ZzwUIJavaControlBridge.syncToJava width");
+    assert(jc["height"] == 50, "ZzwUIJavaControlBridge.syncToJava height");
+    hw["width"] = 300;
+    jc["height"] = 150;
+    bridge.syncBoth();
+    assert(jc["width"] == 300, "ZzwUIJavaControlBridge.syncBoth Java width");
+    assert(hw["height"] == 50, "ZzwUIJavaControlBridge.syncBoth H# height");
+    bridge.unbindProperty("width");
+    let bindings = bridge.getPropertyBindings();
+    assert(len(bindings) == 1, "ZzwUIJavaControlBridge.unbindProperty");
+    bridge.setEnabled(false);
+    assert(bridge.isEnabled() == false, "ZzwUIJavaControlBridge.setEnabled");
+    bridge.dispose();
+    return 0;
+}
+
+fn test_java_window_bridge() {
+    let hw = {"title": "Old", "width": 800, "height": 600, "x": 0, "y": 0};
+    let jw = {"title": "New", "width": 1024, "height": 768, "x": 100, "y": 100};
+    let bridge = new JavaWindowBridge();
+    bridge.init_win_bridge(hw, jw);
+    bridge.bindTitle();
+    bridge.bindSize();
+    bridge.bindPosition();
+    assert(bridge.isTitleBound() == true, "JavaWindowBridge.bindTitle");
+    assert(bridge.isSizeBound() == true, "JavaWindowBridge.bindSize");
+    assert(bridge.isPositionBound() == true, "JavaWindowBridge.bindPosition");
+    bridge.syncTitle();
+    assert(hw["title"] == "New", "JavaWindowBridge.syncTitle");
+    bridge.syncSize();
+    assert(hw["width"] == 1024, "JavaWindowBridge.syncSize width");
+    assert(hw["height"] == 768, "JavaWindowBridge.syncSize height");
+    bridge.syncPosition();
+    assert(hw["x"] == 100, "JavaWindowBridge.syncPosition x");
+    assert(hw["y"] == 100, "JavaWindowBridge.syncPosition y");
+    bridge.syncAll();
+    return 0;
+}
+
+fn test_java_ui_host() {
+    let parent = {};
+    let host = new JavaUIHost();
+    host.init_host(parent);
+    assert(host.isActive() == false, "JavaUIHost.isActive default");
+    host.activate();
+    assert(host.isActive() == true, "JavaUIHost.activate");
+    let w1 = {"name": "button1"};
+    let w2 = {"name": "label1"};
+    host.hostWidget(w1);
+    host.hostWidget(w2);
+    assert(host.getWidgetCount() == 2, "JavaUIHost.hostWidget");
+    host.removeWidget(w1);
+    assert(host.getWidgetCount() == 1, "JavaUIHost.removeWidget");
+    host.setLayoutEngine("JavaFX");
+    assert(host.getLayoutEngine() == "JavaFX", "JavaUIHost.setLayoutEngine");
+    host.deactivate();
+    assert(host.isActive() == false, "JavaUIHost.deactivate");
+    host.clear();
+    assert(host.getWidgetCount() == 0, "JavaUIHost.clear");
+    return 0;
+}
+
+fn test_java_control_factory() {
+    let factory = new JavaControlFactory();
+    factory.init_factory();
+    let jtype = factory.getJavaType("Button");
+    assert(jtype == "javafx.scene.control.Button", "JavaControlFactory.getJavaType Button");
+    jtype = factory.getJavaType("Label");
+    assert(jtype == "javafx.scene.control.Label", "JavaControlFactory.getJavaType Label");
+    jtype = factory.getJavaType("TextBox");
+    assert(jtype == "javafx.scene.control.TextField", "JavaControlFactory.getJavaType TextBox");
+    assert(factory.hasType("Button") == true, "JavaControlFactory.hasType true");
+    assert(factory.hasType("UnknownWidget") == false, "JavaControlFactory.hasType false");
+    let types = factory.getSupportedTypes();
+    assert(len(types) >= 10, "JavaControlFactory.getSupportedTypes");
+    let ctrl = factory.createControl("Button");
+    assert(ctrl != nullptr, "JavaControlFactory.createControl");
+    factory.register("Custom", "com.myapp.CustomControl");
+    assert(factory.getJavaType("Custom") == "com.myapp.CustomControl", "JavaControlFactory.register");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 5: Data Binding Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_binding() {
+    let src = {"Name": "Alice", "Age": 30};
+    let tgt = {"Text": "", "Value": 0};
+    let b = new JavaBinding();
+    b.init_binding(src, "Name", tgt, "Text");
+    assert(b.getMode() == "twoWay", "JavaBinding.getMode default");
+    b.setMode("oneWay");
+    assert(b.getMode() == "oneWay", "JavaBinding.setMode");
+    assert(b.isActive() == true, "JavaBinding.isActive default");
+    b.updateTarget();
+    assert(tgt["Text"] == "Alice", "JavaBinding.updateTarget");
+    tgt["Text"] = "Bob";
+    b.updateSource();
+    assert(src["Name"] == "Alice", "JavaBinding.updateSource oneWay blocked");
+    b.setMode("twoWay");
+    b.updateSource();
+    assert(src["Name"] == "Bob", "JavaBinding.updateSource twoWay");
+    b.setActive(false);
+    assert(b.isActive() == false, "JavaBinding.setActive");
+    b.setFallbackValue("N/A");
+    src["Name"] = nullptr;
+    b.setActive(true);
+    b.updateTarget();
+    assert(tgt["Text"] == "N/A", "JavaBinding.fallbackValue");
+    return 0;
+}
+
+fn test_java_multi_binding() {
+    let src1 = {"FirstName": "John"};
+    let src2 = {"LastName": "Doe"};
+    let tgt = {"FullName": ""};
+    let mb = new JavaMultiBinding();
+    mb.init_multi_binding(tgt, "FullName");
+    let b1 = new JavaBinding();
+    b1.init_binding(src1, "FirstName", tgt, "FullName");
+    let b2 = new JavaBinding();
+    b2.init_binding(src2, "LastName", tgt, "FullName");
+    mb.addBinding(b1);
+    mb.addBinding(b2);
+    assert(mb.getBindingCount() == 2, "JavaMultiBinding.addBinding");
+    mb.setConverter(fn(values) {
+        return values[0] + " " + values[1];
+    });
+    mb.update();
+    assert(tgt["FullName"] == "John Doe", "JavaMultiBinding.converter");
+    mb.removeBinding(b1);
+    assert(mb.getBindingCount() == 1, "JavaMultiBinding.removeBinding");
+    mb.setActive(false);
+    return 0;
+}
+
+fn test_java_binding_manager() {
+    let mgr = new JavaBindingManager();
+    mgr.init_binding_mgr();
+    let src = {"X": 10};
+    let tgt = {"Left": 0};
+    let b = new JavaBinding();
+    b.init_binding(src, "X", tgt, "Left");
+    mgr.addBinding(b);
+    assert(mgr.getBindingCount() == 1, "JavaBindingManager.addBinding");
+    mgr.updateAll();
+    assert(tgt["Left"] == 10, "JavaBindingManager.updateAll");
+    mgr.setDeferUpdates(true);
+    src["X"] = 20;
+    assert(tgt["Left"] == 10, "JavaBindingManager.deferUpdates");
+    mgr.setDeferUpdates(false);
+    assert(tgt["Left"] == 20, "JavaBindingManager.deferred flush");
+    let src_bindings = mgr.getBindingsForSource(src);
+    assert(len(src_bindings) == 1, "JavaBindingManager.getBindingsForSource");
+    let tgt_bindings = mgr.getBindingsForTarget(tgt);
+    assert(len(tgt_bindings) == 1, "JavaBindingManager.getBindingsForTarget");
+    mgr.removeBinding(b);
+    assert(mgr.getBindingCount() == 0, "JavaBindingManager.removeBinding");
+    mgr.clear();
+    return 0;
+}
+
+fn test_java_binding_expression() {
+    let src = {"Value": 100};
+    let tgt = {"Text": ""};
+    let b = new JavaBinding();
+    b.init_binding(src, "Value", tgt, "Text");
+    b.setMode("oneWay");
+    let expr = new JavaBindingExpression();
+    expr.init_expr(b, tgt, "Text");
+    assert(expr.isDirty() == false, "JavaBindingExpression.isDirty default");
+    expr.markDirty();
+    assert(expr.isDirty() == true, "JavaBindingExpression.markDirty");
+    expr.refresh();
+    assert(tgt["Text"] == 100, "JavaBindingExpression.refresh");
+    assert(expr.isDirty() == false, "JavaBindingExpression.refresh clears dirty");
+    assert(expr.getBinding() == b, "JavaBindingExpression.getBinding");
+    assert(expr.getTargetProperty() == "Text", "JavaBindingExpression.getTargetProperty");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 6: RPC/Service Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_service_host() {
+    let host = new JavaServiceHost();
+    host.init_host("TestService", 8080);
+    assert(host.getHostName() == "TestService", "JavaServiceHost.getHostName");
+    assert(host.getPort() == 8080, "JavaServiceHost.getPort");
+    assert(host.isRunning() == false, "JavaServiceHost.isRunning default");
+    host.start();
+    assert(host.isRunning() == true, "JavaServiceHost.start");
+    host.registerService("getUser", "handler_get_user");
+    assert(host.getServiceCount() == 1, "JavaServiceHost.registerService");
+    assert(host.hasService("getUser") == true, "JavaServiceHost.hasService");
+    let svc = host.getService("getUser");
+    assert(svc == "handler_get_user", "JavaServiceHost.getService");
+    host.unregisterService("getUser");
+    assert(host.hasService("getUser") == false, "JavaServiceHost.unregisterService");
+    host.setMaxConnections(50);
+    assert(host.getMaxConnections() == 50, "JavaServiceHost.setMaxConnections");
+    host.addEndpoint("/api/v1");
+    let eps = host.getEndpoints();
+    assert(len(eps) == 1, "JavaServiceHost.addEndpoint");
+    host.stop();
+    assert(host.isRunning() == false, "JavaServiceHost.stop");
+    return 0;
+}
+
+fn test_java_rpc_client() {
+    let client = new JavaRPCClient();
+    client.init_client("http://localhost:8080/rpc");
+    assert(client.getEndpoint() == "http://localhost:8080/rpc", "JavaRPCClient.getEndpoint");
+    client.setTimeout(10000);
+    assert(client.getTimeout() == 10000, "JavaRPCClient.setTimeout");
+    client.setAuthToken("bearer-xyz");
+    client.setHeader("Content-Type", "application/json");
+    client.connect();
+    assert(client.isConnected() == true, "JavaRPCClient.connect");
+    let result = client.call("getUser", [123]);
+    assert(result != nullptr, "JavaRPCClient.call");
+    assert(client.getCallCount() == 1, "JavaRPCClient.getCallCount");
+    client.disconnect();
+    assert(client.isConnected() == false, "JavaRPCClient.disconnect");
+    return 0;
+}
+
+fn test_java_rpc_message() {
+    let msg = new JavaRPCMessage();
+    msg.init_msg("getUser", [{"id": 123}]);
+    assert(msg.getMethod() == "getUser", "JavaRPCMessage.getMethod");
+    assert(msg.getParamCount() == 1, "JavaRPCMessage.getParamCount");
+    assert(msg.isRequest() == true, "JavaRPCMessage.isRequest default");
+    assert(msg.isNotification() == false, "JavaRPCMessage.isNotification default");
+    msg.setNotification(true);
+    assert(msg.isNotification() == true, "JavaRPCMessage.setNotification");
+    msg.setCorrelationId("corr-1");
+    assert(msg.getCorrelationId() == "corr-1", "JavaRPCMessage.setCorrelationId");
+    msg.setId(42);
+    assert(msg.getId() == 42, "JavaRPCMessage.setId");
+    msg.setHeader("X-Trace", "abc123");
+    return 0;
+}
+
+fn test_java_rpc_response() {
+    let resp = new JavaRPCResponse();
+    resp.init_response(1);
+    assert(resp.getMessageId() == 1, "JavaRPCResponse.getMessageId");
+    assert(resp.isSuccess() == false, "JavaRPCResponse.isSuccess default");
+    resp.setSuccess({"name": "Alice"});
+    assert(resp.isSuccess() == true, "JavaRPCResponse.setSuccess");
+    assert(resp.getResult() != nullptr, "JavaRPCResponse.getResult");
+    let resp2 = new JavaRPCResponse();
+    resp2.init_response(2);
+    resp2.setError(500, "Internal Error");
+    assert(resp2.isSuccess() == false, "JavaRPCResponse.setError");
+    assert(resp2.getErrorCode() == 500, "JavaRPCResponse.getErrorCode");
+    assert(resp2.getError() == "Internal Error", "JavaRPCResponse.getError");
+    resp2.setCorrelationId("corr-2");
+    assert(resp2.getCorrelationId() == "corr-2", "JavaRPCResponse.setCorrelationId");
+    return 0;
+}
+
+fn test_java_rpc_context() {
+    let req = new JavaRPCMessage();
+    req.init_msg("getData", []);
+    let resp = new JavaRPCResponse();
+    resp.init_response(1);
+    let ctx = new JavaRPCContext();
+    ctx.init_context(req, resp);
+    assert(ctx.getRequest() == req, "JavaRPCContext.getRequest");
+    assert(ctx.getResponse() == resp, "JavaRPCContext.getResponse");
+    assert(ctx.isAuthenticated() == false, "JavaRPCContext.isAuthenticated default");
+    ctx.setAuthenticated(true);
+    ctx.setPrincipal("admin");
+    assert(ctx.isAuthenticated() == true, "JavaRPCContext.setAuthenticated");
+    assert(ctx.getPrincipal() == "admin", "JavaRPCContext.setPrincipal");
+    ctx.setUserData({"role": "admin"});
+    assert(ctx.getUserData() != nullptr, "JavaRPCContext.setUserData");
+    return 0;
+}
+
+fn test_java_socket_channel() {
+    let ch = new JavaSocketChannel();
+    ch.init_channel("localhost", 9000);
+    assert(ch.getHost() == "localhost", "JavaSocketChannel.getHost");
+    assert(ch.getPort() == 9000, "JavaSocketChannel.getPort");
+    assert(ch.isConnected() == false, "JavaSocketChannel.isConnected default");
+    ch.setBufferSize(8192);
+    ch.setSSL(true);
+    assert(ch.isSSL() == true, "JavaSocketChannel.setSSL");
+    ch.connect();
+    assert(ch.isConnected() == true, "JavaSocketChannel.connect");
+    ch.disconnect();
+    assert(ch.isConnected() == false, "JavaSocketChannel.disconnect");
+    return 0;
+}
+
+fn test_java_mapped_byte_buffer() {
+    let mbb = new JavaMappedByteBuffer();
+    mbb.init_mbb("shared_buffer", 65536);
+    assert(mbb.getName() == "shared_buffer", "JavaMappedByteBuffer.getName");
+    assert(mbb.getSize() == 65536, "JavaMappedByteBuffer.getSize");
+    assert(mbb.isOpen() == false, "JavaMappedByteBuffer.isOpen default");
+    mbb.open();
+    assert(mbb.isOpen() == true, "JavaMappedByteBuffer.open");
+    mbb.setAccess("read_only");
+    assert(mbb.getAccess() == "read_only", "JavaMappedByteBuffer.setAccess");
+    mbb.close();
+    assert(mbb.isOpen() == false, "JavaMappedByteBuffer.close");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 7: Serialization Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_serializer() {
+    let mapper = new JavaTypeMapper();
+    mapper.init_mapper();
+    let s = new JavaSerializer(mapper);
+    s.init_serializer(mapper);
+    assert(s.getFormat() == "json", "JavaSerializer.getFormat default");
+    s.setFormat("messagepack");
+    assert(s.getFormat() == "messagepack", "JavaSerializer.setFormat");
+    s.setIndent(true);
+    assert(s.isIndent() == true, "JavaSerializer.setIndent");
+    let result = s.serialize(42, "int");
+    assert(result != nullptr, "JavaSerializer.serialize");
+    let obj = {"name": "test", "value": 100};
+    let serialized = s.serializeObject(obj);
+    assert(serialized != nullptr, "JavaSerializer.serializeObject");
+    let lst = s.serializeList([1, 2, 3]);
+    assert(lst != nullptr, "JavaSerializer.serializeList");
+    assert(len(lst) == 3, "JavaSerializer.serializeList length");
+    s.registerCustomSerializer("MyType", fn(val) { return {"__custom__": val}; });
+    return 0;
+}
+
+fn test_java_deserializer() {
+    let mapper = new JavaTypeMapper();
+    mapper.init_mapper();
+    let d = new JavaDeserializer(mapper);
+    d.init_deserializer(mapper);
+    assert(d.getFormat() == "json", "JavaDeserializer.getFormat default");
+    d.setFormat("messagepack");
+    assert(d.getFormat() == "messagepack", "JavaDeserializer.setFormat");
+    d.setStrict(true);
+    assert(d.isStrict() == true, "JavaDeserializer.setStrict");
+    let data = {"__type__": "int", "value": 42};
+    let result = d.deserialize(data);
+    assert(result == 42, "JavaDeserializer.deserialize");
+    let null_result = d.deserialize(nullptr);
+    assert(null_result == nullptr, "JavaDeserializer.deserialize nullptr");
+    d.registerCustomDeserializer("MyType", fn(data) { return data; });
+    return 0;
+}
+
+fn test_java_messagepack() {
+    let mp = new JavaMessagePack();
+    mp.init_msgpack();
+    mp.setByteOrder("little_endian");
+    mp.setUseExtTypes(false);
+    mp.setMaxStrLen(1024);
+    let packed = mp.pack([1, 2, 3]);
+    assert(packed != nullptr, "JavaMessagePack.pack");
+    return 0;
+}
+
+fn test_java_json() {
+    let j = new JavaJSON();
+    j.init_json();
+    j.setEscapeUnicode(true);
+    j.setMaxDepth(50);
+    j.setAllowComments(true);
+    assert(j.stringify(nullptr) == "null", "JavaJSON.stringify null");
+    assert(j.stringify(true) == "true", "JavaJSON.stringify true");
+    assert(j.stringify(false) == "false", "JavaJSON.stringify false");
+    return 0;
+}
+
+fn test_java_type_converter() {
+    let tc = new JavaTypeConverter();
+    tc.init_converter();
+    tc.registerConverter("int", "string", fn(val) { return str(val); });
+    assert(tc.canConvert("int", "string") == true, "JavaTypeConverter.canConvert");
+    let result = tc.convert(42, "int", "string");
+    assert(result != nullptr, "JavaTypeConverter.convert");
+    tc.setFallback(fn(val, ft, tt) { return val; });
+    tc.clear();
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 8: Async Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_future() {
+    let f = new JavaFuture();
+    f.init_future();
+    assert(f.getStatus() == "created", "JavaFuture.getStatus created");
+    assert(f.isDone() == false, "JavaFuture.isDone default");
+    assert(f.isFaulted() == false, "JavaFuture.isFaulted default");
+    assert(f.isCancelled() == false, "JavaFuture.isCancelled default");
+    f.setId(1);
+    assert(f.getId() == 1, "JavaFuture.setId");
+    f.complete("result");
+    assert(f.isDone() == true, "JavaFuture.complete");
+    assert(f.getStatus() == "completed", "JavaFuture.getStatus completed");
+    assert(f.getResult() == "result", "JavaFuture.getResult");
+    let f2 = new JavaFuture();
+    f2.init_future();
+    f2.fail("error");
+    assert(f2.isFaulted() == true, "JavaFuture.fail");
+    assert(f2.getException() == "error", "JavaFuture.getException");
+    let f3 = new JavaFuture();
+    f3.init_future();
+    f3.cancel();
+    assert(f3.isCancelled() == true, "JavaFuture.cancel");
+    return 0;
+}
+
+fn test_java_executor_service() {
+    let exec = new JavaExecutorService();
+    exec.init_executor();
+    assert(exec.getPoolSize() == 4, "JavaExecutorService.getPoolSize default");
+    exec.setPoolSize(8);
+    assert(exec.getPoolSize() == 8, "JavaExecutorService.setPoolSize");
+    assert(exec.isShutdown() == false, "JavaExecutorService.isShutdown default");
+    let task = new JavaFuture();
+    task.init_future();
+    exec.submit(task);
+    assert(exec.getPendingCount() == 1, "JavaExecutorService.submit");
+    exec.execute();
+    assert(exec.isTerminated() == false, "JavaExecutorService.execute");
+    exec.shutdown();
+    assert(exec.isShutdown() == true, "JavaExecutorService.shutdown");
+    exec.setQueueType("lifo");
+    assert(exec.getQueueType() == "lifo", "JavaExecutorService.setQueueType");
+    exec.shutdownNow();
+    return 0;
+}
+
+fn test_java_cancellation_token() {
+    let token = new JavaCancellationToken();
+    token.init_token();
+    assert(token.isCancelled() == false, "JavaCancellationToken.isCancelled default");
+    token.cancel();
+    assert(token.isCancelled() == true, "JavaCancellationToken.cancel");
+    let called = false;
+    let token2 = new JavaCancellationToken();
+    token2.init_token();
+    token2.setOnCancel(fn() { called = true; return 0; });
+    token2.cancel();
+    assert(called == true, "JavaCancellationToken.setOnCancel");
+    return 0;
+}
+
+fn test_java_async_result() {
+    let f = new JavaFuture();
+    f.init_future();
+    let ar = new JavaAsyncResult();
+    ar.init_async_result(f);
+    assert(ar.getFuture() == f, "JavaAsyncResult.getFuture");
+    assert(ar.isCompleted() == false, "JavaAsyncResult.isCompleted default");
+    ar.setCompleted(true);
+    assert(ar.isCompleted() == true, "JavaAsyncResult.setCompleted");
+    ar.setCompletedSynchronously(true);
+    ar.setAsyncState({"progress": 50});
+    assert(ar.getAsyncState() != nullptr, "JavaAsyncResult.setAsyncState");
+    return 0;
+}
+
+fn test_java_thread_pool() {
+    let pool = new JavaThreadPool();
+    pool.init_pool();
+    assert(pool.getCorePoolSize() == 2, "JavaThreadPool.getCorePoolSize default");
+    pool.setCorePoolSize(4);
+    assert(pool.getCorePoolSize() == 4, "JavaThreadPool.setCorePoolSize");
+    pool.setMaxPoolSize(16);
+    assert(pool.getMaxPoolSize() == 16, "JavaThreadPool.setMaxPoolSize");
+    pool.setKeepAliveMs(120000);
+    pool.execute(fn() { return 0; });
+    assert(pool.getActiveCount() == 0, "JavaThreadPool.execute returns");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 9: Diagnostics Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_logger() {
+    let logger = new JavaLogger();
+    logger.init_logger();
+    assert(logger.getLevel() == "info", "JavaLogger.getLevel default");
+    logger.setLevel("debug");
+    logger.setIncludeTimestamp(false);
+    logger.setIncludeLevel(true);
+    logger.setLogFile("/tmp/java_app.log");
+    assert(logger.getLogFile() == "/tmp/java_app.log", "JavaLogger.setLogFile");
+    logger.setMaxLogSize(1048576);
+    logger.addCategory("network");
+    logger.trace("trace msg");
+    logger.debug("debug msg");
+    logger.info("info msg");
+    logger.warn("warn msg");
+    logger.error("error msg");
+    logger.fatal("fatal msg");
+    return 0;
+}
+
+fn test_java_profiler() {
+    let p = new JavaProfiler();
+    p.init_profiler();
+    p.start("my_operation");
+    p.stop("my_operation");
+    assert(p.getMeasurementCount() == 1, "JavaProfiler.start/stop");
+    assert(p.getTotalMeasurements() == 1, "JavaProfiler.getTotalMeasurements");
+    assert(p.isRunning("my_operation") == false, "JavaProfiler.isRunning false");
+    p.start("ongoing");
+    assert(p.isRunning("ongoing") == true, "JavaProfiler.isRunning true");
+    p.reset();
+    assert(p.getMeasurementCount() == 0, "JavaProfiler.reset");
+    p.report();
+    return 0;
+}
+
+fn test_java_debugger() {
+    let dbg = new JavaDebugger();
+    dbg.init_debugger();
+    assert(dbg.isAttached() == false, "JavaDebugger.isAttached default");
+    dbg.attach();
+    assert(dbg.isAttached() == true, "JavaDebugger.attach");
+    dbg.setBreakpoint("Main.java", 42);
+    assert(dbg.hasBreakpoint("Main.java", 42) == true, "JavaDebugger.setBreakpoint");
+    dbg.removeBreakpoint("Main.java", 42);
+    assert(dbg.hasBreakpoint("Main.java", 42) == false, "JavaDebugger.removeBreakpoint");
+    dbg.setBreakpoint("Main.java", 10);
+    dbg.setBreakpoint("Main.java", 20);
+    assert(dbg.getBreakpointCount() == 2, "JavaDebugger.getBreakpointCount");
+    dbg.clearBreakpoints();
+    assert(dbg.getBreakpointCount() == 0, "JavaDebugger.clearBreakpoints");
+    dbg.setDebugPort(8000);
+    assert(dbg.getDebugPort() == 8000, "JavaDebugger.setDebugPort");
+    dbg.setStepMode("step_over");
+    assert(dbg.getStepMode() == "step_over", "JavaDebugger.setStepMode");
+    dbg.setCurrentLocation("Main.java", 15);
+    assert(dbg.getCurrentFile() == "Main.java", "JavaDebugger.getCurrentFile");
+    assert(dbg.getCurrentLine() == 15, "JavaDebugger.getCurrentLine");
+    dbg.detach();
+    assert(dbg.isAttached() == false, "JavaDebugger.detach");
+    return 0;
+}
+
+fn test_java_config() {
+    let cfg = new JavaConfig();
+    cfg.init_config();
+    assert(cfg.isLoaded() == false, "JavaConfig.isLoaded default");
+    cfg.load("/etc/app.properties");
+    assert(cfg.isLoaded() == true, "JavaConfig.load");
+    assert(cfg.getConfigFile() == "/etc/app.properties", "JavaConfig.getConfigFile");
+    cfg.set("app.name", "MyJavaApp");
+    assert(cfg.hasKey("app.name") == true, "JavaConfig.hasKey");
+    assert(cfg.get("app.name", "default") == "MyJavaApp", "JavaConfig.get");
+    assert(cfg.get("missing.key", "fallback") == "fallback", "JavaConfig.get with default");
+    cfg.setSection("database", {"host": "localhost", "port": 5432});
+    let section = cfg.getSection("database");
+    assert(section != nullptr, "JavaConfig.setSection/getSection");
+    let keys = cfg.getKeys();
+    assert(len(keys) == 1, "JavaConfig.getKeys");
+    cfg.remove("app.name");
+    assert(cfg.hasKey("app.name") == false, "JavaConfig.remove");
+    cfg.clear();
+    let keys2 = cfg.getKeys();
+    assert(len(keys2) == 0, "JavaConfig.clear");
+    return 0;
+}
+
+fn test_java_environment() {
+    let env = new JavaEnvironment();
+    env.init_env();
+    env.setOSName("Mac OS X");
+    assert(env.getOSName() == "Mac OS X", "JavaEnvironment.setOSName");
+    env.setJavaVersion("17");
+    assert(env.getJavaVersion() == "17", "JavaEnvironment.setJavaVersion");
+    env.setJavaVendor("Oracle");
+    assert(env.getJavaVendor() == "Oracle", "JavaEnvironment.setJavaVendor");
+    env.setIs64Bit(true);
+    assert(env.is64Bit() == true, "JavaEnvironment.is64Bit");
+    env.setMachineName("dev-server");
+    env.setUserName("developer");
+    env.setProcessorCount(8);
+    assert(env.getProcessorCount() == 8, "JavaEnvironment.getProcessorCount");
+    env.setWorkingDirectory("/project");
+    assert(env.getWorkingDirectory() == "/project", "JavaEnvironment.getWorkingDirectory");
+    env.setClassPath("/libs/*:/classes");
+    assert(env.getClassPath() == "/libs/*:/classes", "JavaEnvironment.getClassPath");
+    env.setSystemProperty("java.io.tmpdir", "/tmp");
+    assert(env.getSystemProperty("java.io.tmpdir") == "/tmp", "JavaEnvironment.getSystemProperty");
+    let props = env.getSystemProperties();
+    assert(len(props) == 1, "JavaEnvironment.getSystemProperties");
+    return 0;
+}
+
+fn test_java_process() {
+    let proc = new JavaProcess();
+    proc.init_process("java", ["-jar", "app.jar"]);
+    assert(proc.getProcessName() == "java", "JavaProcess.getProcessName");
+    assert(len(proc.getArguments()) == 2, "JavaProcess.getArguments");
+    assert(proc.isRunning() == false, "JavaProcess.isRunning default");
+    proc.setWorkingDir("/app");
+    assert(proc.getWorkingDir() == "/app", "JavaProcess.setWorkingDir");
+    proc.setRedirectOutput(true);
+    proc.start();
+    assert(proc.isRunning() == true, "JavaProcess.start");
+    proc.destroy();
+    assert(proc.isRunning() == false, "JavaProcess.destroy");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 10: Maven & Project Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_maven_artifact() {
+    let art = new JavaMavenArtifact();
+    art.init_artifact("org.springframework", "spring-core", "5.3.20");
+    assert(art.getGroupId() == "org.springframework", "JavaMavenArtifact.getGroupId");
+    assert(art.getArtifactId() == "spring-core", "JavaMavenArtifact.getArtifactId");
+    assert(art.getVersion() == "5.3.20", "JavaMavenArtifact.getVersion");
+    assert(art.getScope() == "compile", "JavaMavenArtifact.getScope default");
+    art.setScope("runtime");
+    assert(art.getScope() == "runtime", "JavaMavenArtifact.setScope");
+    art.setDescription("Spring Core Framework");
+    assert(art.getDescription() == "Spring Core Framework", "JavaMavenArtifact.setDescription");
+    art.addDependency("org.springframework", "spring-beans", "5.3.20");
+    let deps = art.getDependencies();
+    assert(len(deps) == 1, "JavaMavenArtifact.addDependency");
+    art.setInstalled(true);
+    art.setInstallPath("/.m2/repository");
+    assert(art.isInstalled() == true, "JavaMavenArtifact.setInstalled");
+    assert(art.getId() == "org.springframework:spring-core", "JavaMavenArtifact.getId");
+    return 0;
+}
+
+fn test_java_maven_manager() {
+    let maven = new JavaMavenManager();
+    maven.init_maven();
+    let repos = maven.getRepositories();
+    assert(len(repos) >= 1, "JavaMavenManager default repos");
+    maven.addRepository("https://repo.spring.io/release");
+    assert(len(maven.getRepositories()) == 2, "JavaMavenManager.addRepository");
+    let art = new JavaMavenArtifact();
+    art.init_artifact("junit", "junit", "4.13.2");
+    maven.install(art);
+    assert(maven.isInstalled("junit:junit") == true, "JavaMavenManager.install");
+    let retrieved = maven.getArtifact("junit:junit");
+    assert(retrieved != nullptr, "JavaMavenManager.getArtifact");
+    let installed = maven.getInstalledArtifacts();
+    assert(len(installed) == 1, "JavaMavenManager.getInstalledArtifacts");
+    maven.uninstall("junit:junit");
+    assert(maven.isInstalled("junit:junit") == false, "JavaMavenManager.uninstall");
+    maven.setLocalRepo("/custom/repo");
+    assert(maven.getLocalRepo() == "/custom/repo", "JavaMavenManager.setLocalRepo");
+    assert(maven.getArtifactCount() == 0, "JavaMavenManager.getArtifactCount");
+    return 0;
+}
+
+fn test_java_project() {
+    let proj = new JavaProject();
+    proj.init_project("myapp", "application");
+    assert(proj.getName() == "myapp", "JavaProject.getName");
+    assert(proj.getProjectType() == "application", "JavaProject.getProjectType");
+    assert(proj.getBuildTool() == "maven", "JavaProject.getBuildTool default");
+    proj.setGroupId("com.mycompany");
+    assert(proj.getGroupId() == "com.mycompany", "JavaProject.setGroupId");
+    proj.setArtifactId("myapp-core");
+    assert(proj.getArtifactId() == "myapp-core", "JavaProject.setArtifactId");
+    proj.setVersion("2.0.0");
+    assert(proj.getVersion() == "2.0.0", "JavaProject.setVersion");
+    proj.setMainClass("com.mycompany.Main");
+    assert(proj.getMainClass() == "com.mycompany.Main", "JavaProject.setMainClass");
+    proj.setJavaVersion("21");
+    assert(proj.getJavaVersion() == "21", "JavaProject.setJavaVersion");
+    proj.setBuildTool("gradle");
+    assert(proj.getBuildTool() == "gradle", "JavaProject.setBuildTool");
+    let art = new JavaMavenArtifact();
+    art.init_artifact("com.google.guava", "guava", "31.1");
+    proj.addDependency(art);
+    assert(len(proj.getDependencies()) == 1, "JavaProject.addDependency");
+    proj.addPlugin("maven-compiler-plugin", "3.10.1");
+    assert(len(proj.getPlugins()) == 1, "JavaProject.addPlugin");
+    proj.addSourceDir("src/main/java");
+    assert(len(proj.getSourceDirs()) == 1, "JavaProject.addSourceDir");
+    return 0;
+}
+
+fn test_java_module() {
+    let mod = new JavaModule();
+    mod.init_module("backend");
+    assert(mod.getName() == "backend", "JavaModule.getName");
+    assert(mod.getProjectCount() == 0, "JavaModule.getProjectCount default");
+    let proj1 = new JavaProject();
+    proj1.init_project("api", "library");
+    let proj2 = new JavaProject();
+    proj2.init_project("core", "library");
+    mod.addProject(proj1);
+    mod.addProject(proj2);
+    assert(mod.getProjectCount() == 2, "JavaModule.addProject");
+    let found = mod.getProject("api");
+    assert(found != nullptr, "JavaModule.getProject");
+    assert(mod.getProject("nonexistent") == nullptr, "JavaModule.getProject missing");
+    mod.setBuildConfig("release");
+    assert(mod.getBuildConfig() == "release", "JavaModule.setBuildConfig");
+    mod.removeProject("api");
+    assert(mod.getProjectCount() == 1, "JavaModule.removeProject");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 11: FXML Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_fxml() {
+    let fxml = new JavaFXML();
+    fxml.init_fxml();
+    let namespaces = fxml.getNamespaces();
+    let ns_count = 0;
+    for k in namespaces {
+        ns_count = ns_count + 1;
+    }
+    assert(ns_count >= 1, "JavaFXML.init_fxml namespaces");
+    fxml.addNamespace("custom", "http://example.com/fxml");
+    fxml.setRootElement("VBox");
+    assert(fxml.getRootElement() == "VBox", "JavaFXML.setRootElement");
+    fxml.setControllerClass("com.example.MainController");
+    assert(fxml.getControllerClass() == "com.example.MainController", "JavaFXML.setControllerClass");
+    fxml.addResource("app.title", "My Application");
+    assert(fxml.getResource("app.title") == "My Application", "JavaFXML.addResource");
+    fxml.setContent("<VBox><Button text='Click'/></VBox>");
+    assert(fxml.getContent() == "<VBox><Button text='Click'/></VBox>", "JavaFXML.setContent");
+    fxml.clear();
+    return 0;
+}
+
+fn test_style_bridge() {
+    let bridge = new JavaStyleBridge();
+    bridge.init_style_bridge();
+    assert(bridge.getMappingCount() > 0, "JavaStyleBridge default mappings");
+    let hw_styles = {"bg_color": "red", "font_size": 14};
+    let jfx_styles = bridge.toJavaFX(hw_styles);
+    assert(jfx_styles["-fx-background-color"] == "red", "JavaStyleBridge.toJavaFX bg");
+    assert(jfx_styles["-fx-font-size"] == 14, "JavaStyleBridge.toJavaFX font");
+    let jfx_in = {"-fx-background-color": "blue", "-fx-text-fill": "white"};
+    let hw_out = bridge.toHwdUI(jfx_in);
+    assert(hw_out["bg_color"] == "blue", "JavaStyleBridge.toHwdUI bg");
+    assert(hw_out["fg_color"] == "white", "JavaStyleBridge.toHwdUI fg");
+    bridge.addMapping("border_radius", "-fx-border-radius");
+    assert(bridge.getMappingCount() > 0, "JavaStyleBridge.addMapping");
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 12: Resource Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_resource_bundle() {
+    let bundle = new JavaResourceBundle();
+    bundle.init_bundle();
+    bundle.setLocale("zh_CN");
+    assert(bundle.getLocale() == "zh_CN", "JavaResourceBundle.setLocale");
+    bundle.setBaseName("messages");
+    assert(bundle.getBaseName() == "messages", "JavaResourceBundle.setBaseName");
+    bundle.addResource("hello", "你好");
+    bundle.addResource("count", 42);
+    bundle.addResource("enabled", true);
+    assert(bundle.getString("hello") == "你好", "JavaResourceBundle.getString");
+    assert(bundle.getInteger("count") == 42, "JavaResourceBundle.getInteger");
+    assert(bundle.getBoolean("enabled") == true, "JavaResourceBundle.getBoolean");
+    assert(bundle.getString("missing") == "missing", "JavaResourceBundle.getString fallback");
+    assert(bundle.hasResource("hello") == true, "JavaResourceBundle.hasResource");
+    assert(bundle.getResourceCount() == 3, "JavaResourceBundle.getResourceCount");
+    bundle.removeResource("count");
+    assert(bundle.hasResource("count") == false, "JavaResourceBundle.removeResource");
+    bundle.clear();
+    assert(bundle.getResourceCount() == 0, "JavaResourceBundle.clear");
+    return 0;
+}
+
+fn test_java_file_watcher() {
+    let watcher = new JavaFileWatcher();
+    watcher.init_watcher("/watch/dir", "*.java");
+    assert(watcher.getPath() == "/watch/dir", "JavaFileWatcher.getPath");
+    assert(watcher.getFilter() == "*.java", "JavaFileWatcher.getFilter");
+    assert(watcher.isWatching() == false, "JavaFileWatcher.isWatching default");
+    watcher.start();
+    assert(watcher.isWatching() == true, "JavaFileWatcher.start");
+    watcher.stop();
+    assert(watcher.isWatching() == false, "JavaFileWatcher.stop");
+    watcher.setIncludeSubdirs(false);
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 13: Global Functions Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+fn test_java_global_init() {
+    assert(java_init() == true, "java_init");
+    assert(java_is_ready() == true, "java_is_ready");
+    java_shutdown();
+    assert(java_is_ready() == false, "java_shutdown");
+    java_init();
+    return 0;
+}
+
+fn test_java_global_accessors() {
+    let m = java_get_mapper();
+    assert(m != nullptr, "java_get_mapper");
+    let c = java_get_cache();
+    assert(c != nullptr, "java_get_cache");
+    let bus = java_get_event_bus();
+    assert(bus != nullptr, "java_get_event_bus");
+    let bm = java_get_binding_manager();
+    assert(bm != nullptr, "java_get_binding_manager");
+    let s = java_get_serializer();
+    assert(s != nullptr, "java_get_serializer");
+    let d = java_get_deserializer();
+    assert(d != nullptr, "java_get_deserializer");
+    let tc = java_get_type_converter();
+    assert(tc != nullptr, "java_get_type_converter");
+    let logger = java_get_logger();
+    assert(logger != nullptr, "java_get_logger");
+    let profiler = java_get_profiler();
+    assert(profiler != nullptr, "java_get_profiler");
+    let config = java_get_config();
+    assert(config != nullptr, "java_get_config");
+    let env = java_get_env();
+    assert(env != nullptr, "java_get_env");
+    let loader = java_get_class_loader();
+    assert(loader != nullptr, "java_get_class_loader");
+    let factory = java_get_control_factory();
+    assert(factory != nullptr, "java_get_control_factory");
+    let bridge = java_get_style_bridge();
+    assert(bridge != nullptr, "java_get_style_bridge");
+    let fxml = java_get_fxml();
+    assert(fxml != nullptr, "java_get_fxml");
+    let bundle = java_get_resource_bundle();
+    assert(bundle != nullptr, "java_get_resource_bundle");
+    let maven = java_get_maven();
+    assert(maven != nullptr, "java_get_maven");
+    let exec = java_get_executor();
+    assert(exec != nullptr, "java_get_executor");
+    assert(java_get_version() == "1.0.0", "java_get_version");
+    java_summary();
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Run All Tests
+# ═══════════════════════════════════════════════════════════════════════════
+
+print("");
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+print("  H# zzwUI ↔ Java Tests");
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+print("");
+
+print("── Section 1: Core Interop ──");
+test_java_type_info();
+test_java_type_mapper();
+test_java_value();
+test_java_invoke();
+test_java_result();
+
+print("");
+print("── Section 2: Object Bridge ──");
+test_java_object();
+test_java_object_cache();
+test_java_jar_info();
+test_java_class_loader();
+test_java_constructor();
+test_java_method();
+test_java_field();
+
+print("");
+print("── Section 3: Event Bridge ──");
+test_java_event();
+test_java_event_listener();
+test_java_cross_event_bus();
+test_java_ui_dispatcher();
+
+print("");
+print("── Section 4: UI Bridge ──");
+test_zwui_java_control_bridge();
+test_java_window_bridge();
+test_java_ui_host();
+test_java_control_factory();
+
+print("");
+print("── Section 5: Data Binding ──");
+test_java_binding();
+test_java_multi_binding();
+test_java_binding_manager();
+test_java_binding_expression();
+
+print("");
+print("── Section 6: RPC/Service ──");
+test_java_service_host();
+test_java_rpc_client();
+test_java_rpc_message();
+test_java_rpc_response();
+test_java_rpc_context();
+test_java_socket_channel();
+test_java_mapped_byte_buffer();
+
+print("");
+print("── Section 7: Serialization ──");
+test_java_serializer();
+test_java_deserializer();
+test_java_messagepack();
+test_java_json();
+test_java_type_converter();
+
+print("");
+print("── Section 8: Async ──");
+test_java_future();
+test_java_executor_service();
+test_java_cancellation_token();
+test_java_async_result();
+test_java_thread_pool();
+
+print("");
+print("── Section 9: Diagnostics ──");
+test_java_logger();
+test_java_profiler();
+test_java_debugger();
+test_java_config();
+test_java_environment();
+test_java_process();
+
+print("");
+print("── Section 10: Maven & Project ──");
+test_java_maven_artifact();
+test_java_maven_manager();
+test_java_project();
+test_java_module();
+
+print("");
+print("── Section 11: FXML ──");
+test_java_fxml();
+test_style_bridge();
+
+print("");
+print("── Section 12: Resources ──");
+test_java_resource_bundle();
+test_java_file_watcher();
+
+print("");
+print("── Section 13: Globals ──");
+test_java_global_init();
+test_java_global_accessors();
+
+test_summary();

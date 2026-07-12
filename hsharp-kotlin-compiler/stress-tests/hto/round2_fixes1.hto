@@ -1,0 +1,323 @@
+# ============================================================
+# round2_fixes1.hto — HVM.kt / HNativeBridge.kt 多 bug 修复验证
+# 智能体 #fixes1
+# 覆盖:
+#   Bug1: 浮点除法一律 floor (HVM.kt BINARY_DIV)
+#   Bug2: 负切片 stop 越界崩溃 (HVM.kt sliceBounds)
+#   Bug3: chr() 不支持补充平面码点 (HNativeBridge.kt)
+#   Bug4: substring(s, start, -1) 崩溃 (HNativeBridge.kt)
+#   Bug5: ord("") 返回 0 而非报错 (HNativeBridge.kt)
+#   Bug6: 3 * "ab" 报错但 "ab" * 3 工作 (HVM.kt binMul)
+#   Bug7: len() 对 emoji 返回 UTF-16 码元数 (两文件)
+# 方法: 每个用例打印 [TAG 预期] 实际; 易错项 try/catch 包裹
+# ============================================================
+
+print("===== R2-FIXES1 START =====");
+
+# ============================================================
+# Bug1: 浮点除法 — 整数值 floor, 含小数真除法
+# 注: 使用变量避免编译期常量折叠, 强制走运行时 BINARY_DIV
+# 限制: HNumber 内部为 Double, 运行时无法区分 int 字面量(7)与
+#       float 字面量(7.0) — 二者均为 HNumber(7.0)。故策略为:
+#       两操作数都是整数值时 floor (匹配 C VM // 语义),
+#       任一含小数部分时真除法。这修复了原"一律 floor"导致
+#       7.5/2.0=3 的错误 (现在 3.75)。
+# ============================================================
+print("--- Bug1: division ---");
+let i7 = 7;
+let i2 = 2;
+let i10 = 10;
+let i3 = 3;
+let i9 = 9;
+let ineg7 = -7;
+let i0 = 0;
+let i5 = 5;
+let f7 = 7.0;
+let f2 = 2.0;
+let f10 = 10.0;
+let f3 = 3.0;
+let fneg7 = -7.0;
+let f75 = 7.5;
+let f25 = 2.5;
+let fneg75 = -7.5;
+
+print("[B1.1 7/2 int floor] expect=3]");
+print(i7 / i2);
+
+print("[B1.2 10/3 int floor] expect=3]");
+print(i10 / i3);
+
+print("[B1.3 -7/2 int floor] expect=-4]");
+print(ineg7 / i2);
+
+print("[B1.4 9/3 int exact] expect=3]");
+print(i9 / i3);
+
+print("[B1.5 0/5 zero num] expect=0]");
+print(i0 / i5);
+
+# 整数值 float (无法与 int 区分) — 同样 floor
+print("[B1.6 7.0/2.0 intval-float floor] expect=3]");
+print(f7 / f2);
+
+print("[B1.7 10.0/3.0 intval-float floor] expect=3]");
+print(f10 / f3);
+
+print("[B1.8 -7.0/2.0 intval-float floor] expect=-4]");
+print(fneg7 / f2);
+
+# 含小数部分 — 真除法 (核心修复: 原先一律 floor)
+print("[B1.9 7.5/2.0 true div] expect=3.75]");
+print(f75 / f2);
+
+print("[B1.10 7.0/2.5 true div] expect=2.8]");
+print(f7 / f25);
+
+print("[B1.11 7.5/2.5 true div] expect=3]");
+print(f75 / f25);
+
+print("[B1.12 7.5/2 mixed true div] expect=3.75]");
+print(f75 / i2);
+
+print("[B1.13 -7.5/2.0 true div] expect=-3.75]");
+print(fneg75 / f2);
+
+print("[B1.14 10.0/3.5 true div] expect=2.857142857142857]");
+print(f10 / 3.5);
+
+# 除零仍应报错
+let b1e = "no-err";
+try { let z = i7 / i0; b1e = "got:" + str(z); } catch (e) { b1e = "caught:" + str(e); }
+print("[B1.15 7/0 div-by-zero] expect=caught:division by zero]");
+print(b1e);
+
+# ============================================================
+# Bug2: 负切片 stop 越界不再崩溃
+# ============================================================
+print("--- Bug2: negative slice stop ---");
+
+# 字符串切片, stop 极负
+let s2 = "hello";
+print("[B2.1 s[2:-100] no crash] expect=]");
+print(s2[2:-100]);
+
+print("[B2.2 s[0:-100] no crash] expect=]");
+print(s2[0:-100]);
+
+print("[B2.3 s[1:3] normal] expect=el]");
+print(s2[1:3]);
+
+print("[B2.4 s[0:-1] neg stop in range] expect=hell]");
+print(s2[0:-1]);
+
+# 列表切片同理
+let lst2 = [10, 20, 30, 40, 50];
+print("[B2.5 lst[2:-100] no crash] expect=[]]");
+print(lst2[2:-100]);
+
+print("[B2.6 lst[0:-100] no crash] expect=[]]");
+print(lst2[0:-100]);
+
+print("[B2.7 lst[0:-1] neg stop] expect=[10, 20, 30, 40]]");
+print(lst2[0:-1]);
+
+# ============================================================
+# Bug3: chr() 支持补充平面码点 (代理对)
+# 码点: 128512=U+1F600 (grinning face), 127881=U+1F389 (party popper),
+#       20013=U+4E2D (中), 1114112=U+110000 (越界)
+# ============================================================
+print("--- Bug3: chr() supplementary plane ---");
+
+print("[B3.1 chr(65) ascii] expect=A]");
+print(chr(65));
+
+print("[B3.2 chr(97) ascii] expect=a]");
+print(chr(97));
+
+print("[B3.3 chr(128512) emoji] expect=grinning-face]");
+print(chr(128512));
+
+print("[B3.4 chr(127881) emoji] expect=party-popper]");
+print(chr(127881));
+
+print("[B3.5 chr(20013) BMP chinese] expect=zhong]");
+print(chr(20013));
+
+# chr 码点越界应报错
+let b3e1 = "no-err";
+try { let c = chr(-1); b3e1 = "got:" + str(c); } catch (e) { b3e1 = "caught:" + str(e); }
+print("[B3.6 chr(-1) out of range] expect=caught:chr() argument out of range]");
+print(b3e1);
+
+let b3e2 = "no-err";
+try { let c = chr(1114112); b3e2 = "got:" + str(c); } catch (e) { b3e2 = "caught:" + str(e); }
+print("[B3.7 chr(1114112) out of range] expect=caught:chr() argument out of range]");
+print(b3e2);
+
+# chr+ord 往返 (补充平面)
+let cp3 = 128512;
+print("[B3.8 ord(chr(cp)) roundtrip] expect=128512]");
+print(ord(chr(cp3)));
+
+# ============================================================
+# Bug4: substring(s, start, -1) 报错而非崩溃
+# ============================================================
+print("--- Bug4: substring negative len ---");
+
+print("[B4.1 substring('hello',0,3)] expect=hel]");
+print(substring("hello", 0, 3));
+
+print("[B4.2 substring('hello',2,3)] expect=llo]");
+print(substring("hello", 2, 3));
+
+print("[B4.3 substring('hello',0,0)] expect=]");
+print(substring("hello", 0, 0));
+
+print("[B4.4 substring('hello',0,100) clamp] expect=hello]");
+print(substring("hello", 0, 100));
+
+print("[B4.5 substring('hello',10,2) start clamp] expect=]");
+print(substring("hello", 10, 2));
+
+# 负长度应报错
+let b4e1 = "no-err";
+try { let r = substring("hello", 0, -1); b4e1 = "got:" + str(r); } catch (e) { b4e1 = "caught:" + str(e); }
+print("[B4.6 substring('hello',0,-1) neg len] expect=caught:substring length must be non-negative]");
+print(b4e1);
+
+let b4e2 = "no-err";
+try { let r = substring("hello", 1, -100); b4e2 = "got:" + str(r); } catch (e) { b4e2 = "caught:" + str(e); }
+print("[B4.7 substring('hello',1,-100) neg len] expect=caught:substring length must be non-negative]");
+print(b4e2);
+
+# ============================================================
+# Bug5: ord("") 报错而非返回 0
+# ============================================================
+print("--- Bug5: ord() empty string ---");
+
+print("[B5.1 ord('a') ascii] expect=97]");
+print(ord("a"));
+
+print("[B5.2 ord('A') ascii] expect=65]");
+print(ord("A"));
+
+print("[B5.3 ord('0') digit] expect=48]");
+print(ord("0"));
+
+print("[B5.4 ord newline] expect=10]");
+print(ord("\n"));
+
+print("[B5.5 ord BMP chinese] expect=20013]");
+print(ord("中"));
+
+# 空串应报错
+let b5e1 = "no-err";
+try { let r = ord(""); b5e1 = "got:" + str(r); } catch (e) { b5e1 = "caught:" + str(e); }
+print("[B5.6 ord('') empty] expect=caught:ord() expected a non-empty character string]");
+print(b5e1);
+
+# 多字符 (非代理) 应报错
+let b5e2 = "no-err";
+try { let r = ord("ab"); b5e2 = "got:" + str(r); } catch (e) { b5e2 = "caught:" + str(e); }
+print("[B5.7 ord('ab') multi-char] expect=caught:ord() expected a single character]");
+print(b5e2);
+
+# ord 单个 emoji (代理对, 长度 2 但首字符是 surrogate, 不应报错)
+print("[B5.8 ord(emoji) surrogate pair] expect=128512]");
+print(ord(chr(128512)));
+
+# ============================================================
+# Bug6: 乘法对称性 — 3 * "ab" 等价 "ab" * 3
+# ============================================================
+print("--- Bug6: symmetric multiplication ---");
+
+print("[B6.1 'ab' * 3 str*int] expect=ababab]");
+print("ab" * 3);
+
+print("[B6.2 3 * 'ab' int*str] expect=ababab]");
+print(3 * "ab");
+
+print("[B6.3 'x' * 0 str*0] expect=]");
+print("x" * 0);
+
+print("[B6.4 0 * 'x' int*str 0] expect=]");
+print(0 * "x");
+
+print("[B6.5 5 * '-' int*str repeat] expect=-----]");
+print(5 * "-");
+
+print("[B6.6 '-' * 5 str*int repeat] expect=-----]");
+print("-" * 5);
+
+print("[B6.7 2 * 'abc' int*str] expect=abcabc]");
+print(2 * "abc");
+
+print("[B6.8 'abc' * 2 str*int] expect=abcabc]");
+print("abc" * 2);
+
+# 负数乘字符串应报错 (str*int 现有行为, int*str 新增检查)
+let b6e1 = "no-err";
+try { let r = "ab" * -1; b6e1 = "got:" + str(r); } catch (e) { b6e1 = "caught:" + str(e); }
+print("[B6.9 'ab' * -1 neg str*int] expect=caught]");
+print(b6e1);
+
+let b6e2 = "no-err";
+try { let r = -1 * "ab"; b6e2 = "got:" + str(r); } catch (e) { b6e2 = "caught:" + str(e); }
+print("[B6.10 -1 * 'ab' neg int*str] expect=caught:cannot multiply string by negative number]");
+print(b6e2);
+
+# 数字 * 数字 不受影响
+print("[B6.11 3 * 4 int*int] expect=12]");
+print(3 * 4);
+
+print("[B6.12 2.5 * 4 float*int] expect=10]");
+print(2.5 * 4);
+
+# ============================================================
+# Bug7: len() 返回码点数而非 UTF-16 码元数
+# ============================================================
+print("--- Bug7: len() codepoint count ---");
+
+print("[B7.1 len('hello') ascii] expect=5]");
+print(len("hello"));
+
+print("[B7.2 len('') empty] expect=0]");
+print(len(""));
+
+print("[B7.3 len BMP chinese 2chars] expect=2]");
+print(len("你好"));
+
+print("[B7.4 len BMP chinese 4chars] expect=4]");
+print(len("你好世界"));
+
+# emoji — 补充平面, 每个码点是 2 个 UTF-16 码元
+print("[B7.5 len(emoji) 1 codepoint] expect=1]");
+print(len(chr(128512)));
+
+print("[B7.6 len 2 emoji] expect=2]");
+print(len(chr(128512) + chr(127881)));
+
+# 混合 BMP + 补充
+print("[B7.7 len mixed a+emoji+b] expect=3]");
+print(len("a" + chr(128512) + "b"));
+
+# HString.len() 方法 (callStringMethod) 也应返回码点数
+let s7 = "你好";
+print("[B7.8 s.len() method BMP] expect=2]");
+print(s7.len());
+
+print("[B7.9 s.length() method BMP] expect=2]");
+print(s7.length());
+
+let s7e = chr(128512) + chr(127881);
+print("[B7.10 s.len() method emoji] expect=2]");
+print(s7e.len());
+
+# len() 对 list / dict 不受影响
+print("[B7.11 len([1,2,3]) list] expect=3]");
+print(len([1, 2, 3]));
+
+print("[B7.12 len dict] expect=2]");
+print(len({"a": 1, "b": 2}));
+
+print("===== R2-FIXES1 END =====");

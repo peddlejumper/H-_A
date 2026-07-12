@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>下载验证 — H#</title>
+  <meta name="description" content="下载 H# 前先完成人类验证。" />
+
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="header" id="header">
+    <div class="container header-inner">
+      <a class="brand" href="index.html" aria-label="H# home">
+        <span class="brand-mark">H<span class="sharp">#</span></span>
+        <span class="brand-tag"><span>v0.4</span></span>
+      </a>
+      <nav class="nav" aria-label="primary">
+        <a class="nav-item" href="index.html#features">特性 <span class="caret">▾</span></a>
+        <a class="nav-item" href="index.html#zzw">ZZW Code</a>
+        <a class="nav-item" href="pricing.html">定价</a>
+        <a class="nav-item" href="download.html">下载</a>
+        <a class="nav-item nav-item-beta" href="beta.html">Beta <span class="nav-beta-tag">v0.5</span></a>
+        <a class="nav-item" href="guide.html">指南</a>
+        <a class="nav-item" href="index.html#privacy">隐私</a>
+      </nav>
+      <div class="header-right">
+        <a class="uiverse-btn" href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">
+          <span>GitHub</span>
+          <span>查看仓库 ↗</span>
+        </a>
+        <a class="uiverse-btn uiverse-btn-brand" href="download.html">
+          <span>下载 H#</span>
+          <span>立即下载 ↓</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="verify-main">
+    <div class="container verify-container">
+
+      <!-- Step indicator -->
+      <ol class="verify-stepper" aria-label="下载流程">
+        <li class="is-done">
+          <span class="verify-step-num">1</span>
+          <span class="verify-step-label">选择文件</span>
+        </li>
+        <li class="is-active" data-verify-step>
+          <span class="verify-step-num">2</span>
+          <span class="verify-step-label">人类验证</span>
+        </li>
+        <li data-verify-step data-step-state="pending">
+          <span class="verify-step-num">3</span>
+          <span class="verify-step-label">开始下载</span>
+        </li>
+      </ol>
+
+      <!-- Verification card -->
+      <section class="verify-card" id="verifyCard" data-state="checking">
+        <div class="verify-card-head">
+          <div class="verify-card-icon" id="verifyIcon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <div>
+            <h1>下载前先证明你是人类</h1>
+            <p>我们用这一步挡住自动化下载 · 完成验证后会自动开始下载。</p>
+          </div>
+        </div>
+
+        <!-- Target file summary -->
+        <div class="verify-target">
+          <span class="verify-target-label">即将下载</span>
+          <span class="verify-target-name" id="targetName">H# v0.4.2 · macOS · Apple Silicon</span>
+          <a class="verify-target-back" href="download.html">← 换一个</a>
+        </div>
+
+        <!-- Stage 1: checkbox -->
+        <div class="verify-stage verify-stage-1" data-stage="1">
+          <button class="verify-checkbox" id="verifyCheckbox" type="button" aria-pressed="false">
+            <span class="verify-checkbox-box" aria-hidden="true">
+              <span class="verify-checkbox-tick">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </span>
+            </span>
+            <span class="verify-checkbox-label">我不是机器人</span>
+            <span class="verify-checkbox-spinner" aria-hidden="true">
+              <span class="verify-checkbox-spinner-ring"></span>
+            </span>
+          </button>
+
+          <div class="verify-meta">
+            <span class="verify-meta-dot"></span>
+            <span>隐私优先 · 本次验证不会上传任何个人数据</span>
+          </div>
+        </div>
+
+        <!-- Stage 2: drag slider -->
+        <div class="verify-stage verify-stage-2" data-stage="2" hidden>
+          <div class="verify-slider" id="verifySlider">
+            <div class="verify-slider-fill" id="verifySliderFill"></div>
+            <button class="verify-slider-handle" id="verifySliderHandle" type="button" aria-label="拖动滑块">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+            <div class="verify-slider-text" id="verifySliderText">向右拖动滑块 → 启动下载</div>
+          </div>
+
+          <div class="verify-meta">
+            <span class="verify-meta-dot"></span>
+            <span>拖到最右后会立即开始下载</span>
+          </div>
+        </div>
+
+        <!-- Stage 3: success -->
+        <div class="verify-stage verify-stage-3" data-stage="3" hidden>
+          <div class="verify-success">
+            <div class="verify-success-icon">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+            <h2>验证完成 · 正在启动下载</h2>
+            <p>你的浏览器会在 1.5 秒后开始下载 <code class="inline-code" id="targetNameSuccess">h#-v0.4.2.hps</code>。如果未自动开始，点下面的按钮。</p>
+            <a class="btn btn-brand btn-md" id="manualDownload" href="#" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              手动下载
+            </a>
+          </div>
+        </div>
+
+        <!-- Footer note -->
+        <div class="verify-foot">
+          <span>powered by</span>
+          <span class="verify-foot-brand">H<span class="sharp">#</span> Verify</span>
+          <span>· 不使用第三方 cookie · 不写本地存储</span>
+        </div>
+      </section>
+
+      <!-- Why we need this -->
+      <aside class="verify-why fade-up">
+        <h3>为什么需要这一步？</h3>
+        <ul>
+          <li><strong>挡住自动化下载</strong>：H# 的发布包是公开的，但 GitHub Releases 在被脚本刷量时会触发 rate limit，拖累正常用户。</li>
+          <li><strong>不收集任何个人信息</strong>：本验证完全在本地完成，零 cookie、零指纹、零第三方请求。</li>
+          <li><strong>如果你不想等</strong>：也可以直接 <a class="pricing-link" href="https://github.com/peddlejumper/HSharp/archive/refs/heads/main.zip">从 GitHub 拉源码</a> 或 <a class="pricing-link" href="https://github.com/peddlejumper/homebrew-hsharp">brew install hsharp</a>。</li>
+        </ul>
+      </aside>
+
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <span class="brand-mark">H<span class="sharp">#</span></span>
+            <span class="brand-tag"><span>v0.4</span></span>
+          </div>
+          <p>A self-hosting language<br/>for the curious mind.</p>
+        </div>
+        <div class="footer-col">
+          <h5>产品</h5>
+          <a href="index.html#features">H# 特性</a>
+          <a href="index.html#zzw">ZZW Code</a>
+          <a href="pricing.html">订阅计划</a>
+          <a href="download.html">下载</a>
+          <a href="guide.html">官方指南</a>
+        </div>
+        <div class="footer-col">
+          <h5>资源</h5>
+          <a href="https://github.com/peddlejumper/HSharp" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/peddlejumper/HSharp/tree/main/docs" target="_blank" rel="noopener">Documentation</a>
+          <a href="https://github.com/peddlejumper/HSharp/issues" target="_blank" rel="noopener">Issues</a>
+        </div>
+        <div class="footer-col">
+          <h5>联系</h5>
+          <a href="mailto:hi@hsharp.dev">hi@hsharp.dev</a>
+          <a href="https://github.com/peddlejumper" target="_blank" rel="noopener">peddlejumper</a>
+          <span>独立开发，2026</span>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 peddlejumper · H# Project</span>
+        <span id="build-time">build · 2026.06.13</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/verify.js"></script>
+</body>
+</html>

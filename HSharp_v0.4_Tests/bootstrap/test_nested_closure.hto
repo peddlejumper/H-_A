@@ -1,0 +1,168 @@
+import "bootstrap/tokenize.hto";
+import "bootstrap/parser.hto";
+import "bootstrap/interpreter.hto";
+
+let passed = 0;
+let failed = 0;
+
+fn check(name, condition) {
+    if (condition) {
+        passed = passed + 1;
+        print("[PASS] " + name);
+    } else {
+        failed = failed + 1;
+        print("[FAIL] " + name);
+    }
+}
+
+print("╔══════════════════════════════════════════════╗");
+print("║   H# Nested Function Closure Test           ║");
+print("╚══════════════════════════════════════════════╝");
+print("");
+
+# ======== Test 1: Basic nested function calling later-defined function ========
+print("--- Test 1: Forward reference in nested functions ---");
+let src1 = "fn outer() {\n";
+src1 = src1 + "    let x = 42;\n";
+src1 = src1 + "    fn inner1() {\n";
+src1 = src1 + "        return inner2() + 1;\n";
+src1 = src1 + "    }\n";
+src1 = src1 + "    fn inner2() {\n";
+src1 = src1 + "        return x * 2;\n";
+src1 = src1 + "    }\n";
+src1 = src1 + "    return inner1();\n";
+src1 = src1 + "}\n";
+src1 = src1 + "let r1 = outer();\n";
+
+let t1 = tokenize(src1);
+let a1 = parse(t1);
+let e1 = [];
+eval_node(a1, e1);
+check("inner1 calls inner2 (defined later): 85", _env_get(e1, "r1") == 85);
+print("");
+
+# ======== Test 2: Mutually recursive nested functions ========
+print("--- Test 2: Mutually recursive nested functions ---");
+let src2 = "fn outer2() {\n";
+src2 = src2 + "    fn even(n) {\n";
+src2 = src2 + "        if (n == 0) { return true; }\n";
+src2 = src2 + "        return odd(n - 1);\n";
+src2 = src2 + "    }\n";
+src2 = src2 + "    fn odd(n) {\n";
+src2 = src2 + "        if (n == 0) { return false; }\n";
+src2 = src2 + "        return even(n - 1);\n";
+src2 = src2 + "    }\n";
+src2 = src2 + "    let e0 = even(0);\n";
+src2 = src2 + "    let e1 = even(1);\n";
+src2 = src2 + "    let e2 = even(2);\n";
+src2 = src2 + "    let e4 = even(4);\n";
+src2 = src2 + "    return [e0, e1, e2, e4];\n";
+src2 = src2 + "}\n";
+src2 = src2 + "let r2 = outer2();\n";
+
+let t2 = tokenize(src2);
+let a2 = parse(t2);
+let e2 = [];
+eval_node(a2, e2);
+let r2val = _env_get(e2, "r2");
+if (r2val != nullptr) {
+    check("even(0) = true", r2val[0] == true);
+    check("even(1) = false", r2val[1] == false);
+    check("even(2) = true", r2val[2] == true);
+    check("even(4) = true", r2val[3] == true);
+} else {
+    check("even(0) = true", false);
+    check("even(1) = false", false);
+    check("even(2) = true", false);
+    check("even(4) = true", false);
+}
+print("");
+
+# ======== Test 3: Simulate parser.hto pattern ========
+print("--- Test 3: Parser-like nested function chain ---");
+let src3 = "fn parse(input) {\n";
+src3 = src3 + "    let pos = 0;\n";
+src3 = src3 + "    fn cur() {\n";
+src3 = src3 + "        return input[pos];\n";
+src3 = src3 + "    }\n";
+src3 = src3 + "    fn advance() {\n";
+src3 = src3 + "        pos = pos + 1;\n";
+src3 = src3 + "    }\n";
+src3 = src3 + "    # parse_primary defined first\n";
+src3 = src3 + "    fn parse_primary() {\n";
+src3 = src3 + "        if (cur() == 1) { advance(); return 10; }\n";
+src3 = src3 + "        if (cur() == 2) { return parse_binary(); }\n";
+src3 = src3 + "        return 0;\n";
+src3 = src3 + "    }\n";
+src3 = src3 + "    # parse_binary defined AFTER parse_primary\n";
+src3 = src3 + "    fn parse_binary() {\n";
+src3 = src3 + "        advance();\n";
+src3 = src3 + "        let left = parse_primary();\n";
+src3 = src3 + "        let right = parse_primary();\n";
+src3 = src3 + "        return left + right;\n";
+src3 = src3 + "    }\n";
+src3 = src3 + "    fn parse_expression() {\n";
+src3 = src3 + "        return parse_primary();\n";
+src3 = src3 + "    }\n";
+src3 = src3 + "    return parse_expression();\n";
+src3 = src3 + "}\n";
+src3 = src3 + "let r3a = parse([1, 0, 0]);\n";
+src3 = src3 + "let r3b = parse([2, 1, 1]);\n";
+
+let t3 = tokenize(src3);
+let a3 = parse(t3);
+let e3 = [];
+eval_node(a3, e3);
+# parse([1, 0, 0]) → cur()=1 → advance → return 10
+check("parse([1,0,0]) = 10", _env_get(e3, "r3a") == 10);
+# parse([2, 1, 1]) → cur()=2 → parse_binary() → advance, parse_primary()=10, parse_primary()=10 → 10+10=20
+check("parse([2,1,1]) = 20", _env_get(e3, "r3b") == 20);
+print("");
+
+# ======== Test 4: Nested fn modifying shared env ========
+print("--- Test 4: Shared mutable state ---");
+let src4 = "fn counter() {\n";
+src4 = src4 + "    let count = 0;\n";
+src4 = src4 + "    fn inc() {\n";
+src4 = src4 + "        count = count + 1;\n";
+src4 = src4 + "        return count;\n";
+src4 = src4 + "    }\n";
+src4 = src4 + "    fn dec() {\n";
+src4 = src4 + "        count = count - 1;\n";
+src4 = src4 + "        return count;\n";
+src4 = src4 + "    }\n";
+src4 = src4 + "    let a = inc();\n";
+src4 = src4 + "    let a2 = inc();\n";
+src4 = src4 + "    let a3 = inc();\n";
+src4 = src4 + "    let b = dec();\n";
+src4 = src4 + "    return [a, a2, a3, b];\n";
+src4 = src4 + "}\n";
+src4 = src4 + "let r4 = counter();\n";
+
+let t4 = tokenize(src4);
+let a4 = parse(t4);
+let e4 = [];
+eval_node(a4, e4);
+let r4val = _env_get(e4, "r4");
+if (r4val != nullptr) {
+    check("inc() = 1", r4val[0] == 1);
+    check("inc() = 2", r4val[1] == 2);
+    check("inc() = 3", r4val[2] == 3);
+    check("dec() = 2", r4val[3] == 2);
+} else {
+    check("inc() = 1", false); check("inc() = 2", false);
+    check("inc() = 3", false); check("dec() = 2", false);
+}
+print("");
+
+# ======== Summary ========
+print("========================================");
+print("  Results: " + passed + " passed, " + failed + " failed");
+print("========================================");
+if (failed > 0) {
+    print("SOME TESTS FAILED!");
+}
+if (failed == 0) {
+    print("NESTED FUNCTION CLOSURES WORK!");
+    print("Ready for full parser.hto self-interpretation");
+}

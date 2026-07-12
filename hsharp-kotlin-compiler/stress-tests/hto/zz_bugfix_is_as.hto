@@ -1,0 +1,39 @@
+# Verification for Bug 3 (`x is T`) and Bug 4 (`x as T`).
+# Uses binary is/as, supported by HSharp_v0.4_Tests/parser.py.
+
+print("--- Bug 3: x is T on primitives ---");
+print(5 is int);            # expect true
+print(5.5 is int);          # expect false (5.5 not integral)
+print(5.5 is float);        # expect true
+print(5 is float);          # expect true (int is also float)
+print("hi" is str);         # expect true
+print(true is bool);        # expect true
+print([1, 2] is list);      # expect true
+print({} is dict);          # expect true
+# NOTE: `nullptr is null` is not parseable — `null` is a keyword, not
+# an identifier, and the binary `is` parser only accepts IDENTIFIER.
+print(5 is str);            # expect false
+
+print("--- Bug 3: x is T on classes ---");
+class Animal {}
+class Dog extends Animal {}
+let d = new Dog();
+print(d is Dog);            # expect true
+print(d is Animal);         # expect true
+print(d is Animal);         # expect true (via base chain)
+
+print("--- Bug 4: x as T casts ---");
+print(5.7 as int);          # expect 5 (truncation)
+print(5 as str);            # expect "5"
+print(0 as bool);           # expect false
+print(1 as bool);           # expect true
+print(3.14 as float);       # expect 3.14
+print(d as Dog);            # expect Dog{...} (instance unchanged)
+
+print("--- Bug 4: bad cast throws ---");
+try {
+    let bad = 5 as Dog;
+    print("ERROR: should have thrown");
+} catch (e) {
+    print("caught: " + e);  # expect "Cannot cast NUMBER to Dog"
+}

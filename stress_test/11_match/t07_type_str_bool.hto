@@ -1,0 +1,13 @@
+# t07 - type pattern: is str / is bool (with and without `as` binding)
+fn typ(x) {
+    return match x {
+        is str as s => "str:" + s,
+        is bool => "bool",
+        _ => "other"
+    };
+}
+print("t07_str:" + typ("hello"));
+print("t07_str_empty:" + typ(""));
+print("t07_bool_t:" + typ(true));
+print("t07_bool_f:" + typ(false));
+print("t07_other:" + typ(5));

@@ -1,0 +1,74 @@
+# 14 — parallelism() vs Runtime.availableProcessors()
+# Covers: parallelism() 与 Runtime.availableProcessors() 一致
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) { print("OK " + name); __stats[0] = __stats[0] + 1; }
+    else { print("FAIL " + name + " " + detail); __stats[1] = __stats[1] + 1; }
+}
+
+let p = parallelism();
+check("parallelism_positive", p >= 1, "p=" + str(p));
+check("parallelism_reasonable", p <= 128, "p=" + str(p) + " too large");
+
+# parallelism() 应与 dzzw_worker_count() native 一致
+# （HNativeBridge 暴露了 dzzw_worker_count = Runtime.availableProcessors()）
+let cores = dzzw_worker_count();
+check("parallelism_equals_processors", p == cores,
+      "parallelism=" + str(p) + " processors=" + str(cores));
+
+# 多次调用应稳定（WorkerPool 是单例，parallelism 不变）
+let p1 = parallelism();
+let p2 = parallelism();
+let p3 = parallelism();
+check("parallelism_stable", p1 == p2 and p2 == p3,
+      str(p1) + "/" + str(p2) + "/" + str(p3));
+
+# 在 parallel fn 内查询 parallelism（worker 线程也应看到同一个 pool）
+parallel fn par_parallelism() {
+    return parallelism();
+}
+let fp = par_parallelism();
+check("parallelism_inside_worker", await fp == p,
+      "worker saw " + str(await fp) + " main saw " + str(p));
+
+# 在 concurrent{} 内多个 worker 同时查
+parallel fn par_cores() {
+    return dzzw_worker_count();
+}
+let futs = [];
+let i = 0;
+while (i < 20) {
+    push(futs, par_cores());
+    i = i + 1;
+}
+let all_match = true;
+let j = 0;
+while (j < 20) {
+    if (await futs[j] != cores) { all_match = false; }
+    j = j + 1;
+}
+check("all_workers_see_same_cores", all_match, "some worker saw different core count");
+
+# pool 大小决定并发度：提交 cores 个长任务，应能在 cores 并行
+# （仅定性：所有任务都能完成，不挂死）
+parallel fn busy(n) {
+    let i = 0;
+    let s = 0;
+    while (i < 500000) { s = s + i; i = i + 1; }
+    return s + n;
+}
+let bf = [];
+let k = 0;
+while (k < cores) {
+    push(bf, busy(k));
+    k = k + 1;
+}
+let all_done = true;
+let m = 0;
+while (m < cores) {
+    if (await bf[m] < 0) { all_done = false; }
+    m = m + 1;
+}
+check("cores_busy_tasks_complete", all_done, "some task did not finish");
+
+print("T14_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

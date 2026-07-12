@@ -1,0 +1,154 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ZZW.CodeTeacher.Client.ViewModels"
+             xmlns:cvt="using:ZZW.CodeTeacher.Client.Converters"
+             xmlns:dto="using:ZZW.CodeTeacher.Application.DTOs"
+             x:Class="ZZW.CodeTeacher.Client.Views.BlogView"
+             x:DataType="vm:BlogViewModel">
+
+  <Grid Background="Transparent">
+    <DockPanel>
+
+      <!-- ═══ 顶栏:返回 IDE + 标题 + 状态 + 刷新 + 写文章 ═══ -->
+      <Border DockPanel.Dock="Top" Classes="toolbar" Padding="16,10">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <Button Classes="secondary" Content="返回 IDE" Command="{Binding BackToIdeCommand}" />
+            <Border Classes="title-dot" />
+            <TextBlock Classes="title" Text="知识广场" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding StatusHint}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12"
+                       VerticalAlignment="Center" Margin="6,0,0,0" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+            <Button Classes="primary" Content="{Binding IsCreating, StringFormat={}{0:#收起发布;写文章;}}"
+                    Command="{Binding ToggleCreateFormCommand}" FontSize="12" Padding="10,4" />
+            <Button Classes="secondary icon" Content="⋯" ToolTip.Tip="更多">
+              <Button.Flyout>
+                <MenuFlyout>
+                  <MenuItem Header="刷新" Command="{Binding RefreshCommand}" />
+                  <Separator />
+                  <MenuItem Header="返回 IDE" Command="{Binding BackToIdeCommand}" />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- 加载遮罩 -->
+      <Border DockPanel.Dock="Top" Background="{DynamicResource GlassInsetBrush}" Padding="8"
+              IsVisible="{Binding IsLoading}">
+        <TextBlock Text="加载中…" HorizontalAlignment="Center"
+                   Foreground="{DynamicResource InkTertiaryBrush}" FontSize="12" />
+      </Border>
+
+      <!-- 主体:左列表 + 右详情 -->
+      <Grid ColumnDefinitions="*,*" Margin="16,12,16,16">
+
+        <!-- 左:文章列表 + 发布表单 -->
+        <Border Grid.Column="0" Classes="panel" Margin="0,0,4,0" Padding="0">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Top" Classes="section" Text="文章列表" Margin="16,12,16,6" />
+
+            <!-- 发布表单(可折叠) -->
+            <Expander DockPanel.Dock="Bottom" Header="写文章" IsExpanded="{Binding IsCreating, Mode=TwoWay}"
+                      Padding="12,6" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource BorderDefaultBrush}">
+              <StackPanel Spacing="6" Margin="0,8,0,4">
+                <TextBox Text="{Binding NewTitle, Mode=TwoWay}" Watermark="文章标题" FontSize="12" />
+                <TextBox Text="{Binding NewSummary, Mode=TwoWay}" Watermark="摘要(可选)" FontSize="12" />
+                <TextBox Text="{Binding NewContent, Mode=TwoWay}" Watermark="正文(Markdown)"
+                         AcceptsReturn="True" TextWrapping="Wrap" Height="120" FontSize="12" />
+                <TextBox Text="{Binding NewTags, Mode=TwoWay}" Watermark="标签(逗号分隔)" FontSize="12" />
+                <Button Classes="primary" Content="发布" HorizontalAlignment="Right" FontSize="12" Padding="10,4"
+                        Command="{Binding CreatePostCommand}" IsEnabled="{Binding !IsPosting}" />
+              </StackPanel>
+            </Expander>
+
+            <TextBlock Text="暂无文章,来写第一篇吧" Classes="empty"
+                       IsVisible="{Binding Posts.Count, Converter={x:Static cvt:CountToBoolConverter.Instance}}"
+                       Margin="16,8" />
+            <ScrollViewer>
+              <ItemsControl ItemsSource="{Binding Posts}" Margin="8,4,8,8">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="dto:BlogPostListItemDto">
+                    <Button Classes="text"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            Padding="12,9" Margin="0,3"
+                            Command="{Binding $parent[ItemsControl].DataContext.SelectPostCommand}"
+                            CommandParameter="{Binding}">
+                      <StackPanel Spacing="4">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"
+                                   Foreground="{DynamicResource InkPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource InkSecondaryBrush}"
+                                   FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{Binding AuthorName}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10" />
+                          <TextBlock Text="{Binding LikeCount, StringFormat=赞 {0}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                          <TextBlock Text="{Binding ViewCount, StringFormat=浏览 {0}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                          <TextBlock Text="{Binding CreatedAt, StringFormat={}{0:MM-dd HH:mm}}" Foreground="{DynamicResource InkMutedBrush}" FontSize="10" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </DockPanel>
+        </Border>
+
+        <!-- 右:文章详情 + 点赞 -->
+        <Border Grid.Column="1" Classes="panel" Margin="4,0,0,0" Padding="0">
+          <DockPanel>
+            <!-- 详情头部(标题/作者/标签) -->
+            <StackPanel DockPanel.Dock="Top" Margin="16,12,16,6" Spacing="4"
+                        IsVisible="{Binding Detail, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+              <TextBlock Classes="section" Text="文章详情" />
+              <TextBlock Text="{Binding Detail.Title}" FontSize="16" FontWeight="SemiBold"
+                         Foreground="{DynamicResource InkPrimaryBrush}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="{Binding Detail.AuthorName}" Foreground="{DynamicResource BrandBlueBrush}" FontSize="11" />
+                <TextBlock Text="{Binding Detail.CreatedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}"
+                           Foreground="{DynamicResource InkMutedBrush}" FontSize="11" />
+                <TextBlock Text="{Binding Detail.LikeCount, StringFormat=赞 {0}}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" />
+                <TextBlock Text="{Binding Detail.ViewCount, StringFormat=浏览 {0}}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="11" />
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding Detail.Tags}" Margin="0,4,0,0">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <Border Classes="code-chip" Margin="0,0,4,2">
+                      <TextBlock Text="{Binding}" Foreground="{DynamicResource InkTertiaryBrush}" FontSize="10" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <!-- 底部点赞按钮 -->
+            <StackPanel DockPanel.Dock="Bottom" Margin="16,8" Spacing="6"
+                        IsVisible="{Binding Detail, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+              <Button Classes="primary" Content="点赞" FontSize="12" Padding="12,5" HorizontalAlignment="Left"
+                      Command="{Binding LikeCommand}" CommandParameter="{Binding SelectedPost}" />
+            </StackPanel>
+
+            <!-- 空态占位(未选中文章) -->
+            <TextBlock Text="选中左侧文章查看正文" Foreground="{DynamicResource InkMutedBrush}" FontSize="12"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       IsVisible="{Binding Detail, Converter={x:Static cvt:NullToBoolConverter.InvertedInstance}}" />
+
+            <!-- 正文(可滚动) -->
+            <ScrollViewer IsVisible="{Binding Detail, Converter={x:Static cvt:NullToBoolConverter.Instance}}">
+              <TextBox Text="{Binding Detail.Content, Mode=OneWay}" IsReadOnly="True"
+                       Background="Transparent" Foreground="{DynamicResource InkSecondaryBrush}"
+                       FontSize="13" TextWrapping="Wrap" BorderThickness="0" Padding="16,8" />
+            </ScrollViewer>
+          </DockPanel>
+        </Border>
+      </Grid>
+    </DockPanel>
+  </Grid>
+</UserControl>

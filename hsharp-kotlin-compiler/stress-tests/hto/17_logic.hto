@@ -1,0 +1,15 @@
+# T17 - Boolean logic
+let t = true;
+let f = false;
+print(t and f);
+print(t or f);
+print(not t);
+print(not f);
+print(t and (f or t));
+print((t and t) or (f and f));
+
+let x = 5;
+print(x > 0 and x < 10);
+print(x < 0 or x > 100);
+print(x == 5);
+print(x != 6);

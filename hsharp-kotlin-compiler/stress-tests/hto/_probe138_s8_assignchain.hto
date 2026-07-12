@@ -1,0 +1,11 @@
+# _probe138_s8_assignchain.hto — 赋值链 a = b = c = 0
+# 测试: 赋值是否可作为表达式 (右结合赋值链)
+# 预期: 语法错误 — H# 赋值是语句, expression() 不处理 EQ
+#   a = b = c = 0 解析: a 是 Identifier, eat(EQ), value = expression() 返回 b,
+#   然后 eat(SEMI) 遇到 = 而非 ; -> SyntaxError
+
+let a = 0;
+let b = 0;
+let c = 0;
+a = b = c = 0;
+print("a=" + str(a) + " b=" + str(b) + " c=" + str(c));

@@ -1,0 +1,12 @@
+# 03_dup_swap.hto — (注: match 语法 parser.py 不支持, 无法经此流水线触发 DUP/SWAP)
+# 改为覆盖 CALL_METHOD 字符串方法边界
+let s = "  Hello World  ";
+print(s.strip());
+print(s.lower());
+print(s.upper());
+print(s.len());
+print(s.contains("World"));
+print(s.replace("World", "H#"));
+print(s.starts_with("  H"));
+print(s.ends_with("d  "));
+print("done");

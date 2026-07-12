@@ -1,0 +1,80 @@
+# P1 verification: all P1 bug fixes in one test file.
+
+# === Bug 1: Integer dict key consistency ===
+let d = {};
+d[1] = "a";
+print("int-key-in: " + (1 in d));
+print("int-key-get: " + d[1]);
+
+# === Bug 2: for k, v on list ===
+let pairs = "";
+for k, v in [10, 20, 30] {
+    pairs = pairs + k + ":" + v + " ";
+}
+print("for-kv-list: " + pairs);
+
+# === Bug 3: Multi-layer super chain ===
+class A {
+    fn who() { return "A"; }
+}
+class B extends A {
+    fn who() { return super.who() + ">B"; }
+}
+class C extends B {
+    fn who() { return super.who() + ">C"; }
+}
+let c = new C();
+try {
+    print("super-chain: " + c.who());
+} catch (e) {
+    print("super-chain-err: " + e);
+}
+
+# === Bug 4: Instance calling static method ===
+class Math2 {
+    static fn double(x) { return x * 2; }
+}
+let m = new Math2();
+try {
+    print("static-on-instance: " + m.double(5));
+} catch (e) {
+    print("static-on-instance-err: " + e);
+}
+
+# === Bug 5: Negative step slice ===
+print("neg-slice-str: " + "hello"[4:0:-1]);
+print("rev-str: " + "hello"[::-1]);
+print("neg-slice-list: " + [0, 1, 2, 3, 4][4:0:-1]);
+
+# === Bug 6: del statement ===
+let x = 42;
+del x;
+print("del-ident: " + x);
+
+# === Bug 7: Lambda with default/variadic params ===
+let add = fn(a, b = 10) { return a + b; };
+print("lambda-default: " + add(5));
+print("lambda-default-2: " + add(5, 20));
+
+let sumAll = fn(...nums) {
+    let s = 0;
+    for n in nums { s = s + n; }
+    return s;
+};
+print("lambda-variadic: " + sumAll(1, 2, 3, 4));
+
+# === Bug 8: find with start position ===
+print("find-start: " + "hello world".find("o", 5));
+
+# === Bug 9: join with non-string elements ===
+print("join-mixed: " + "-".join([1, 2, 3]));
+
+# === Bug 10: split with empty separator ===
+try {
+    let parts = "abc".split("");
+    print("split-empty: " + parts);
+} catch (e) {
+    print("split-empty-err: " + e);
+}
+
+print("p1-done");

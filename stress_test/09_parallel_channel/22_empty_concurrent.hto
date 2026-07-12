@@ -1,0 +1,39 @@
+# 22 — concurrent { } with no children (empty block)
+# An empty concurrent block should be a no-op: CONCURRENT_ENTER + CONCURRENT_EXIT
+# with no children spawned.  join() on zero children should return [] immediately.
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+let t0 = time_ms();
+concurrent {
+    let x = 1;   # no parallel spawns, just a local
+    x = x + 1;
+}
+let t1 = time_ms();
+check("empty_concurrent_returns", true, "");
+check("empty_concurrent_fast", (t1 - t0) < 1000, "took " + str(t1 - t0) + "ms");
+
+# Empty concurrent block followed by a normal parallel call
+@parallel fn w(x) { return x * 2; }
+
+concurrent { }
+let f = w(21);
+check("parallel_after_empty_concurrent", await f == 42, "got " + str(await f));
+
+# Nested empty concurrent blocks
+concurrent {
+    concurrent { }
+    concurrent { }
+    let x = 5;
+}
+check("nested_empty_concurrent", true, "");
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

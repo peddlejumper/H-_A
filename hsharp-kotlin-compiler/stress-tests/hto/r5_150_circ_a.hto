@@ -1,0 +1,9 @@
+# r5_150_circ_a.hto — circular import: A imports B, B imports A
+
+print("R5_150_CIRC_A: entering");
+import "r5_150_circ_b.hbc";
+print("R5_150_CIRC_A: after importing circ_b");
+
+fn r5_150_circ_a_fn() {
+    return "from_circ_a";
+}

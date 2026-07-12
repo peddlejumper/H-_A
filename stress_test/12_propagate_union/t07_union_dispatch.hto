@@ -1,0 +1,24 @@
+# T07 - Union variant dispatch via if + __variant__ (match-free, works on both VMs)
+union Tree {
+    Leaf: v;
+    Node: left, right;
+}
+
+fn sum(t) {
+    if (t.__variant__ == "Leaf") {
+        return t.v;
+    }
+    if (t.__variant__ == "Node") {
+        return sum(t.left) + sum(t.right);
+    }
+    return 0;
+}
+
+let l1 = Tree{Leaf: 1};
+let l2 = Tree{Leaf: 2};
+let l3 = Tree{Leaf: 3};
+let n  = Tree{Node: l1, l2};
+let root = Tree{Node: n, l3};
+
+print(sum(l1));
+print(sum(root));

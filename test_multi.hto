@@ -1,0 +1,9 @@
+# test_multi.hto
+fn a() {
+    return 1;
+}
+fn b() {
+    return 2;
+}
+print(a());
+print(b());

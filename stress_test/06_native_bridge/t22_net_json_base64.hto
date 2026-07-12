@@ -1,0 +1,39 @@
+# t22 — net/base64/json boundaries: base64 roundtrip, json_parse stub, url_parse
+print("== t22 net/base64/json ==");
+try {
+    let enc = base64_encode("hello");
+    print("base64_encode(\"hello\")=" + enc);
+    print("base64_decode back=" + base64_decode(enc));
+} catch (e) {
+    print("base64 ERR: " + str(e));
+}
+try {
+    print("base64_decode(\"!!!notbase64!!!\")=" + base64_decode("!!!notbase64!!!"));
+} catch (e) {
+    print("base64_decode(bad) ERR: " + str(e));
+}
+try {
+    print("base64_encode(\"\")=[" + base64_encode("") + "]");
+} catch (e) {
+    print("base64_encode(\"\") ERR: " + str(e));
+}
+try {
+    print("json_stringify([1,2,3])=" + json_stringify([1, 2, 3]));
+} catch (e) {
+    print("json_stringify ERR: " + str(e));
+}
+try {
+    print("json_parse(\"{\\\"a\\\":1}\")=" + str(json_parse("{\"a\":1}")));
+} catch (e) {
+    print("json_parse ERR: " + str(e));
+}
+try {
+    print("url_parse(\"https://h.com/p?q=1\")=" + str(url_parse("https://h.com/p?q=1")));
+} catch (e) {
+    print("url_parse ERR: " + str(e));
+}
+try {
+    print("net_base64_encode(\"hi\")=" + net_base64_encode("hi"));
+} catch (e) {
+    print("net_base64_encode ERR: " + str(e));
+}

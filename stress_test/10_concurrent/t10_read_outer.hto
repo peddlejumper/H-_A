@@ -1,0 +1,14 @@
+# t10_read_outer.hto
+# concurrent 内 parallel 任务访问外部（模块级）变量。
+# 预期：worker 通过 callerFrame 读到 W=80，正常打印 80。
+let W = 80;
+parallel fn readW() {
+    return W;
+}
+concurrent {
+    let f = readW();
+    let r = await f;
+    print("W=");
+    print(r);
+}
+print("done");

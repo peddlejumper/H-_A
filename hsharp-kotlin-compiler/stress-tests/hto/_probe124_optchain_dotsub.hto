@@ -1,0 +1,6 @@
+# Probe 124-B: dict?.["key"]  (带点的可选下标)
+# 预期: PARSE 错误 — `?.` 后期待 IDENTIFIER, 遇到 `[` 报错
+print("probe B start");
+let d = {"k": 1};
+print(d?.["k"]);
+print("probe B end");

@@ -1,0 +1,39 @@
+# Test inheritance (extends)
+class Shape {
+    let name = "Shape";
+    
+    fn init(n) {
+        self.name = n;
+    }
+    
+    fn area() {
+        return 0;
+    }
+    
+    fn describe() {
+        return self.name + " with area " + str(self.area());
+    }
+}
+
+class Rectangle {
+    let name = "Rectangle";
+    let width = 0;
+    let height = 0;
+    
+    fn init(w, h) {
+        self.width = w;
+        self.height = h;
+    }
+    
+    fn area() {
+        return self.width * self.height;
+    }
+    
+    fn describe() {
+        return self.name + " " + str(self.width) + "x" + str(self.height) + " = " + str(self.area());
+    }
+}
+
+let r = new Rectangle(5, 3);
+print(r.describe());
+print("Area: " + str(r.area()));

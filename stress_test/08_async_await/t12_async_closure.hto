@@ -1,0 +1,9 @@
+# t12: async fn as a closure capturing a free variable.
+fn make_adder(n) {
+    async fn inner(x) {
+        return x + n;
+    }
+    return inner;
+}
+let add5 = make_adder(5);
+print(await add5(10));

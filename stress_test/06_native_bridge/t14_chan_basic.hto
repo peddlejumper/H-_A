@@ -1,0 +1,22 @@
+# t14 — chan_new(0) unbounded; chan_size / chan_try_send / chan_try_recv on empty
+print("== t14 chan basic ==");
+try {
+    let ch = chan_new(0);
+    print("chan_new(0) size=" + str(chan_size(ch)));
+    print("chan_try_recv(empty)=" + str(chan_try_recv(ch)));
+    print("chan_try_send(1)=" + str(chan_try_send(ch, 1)));
+    print("chan_size after send=" + str(chan_size(ch)));
+    print("chan_try_recv now=" + str(chan_try_recv(ch)));
+    print("chan_size after recv=" + str(chan_size(ch)));
+} catch (e) {
+    print("chan basic ERR: " + str(e));
+}
+# bounded channel of capacity 1: try_send twice should saturate
+try {
+    let ch = chan_new(1);
+    print("cap1 try_send a=" + str(chan_try_send(ch, "a")));
+    print("cap1 try_send b=" + str(chan_try_send(ch, "b")));
+    print("cap1 size=" + str(chan_size(ch)));
+} catch (e) {
+    print("chan bounded ERR: " + str(e));
+}

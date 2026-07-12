@@ -69,6 +69,7 @@ class TokenType(Enum):
     COMMA = 'COMMA'
     SEMI = 'SEMI'
     DOT = 'DOT'
+    ELLIPSIS = 'ELLIPSIS'  # ...
     QMARK = 'QMARK'        # ?
     QMARK_CARET = 'QMARK_CARET'  # ?^
     AND = 'AND'

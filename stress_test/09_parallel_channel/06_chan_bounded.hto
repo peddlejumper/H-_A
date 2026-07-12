@@ -1,0 +1,69 @@
+# 06 — chan_new(N) bounded channel
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + " " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+let ch = chan_new(3);
+check("empty_size", chan_size(ch) == 0, "size=" + str(chan_size(ch)));
+
+# Fill to capacity (use try_send to avoid blocking the main thread)
+let ok1 = chan_try_send(ch, 10);
+let ok2 = chan_try_send(ch, 20);
+let ok3 = chan_try_send(ch, 30);
+check("fill_1", ok1 == true, "ok1=" + str(ok1));
+check("fill_2", ok2 == true, "ok2=" + str(ok2));
+check("fill_3", ok3 == true, "ok3=" + str(ok3));
+check("full_size", chan_size(ch) == 3, "size=" + str(chan_size(ch)));
+
+# try_send on full bounded channel returns false (non-blocking)
+let ok4 = chan_try_send(ch, 40);
+check("try_send_full_false", ok4 == false, "ok4=" + str(ok4));
+check("size_unchanged", chan_size(ch) == 3, "size=" + str(chan_size(ch)));
+
+# recv makes room, then try_send succeeds
+let v = chan_recv(ch);
+check("recv_value", v == 10, "v=" + str(v));
+let ok5 = chan_try_send(ch, 50);
+check("try_send_after_recv", ok5 == true, "ok5=" + str(ok5));
+check("size_after_resend", chan_size(ch) == 3, "size=" + str(chan_size(ch)));
+
+# Drain and verify FIFO order
+let a = chan_recv(ch);
+let b = chan_recv(ch);
+let c = chan_recv(ch);
+check("drain_fifo", a == 20 and b == 30 and c == 50,
+      "a=" + str(a) + " b=" + str(b) + " c=" + str(c));
+check("drained_size", chan_size(ch) == 0, "size=" + str(chan_size(ch)));
+
+# Bounded channel with capacity 1
+let ch1 = chan_new(1);
+let s1 = chan_try_send(ch1, "first");
+let s2 = chan_try_send(ch1, "second");
+check("cap1_first_ok",  s1 == true,  "s1=" + str(s1));
+check("cap1_second_no", s2 == false, "s2=" + str(s2));
+let r1 = chan_recv(ch1);
+check("cap1_recv", r1 == "first", "r1=" + str(r1));
+
+# Bounded channel with large capacity
+let ch_big = chan_new(100);
+let k = 0;
+let all_ok = true;
+while (k < 100) {
+    if (chan_try_send(ch_big, k) == false) {
+        all_ok = false;
+    }
+    k = k + 1;
+}
+check("cap100_fill_all", all_ok == true, "all_ok=" + str(all_ok));
+check("cap100_full_size", chan_size(ch_big) == 100, "size=" + str(chan_size(ch_big)));
+let overflow_ok = chan_try_send(ch_big, 999);
+check("cap100_overflow_false", overflow_ok == false, "overflow_ok=" + str(overflow_ok));
+
+print("PC_TEST : PASS=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

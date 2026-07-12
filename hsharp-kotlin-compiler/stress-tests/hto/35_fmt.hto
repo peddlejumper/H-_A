@@ -1,0 +1,8 @@
+# D2: fmt string formatting test
+print(fmt("Hello {0}, {1}!", "world", 42));
+print(fmt("{0} + {1} = {2}", 1, 2, 3));
+print(fmt("name={0}, age={1}", "Alice", 30));
+print(fmt("no placeholders"));
+print(fmt("{0}-{0}-{1}", "a", "b"));
+print(fmt("missing {9} arg"));
+print(fmt("just {0}", "x"));

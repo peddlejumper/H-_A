@@ -1,0 +1,8 @@
+# t6
+let _ai_cfg = {
+    "endpoint": "https://api.openai.com/v1/chat/completions",
+    "api_key": "",
+    "model": "gpt-4o-mini"
+};
+
+print(_ai_cfg["endpoint"]);

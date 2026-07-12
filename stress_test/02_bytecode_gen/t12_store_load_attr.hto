@@ -1,0 +1,36 @@
+# t12_store_load_attr.hto - STORE_ATTR/LOAD_ATTR 链式
+class Point {
+    let x = 0;
+    let y = 0;
+    fn init(x, y) {
+        self.x = x;
+        self.y = y;
+    }
+    fn sum() {
+        return self.x + self.y;
+    }
+}
+let p = new Point(3, 4);
+print(p.x);
+print(p.y);
+print(p.sum());
+
+# 属性赋值
+p.x = 100;
+p.y = 200;
+print(p.sum());
+
+# 链式访问：对象属性是对象
+class Box {
+    let item = 0;
+    fn init(v) { self.item = v; }
+}
+class Wrapper {
+    let box = 0;
+    fn init(b) { self.box = b; }
+}
+let b = new Box(99);
+let w = new Wrapper(b);
+print(w.box.item);
+w.box.item = 777;
+print(w.box.item);

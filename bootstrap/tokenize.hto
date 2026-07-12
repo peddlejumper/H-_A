@@ -97,6 +97,14 @@ fn tokenize(src) {
             else if (s == "em3d") { push(tokens, {"type":"EM3D", "value":nullptr}); }
             else if (s == "region") { push(tokens, {"type":"REGION", "value":nullptr}); }
             else if (s == "region_interface") { push(tokens, {"type":"REGION_INTERFACE", "value":nullptr}); }
+            # v0.4.1 new feature keywords
+            else if (s == "async") { push(tokens, {"type":"ASYNC", "value":nullptr}); }
+            else if (s == "await") { push(tokens, {"type":"AWAIT", "value":nullptr}); }
+            else if (s == "chan") { push(tokens, {"type":"CHAN", "value":nullptr}); }
+            else if (s == "match") { push(tokens, {"type":"MATCH", "value":nullptr}); }
+            else if (s == "union") { push(tokens, {"type":"UNION", "value":nullptr}); }
+            else if (s == "concurrent") { push(tokens, {"type":"CONCURRENT", "value":nullptr}); }
+            else if (s == "parallel") { push(tokens, {"type":"PARALLEL", "value":nullptr}); }
             else {
                 push(tokens, {"type":"IDENTIFIER", "value":s});
             }
@@ -156,7 +164,19 @@ fn tokenize(src) {
                 i = i + 2;
                 continue;
             }
+            # => arrow (for match arms)
+            if (i + 1 < n and src[i+1] == ">") {
+                push(tokens, {"type":"ARROW", "value":"=>"});
+                i = i + 2;
+                continue;
+            }
             push(tokens, {"type":"EQ", "value":"="});
+            i = i + 1;
+            continue;
+        }
+        # ? error propagation operator (v0.4.1)
+        if (ch == "?") {
+            push(tokens, {"type":"QUESTION", "value":"?"});
             i = i + 1;
             continue;
         }

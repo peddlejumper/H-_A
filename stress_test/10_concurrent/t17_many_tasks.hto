@@ -1,0 +1,19 @@
+# t17_many_tasks.hto
+# concurrent 内 spawn 大量 parallel 任务（20 个），不显式 await，依赖 CONCURRENT_EXIT join。
+# 预期：所有任务完成后再打印 “joined”，sum 为 0+1+...+19=190。
+parallel fn work(n) {
+    return n;
+}
+concurrent {
+    let i = 0;
+    let total = 0;
+    while (i < 20) {
+        let f = work(i);
+        let v = await f;
+        total = total + v;
+        i = i + 1;
+    }
+    print("total:");
+    print(total);
+}
+print("joined");

@@ -1,0 +1,11 @@
+# Probe S8 — Destructure as a function parameter.
+# `fn f([a, b]) { return a + b; }`
+# The parser's `function_declaration` only accepts IDENTIFIER params,
+# so a `[` in the param list should raise a compile-time SyntaxError.
+#
+# Expected: COMPILE ERROR.  This probe exists to confirm that.
+
+fn sum_pair([a, b]) {
+    return a + b;
+}
+print(sum_pair([3, 4]));

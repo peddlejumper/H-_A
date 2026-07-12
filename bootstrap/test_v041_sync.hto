@@ -1,0 +1,128 @@
+# test_v041_sync.hto — 验证 v0.4.1 新特性已同步到 bootstrap 端
+# 此文件通过 bootstrap pipeline (tokenize.hto → parser.hto → compiler.hto → interpreter.hto) 运行
+# 目标:验证新语法能被 bootstrap tokenize 正确分词、parser 正确解析、compiler 正确编译
+
+# ========== 1. Union 声明 + 构造 ==========
+union Shape {
+    Circle: r;
+    Rect: w, h;
+    Point;
+}
+
+let c = Shape{Circle: 7};
+print(c.__union__);
+print(c.__variant__);
+print(c.r);
+
+let r = Shape{Rect: 3, 4};
+print(r.__variant__);
+print(r.w);
+print(r.h);
+
+let p = Shape{Point};
+print(p.__variant__);
+
+# ========== 2. match 表达式 ==========
+fn describe(x) {
+    return match x {
+        1 => "one",
+        42 => "answer",
+        _ => "other"
+    };
+}
+print("match_1:" + describe(1));
+print("match_42:" + describe(42));
+print("match_oth:" + describe(99));
+
+# match with binding
+fn identity(x) {
+    return match x {
+        v => v
+    };
+}
+print("bind:" + str(identity(7)));
+
+# match with variant pattern
+union Opt {
+    Some: val;
+    None;
+}
+fn unwrap_opt(o) {
+    return match o {
+        Some(v) => v,
+        None => "nothing",
+        _ => "other"
+    };
+}
+let s = Opt{Some: 99};
+let n = Opt{None};
+print("some:" + str(unwrap_opt(s)));
+print("none:" + unwrap_opt(n));
+
+# match with guard
+fn sign(x) {
+    return match x {
+        n if n > 0 => "pos",
+        n if n < 0 => "neg",
+        _ => "zero"
+    };
+}
+print("sign_pos:" + sign(5));
+print("sign_neg:" + sign(-3));
+print("sign_zero:" + sign(0));
+
+# ========== 3. Channel API (函数调用形式) ==========
+let ch = chan_new(0);
+chan_send(ch, 1);
+chan_send(ch, 2);
+print("chan_recv:" + str(chan_recv(ch)));
+print("chan_recv:" + str(chan_recv(ch)));
+
+# ========== 4. ? 错误传播 ==========
+fn risky(n) {
+    if (n < 0) {
+        throw "neg";
+    }
+    return n * 2;
+}
+let v1 = risky(5)?;
+print("prop_ok:" + str(v1));
+let v2 = risky(-1)?;
+print("prop_err:" + str(v2));
+
+# ========== 5. concurrent 块 ==========
+concurrent {
+    print("in_concurrent_1");
+    print("in_concurrent_2");
+}
+print("after_concurrent");
+
+# ========== 6. async/parallel fn ==========
+parallel fn compute() {
+    let s = 0;
+    let i = 0;
+    while (i < 100) {
+        s = s + i;
+        i = i + 1;
+    }
+    return s;
+}
+concurrent {
+    let f = compute();
+    let r = await f;
+    print("await_result:" + str(r));
+}
+
+# ========== 7. 泛型 ==========
+class Box<T> {
+    let value = nullptr;
+    fn init(v) { self.value = v; }
+    fn get() { return self.value; }
+}
+let b = new Box<int>(42);
+print("generic_box:" + str(b.get()));
+
+fn identity_fn<T>(x) { return x; }
+print("generic_fn:" + str(identity_fn<int>(100)));
+
+print("ALL_V041_SYNC_TESTS_DONE");

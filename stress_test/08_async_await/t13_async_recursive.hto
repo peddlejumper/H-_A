@@ -1,0 +1,9 @@
+# t13: async fn recursion — fact(n) = n * fact(n-1).
+async fn fact(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    let sub = await fact(n - 1);
+    return n * sub;
+}
+print(await fact(5));

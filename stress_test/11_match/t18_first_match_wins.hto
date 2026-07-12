@@ -1,0 +1,44 @@
+# t18 - first matching arm wins (ordering matters)
+# Multiple arms that could match: the FIRST one should win.
+fn order(x) {
+    return match x {
+        _ => "wildcard-first",
+        5 => "five"
+    };
+}
+# wildcard is first → always matches first
+print("t18_wild_first_5:" + order(5));
+print("t18_wild_first_99:" + order(99));
+
+# binding before literal
+fn order2(x) {
+    return match x {
+        v => "binding:" + str(v),
+        5 => "five"
+    };
+}
+print("t18_bind_first_5:" + order2(5));
+
+# literal before wildcard (correct order)
+fn order3(x) {
+    return match x {
+        5 => "five",
+        n if n > 10 => "big",
+        _ => "other"
+    };
+}
+print("t18_lit_5:" + order3(5));
+print("t18_big_20:" + order3(20));
+print("t18_other_7:" + order3(7));
+
+# overlapping type patterns: is int before is float (int is more specific)
+fn order4(x) {
+    return match x {
+        is int => "int",
+        is float => "float",
+        _ => "other"
+    };
+}
+print("t18_int42:" + order4(42));
+# 3.0 — is it int (3.0 == 3) or float?
+print("t18_3.0:" + order4(3.0));

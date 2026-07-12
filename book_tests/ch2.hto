@@ -1,0 +1,12 @@
+let name = "World";
+print("Hello, " + name + "!");
+let a = 10;
+let b = 20;
+print("a + b = " + str(a + b));
+print("a * b = " + str(a * b));
+let nums = [1, 2, 3, 4, 5];
+let total = 0;
+for n in nums {
+    total = total + n;
+}
+print("sum = " + str(total));

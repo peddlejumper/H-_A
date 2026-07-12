@@ -1,0 +1,19 @@
+# t15
+print("READY");
+let i = 0;
+while (i < 3) {
+    let line = nullptr;
+    try {
+        line = input();
+    } catch (e) {
+        print("CAUGHT: " + e);
+        break;
+    }
+    if (line == nullptr) {
+        print("NULL");
+        break;
+    }
+    print("GOT[" + str(i) + "]: " + line);
+    i = i + 1;
+}
+print("DONE");

@@ -1,0 +1,19 @@
+# t09_mix_parallel_plain.hto
+# concurrent 内混合 parallel fn 调用与普通 fn 调用。
+# 预期：普通 fn 在调用线程同步执行；parallel fn 在 worker 上执行并 await。
+parallel fn para(x) {
+    return x * 2;
+}
+fn plain(x) {
+    return x + 1;
+}
+concurrent {
+    let p = plain(10);
+    let f = para(5);
+    let r = await f;
+    print("plain:");
+    print(p);
+    print("para:");
+    print(r);
+}
+print("after");

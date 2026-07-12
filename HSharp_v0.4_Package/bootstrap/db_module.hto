@@ -1,0 +1,844 @@
+# H# Database Module
+# Provides SQLite database operations and basic ORM functionality
+
+# Constants
+let DB_INTEGER = "INTEGER";
+let DB_TEXT = "TEXT";
+let DB_REAL = "REAL";
+let DB_BLOB = "BLOB";
+let DB_NUMERIC = "NUMERIC";
+
+# ============================================
+# Database Connection Functions
+# ============================================
+
+# Connect to SQLite database
+fn db_open(path) {
+    return db_connect(path);
+}
+
+# Close database connection
+fn db_disconnect(conn_id) {
+    return db_close(conn_id);
+}
+
+# Check if connection is successful
+fn db_is_connected(result) {
+    if (result == nullptr) {
+        return false;
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "connected") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+# Get connection error message
+fn db_get_error(result) {
+    if (result == nullptr) {
+        return "";
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "error") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+# Get connection ID from result
+fn db_get_connection_id(result) {
+    if (result == nullptr) {
+        return "";
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "connection_id") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+# ============================================
+# SQL Execution Functions
+# ============================================
+
+# Execute SQL statement (INSERT, UPDATE, DELETE)
+fn db_run(conn_id, sql, params) {
+    if (params == nullptr) {
+        params = [];
+    }
+    return db_execute(conn_id, sql, params);
+}
+
+# Check if SQL execution was successful
+fn db_success(result) {
+    if (result == nullptr) {
+        return false;
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "success") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+# Get rows affected count
+fn db_rows_affected(result) {
+    if (result == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "rows_affected") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Get last insert ID
+fn db_last_insert_id(result) {
+    if (result == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "last_insert_id") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# ============================================
+# Query Functions
+# ============================================
+
+# Execute SELECT query and return all rows
+fn db_select(conn_id, sql, params) {
+    if (params == nullptr) {
+        params = [];
+    }
+    return db_query(conn_id, sql, params);
+}
+
+# Execute SELECT query and return single row
+fn db_select_one(conn_id, sql, params) {
+    if (params == nullptr) {
+        params = [];
+    }
+    return db_query_one(conn_id, sql, params);
+}
+
+# Get rows from query result
+fn db_get_rows(result) {
+    if (result == nullptr) {
+        return [];
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "rows") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+# Get columns from query result
+fn db_get_columns(result) {
+    if (result == nullptr) {
+        return [];
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "columns") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+# Get row count from query result
+fn db_row_count(result) {
+    if (result == nullptr) {
+        return 0;
+    }
+    let i = 0;
+    while (i < len(result)) {
+        let entry = result[i];
+        if (len(entry) >= 2 and entry[0] == "row_count") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+# Get value from row by column name
+fn db_get_value(row, column_name) {
+    if (row == nullptr or len(row) == 0) {
+        return nullptr;
+    }
+    let i = 0;
+    while (i < len(row)) {
+        let entry = row[i];
+        if (len(entry) >= 2 and entry[0] == column_name) {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return nullptr;
+}
+
+# Convert row to array of values
+fn db_row_to_array(row) {
+    if (row == nullptr) {
+        return [];
+    }
+    let values = [];
+    let i = 0;
+    while (i < len(row)) {
+        let entry = row[i];
+        if (len(entry) >= 2) {
+            push(values, entry[1]);
+        }
+        i = i + 1;
+    }
+    return values;
+}
+
+# ============================================
+# Transaction Functions
+# ============================================
+
+# Begin transaction
+fn db_transaction_begin(conn_id) {
+    return db_begin_transaction(conn_id);
+}
+
+# Commit transaction
+fn db_transaction_commit(conn_id) {
+    return db_commit(conn_id);
+}
+
+# Rollback transaction
+fn db_transaction_rollback(conn_id) {
+    return db_rollback(conn_id);
+}
+
+# Execute operations in a transaction
+fn db_transaction(conn_id, operations) {
+    let begin_result = db_transaction_begin(conn_id);
+    if (not db_success(begin_result)) {
+        return ["error", db_get_error(begin_result)];
+    }
+
+    # Execute operations (simplified - would need better error handling)
+    let i = 0;
+    while (i < len(operations)) {
+        let op = operations[i];
+        # Each operation is [sql, params]
+        let sql = op[0];
+        let params = op[1];
+        let result = db_execute(conn_id, sql, params);
+        if (not db_success(result)) {
+            db_transaction_rollback(conn_id);
+            return ["error", db_get_error(result)];
+        }
+        i = i + 1;
+    }
+
+    let commit_result = db_transaction_commit(conn_id);
+    if (not db_success(commit_result)) {
+        return ["error", db_get_error(commit_result)];
+    }
+
+    return ["success", true];
+}
+
+# ============================================
+# Table Management Functions
+# ============================================
+
+# Create table with columns definition
+fn db_table_create(conn_id, table_name, columns) {
+    return db_create_table(conn_id, table_name, columns);
+}
+
+# Drop table
+fn db_table_drop(conn_id, table_name) {
+    return db_drop_table(conn_id, table_name);
+}
+
+# Get list of tables
+fn db_tables_list(conn_id) {
+    let result = db_get_tables(conn_id);
+    if (db_success(result)) {
+        let i = 0;
+        while (i < len(result)) {
+            let entry = result[i];
+            if (len(entry) >= 2 and entry[0] == "tables") {
+                return entry[1];
+            }
+            i = i + 1;
+        }
+    }
+    return [];
+}
+
+# Get table schema information
+fn db_table_info(conn_id, table_name) {
+    let result = db_get_table_info(conn_id, table_name);
+    if (db_success(result)) {
+        let i = 0;
+        while (i < len(result)) {
+            let entry = result[i];
+            if (len(entry) >= 2 and entry[0] == "columns") {
+                return entry[1];
+            }
+            i = i + 1;
+        }
+    }
+    return [];
+}
+
+# Check if table exists
+fn db_table_exists(conn_id, table_name) {
+    let tables = db_tables_list(conn_id);
+    let i = 0;
+    while (i < len(tables)) {
+        if (tables[i] == table_name) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+# ============================================
+# Helper Functions for Building SQL
+# ============================================
+
+# Build INSERT statement
+fn db_build_insert(table_name, data) {
+    let columns = [];
+    let placeholders = [];
+    let values = [];
+    
+    let i = 0;
+    while (i < len(data)) {
+        let entry = data[i];
+        if (len(entry) >= 2) {
+            push(columns, str(entry[0]));
+            push(placeholders, "?");
+            push(values, entry[1]);
+        }
+        i = i + 1;
+    }
+    
+    let col_str = "";
+    let j = 0;
+    while (j < len(columns)) {
+        if (j > 0) {
+            col_str = col_str + ", ";
+        }
+        col_str = col_str + columns[j];
+        j = j + 1;
+    }
+    
+    let place_str = "";
+    j = 0;
+    while (j < len(placeholders)) {
+        if (j > 0) {
+            place_str = place_str + ", ";
+        }
+        place_str = place_str + placeholders[j];
+        j = j + 1;
+    }
+    
+    let sql = "INSERT INTO " + table_name + " (" + col_str + ") VALUES (" + place_str + ")";
+    return [sql, values];
+}
+
+# Build UPDATE statement
+fn db_build_update(table_name, data, where_clause, where_params) {
+    let set_parts = [];
+    let values = [];
+    
+    let i = 0;
+    while (i < len(data)) {
+        let entry = data[i];
+        if (len(entry) >= 2) {
+            push(set_parts, str(entry[0]) + " = ?");
+            push(values, entry[1]);
+        }
+        i = i + 1;
+    }
+    
+    let set_str = "";
+    let j = 0;
+    while (j < len(set_parts)) {
+        if (j > 0) {
+            set_str = set_str + ", ";
+        }
+        set_str = set_str + set_parts[j];
+        j = j + 1;
+    }
+    
+    let sql = "UPDATE " + table_name + " SET " + set_str;
+    if (len(where_clause) > 0) {
+        sql = sql + " WHERE " + where_clause;
+        # Append where params to values
+        let k = 0;
+        while (k < len(where_params)) {
+            push(values, where_params[k]);
+            k = k + 1;
+        }
+    }
+    
+    return [sql, values];
+}
+
+# Build DELETE statement
+fn db_build_delete(table_name, where_clause, where_params) {
+    let sql = "DELETE FROM " + table_name;
+    let values = [];
+    
+    if (len(where_clause) > 0) {
+        sql = sql + " WHERE " + where_clause;
+        let i = 0;
+        while (i < len(where_params)) {
+            push(values, where_params[i]);
+            i = i + 1;
+        }
+    }
+    
+    return [sql, values];
+}
+
+# Build SELECT statement
+fn db_build_select(table_name, columns, where_clause, where_params, order_by, limit) {
+    let col_str = "*";
+    if (len(columns) > 0) {
+        col_str = "";
+        let i = 0;
+        while (i < len(columns)) {
+            if (i > 0) {
+                col_str = col_str + ", ";
+            }
+            col_str = col_str + columns[i];
+            i = i + 1;
+        }
+    }
+    
+    let sql = "SELECT " + col_str + " FROM " + table_name;
+    let values = [];
+    
+    if (len(where_clause) > 0) {
+        sql = sql + " WHERE " + where_clause;
+        let i = 0;
+        while (i < len(where_params)) {
+            push(values, where_params[i]);
+            i = i + 1;
+        }
+    }
+    
+    if (len(order_by) > 0) {
+        sql = sql + " ORDER BY " + order_by;
+    }
+    
+    if (limit > 0) {
+        sql = sql + " LIMIT " + str(limit);
+    }
+    
+    return [sql, values];
+}
+
+# ============================================
+# CRUD Helper Functions
+# ============================================
+
+# Insert record
+fn db_insert(conn_id, table_name, data) {
+    let statement = db_build_insert(table_name, data);
+    let sql = statement[0];
+    let params = statement[1];
+    return db_execute(conn_id, sql, params);
+}
+
+# Update records
+fn db_update(conn_id, table_name, data, where_clause, where_params) {
+    if (where_params == nullptr) {
+        where_params = [];
+    }
+    let statement = db_build_update(table_name, data, where_clause, where_params);
+    let sql = statement[0];
+    let params = statement[1];
+    return db_execute(conn_id, sql, params);
+}
+
+# Delete records
+fn db_delete(conn_id, table_name, where_clause, where_params) {
+    if (where_params == nullptr) {
+        where_params = [];
+    }
+    let statement = db_build_delete(table_name, where_clause, where_params);
+    let sql = statement[0];
+    let params = statement[1];
+    return db_execute(conn_id, sql, params);
+}
+
+# Select records
+fn db_find(conn_id, table_name, columns, where_clause, where_params, order_by, limit) {
+    if (columns == nullptr) {
+        columns = [];
+    }
+    if (where_params == nullptr) {
+        where_params = [];
+    }
+    if (order_by == nullptr) {
+        order_by = "";
+    }
+    if (limit == nullptr) {
+        limit = 0;
+    }
+    
+    let statement = db_build_select(table_name, columns, where_clause, where_params, order_by, limit);
+    let sql = statement[0];
+    let params = statement[1];
+    return db_query(conn_id, sql, params);
+}
+
+# Find one record
+fn db_find_one(conn_id, table_name, columns, where_clause, where_params) {
+    if (columns == nullptr) {
+        columns = [];
+    }
+    if (where_params == nullptr) {
+        where_params = [];
+    }
+    
+    let statement = db_build_select(table_name, columns, where_clause, where_params, "", 1);
+    let sql = statement[0];
+    let params = statement[1];
+    return db_query_one(conn_id, sql, params);
+}
+
+# Find all records
+fn db_find_all(conn_id, table_name, columns, order_by, limit) {
+    return db_find(conn_id, table_name, columns, "", [], order_by, limit);
+}
+
+# ============================================
+# ORM (Object-Relational Mapping) Base
+# ============================================
+
+# Create an ORM model definition
+fn orm_model(name, table_name, fields) {
+    return [
+        ["name", name],
+        ["table", table_name],
+        ["fields", fields]
+    ];
+}
+
+# Get model name
+fn orm_get_name(model) {
+    let i = 0;
+    while (i < len(model)) {
+        let entry = model[i];
+        if (len(entry) >= 2 and entry[0] == "name") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+# Get model table name
+fn orm_get_table(model) {
+    let i = 0;
+    while (i < len(model)) {
+        let entry = model[i];
+        if (len(entry) >= 2 and entry[0] == "table") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return "";
+}
+
+# Get model fields
+fn orm_get_fields(model) {
+    let i = 0;
+    while (i < len(model)) {
+        let entry = model[i];
+        if (len(entry) >= 2 and entry[0] == "fields") {
+            return entry[1];
+        }
+        i = i + 1;
+    }
+    return [];
+}
+
+# Create a new record from model
+fn orm_create_record(conn_id, model, data) {
+    let table = orm_get_table(model);
+    return db_insert(conn_id, table, data);
+}
+
+# Find records by model
+fn orm_find(conn_id, model, where_clause, where_params, order_by, limit) {
+    let table = orm_get_table(model);
+    return db_find(conn_id, table, [], where_clause, where_params, order_by, limit);
+}
+
+# Find one record by model
+fn orm_find_one(conn_id, model, where_clause, where_params) {
+    let table = orm_get_table(model);
+    return db_find_one(conn_id, table, [], where_clause, where_params);
+}
+
+# Find by ID (assumes 'id' column exists)
+fn orm_find_by_id(conn_id, model, id) {
+    let table = orm_get_table(model);
+    return db_find_one(conn_id, table, [], "id = ?", [[nullptr, id]]);
+}
+
+# Update record by model
+fn orm_update(conn_id, model, data, where_clause, where_params) {
+    let table = orm_get_table(model);
+    return db_update(conn_id, table, data, where_clause, where_params);
+}
+
+# Delete record by model
+fn orm_delete(conn_id, model, where_clause, where_params) {
+    let table = orm_get_table(model);
+    return db_delete(conn_id, table, where_clause, where_params);
+}
+
+# Count records
+fn orm_count(conn_id, model, where_clause, where_params) {
+    let table = orm_get_table(model);
+    let sql = "SELECT COUNT(*) as count FROM " + table;
+    if (len(where_clause) > 0) {
+        sql = sql + " WHERE " + where_clause;
+    }
+    let result = db_query_one(conn_id, sql, where_params);
+    if (db_success(result)) {
+        let i = 0;
+        while (i < len(result)) {
+            let entry = result[i];
+            if (len(entry) >= 2 and entry[0] == "row") {
+                let row = entry[1];
+                let j = 0;
+                while (j < len(row)) {
+                    let field = row[j];
+                    if (len(field) >= 2 and field[0] == "count") {
+                        return field[1];
+                    }
+                    j = j + 1;
+                }
+            }
+            i = i + 1;
+        }
+    }
+    return 0;
+}
+
+# ============================================
+# Query Builder (Fluent Interface)
+# ============================================
+
+# Create a new query builder
+fn query_builder(conn_id, table_name) {
+    return [
+        ["conn_id", conn_id],
+        ["table", table_name],
+        ["columns", []],
+        ["where", ""],
+        ["where_params", []],
+        ["order_by", ""],
+        ["limit", 0],
+        ["offset", 0]
+    ];
+}
+
+# Set columns to select
+fn qb_select(qb, columns) {
+    let i = 0;
+    while (i < len(qb)) {
+        if (len(qb[i]) >= 2 and qb[i][0] == "columns") {
+            qb[i][1] = columns;
+        }
+        i = i + 1;
+    }
+    return qb;
+}
+
+# Add WHERE clause
+fn qb_where(qb, clause, params) {
+    let i = 0;
+    while (i < len(qb)) {
+        if (len(qb[i]) >= 2 and qb[i][0] == "where") {
+            qb[i][1] = clause;
+        } else if (len(qb[i]) >= 2 and qb[i][0] == "where_params") {
+            qb[i][1] = params;
+        }
+        i = i + 1;
+    }
+    return qb;
+}
+
+# Add ORDER BY
+fn qb_order_by(qb, order) {
+    let i = 0;
+    while (i < len(qb)) {
+        if (len(qb[i]) >= 2 and qb[i][0] == "order_by") {
+            qb[i][1] = order;
+        }
+        i = i + 1;
+    }
+    return qb;
+}
+
+# Set LIMIT
+fn qb_limit(qb, limit) {
+    let i = 0;
+    while (i < len(qb)) {
+        if (len(qb[i]) >= 2 and qb[i][0] == "limit") {
+            qb[i][1] = limit;
+        }
+        i = i + 1;
+    }
+    return qb;
+}
+
+# Execute the query
+fn qb_execute(qb) {
+    let conn_id = "";
+    let table = "";
+    let columns = [];
+    let where = "";
+    let where_params = [];
+    let order = "";
+    let limit = 0;
+    
+    let i = 0;
+    while (i < len(qb)) {
+        let entry = qb[i];
+        if (len(entry) >= 2) {
+            if (entry[0] == "conn_id") {
+                conn_id = entry[1];
+            } else if (entry[0] == "table") {
+                table = entry[1];
+            } else if (entry[0] == "columns") {
+                columns = entry[1];
+            } else if (entry[0] == "where") {
+                where = entry[1];
+            } else if (entry[0] == "where_params") {
+                where_params = entry[1];
+            } else if (entry[0] == "order_by") {
+                order = entry[1];
+            } else if (entry[0] == "limit") {
+                limit = entry[1];
+            }
+        }
+        i = i + 1;
+    }
+    
+    return db_find(conn_id, table, columns, where, where_params, order, limit);
+}
+
+# Execute and get one result
+fn qb_execute_one(qb) {
+    let conn_id = "";
+    let table = "";
+    let columns = [];
+    let where = "";
+    let where_params = [];
+    
+    let i = 0;
+    while (i < len(qb)) {
+        let entry = qb[i];
+        if (len(entry) >= 2) {
+            if (entry[0] == "conn_id") {
+                conn_id = entry[1];
+            } else if (entry[0] == "table") {
+                table = entry[1];
+            } else if (entry[0] == "columns") {
+                columns = entry[1];
+            } else if (entry[0] == "where") {
+                where = entry[1];
+            } else if (entry[0] == "where_params") {
+                where_params = entry[1];
+            }
+        }
+        i = i + 1;
+    }
+    
+    return db_find_one(conn_id, table, columns, where, where_params);
+}
+
+# ============================================
+# Utility Functions
+# ============================================
+
+# Escape string for SQL (basic implementation)
+fn db_escape_string(str) {
+    let result = "";
+    let i = 0;
+    while (i < len(str)) {
+        if (str[i] == "'") {
+            result = result + "''";
+        } else {
+            result = result + str[i];
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+# Format value for SQL
+fn db_format_value(value) {
+    if (value == nullptr) {
+        return "NULL";
+    }
+    if (typeof(value) == "string" or typeof(value) == "StringLiteral") {
+        return "'" + db_escape_string(str(value)) + "'";
+    }
+    return str(value);
+}
+
+# Helper: check type (simplified)
+fn typeof(value) {
+    if (value == nullptr) {
+        return "nullptr";
+    }
+    # This is simplified - proper type checking would need host support
+    return "unknown";
+}

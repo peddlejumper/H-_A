@@ -1,0 +1,144 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# common/ai_tutor.hto — AI 辅导引擎
+# 定位：学习引导而非代写。提供：错误解析、思路提示、知识点讲解、
+# 苏格拉底式提问。绝不直接给出完整答案代码。
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ───────────────────────── 错误解析 ─────────────────────────
+# 分析 H# 运行时错误文本，返回学习性解读
+fn ai_parse_error(err_text) {
+    let e = err_text;
+    # 语法错误
+    if (str_contains(e, "Syntax Error") or str_contains(e, "Expected")) {
+        return "【语法错误】编译器在解析时遇到了不符合语法的结构。\n\n学习建议：\n1. 检查报错位置附近是否缺少分号 ;、括号 () 或花括号 {}\n2. 确认关键字拼写（let / fn / if / for / while / class）\n3. H# 的 if 条件必须用括号包裹：if (x > 0) {...}\n\n请定位到报错行，逐字符核对语法。你能找到哪里不对吗？";
+    }
+    # 未定义变量
+    if (str_contains(e, "Undefined") or str_contains(e, "not defined")) {
+        return "【未定义标识符】使用了一个尚未声明的变量或函数。\n\n学习建议：\n1. 变量必须先用 let 声明再使用\n2. 检查变量名拼写是否一致（大小写敏感）\n3. 确认作用域——函数内部定义的变量在外部不可见\n\n思考：这个变量是在哪里声明的？它在当前作用域能被访问到吗？";
+    }
+    # 类型/运算错误
+    if (str_contains(e, "index out of bounds")) {
+        return "【数组越界】访问了数组中不存在的下标。\n\n学习建议：\n1. 数组下标从 0 开始，最大下标是 len(arr) - 1\n2. 访问前先判断 index < len(arr)\n3. 检查循环边界：for i in arr 还是 for i in [0, len(arr))?\n\n你的循环边界设对了吗？";
+    }
+    if (str_contains(e, "Function") and str_contains(e, "arguments")) {
+        return "【参数数量不匹配】调用函数时传入的参数个数与定义不一致。\n\n学习建议：\n1. 对照函数定义的参数列表\n2. 注意：H# 的方法 self 由运行时自动绑定，参数列表中不要写 self\n3. 确认每个参数都传了值\n\n数一数：定义了几个参数？调用时传了几个？";
+    }
+    if (str_contains(e, "not a function") or str_contains(e, "not callable")) {
+        return "【不可调用】尝试调用了一个非函数的值。\n\n学习建议：\n1. 确认该名字确实指向一个函数（fn 定义）\n2. 检查是否与变量同名冲突\n3. 类实例化用 ClassName() 或 new ClassName()\n\n这个名字指向的到底是什么类型的值？";
+    }
+    # 空指针
+    if (str_contains(e, "nullptr") or str_contains(e, "null") or str_contains(e, "None")) {
+        return "【空值问题】访问了一个为空的值。\n\n学习建议：\n1. H# 的空值是 nullptr，不是 null\n2. 使用前判断 if (x != nullptr)\n3. 追溯该值的来源：函数是否可能返回空？\n\n这个空值是从哪里来的？顺着赋值链路往上找。";
+    }
+    # 默认
+    return "【运行时错误】" + e + "\n\n学习建议：\n1. 阅读错误信息，定位到具体的行和操作\n2. 在出错前用 print 输出关键变量的值，观察状态\n3. 缩小问题范围：注释掉部分代码，逐步排查\n\n你能复现这个错误吗？最小的复现场景是什么？";
+}
+
+# ───────────────────────── 思路提示（按题目）─────────────────────────
+fn ai_hint(problem_id) {
+    let hints = {
+        "P001": "两数之和的思路：\n\n暴力法 O(n²)：两层循环枚举所有数对。\n优化法 O(n)：用字典（哈希表）记录 每个值→下标，遍历时查找 target - 当前值 是否已在字典中。\n\n问自己：我每次看到一个数 x，真正需要找的是什么？",
+        "P002": "反转链表的思路：\n\n需要三个指针：prev（已反转部分的头）、curr（当前节点）、next（暂存下一个）。\n每一步：先存 next = curr.next，再把 curr 指向 prev，然后 prev、curr 各前进一步。\n\n能不能用画图模拟一次三个指针的移动？",
+        "P003": "有效括号的思路：\n\n栈是天然的匹配工具。遇左括号入栈，遇右括号时：若栈空或栈顶不匹配→无效；否则弹栈。\n最后栈为空则有效。\n\n为什么用栈而不是队列？想想括号的嵌套结构。",
+        "P004": "斐波那契的思路：\n\n递归 fib(n) = fib(n-1) + fib(n-2) 最直观，但有大量重复计算。\n迭代法：用两个变量滚动前进，O(n) 时间 O(1) 空间。\n\n递归为什么慢？试着画出 fib(5) 的调用树，数数 fib(2) 被计算了几次。",
+        "P005": "二分查找的思路：\n\n前提：数组已有序。维护 left、right 两个边界。\n循环中取 mid = (left+right)/2，比较 nums[mid] 与 target：\n  相等→返回 mid；nums[mid] < target→left = mid+1；否则 right = mid-1。\n\n关键：边界更新是 mid+1 / mid-1，不是 mid。为什么？"
+    };
+    if (hints[problem_id] != nullptr) {
+        return hints[problem_id];
+    }
+    return "这道题暂无专门提示。\n\n通用思路：\n1. 先理解题意，用手算走一遍示例\n2. 想暴力解法，再考虑优化\n3. 识别问题类型（数组/链表/树/图/DP/贪心）\n4. 关注时间/空间复杂度\n\n你用手算验证过示例吗？";
+}
+
+# ───────────────────────── 代码静态分析（学习性反馈）─────────────────────────
+fn ai_review_code(code) {
+    let feedback = [];
+    # 检查常见学习性问题（非 bug，而是习惯/可读性）
+    if (str_contains(code, "let ") == false) {
+        push(feedback, "代码中没有 let 声明——是否所有变量都已定义？未声明的变量会导致运行时错误。");
+    }
+    if (str_contains(code, "print(") and str_contains(code, "return") == false) {
+        push(feedback, "看到 print 但没有 return。调试用的 print 很好，但记得最终用 return 返回结果。");
+    }
+    if (str_contains(code, "while (true)") or str_contains(code, "while(true)")) {
+        push(feedback, "检测到 while(true) 死循环——确认循环体内有 break 或改变条件的逻辑，否则会无限运行。");
+    }
+    if (str_contains(code, "== false") or str_contains(code, "== true")) {
+        push(feedback, "建议：用 not x 代替 x == false，用 x 代替 x == true，更简洁也更符合习惯。");
+    }
+    if (len(feedback) == 0) {
+        push(feedback, "静态检查未发现明显问题。建议：\n1. 用边界值测试（空输入、最小/最大输入）\n2. 思考是否有遗漏的边界情况\n3. 确认变量命名清晰\n\n你测试过空数组的情况吗？");
+    }
+    return feedback;
+}
+
+# ───────────────────────── 对话响应（核心入口）─────────────────────────
+# mode: "error" | "hint" | "review" | "concept" | "chat"
+fn ai_respond(mode, query, context) {
+    if (mode == "error") {
+        return ai_parse_error(query);
+    }
+    if (mode == "hint") {
+        return ai_hint(query);
+    }
+    if (mode == "review") {
+        let fb = ai_review_code(query);
+        let msg = "【代码学习反馈】\n\n";
+        let i = 0;
+        while (i < len(fb)) {
+            msg = msg + "• " + fb[i] + "\n";
+            i = i + 1;
+        }
+        return msg;
+    }
+    if (mode == "concept") {
+        return ai_explain_concept(query);
+    }
+    # chat：通用引导
+    return "我是你的编程学习助手，帮助你理解概念、分析错误、理清思路——但我不会直接替你写代码。\n\n你可以问我：\n• 「解释 [概念]」——比如「解释递归」「解释字典」\n• 「提示 [题号]」——比如「提示 P001」\n• 把报错信息发给我，我帮你分析\n• 把代码发给我，我给学习性反馈\n\n你现在卡在哪里？";
+}
+
+# ───────────────────────── 概念讲解库 ─────────────────────────
+fn ai_explain_concept(topic) {
+    let t = topic;
+    let concepts = {
+        "递归": "【递归】函数调用自身来解决问题的方法。\n\n两个必备要素：\n1. 基线条件（base case）：停止递归的最简单情形\n2. 递归条件：把问题缩小后调用自身\n\n经典例子：阶乘\n  fn fact(n) {\n      if (n <= 1) { return 1; }      // 基线\n      return n * fact(n - 1);         // 递归\n  }\n\n关键：信任递归——假设子问题已正确解决，在此基础上构建当前问题的解。\n\n练习：用递归写一个计算 1+2+...+n 的函数。基线条件是什么？",
+        "字典": "【字典 / 哈希表】用键存储和查找值的数据结构，查找 O(1)。\n\nH# 中：let d = {\"name\": \"H#\", \"ver\": 4};\n访问：d[\"name\"]；赋值：d[\"x\"] = 10。\n\n核心思想：通过哈希函数把键映射到存储位置，实现快速查找。\n\n典型应用：计数、去重、两数之和（值→下标映射）。\n\n练习：用字典统计一个数组中每个元素出现的次数。",
+        "栈": "【栈】后进先出（LIFO）的数据结构。\n\n操作：push 入栈，pop 出栈，只能在一端（栈顶）操作。\n\nH# 用数组模拟：push(arr, x) 入栈，pop(arr) 出栈。\n\n典型应用：括号匹配、表达式求值、DFS、撤销功能。\n\n为什么括号匹配用栈？因为括号是嵌套的，最近遇到的左括号必须最先被匹配——正是 LIFO。\n\n练习：用栈判断 \"(()())\" 是否匹配。",
+        "循环": "【循环】重复执行一段代码。\n\nH# 有三种：\n1. for x in iterable {...}：遍历集合\n2. while (cond) {...}：条件为真时重复\n3. for i, v in arr {...}：同时取下标和值\n\n常见错误：\n• 死循环：while 条件永不变假\n• 越界：循环次数超出数组长度\n• 差一错误：边界多一次或少一次\n\n练习：用 while 求 1 到 100 的和。终止条件怎么写？",
+        "函数": "【函数】封装可复用的代码块。\n\n定义：fn name(params) { ... return val; }\n调用：name(args)\n\n要点：\n1. 参数是函数内部的局部变量\n2. return 返回值并结束函数；无 return 则返回空\n3. 函数可以嵌套调用，也可以递归\n4. Lambda：fn(x) { return x*2; } 是匿名函数，可赋值给变量\n\n好的函数：单一职责、命名清晰、参数不宜过多。\n\n练习：写一个函数 is_prime(n) 判断 n 是否为素数。",
+        "类": "【类与对象】面向对象编程的基础。\n\n类是模板，对象是实例。\n\nH# 中：\n  class Dog {\n      private let name = \"\";\n      fn init(name) { self.name = name; }\n      fn speak() { print(self.name + \" says woof\"); }\n  }\n  let d = Dog(); d.init(\"Rex\"); d.speak();\n\n要点：\n1. self 指向当前实例（运行时自动绑定，参数列表不写 self）\n2. extends 实现继承，子类获得父类的方法\n3. private 字段用 private let 声明\n\n练习：写一个 Cat 类继承 Animal，实现自己的 speak 方法。"
+    };
+    # 模糊匹配
+    let keys = ["递归", "字典", "栈", "循环", "函数", "类"];
+    let i = 0;
+    while (i < len(keys)) {
+        if (str_contains(t, keys[i])) {
+            return concepts[keys[i]];
+        }
+        i = i + 1;
+    }
+    return "我目前能讲解这些概念：递归、字典、栈、循环、函数、类。\n\n请告诉我你想了解哪个，比如「解释递归」。\n\n学习建议：概念不是背下来的，而是通过写代码理解的。挑一个概念，找一道相关题目练手。";
+}
+
+# ───────────────────────── 工具：字符串包含 ─────────────────────────
+fn str_contains(haystack, needle) {
+    if (needle == "") { return true; }
+    let hl = len(haystack);
+    let nl = len(needle);
+    if (nl > hl) { return false; }
+    let i = 0;
+    while (i <= hl - nl) {
+        let j = 0;
+        let match = true;
+        while (j < nl) {
+            if (substring(haystack, i + j, 1) != substring(needle, j, 1)) {
+                match = false;
+                j = nl;
+            }
+            j = j + 1;
+        }
+        if (match) { return true; }
+        i = i + 1;
+    }
+    return false;
+}

@@ -1,0 +1,27 @@
+# Probe: new ClassName() inside a lambda fails when ClassName is a free var
+class C { fn m() { return "ok"; } }
+
+# Top-level new — should work
+let x = new C();
+print("toplevel_new: " + x.m());
+
+# Inside a lambda — LOAD_NAME vs LOAD_DEREF bug?
+let f = fn() {
+    let y = new C();
+    return y.m();
+};
+print("lambda_new: " + f());
+
+# Inside a named function
+fn g() {
+    let z = new C();
+    return z.m();
+}
+print("func_new: " + g());
+
+# Counter-test: static method call inside lambda (uses emit_load_name)
+let h = fn() {
+    return C;   # just reference the class
+};
+print("lambda_ref: " + type(h()));
+print("DONE");

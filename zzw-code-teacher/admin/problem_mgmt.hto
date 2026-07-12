@@ -1,0 +1,257 @@
+# admin/problem_mgmt.hto
+# 题目管理: 列表 + 新建 / 编辑 / 删除 + 测试数据
+
+import "client/ide_theme.hto";
+import "admin/admin_app.hto";
+import "shared/json_utils.hto";
+
+let _pm_widgets = nullptr;
+let _pm_cache = [];
+let _pm_current = nullptr;
+let _pm_dirty = false;
+
+fn build(parent, x, y, w, h) {
+    let t = ide_theme();
+    let panel = new Panel();
+    panel.init_panel("problem_mgmt");
+    panel.set_pos(x, y);
+    panel.set_size(w, h);
+    ide_paint_panel(panel, "soft");
+    parent.add_child(panel);
+    # 标题
+    let title = new Label();
+    title.init_label("📚 题目管理");
+    title.set_pos(20, 10);
+    title.set_size(w - 40, 26);
+    title.set_color(t["accent"]);
+    title.set_font_size(15);
+    panel.add_child(title);
+    # 左:列表
+    let list = new ListBox();
+    list.init_listbox();
+    list.set_pos(20, 46);
+    list.set_size(340, h - 60);
+    panel.add_child(list);
+    # 右上:按钮栏
+    let btn_new = new Button();
+    btn_new.init_button("➕ 新建");
+    btn_new.set_pos(380, 46);
+    btn_new.set_size(80, 24);
+    panel.add_child(btn_new);
+    let btn_save = new Button();
+    btn_save.init_button("💾 保存");
+    btn_save.set_pos(470, 46);
+    btn_save.set_size(80, 24);
+    panel.add_child(btn_save);
+    let btn_del = new Button();
+    btn_del.init_button("🗑 删除");
+    btn_del.set_pos(560, 46);
+    btn_del.set_size(80, 24);
+    panel.add_child(btn_del);
+    # 右:详情编辑
+    let f_id = new Label(); f_id.init_label("ID:"); f_id.set_pos(380, 80); f_id.set_size(80, 20);
+    let id_in = new TextBox(); id_in.init_textbox(); id_in.set_pos(460, 80); id_in.set_size(700, 24);
+    let f_t = new Label(); f_t.init_label("标题:"); f_t.set_pos(380, 110); f_t.set_size(80, 20);
+    let title_in = new TextBox(); title_in.init_textbox(); title_in.set_pos(460, 110); title_in.set_size(700, 24);
+    let f_d = new Label(); f_d.init_label("难度:"); f_d.set_pos(380, 140); f_d.set_size(80, 20);
+    let diff_lb = new ListBox(); diff_lb.init_listbox(); diff_lb.set_pos(460, 138); diff_lb.set_size(200, 22);
+    diff_lb.add_item("easy"); diff_lb.add_item("medium"); diff_lb.add_item("hard");
+    let f_tags = new Label(); f_tags.init_label("标签:"); f_tags.set_pos(680, 140); f_tags.set_size(60, 20);
+    let tags_in = new TextBox(); tags_in.init_textbox(); tags_in.set_pos(740, 140); tags_in.set_size(420, 24);
+    let f_desc = new Label(); f_desc.init_label("描述:"); f_desc.set_pos(380, 170); f_desc.set_size(80, 20);
+    let desc_in = new TextBox(); desc_in.init_textbox(); desc_in.set_pos(460, 170); desc_in.set_size(700, 60); desc_in.set_multi_line(true);
+    let f_in = new Label(); f_in.init_label("输入:"); f_in.set_pos(380, 240); f_in.set_size(80, 20);
+    let input_in = new TextBox(); input_in.init_textbox(); input_in.set_pos(460, 240); input_in.set_size(700, 40); input_in.set_multi_line(true);
+    let f_out = new Label(); f_out.init_label("输出:"); f_out.set_pos(380, 290); f_out.set_size(80, 20);
+    let output_in = new TextBox(); output_in.init_textbox(); output_in.set_pos(460, 290); output_in.set_size(700, 40); output_in.set_multi_line(true);
+    let f_sample = new Label(); f_sample.init_label("样例JSON:"); f_sample.set_pos(380, 340); f_sample.set_size(80, 20);
+    let sample_in = new TextBox(); sample_in.init_textbox(); sample_in.set_pos(460, 340); sample_in.set_size(700, 40); sample_in.set_multi_line(true);
+    let f_test = new Label(); f_test.init_label("测试JSON:"); f_test.set_pos(380, 390); f_test.set_size(80, 20);
+    let test_in = new TextBox(); test_in.init_textbox(); test_in.set_pos(460, 390); test_in.set_size(700, 60); test_in.set_multi_line(true);
+    let f_tmpl = new Label(); f_tmpl.init_label("模板:"); f_tmpl.set_pos(380, 460); f_tmpl.set_size(80, 20);
+    let tmpl_in = new TextBox(); tmpl_in.init_textbox(); tmpl_in.set_pos(460, 460); tmpl_in.set_size(700, 60); tmpl_in.set_multi_line(true);
+    let f_lim = new Label(); f_lim.init_label("限制:"); f_lim.set_pos(380, 530); f_lim.set_size(80, 20);
+    let lim_in = new TextBox(); lim_in.init_textbox(); lim_in.set_pos(460, 530); lim_in.set_size(200, 24);
+    let f_mem = new Label(); f_mem.init_label("内存:"); f_mem.set_pos(680, 530); f_mem.set_size(60, 20);
+    let mem_in = new TextBox(); mem_in.init_textbox(); mem_in.set_pos(740, 530); mem_in.set_size(200, 24);
+    # 状态
+    let status = new Label(); status.init_label(""); status.set_pos(380, 560); status.set_size(700, 20);
+    status.set_color(t["warning"]);
+    # 加入面板
+    let add = [
+        f_id, id_in, f_t, title_in, f_d, diff_lb, f_tags, tags_in,
+        f_desc, desc_in, f_in, input_in, f_out, output_in,
+        f_sample, sample_in, f_test, test_in, f_tmpl, tmpl_in,
+        f_lim, lim_in, f_mem, mem_in, status
+    ];
+    let i = 0;
+    while (i < len(add)) {
+        panel.add_child(add[i]);
+        i = i + 1;
+    }
+    _pm_widgets = {
+        "panel": panel,
+        "list": list,
+        "id_in": id_in,
+        "title_in": title_in,
+        "diff_lb": diff_lb,
+        "tags_in": tags_in,
+        "desc_in": desc_in,
+        "input_in": input_in,
+        "output_in": output_in,
+        "sample_in": sample_in,
+        "test_in": test_in,
+        "tmpl_in": tmpl_in,
+        "lim_in": lim_in,
+        "mem_in": mem_in,
+        "status": status,
+        "btn_new": btn_new,
+        "btn_save": btn_save,
+        "btn_del": btn_del
+    };
+    btn_new.onClick = fn() { _new(); };
+    btn_save.onClick = fn() { _save(); };
+    btn_del.onClick = fn() { _delete(); };
+    list.onChange = fn() { _on_select(); };
+    refresh();
+    return _pm_widgets;
+}
+
+fn refresh() {
+    let resp = admin_get("/api/problems");
+    let data = admin_parse(resp);
+    if (data != nullptr and data["ok"]) {
+        _pm_cache = data["data"];
+        let lb = _pm_widgets["list"];
+        lb.clear();
+        let i = 0;
+        while (i < len(_pm_cache)) {
+            let p = _pm_cache[i];
+            let icon = "🟢";
+            if (p["difficulty"] == "medium") { icon = "🟡"; }
+            if (p["difficulty"] == "hard") { icon = "🔴"; }
+            lb.add_item(icon + " " + p["title"]);
+            i = i + 1;
+        }
+        if (len(_pm_cache) == 0) { lb.add_item("(无题目)"); }
+    }
+}
+
+fn _on_select() {
+    let idx = _pm_widgets["list"].get_selected();
+    if (idx >= 0 and idx < len(_pm_cache)) {
+        let pid = _pm_cache[idx]["id"];
+        let resp = admin_get("/api/problems/" + pid);
+        let data = admin_parse(resp);
+        if (data != nullptr and data["ok"]) {
+            let p = data["data"];
+            _pm_current = p;
+            _pm_widgets["id_in"].set_text(p["id"]);
+            _pm_widgets["title_in"].set_text(p["title"]);
+            let d = 0;
+            if (p["difficulty"] == "medium") { d = 1; }
+            if (p["difficulty"] == "hard") { d = 2; }
+            _pm_widgets["diff_lb"].set_selected(d);
+            let tags_text = "";
+            let i = 0;
+            while (i < len(p["tags"])) {
+                if (i > 0) { tags_text = tags_text + ","; }
+                tags_text = tags_text + p["tags"][i];
+                i = i + 1;
+            }
+            _pm_widgets["tags_in"].set_text(tags_text);
+            _pm_widgets["desc_in"].set_text(p["description"]);
+            _pm_widgets["input_in"].set_text(p["input_format"]);
+            _pm_widgets["output_in"].set_text(p["output_format"]);
+            _pm_widgets["sample_in"].set_text(json_stringify(p["samples"]));
+            _pm_widgets["test_in"].set_text(json_stringify(p["test_cases"]));
+            _pm_widgets["tmpl_in"].set_text(p["template"]);
+            _pm_widgets["lim_in"].set_text(str(p["time_limit_ms"]));
+            _pm_widgets["mem_in"].set_text(str(p["memory_limit_kb"]));
+        }
+    }
+}
+
+fn _new() {
+    _pm_current = nullptr;
+    _pm_widgets["id_in"].set_text("(新建后自动生成)");
+    _pm_widgets["title_in"].set_text("");
+    _pm_widgets["diff_lb"].set_selected(0);
+    _pm_widgets["tags_in"].set_text("");
+    _pm_widgets["desc_in"].set_text("");
+    _pm_widgets["input_in"].set_text("");
+    _pm_widgets["output_in"].set_text("");
+    _pm_widgets["sample_in"].set_text("[]");
+    _pm_widgets["test_in"].set_text("[]");
+    _pm_widgets["tmpl_in"].set_text("");
+    _pm_widgets["lim_in"].set_text("2000");
+    _pm_widgets["mem_in"].set_text("65536");
+}
+
+fn _save() {
+    let w = _pm_widgets;
+    let title = w["title_in"].get_text();
+    if (title == "") {
+        w["status"].set_text("❌ 标题不能为空");
+        w["status"].set_color("#F48771");
+    } else {
+        let diff = "easy";
+        let di = w["diff_lb"].get_selected();
+        if (di == 1) { diff = "medium"; }
+        if (di == 2) { diff = "hard"; }
+        let tags_text = w["tags_in"].get_text();
+        let tags = [];
+        if (tags_text != "") {
+            tags = str_split(tags_text, ",");
+        }
+        let samples = json_parse(w["sample_in"].get_text());
+        if (samples == nullptr) { samples = []; }
+        let tests = json_parse(w["test_in"].get_text());
+        if (tests == nullptr) { tests = []; }
+        let body = {
+            "title": title,
+            "difficulty": diff,
+            "tags": tags,
+            "description": w["desc_in"].get_text(),
+            "input_format": w["input_in"].get_text(),
+            "output_format": w["output_in"].get_text(),
+            "samples": samples,
+            "test_cases": tests,
+            "template": w["tmpl_in"].get_text(),
+            "time_limit_ms": int(w["lim_in"].get_text()),
+            "memory_limit_kb": int(w["mem_in"].get_text())
+        };
+        let body_text = json_stringify(body);
+        let resp = nullptr;
+        if (_pm_current == nullptr) {
+            resp = admin_post("/api/problems", body_text);
+        } else {
+            resp = admin_put("/api/problems/" + _pm_current["id"], body_text);
+        }
+        let data = admin_parse(resp);
+        if (data == nullptr or not data["ok"]) {
+            w["status"].set_text("❌ 保存失败: " + http_get_body(resp));
+            w["status"].set_color("#F48771");
+        } else {
+            w["status"].set_text("✅ 保存成功");
+            w["status"].set_color("#4EC9B0");
+            refresh();
+        }
+    }
+}
+
+fn _delete() {
+    if (_pm_current == nullptr) {
+        _pm_widgets["status"].set_text("⚠ 请先选择题目");
+    } else {
+        let resp = admin_delete("/api/problems/" + _pm_current["id"]);
+        let data = admin_parse(resp);
+        if (data == nullptr or not data["ok"]) {
+            _pm_widgets["status"].set_text("❌ 删除失败");
+        } else {
+            _pm_widgets["status"].set_text("✅ 已删除");
+            _pm_current = nullptr;
+            refresh();
+        }
+    }
+}

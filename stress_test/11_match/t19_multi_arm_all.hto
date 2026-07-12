@@ -1,0 +1,41 @@
+# t19 - multi-arm match combining all pattern kinds
+union Tree {
+    Leaf: v;
+    Node: l, r;
+}
+class Custom { }
+
+fn describe(x) {
+    return match x {
+        0 => "zero",
+        "hi" => "greeting",
+        true => "bool-true",
+        null => "null",
+        Leaf(v) => "leaf:" + str(v),
+        Node(l, r) => "node",
+        is int as n => "int:" + str(n),
+        is str as s => "str:" + s,
+        is list as l => "list:" + str(len(l)),
+        is dict as d => "dict:" + str(len(d)),
+        is bool => "bool-other",
+        is null => "null-type",
+        is Custom => "custom-class",
+        chan send(_) => "chan-send",
+        chan recv(v) => "chan-recv:" + str(v),
+        chan close => "chan-closed",
+        _ => "catchall"
+    };
+}
+print("t19_zero:" + describe(0));
+print("t19_hi:" + describe("hi"));
+print("t19_true:" + describe(true));
+print("t19_null:" + describe(null));
+print("t19_leaf:" + describe(Tree{Leaf: 7}));
+print("t19_node:" + describe(Tree{Node: 1, 2}));
+print("t19_int:" + describe(42));
+print("t19_str:" + describe("ok"));
+print("t19_list:" + describe([1,2]));
+print("t19_dict:" + describe({"a":1}));
+print("t19_chan:" + describe(chan_new(0)));
+print("t19_custom:" + describe(new Custom()));
+print("t19_catchall:" + describe(3.14));

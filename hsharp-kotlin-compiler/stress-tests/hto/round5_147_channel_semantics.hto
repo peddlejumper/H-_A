@@ -1,0 +1,793 @@
+# round5_147_channel_semantics.hto — 测试智能体 Round 5 #147
+# 领域: Channel 语义 (Channel Semantics)
+# H# v0.4.1
+#
+# 已知源码事实 (HValue.kt HChannel / HVM.kt / HNativeBridge.kt / WorkerPool.kt):
+#   - chan_new(N): N=0 → 无界 (LinkedBlockingQueue); N>0 → 有界 (ArrayBlockingQueue)
+#     N<0 → 视为 0 (无界)。 !! H# 无法表达真正的无缓冲 (rendezvous) channel
+#   - chan_send(ch, v): 阻塞; closed channel 上 send 抛 HSharpException("send on closed channel")
+#   - chan_recv(ch): 阻塞; closed 且 drained 后 recv 抛 HSharpException (不返回 null/零值)
+#   - chan_try_send(ch, v): closed 时抛异常 (非返回 false); 满时返回 false
+#   - chan_try_recv(ch): 空返回 null; closed+drained 也返回 null (不抛, 不区分 closed)
+#   - chan_close(ch): 幂等 (不抛); 内部 drainTo + re-offer
+#   - chan_size(ch): 当前缓冲数
+#   - HChannel.recv(): finally 子句在 closed&&isEmpty 时抛 — 可能在 poll 取走值后抛 (丢值)
+#   - HChannel.close(): drainTo + re-offer, 与被阻塞 sender 竞争可能丢值
+#   - parallel fn: STORE_NAME 写 worker 本地 env, 共享全局写不可见
+#   - ConcurrentScope.joinPendingOnly 跳过已 settled 的 cell
+#   - 无 select / 无 timeout / 无 for-in channel 迭代 (FOR_ITER 抛 unsupported iterable)
+#   - Chan<int> 泛型声明语法不被解析器接受; 实际语法是 chan_new(N)
+#
+# 本测试覆盖 S1..S15 共 15 个子领域, 每个子领域 2-4 个用例。
+# 所有"应阻塞"场景用 "main 旋转 try_recv + close 唤醒" 模式避免挂起。
+# 用 try/catch 包裹每个用例避免整体中止；打印 "Sxx:" 前缀, 预期值在注释。
+
+let __stats = [0, 0];
+fn check(name, cond, detail) {
+    if (cond) {
+        print("OK   " + name);
+        __stats[0] = __stats[0] + 1;
+    } else {
+        print("FAIL " + name + "  " + detail);
+        __stats[1] = __stats[1] + 1;
+    }
+}
+
+# ============================================================
+# S1: 基本 send/recv — 单发单收, 顺序正确性
+# ============================================================
+print("=== S1 basic send/recv ===");
+
+# S1.1: 单条 int 消息 send→recv
+let s1_ch1 = chan_new(2);
+chan_send(s1_ch1, 42);
+check("S1.1_single_int_recv", chan_recv(s1_ch1) == 42, "expected 42");
+
+# S1.2: 多条 int 消息 FIFO 顺序
+let s1_ch2 = chan_new(4);
+chan_send(s1_ch2, 1);
+chan_send(s1_ch2, 2);
+chan_send(s1_ch2, 3);
+chan_send(s1_ch2, 4);
+check("S1.2_fifo_order", chan_recv(s1_ch2) == 1 && chan_recv(s1_ch2) == 2 &&
+     chan_recv(s1_ch2) == 3 && chan_recv(s1_ch2) == 4, "expected 1,2,3,4 FIFO");
+
+# S1.3: 字符串消息
+let s1_ch3 = chan_new(2);
+chan_send(s1_ch3, "hello");
+chan_send(s1_ch3, "world");
+check("S1.3_string_msgs", chan_recv(s1_ch3) == "hello" && chan_recv(s1_ch3) == "world", "str fifo");
+
+# S1.4: 无界 channel (cap=0) 多消息
+let s1_ch4 = chan_new(0);
+let i = 0;
+while (i < 10) { chan_send(s1_ch4, i * 10); i = i + 1; }
+let s1_sum = 0;
+let j = 0;
+while (j < 10) { s1_sum = s1_sum + chan_recv(s1_ch4); j = j + 1; }
+check("S1.4_unbounded_10_msgs", s1_sum == 450, "sum 0..90 step10 = 450, got " + str(s1_sum));
+
+# ============================================================
+# S2: close 后 recv — close+drained 抛异常 (非返回 null)
+# ============================================================
+print("=== S2 recv after close ===");
+
+# S2.1: close 后立即 recv (无缓冲数据) → 应抛异常
+let s2_ch1 = chan_new(2);
+chan_close(s2_ch1);
+let s2_r1 = "no-throw";
+try { chan_recv(s2_ch1); } catch (e) { s2_r1 = "caught:" + e; }
+check("S2.1_recv_closed_empty_throws", s2_r1 == "caught:recv on closed channel",
+      "got " + s2_r1);
+
+# S2.2: close 后仍有缓冲数据 → 应先 drain 再抛
+let s2_ch2 = chan_new(3);
+chan_send(s2_ch2, "a");
+chan_send(s2_ch2, "b");
+chan_close(s2_ch2);
+let s2_v1 = chan_recv(s2_ch2);
+let s2_v2 = chan_recv(s2_ch2);
+let s2_r2 = "no-throw";
+try { chan_recv(s2_ch2); } catch (e) { s2_r2 = "caught:" + e; }
+check("S2.2_drain_then_throw", s2_v1 == "a" && s2_v2 == "b" &&
+     s2_r2 == "caught:recv on closed channel",
+     "v1=" + str(s2_v1) + " v2=" + str(s2_v2) + " r=" + s2_r2);
+
+# S2.3: close 后 try_recv (非阻塞) 在 drained 上返回 null (不抛)
+let s2_ch3 = chan_new(1);
+chan_send(s2_ch3, 99);
+chan_close(s2_ch3);
+let s2_t1 = chan_try_recv(s2_ch3);
+let s2_t2 = chan_try_recv(s2_ch3);
+check("S2.3_try_recv_drained_returns_null", s2_t1 == 99 && s2_t2 == null,
+      "t1=" + str(s2_t1) + " t2=" + str(s2_t2));
+
+# S2.4: 未 close 的空 channel try_recv 返回 null
+let s2_ch4 = chan_new(2);
+check("S2.4_try_recv_open_empty_null", chan_try_recv(s2_ch4) == null, "expected null");
+
+# ============================================================
+# S3: close 后 send — 应抛异常
+# ============================================================
+print("=== S3 send after close ===");
+
+# S3.1: close 后 chan_send 抛异常
+let s3_ch1 = chan_new(1);
+chan_close(s3_ch1);
+let s3_r1 = "no-throw";
+try { chan_send(s3_ch1, 1); } catch (e) { s3_r1 = "caught:" + e; }
+check("S3.1_send_after_close_throws", s3_r1 == "caught:send on closed channel",
+      "got " + s3_r1);
+
+# S3.2: close 后 chan_try_send 也抛异常 (非返回 false)
+let s3_ch2 = chan_new(1);
+chan_close(s3_ch2);
+let s3_r2 = "no-throw";
+try { chan_try_send(s3_ch2, 1); } catch (e) { s3_r2 = "caught:" + e; }
+check("S3.2_try_send_after_close_throws", s3_r2 == "caught:send on closed channel",
+      "got " + s3_r2);
+
+# S3.3: send 后 close 后 send — 第一条可 recv, 第二条 send 抛
+let s3_ch3 = chan_new(2);
+chan_send(s3_ch3, "first");
+chan_close(s3_ch3);
+let s3_r3 = "no-throw";
+try { chan_send(s3_ch3, "second"); } catch (e) { s3_r3 = "caught:" + e; }
+check("S3.3_send_after_close_with_buffered", chan_recv(s3_ch3) == "first" &&
+     s3_r3 == "caught:send on closed channel", "r=" + s3_r3);
+
+# ============================================================
+# S4: 重复 close — 应幂等安全
+# ============================================================
+print("=== S4 repeated close ===");
+
+# S4.1: 多次 close 不抛
+let s4_ch1 = chan_new(1);
+chan_close(s4_ch1);
+let s4_r1a = "no-throw";
+try { chan_close(s4_ch1); } catch (e) { s4_r1a = "caught:" + e; }
+let s4_r1b = "no-throw";
+try { chan_close(s4_ch1); } catch (e) { s4_r1b = "caught:" + e; }
+let s4_r1c = "no-throw";
+try { chan_close(s4_ch1); } catch (e) { s4_r1c = "caught:" + e; }
+check("S4.1_triple_close_idempotent", s4_r1a == "no-throw" && s4_r1b == "no-throw" &&
+     s4_r1c == "no-throw", "a=" + s4_r1a + " b=" + s4_r1b + " c=" + s4_r1c);
+
+# S4.2: 有数据时 close→close→recv 仍可 drain
+let s4_ch2 = chan_new(2);
+chan_send(s4_ch2, 1);
+chan_send(s4_ch2, 2);
+chan_close(s4_ch2);
+chan_close(s4_ch2);
+chan_close(s4_ch2);
+check("S4.2_drain_after_multi_close", chan_recv(s4_ch2) == 1 && chan_recv(s4_ch2) == 2,
+      "expected 1,2 after 3x close");
+
+# S4.3: close 后 size 仍反映缓冲数
+let s4_ch3 = chan_new(3);
+chan_send(s4_ch3, 10);
+chan_send(s4_ch3, 20);
+chan_close(s4_ch3);
+check("S4.3_size_after_close", chan_size(s4_ch3) == 2, "size=" + str(chan_size(s4_ch3)));
+
+# ============================================================
+# S5: 多 producer 单 consumer — 消息完整性
+# ============================================================
+print("=== S5 multi-producer single-consumer ===");
+
+# S5.1: 2 producer 各发 5 条, consumer 收 10 条求和
+parallel fn s5_prod(ch, start, cnt) {
+    let k = 0;
+    while (k < cnt) {
+        chan_send(ch, start + k);
+        k = k + 1;
+    }
+    return "p-done";
+}
+let s5_ch1 = chan_new(0);
+let s5_f1 = s5_prod(s5_ch1, 0, 5);
+let s5_f2 = s5_prod(s5_ch1, 100, 5);
+let s5_sum = 0;
+let s5_n = 0;
+while (s5_n < 10) {
+    s5_sum = s5_sum + chan_recv(s5_ch1);
+    s5_n = s5_n + 1;
+}
+let s5_da = await s5_f1;
+let s5_db = await s5_f2;
+# 0..4 sum=10, 100..104 sum=510, total=520
+check("S5.1_two_producers_sum", s5_sum == 520 && s5_n == 10,
+      "sum=" + str(s5_sum) + " n=" + str(s5_n));
+
+# S5.2: 3 producer 各发 3 条, consumer 收 9 条完整性
+parallel fn s5_prod3(ch, base) {
+    chan_send(ch, base);
+    chan_send(ch, base + 1);
+    chan_send(ch, base + 2);
+    return base;
+}
+let s5_ch2 = chan_new(0);
+let s5_g1 = s5_prod3(s5_ch2, 1000);
+let s5_g2 = s5_prod3(s5_ch2, 2000);
+let s5_g3 = s5_prod3(s5_ch2, 3000);
+let s5_seen = {};
+let s5_m = 0;
+while (s5_m < 9) {
+    let v = chan_recv(s5_ch2);
+    s5_seen[v] = 1;
+    s5_m = s5_m + 1;
+}
+await s5_g1; await s5_g2; await s5_g3;
+check("S5.2_three_producers_distinct", len(s5_seen) == 9,
+      "distinct=" + str(len(s5_seen)));
+
+# S5.3: 多 producer + close 协调 — 最后一个 producer close
+parallel fn s5_prod_close(ch, id, cnt) {
+    let k = 0;
+    while (k < cnt) { chan_send(ch, id * 100 + k); k = k + 1; }
+    return id;
+}
+let s5_ch3 = chan_new(0);
+let s5_h1 = s5_prod_close(s5_ch3, 1, 4);
+let s5_h2 = s5_prod_close(s5_ch3, 2, 4);
+await s5_h1; await s5_h2;
+chan_close(s5_ch3);
+# drain all
+let s5_count = 0;
+let s5_done = "no";
+while (s5_done == "no") {
+    let r = "x";
+    try { chan_recv(s5_ch3); s5_count = s5_count + 1; } catch (e) { s5_done = "yes"; }
+}
+check("S5.3_close_after_producers", s5_count == 8, "count=" + str(s5_count));
+
+# ============================================================
+# S6: 单 producer 多 consumer — 消息分发
+# ============================================================
+print("=== S6 single-producer multi-consumer ===");
+
+# S6.1: 1 producer 发 6 条, 2 consumer 各收 3 条, 合计 6
+parallel fn s6_cons(ch) {
+    let got = 0;
+    let done = "no";
+    while (done == "no") {
+        let r = "x";
+        try { chan_recv(ch); got = got + 1; } catch (e) { done = "yes"; }
+    }
+    return got;
+}
+let s6_ch1 = chan_new(0);
+let s6_c1 = s6_cons(s6_ch1);
+let s6_c2 = s6_cons(s6_ch1);
+let s6_p = 0;
+while (s6_p < 6) { chan_send(s6_ch1, s6_p); s6_p = s6_p + 1; }
+chan_close(s6_ch1);
+let s6_a = await s6_c1;
+let s6_b = await s6_c2;
+check("S6.1_one_prod_two_cons_total", (s6_a + s6_b) == 6,
+      "c1=" + str(s6_a) + " c2=" + str(s6_b));
+
+# S6.2: producer 发后 close, 单 consumer 全收
+parallel fn s6_cons2(ch) {
+    let sum = 0;
+    let done = "no";
+    while (done == "no") {
+        try { sum = sum + chan_recv(ch); } catch (e) { done = "yes"; }
+    }
+    return sum;
+}
+let s6_ch2 = chan_new(0);
+let s6_d = s6_cons2(s6_ch2);
+let s6_q = 1;
+while (s6_q <= 5) { chan_send(s6_ch2, s6_q); s6_q = s6_q + 1; }
+chan_close(s6_ch2);
+let s6_sum = await s6_d;
+check("S6.2_single_cons_sum", s6_sum == 15, "sum 1..5=15, got " + str(s6_sum));
+
+# S6.3: 多次 producer→consumer→close 循环 — 放大 recv() finally 丢值竞态
+# 已知 bug: HChannel.recv() 的 finally 在 closed&&isEmpty 时抛异常,
+#   即使 poll 已成功取走值, 也会丢弃返回值 (丢值)。多次运行可稳定复现。
+parallel fn s6_cons3(ch) {
+    let sum = 0;
+    let done = "no";
+    while (done == "no") {
+        try { sum = sum + chan_recv(ch); } catch (e) { done = "yes"; }
+    }
+    return sum;
+}
+let s6_loss_count = 0;
+let s6_iter = 0;
+while (s6_iter < 8) {
+    let ch = chan_new(0);
+    let fut = s6_cons3(ch);
+    let k = 1;
+    while (k <= 20) { chan_send(ch, k); k = k + 1; }
+    chan_close(ch);
+    let r = await fut;
+    if (r != 210) { s6_loss_count = s6_loss_count + 1; }   # 1..20 sum=210
+    s6_iter = s6_iter + 1;
+}
+check("S6.3_no_value_loss_on_close_race", s6_loss_count == 0,
+      "loss_count=" + str(s6_loss_count) + "/8 (recv finally 丢值竞态)");
+
+# ============================================================
+# S7: 双向通信 — 两个 channel 实现 ping-pong
+# ============================================================
+print("=== S7 bidirectional ping-pong ===");
+
+# S7.1: ping-pong 3 轮
+parallel fn s7_ponger(ping, pong) {
+    let rounds = 0;
+    let done = "no";
+    while (done == "no") {
+        let r = "x";
+        try {
+            let v = chan_recv(ping);
+            chan_send(pong, v + 1);
+            rounds = rounds + 1;
+        } catch (e) { done = "yes"; }
+    }
+    return rounds;
+}
+let s7_ping = chan_new(0);
+let s7_pong = chan_new(0);
+let s7_p = s7_ponger(s7_ping, s7_pong);
+chan_send(s7_ping, 0);
+let s7_r1 = chan_recv(s7_pong);
+chan_send(s7_ping, s7_r1);
+let s7_r2 = chan_recv(s7_pong);
+chan_send(s7_ping, s7_r2);
+let s7_r3 = chan_recv(s7_pong);
+chan_close(s7_ping);
+let s7_rounds = await s7_p;
+check("S7.1_pingpong_3_rounds", s7_r1 == 1 && s7_r2 == 2 && s7_r3 == 3 &&
+     s7_rounds == 3, "r1=" + str(s7_r1) + " r2=" + str(s7_r2) + " r3=" + str(s7_r3) +
+     " rounds=" + str(s7_rounds));
+
+# S7.2: echo worker
+parallel fn s7_echo(ch) {
+    let done = "no";
+    let cnt = 0;
+    while (done == "no") {
+        try {
+            let v = chan_recv(ch);
+            chan_send(ch, v);
+            cnt = cnt + 1;
+        } catch (e) { done = "yes"; }
+    }
+    return cnt;
+}
+let s7_ch2 = chan_new(0);
+let s7_e = s7_echo(s7_ch2);
+chan_send(s7_ch2, "a");
+let s7_ea = chan_recv(s7_ch2);
+chan_send(s7_ch2, "b");
+let s7_eb = chan_recv(s7_ch2);
+chan_close(s7_ch2);
+# 唤醒 echo 让它退出 (close 后 recv 抛)
+let s7_echo_cnt = await s7_e;
+check("S7.2_echo_roundtrip", s7_ea == "a" && s7_eb == "b",
+      "ea=" + str(s7_ea) + " eb=" + str(s7_eb));
+
+# ============================================================
+# S8: channel 容量 — 有缓冲 vs 无缓冲, 缓冲满时 send 阻塞
+# ============================================================
+print("=== S8 channel capacity ===");
+
+# S8.1: 有界 channel 满后 try_send 返回 false
+let s8_ch1 = chan_new(2);
+chan_send(s8_ch1, 1);
+chan_send(s8_ch1, 2);
+check("S8.1_bounded_try_send_full_false", chan_try_send(s8_ch1, 3) == false,
+      "expected false when full");
+check("S8.1b_size_full", chan_size(s8_ch1) == 2, "size=" + str(chan_size(s8_ch1)));
+
+# S8.2: 无界 channel try_send 总是 true
+let s8_ch2 = chan_new(0);
+let s8_k = 0;
+let s8_all_ok = true;
+while (s8_k < 100) {
+    if (chan_try_send(s8_ch2, s8_k) == false) { s8_all_ok = false; }
+    s8_k = s8_k + 1;
+}
+check("S8.2_unbounded_try_send_always_true", s8_all_ok && chan_size(s8_ch2) == 100,
+      "all_ok=" + str(s8_all_ok) + " size=" + str(chan_size(s8_ch2)));
+
+# S8.3: 有界 channel 满时 chan_send 阻塞 — 验证 recv 后 send 可继续
+# main 填满 cap=2, 再 try_send 应 false; recv 1 个后 try_send 应 true
+let s8_ch3 = chan_new(2);
+chan_send(s8_ch3, "x");
+chan_send(s8_ch3, "y");
+let s8_before = chan_try_send(s8_ch3, "z");
+let s8_mid = chan_recv(s8_ch3);
+let s8_after = chan_try_send(s8_ch3, "z");
+check("S8.3_send_resumes_after_recv", s8_before == false && s8_mid == "x" &&
+     s8_after == true, "before=" + str(s8_before) + " mid=" + str(s8_mid) +
+     " after=" + str(s8_after));
+
+# S8.4: 并发 — 有界 channel 阻塞 send 由 worker 解除
+parallel fn s8_blocked_sender(ch) {
+    chan_send(ch, "blocked-msg");
+    return "sent";
+}
+let s8_ch4 = chan_new(1);
+chan_send(s8_ch4, "first");   # 填满 cap=1
+let s8_fut = s8_blocked_sender(s8_ch4);
+# worker 应阻塞在 send; 旋转确认 size 仍为 1
+let s8_spin = 0;
+let s8_size_seen = -1;
+while (s8_spin < 50) {
+    s8_size_seen = chan_size(s8_ch4);
+    if (s8_size_seen >= 2) { break; }
+    s8_spin = s8_spin + 1;
+}
+# recv 解除 worker 阻塞
+let s8_v1 = chan_recv(s8_ch4);
+let s8_v2 = chan_recv(s8_ch4);
+let s8_sr = await s8_fut;
+check("S8.4_bounded_send_unblocks", s8_v1 == "first" && s8_v2 == "blocked-msg" &&
+     s8_sr == "sent", "v1=" + str(s8_v1) + " v2=" + str(s8_v2) + " sr=" + str(s8_sr));
+
+# S8.5: close 在有界 channel 上保留缓冲项 (Go 语义) — 非阻塞, 安全
+# 注: close()+被阻塞 sender 的死锁竞态见 Bug 报告 #147-S3 (此处不复现, 因会挂起)
+let s8_ch5 = chan_new(3);
+chan_send(s8_ch5, 1);
+chan_send(s8_ch5, 2);
+chan_send(s8_ch5, 3);
+chan_close(s8_ch5);
+check("S8.5_close_preserves_buffered", chan_recv(s8_ch5) == 1 && chan_recv(s8_ch5) == 2 &&
+     chan_recv(s8_ch5) == 3, "expected 1,2,3 preserved after close");
+
+# S8.6: close 后 chan_size 反映剩余缓冲 (drain 过程中递减)
+let s8_ch6 = chan_new(4);
+chan_send(s8_ch6, "a");
+chan_send(s8_ch6, "b");
+chan_close(s8_ch6);
+let s8_sz1 = chan_size(s8_ch6);
+chan_recv(s8_ch6);
+let s8_sz2 = chan_size(s8_ch6);
+check("S8.6_size_decrements_on_drain", s8_sz1 == 2 && s8_sz2 == 1,
+      "sz1=" + str(s8_sz1) + " sz2=" + str(s8_sz2));
+
+# ============================================================
+# S9: concurrent 块退出 — 所有 worker 是否正确 join
+# ============================================================
+print("=== S9 concurrent block exit ===");
+
+# S9.1: concurrent 内启动 N 个 parallel, 块退出时全部 join
+parallel fn s9_worker(id) {
+    let s = 0;
+    let k = 0;
+    while (k < 100) { s = s + k; k = k + 1; }
+    return s + id;
+}
+let s9_results = [];
+concurrent {
+    s9_results.append(await s9_worker(1));
+    s9_results.append(await s9_worker(2));
+    s9_results.append(await s9_worker(3));
+}
+check("S9.1_concurrent_joins_all", len(s9_results) == 3,
+      "len=" + str(len(s9_results)));
+
+# S9.2: concurrent 块内 try/catch 子任务异常, 块正常退出
+parallel fn s9_ok() { return 7; }
+parallel fn s9_throw() { throw "s9-err"; }
+let s9_catched = "none";
+let s9_okval = -1;
+try {
+    concurrent {
+        s9_okval = await s9_ok();
+        try {
+            await s9_throw();
+        } catch (e) {
+            s9_catched = "caught:" + e;
+        }
+    }
+} catch (e) {
+    s9_catched = "outer:" + e;
+}
+check("S9.2_inner_catch_no_rethrow", s9_catched == "caught:s9-err" && s9_okval == 7,
+      "catched=" + s9_catched + " okval=" + str(s9_okval));
+
+# S9.3: concurrent 子任务异常未在块内 catch → 块退出时重抛
+parallel fn s9_boom() { throw "s9-boom"; }
+let s9_outer = "none";
+try {
+    concurrent {
+        await s9_boom();
+    }
+} catch (e) {
+    s9_outer = "outer:" + e;
+}
+check("S9.3_uncaught_propagates", s9_outer == "outer:s9-boom", "got " + s9_outer);
+
+# ============================================================
+# S10: channel 传递 channel — channel 作为消息发送
+# ============================================================
+print("=== S10 channel over channel ===");
+
+# S10.1: 通过 channel 传递一个 channel 引用
+parallel fn s10_receiver(req_ch) {
+    let inner = chan_recv(req_ch);
+    chan_send(inner, "got-inner");
+    return "done";
+}
+let s10_req = chan_new(0);
+let s10_f = s10_receiver(s10_req);
+let s10_inner = chan_new(0);
+chan_send(s10_req, s10_inner);
+let s10_reply = chan_recv(s10_inner);
+let s10_done = await s10_f;
+check("S10.1_chan_over_chan", s10_reply == "got-inner" && s10_done == "done",
+      "reply=" + str(s10_reply));
+
+# S10.2: 传递 channel 后关闭它, 接收方观察到 close
+parallel fn s10_closer(ch) {
+    let target = chan_recv(ch);
+    chan_close(target);
+    return "closed";
+}
+let s10_req2 = chan_new(0);
+let s10_target = chan_new(0);
+let s10_fc = s10_closer(s10_req2);
+chan_send(s10_req2, s10_target);
+await s10_fc;
+let s10_r = "no-throw";
+try { chan_recv(s10_target); } catch (e) { s10_r = "caught:" + e; }
+check("S10.2_close_received_chan", s10_r == "caught:recv on closed channel",
+      "got " + s10_r);
+
+# ============================================================
+# S11: 空 channel recv — 是否阻塞/报错
+# ============================================================
+print("=== S11 empty channel recv ===");
+
+# S11.1: 未 close 空 channel — try_recv 返回 null (非阻塞)
+let s11_ch1 = chan_new(2);
+let s11_t1 = chan_try_recv(s11_ch1);
+check("S11.1_try_recv_open_empty_null", s11_t1 == null, "got " + str(s11_t1));
+
+# S11.2: chan_recv 在空 channel 上阻塞 — 用 worker 发送解除
+parallel fn s11_sender(ch) {
+    chan_send(ch, "delayed");
+    return "sent";
+}
+let s11_ch2 = chan_new(0);
+let s11_fut = s11_sender(s11_ch2);
+let s11_v = chan_recv(s11_ch2);
+let s11_sr = await s11_fut;
+check("S11.2_recv_unblocks_on_send", s11_v == "delayed" && s11_sr == "sent",
+      "v=" + str(s11_v));
+
+# S11.3: close 唤醒阻塞的 recv (worker 阻塞在 recv, main close)
+parallel fn s11_blocked_recv(ch) {
+    let r = "no-throw";
+    try { chan_recv(ch); } catch (e) { r = "caught:" + e; }
+    return r;
+}
+let s11_ch3 = chan_new(0);
+let s11_fut3 = s11_blocked_recv(s11_ch3);
+# 旋转让 worker 进入 recv 阻塞
+let s11_spin = 0;
+while (s11_spin < 30) { s11_spin = s11_spin + 1; }
+chan_close(s11_ch3);
+let s11_r3 = await s11_fut3;
+check("S11.3_close_wakes_blocked_recv", s11_r3 == "caught:recv on closed channel",
+      "got " + str(s11_r3));
+
+# S11.4: try_recv 在 close+drained 上返回 null (非阻塞, 不抛)
+let s11_ch4 = chan_new(1);
+chan_close(s11_ch4);
+let s11_r4 = "no-throw";
+let s11_v4 = chan_try_recv(s11_ch4);
+check("S11.4_try_recv_closed_empty_null", s11_v4 == null, "got " + str(s11_v4));
+
+# ============================================================
+# S12: channel 类型 — int / str / list / 混合
+# ============================================================
+print("=== S12 channel types ===");
+
+# S12.1: Chan<int> (实际用 chan_new) — int 消息
+let s12_ci = chan_new(2);
+chan_send(s12_ci, 100);
+check("S12.1_int_chan", chan_recv(s12_ci) == 100, "int");
+
+# S12.2: Chan<str> — 字符串消息
+let s12_cs = chan_new(2);
+chan_send(s12_cs, "text");
+check("S12.2_str_chan", chan_recv(s12_cs) == "text", "str");
+
+# S12.3: Chan<list> — 列表消息 (引用)
+let s12_cl = chan_new(2);
+chan_send(s12_cl, [1, 2, 3]);
+let s12_lv = chan_recv(s12_cl);
+check("S12.3_list_chan", len(s12_lv) == 3 && s12_lv[0] == 1, "list len=" + str(len(s12_lv)));
+
+# S12.4: 混合类型 — 同一 channel 传不同类型 (H# channel 无类型约束)
+let s12_cm = chan_new(4);
+chan_send(s12_cm, 1);
+chan_send(s12_cm, "two");
+chan_send(s12_cm, [3]);
+chan_send(s12_cm, {"k": 4});
+let s12_a = chan_recv(s12_cm);
+let s12_b = chan_recv(s12_cm);
+let s12_c = chan_recv(s12_cm);
+let s12_d = chan_recv(s12_cm);
+check("S12.4_mixed_types", s12_a == 1 && s12_b == "two" && len(s12_c) == 1 &&
+     s12_d["k"] == 4, "a=" + str(s12_a) + " b=" + str(s12_b));
+
+# S12.5: channel 传 dict
+let s12_cd = chan_new(1);
+chan_send(s12_cd, {"x": 1, "y": 2});
+let s12_dv = chan_recv(s12_cd);
+check("S12.5_dict_chan", s12_dv["x"] == 1 && s12_dv["y"] == 2, "dict");
+
+# ============================================================
+# S13: 大量消息 — 1000+ 消息完整性
+# ============================================================
+print("=== S13 large message count ===");
+
+# S13.1: 1000 条 int 求和 (无界 channel)
+let s13_ch1 = chan_new(0);
+let s13_k = 0;
+while (s13_k < 1000) { chan_send(s13_ch1, s13_k); s13_k = s13_k + 1; }
+let s13_sum = 0;
+let s13_n = 0;
+while (s13_n < 1000) { s13_sum = s13_sum + chan_recv(s13_ch1); s13_n = s13_n + 1; }
+check("S13.1_1000_msgs_sum", s13_sum == 499500 && s13_n == 1000,
+      "sum=" + str(s13_sum) + " n=" + str(s13_n));
+
+# S13.2: 有界 channel cap=4, 1000 条 producer/consumer 并发
+parallel fn s13_producer(ch, n) {
+    let k = 0;
+    while (k < n) { chan_send(ch, k); k = k + 1; }
+    chan_close(ch);
+    return "p-done";
+}
+parallel fn s13_consumer(ch) {
+    let sum = 0;
+    let done = "no";
+    while (done == "no") {
+        try { sum = sum + chan_recv(ch); } catch (e) { done = "yes"; }
+    }
+    return sum;
+}
+let s13_ch2 = chan_new(4);
+let s13_pf = s13_producer(s13_ch2, 1000);
+let s13_cf = s13_consumer(s13_ch2);
+let s13_presult = await s13_pf;
+let s13_csum = await s13_cf;
+check("S13.2_bounded_1000_concurrent", s13_csum == 499500,
+      "sum=" + str(s13_csum));
+
+# S13.3: 大对象 (list) 200 条
+let s13_ch3 = chan_new(0);
+let s13_kk = 0;
+while (s13_kk < 200) { chan_send(s13_ch3, [s13_kk, s13_kk + 1]); s13_kk = s13_kk + 1; }
+let s13_pairs = 0;
+let s13_pn = 0;
+while (s13_pn < 200) {
+    let p = chan_recv(s13_ch3);
+    s13_pairs = s13_pairs + p[0] + p[1];
+    s13_pn = s13_pn + 1;
+}
+check("S13.3_200_list_msgs", s13_pn == 200 && s13_pairs == 40000,
+      "pn=" + str(s13_pn) + " pairs=" + str(s13_pairs));
+
+# ============================================================
+# S14: 异常在 concurrent 中 — worker 抛异常是否影响主线程
+# ============================================================
+print("=== S14 exception in concurrent ===");
+
+# S14.1: worker 抛异常, 块内未 catch → 块退出重抛, 外层 catch
+parallel fn s14_thrower(msg) { throw msg; }
+let s14_r1 = "none";
+try {
+    concurrent {
+        await s14_thrower("s14-bang");
+    }
+} catch (e) {
+    s14_r1 = "outer:" + e;
+}
+check("S14.1_worker_exc_propagates", s14_r1 == "outer:s14-bang", "got " + s14_r1);
+
+# S14.2: 多个 worker, 一个抛异常, 其他应被取消 (parent-wins)
+parallel fn s14_long() {
+    let s = 0;
+    let k = 0;
+    while (k < 1000) { s = s + k; k = k + 1; }
+    return s;
+}
+parallel fn s14_bad() { throw "s14-bad"; }
+let s14_r2 = "none";
+let s14_long_val = -1;
+try {
+    concurrent {
+        s14_long_val = await s14_long();
+        await s14_bad();
+    }
+} catch (e) {
+    s14_r2 = "caught:" + e;
+}
+check("S14.2_sibling_cancel_on_fail", s14_r2 == "caught:s14-bad",
+      "got " + s14_r2);
+
+# S14.3: worker 抛非字符串异常 (数字)
+parallel fn s14_num_throw() { throw 404; }
+let s14_r3 = "none";
+try {
+    concurrent {
+        await s14_num_throw();
+    }
+} catch (e) {
+    s14_r3 = "caught:" + str(e);
+}
+check("S14.3_non_string_exception", s14_r3 == "caught:404", "got " + s14_r3);
+
+# S14.4: worker 异常后 main 线程继续执行 (不影响后续代码)
+parallel fn s14_crash() { throw "crash"; }
+let s14_after = "before";
+try {
+    concurrent { await s14_crash(); }
+} catch (e) { }
+s14_after = "after";
+check("S14.4_main_survives_worker_crash", s14_after == "after", "got " + s14_after);
+
+# ============================================================
+# S15: channel 与 for-in — `for x in ch { ... }` (若支持)
+# ============================================================
+print("=== S15 channel with for-in ===");
+
+# S15.1: for-in 直接迭代 channel — 预期不支持 (抛 unsupported iterable)
+let s15_ch1 = chan_new(2);
+chan_send(s15_ch1, 1);
+chan_send(s15_ch1, 2);
+let s15_r1 = "no-throw";
+let s15_count = 0;
+try {
+    for x in s15_ch1 {
+        s15_count = s15_count + 1;
+    }
+} catch (e) {
+    s15_r1 = "caught:" + str(e);
+}
+check("S15.1_for_in_chan_unsupported", s15_r1 == "caught:FOR_ITER: unsupported iterable channel" ||
+     s15_count == 2, "r=" + s15_r1 + " count=" + str(s15_count));
+
+# S15.2: while+try_recv 替代 for-in 遍历 channel
+let s15_ch2 = chan_new(0);
+let s15_k = 0;
+while (s15_k < 5) { chan_send(s15_ch2, s15_k); s15_k = s15_k + 1; }
+chan_close(s15_ch2);
+let s15_total = 0;
+let s15_done = "no";
+while (s15_done == "no") {
+    let v = chan_try_recv(s15_ch2);
+    if (v == null) {
+        s15_done = "yes";
+    } else {
+        s15_total = s15_total + v;
+    }
+}
+check("S15.2_while_try_recv_drain", s15_total == 10, "total=" + str(s15_total));
+
+# S15.3: while+recv+catch 遍历 (Go 风格 break-on-exception)
+let s15_ch3 = chan_new(0);
+let s15_kk = 0;
+while (s15_kk < 4) { chan_send(s15_ch3, s15_kk * 10); s15_kk = s15_kk + 1; }
+chan_close(s15_ch3);
+let s15_sum3 = 0;
+let s15_done3 = "no";
+while (s15_done3 == "no") {
+    try {
+        s15_sum3 = s15_sum3 + chan_recv(s15_ch3);
+    } catch (e) {
+        s15_done3 = "yes";
+    }
+}
+check("S15.3_while_recv_catch_drain", s15_sum3 == 60, "sum 0+10+20+30=60, got " + str(s15_sum3));
+
+# ============================================================
+print("=== SUMMARY ===");
+print("OK=" + str(__stats[0]) + " FAIL=" + str(__stats[1]));

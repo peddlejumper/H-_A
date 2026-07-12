@@ -1,0 +1,876 @@
+# round5_145_deep_inherit.hto — 测试智能体 Round 5 #145
+# 领域: 深层继承链 (Deep Inheritance Chains)
+# H# v0.4.1
+#
+# 已知背景 (来自 HVM.kt / parser.py / compiler.py 源码审阅):
+#   - class extends 只支持单继承 (parser.py:413-416, base = 单个 IDENTIFIER)
+#   - class implements 支持多接口 (parser.py:417-424, 逗号分隔)
+#   - interface extends 支持多父接口 (parser.py:468-475)
+#   - interface 方法可有默认实现 (compiler.py:852-856)
+#   - super.method() 编译为 CALL_SUPER; parser 在 SUPER 后强制 DOT IDENTIFIER
+#     (parser.py:1278-1291), 故 super.super.method() 是 SyntaxError
+#   - callSuper (HVM.kt:1122) 用 __current_class__ 跟踪方法定义类
+#   - callMethod (HVM.kt:835-840) 调用方法时 NOT 设置 definingClass
+#     -> 继承方法内 super 调用可能定位错误 (本测试核心 bug 探测)
+#   - isInstanceOfClass (HVM.kt:1986) 走 base 链 + interfaceMatches
+#   - interfaceMatches (HVM.kt:2020) 依赖 globals[ifaceName] as? HClass;
+#     但 interface 在编译时 NOT emit 字节码 (compiler.py:881-883),
+#     故接口继承链的 is 检查可能失败
+#   - resolveClass (HVM.kt:1942-1956) 合并父类 methods/fields/implements
+#   - 二元 `x is T` / `x as T` 已修复 (parser.py:906-941)
+#
+# 子领域:
+#   S1  5层继承 (A->B->C->D->E) 方法+字段
+#   S2  super 链 (init 链 + method 链)  [核心 bug 探测]
+#   S3  super.super 跨层 (语法限制, 见探针 _probe145_s3_supersuper.hto)
+#   S4  方法覆盖 + self.method() 动态分派
+#   S5  字段继承 + 同名字段遮蔽
+#   S6  多重继承 extends A, B (语法限制, 见探针 _probe145_s6_multiextends.hto)
+#   S7  接口实现 (多接口, 接口方法分派)
+#   S8  接口继承 (interface IB extends IA, is IA 检查) [刚修复, 重点验证]
+#   S9  菱形继承 (单继承下不存在; 测试接口菱形)
+#   S10 is 检查深层 (5层继承的 is 检查)
+#   S11 super 在不同上下文 (init / 普通方法 / static / lambda)
+#   S12 父类构造 (new 子类时父类 init 自动调用?)
+#   S13 方法解析顺序 (多接口默认方法冲突)
+#   S14 接口默认方法 (类不实现时的分派)
+#
+# 每个 try/catch 独立; 打印 "Sxx-Tnn:" 前缀, 预期值在注释。
+# 严重性标注: [BUG]=确认缺陷 [LEAK]=泄漏 [CRASH]=崩溃 [LIMIT]=语言限制
+
+# ============================================================
+# S1: 5层继承 — A->B->C->D->E, 每层有方法和字段
+# ============================================================
+print("=== S1: 5-level inheritance ===");
+
+# S1-T1: 5层链, 每层有 m() 返回层名
+try {
+    class S1A1 { fn m() { return "A"; } }
+    class S1B1 extends S1A1 { fn m() { return "B"; } }
+    class S1C1 extends S1B1 { fn m() { return "C"; } }
+    class S1D1 extends S1C1 { fn m() { return "D"; } }
+    class S1E1 extends S1D1 { fn m() { return "E"; } }
+    let e = new S1E1();
+    print("S1-T1: " + e.m());   # 预期: E
+} catch (e) { print("S1-T1-ERR: " + e); }
+
+# S1-T2: 子类不覆盖, 继承顶层方法
+try {
+    class S1A2 { fn m() { return "A"; } }
+    class S1B2 extends S1A2 { }
+    class S1C2 extends S1B2 { }
+    class S1D2 extends S1C2 { }
+    class S1E2 extends S1D2 { }
+    let e = new S1E2();
+    print("S1-T2: " + e.m());   # 预期: A (继承)
+} catch (e) { print("S1-T2-ERR: " + e); }
+
+# S1-T3: 5层每层有字段, 累加
+try {
+    class S1A3 { let a = 1; fn sum() { return self.a; } }
+    class S1B3 extends S1A3 { let b = 2; fn sum() { return super.sum() + self.b; } }
+    class S1C3 extends S1B3 { let c = 4; fn sum() { return super.sum() + self.c; } }
+    class S1D3 extends S1C3 { let d = 8; fn sum() { return super.sum() + self.d; } }
+    class S1E3 extends S1D3 { let e = 16; fn sum() { return super.sum() + self.e; } }
+    let e = new S1E3();
+    print("S1-T3: " + e.sum());   # 预期: 31 (1+2+4+8+16)
+} catch (e) { print("S1-T3-ERR: " + e); }
+
+# S1-T4: 各层独有方法 (不覆盖), 子类访问父类方法
+try {
+    class S1A4 { fn aM() { return "A.aM"; } }
+    class S1B4 extends S1A4 { fn bM() { return "B.bM"; } }
+    class S1C4 extends S1B4 { fn cM() { return "C.cM"; } }
+    class S1D4 extends S1C4 { fn dM() { return "D.dM"; } }
+    class S1E4 extends S1D4 { fn eM() { return "E.eM"; } }
+    let e = new S1E4();
+    print("S1-T4: " + e.aM() + "|" + e.bM() + "|" + e.cM() + "|" + e.dM() + "|" + e.eM());
+    # 预期: A.aM|B.bM|C.cM|D.dM|E.eM
+} catch (e) { print("S1-T4-ERR: " + e); }
+
+# S1-T5: 5层字段访问 (父类字段在子类可见)
+try {
+    class S1A5 { let a = 10; }
+    class S1B5 extends S1A5 { let b = 20; }
+    class S1C5 extends S1B5 { let c = 30; }
+    class S1D5 extends S1C5 { let d = 40; }
+    class S1E5 extends S1D5 { let e = 50; }
+    let o = new S1E5();
+    print("S1-T5: " + (o.a + o.b + o.c + o.d + o.e));   # 预期: 150
+} catch (e) { print("S1-T5-ERR: " + e); }
+
+# ============================================================
+# S2: super 链 — 每层 init 调用 super.init(), super.method() 链
+# ============================================================
+print("=== S2: super chain ===");
+
+# S2-T1: 5层 init 链, 每层 super.init() 累加 log
+try {
+    class S2A1 {
+        let log = "";
+        fn init() { self.log = self.log + "A"; }
+    }
+    class S2B1 extends S2A1 {
+        fn init() { super.init(); self.log = self.log + "B"; }
+    }
+    class S2C1 extends S2B1 {
+        fn init() { super.init(); self.log = self.log + "C"; }
+    }
+    class S2D1 extends S2C1 {
+        fn init() { super.init(); self.log = self.log + "D"; }
+    }
+    class S2E1 extends S2D1 {
+        fn init() { super.init(); self.log = self.log + "E"; }
+    }
+    let o = new S2E1();
+    print("S2-T1: " + o.log);   # 预期: ABCDE
+} catch (e) { print("S2-T1-ERR: " + e); }
+
+# S2-T2: super.method() 5层链式
+try {
+    class S2A2 { fn m() { return "A"; } }
+    class S2B2 extends S2A2 { fn m() { return super.m() + "B"; } }
+    class S2C2 extends S2B2 { fn m() { return super.m() + "C"; } }
+    class S2D2 extends S2C2 { fn m() { return super.m() + "D"; } }
+    class S2E2 extends S2D2 { fn m() { return super.m() + "E"; } }
+    print("S2-T2: " + (new S2E2()).m());   # 预期: ABCDE
+} catch (e) { print("S2-T2-ERR: " + e); }
+
+# S2-T3: [核心 BUG 探测] 中间层覆盖+调用 super, 子类不覆盖
+# Base.m -> super.m + "+Mid"; Sub 不覆盖 m; Sub 实例调 m()
+# Java/Python 语义: super.m() 应跳过 Mid 找到 Base.m, 结果 "Base+Mid"
+# H# callMethod 不设置 definingClass, super 从实例类(Sub)父类(Mid)开始查找
+#   -> 找到 Mid.m 自身 -> Mid.m 被调用两次 -> "Base+Mid+Mid"
+try {
+    class S2Base3 { fn m() { return "Base"; } }
+    class S2Mid3 extends S2Base3 { fn m() { return super.m() + "+Mid"; } }
+    class S2Sub3 extends S2Mid3 { }   # 不覆盖 m
+    print("S2-T3: " + (new S2Sub3()).m());   # 预期: Base+Mid ; 实际(BUG): Base+Mid+Mid
+} catch (e) { print("S2-T3-ERR: " + e); }
+
+# S2-T4: [核心 BUG 探测] 5层, 中间层都覆盖+super, 顶层和底层不覆盖
+# A.m -> "A"; B.m -> super.m()+"B"; C.m -> super.m()+"C"; D 不覆盖; E 不覆盖
+# Java: D/E 继承 C.m, super 从 C 开始 -> A+B+C ; 结果 "ABC"
+# H# : super 从 E.base=D 开始, D 模板无 m, 到 C, 调 C.m(definingClass=C)
+#      C.m super 从 C.base=B -> B.m(definingClass=B)
+#      B.m super 从 B.base=A -> A.m -> "A"
+#      -> B.m="AB", C.m="ABC"
+#      但第一次 C.m 的 super.m 从 D 开始找到 C.m 自身, 又调一次 C.m...
+#      实际: 复杂, 需运行验证
+try {
+    class S2A4 { fn m() { return "A"; } }
+    class S2B4 extends S2A4 { fn m() { return super.m() + "B"; } }
+    class S2C4 extends S2B4 { fn m() { return super.m() + "C"; } }
+    class S2D4 extends S2C4 { }   # 不覆盖
+    class S2E4 extends S2D4 { }   # 不覆盖
+    print("S2-T4: " + (new S2E4()).m());   # 预期: ABC ; 实际(BUG?): 需验证
+} catch (e) { print("S2-T4-ERR: " + e); }
+
+# S2-T5: [对照] 直接实例化中间层, super 链正常
+try {
+    class S2A5 { fn m() { return "A"; } }
+    class S2B5 extends S2A5 { fn m() { return super.m() + "B"; } }
+    class S2C5 extends S2B5 { fn m() { return super.m() + "C"; } }
+    print("S2-T5a: " + (new S2B5()).m());   # 预期: AB
+    print("S2-T5b: " + (new S2C5()).m());   # 预期: ABC
+} catch (e) { print("S2-T5-ERR: " + e); }
+
+# S2-T6: init 链中, 中间层 super.init(), 子类不覆盖 init
+try {
+    class S2A6 {
+        let log = "";
+        fn init() { self.log = self.log + "A"; }
+    }
+    class S2B6 extends S2A6 {
+        fn init() { super.init(); self.log = self.log + "B"; }
+    }
+    class S2C6 extends S2B6 { }   # 不覆盖 init
+    let o = new S2C6();
+    print("S2-T6: " + o.log);   # 预期: AB (继承 B.init)
+} catch (e) { print("S2-T6-ERR: " + e); }
+
+# S2-T7: [BUG 探测] init 链中, 中间层 super.init(), 子类不覆盖, 但父类 init 也调用 super.init
+# A.init -> log+="A" (无 super); B.init -> super.init()+log+="B"; C 不覆盖
+# 通过 C 实例 new, 调用 B.init (继承)
+# H#: B.init 的 super.init() 从 C.base=B 开始查找 -> 找到 B.init 自身 -> 重复!
+try {
+    class S2A7 {
+        let log = "";
+        fn init() { self.log = self.log + "A"; }
+    }
+    class S2B7 extends S2A7 {
+        fn init() { super.init(); self.log = self.log + "B"; }
+    }
+    class S2C7 extends S2B7 { }   # 不覆盖 init
+    let o = new S2C7();
+    print("S2-T7: " + o.log);   # 预期: AB ; 实际(BUG?): 需验证
+} catch (e) { print("S2-T7-ERR: " + e); }
+
+# ============================================================
+# S3: super.super 跨层 (语法限制 — 见探针文件)
+# parser.py:1278-1291 在 SUPER 后强制 DOT IDENTIFIER,
+# 遇到第二个 SUPER 抛 SyntaxError, 阻塞整个文件编译。
+# 见 _probe145_s3_supersuper.hto 验证。
+# 这里测试语义等价路径:
+# ============================================================
+print("=== S3: super.super (semantic equivalents) ===");
+
+# S3-T1: 链式 super.m() 间接到达祖父 (B.m 的 super.m 到 A)
+try {
+    class S3A1 { fn m() { return "A"; } }
+    class S3B1 extends S3A1 { fn m() { return super.m() + "B"; } }
+    class S3C1 extends S3B1 { fn m() { return super.m() + "C"; } }
+    print("S3-T1: " + (new S3C1()).m());   # 预期: ABC (链式到 A)
+} catch (e) { print("S3-T1-ERR: " + e); }
+
+# S3-T2: B 不覆盖, C 的 super.m() 跳层到 A
+try {
+    class S3A2 { fn m() { return "A"; } }
+    class S3B2 extends S3A2 { }   # 不覆盖
+    class S3C2 extends S3B2 { fn m() { return super.m() + "C"; } }
+    print("S3-T2: " + (new S3C2()).m());   # 预期: AC (跳过 B)
+} catch (e) { print("S3-T2-ERR: " + e); }
+
+# S3-T3: super 调用祖父类独有方法 (父类未定义)
+try {
+    class S3A3 { fn grand() { return "grand"; } }
+    class S3B3 extends S3A3 { fn m() { return "B.m"; } }
+    class S3C3 extends S3B3 { fn m() { return super.grand() + "+C"; } }
+    print("S3-T3: " + (new S3C3()).m());   # 预期: grand+C (跳层查找)
+} catch (e) { print("S3-T3-ERR: " + e); }
+
+print("S3-DOC: super.super.method() -> SyntaxError; tested in _probe145_s3_supersuper.hto");
+
+# ============================================================
+# S4: 方法覆盖 + self.method() 动态分派
+# ============================================================
+print("=== S4: override + dynamic dispatch ===");
+
+# S4-T1: self.method() 动态分派到子类版本
+try {
+    class S4A1 {
+        fn m() { return "A.m"; }
+        fn call() { return self.m(); }
+    }
+    class S4B1 extends S4A1 {
+        fn m() { return "B.m"; }
+    }
+    let b = new S4B1();
+    print("S4-T1: " + b.call());   # 预期: B.m (动态分派)
+} catch (e) { print("S4-T1-ERR: " + e); }
+
+# S4-T2: 父类 call 调 self.m, 子类覆盖 m, 5层链
+try {
+    class S4A2 {
+        fn m() { return "A"; }
+        fn call() { return "call:" + self.m(); }
+    }
+    class S4B2 extends S4A2 { fn m() { return "B"; } }
+    class S4C2 extends S4B2 { fn m() { return "C"; } }
+    class S4D2 extends S4C2 { fn m() { return "D"; } }
+    class S4E2 extends S4D2 { fn m() { return "E"; } }
+    print("S4-T2: " + (new S4E2()).call());   # 预期: call:E
+} catch (e) { print("S4-T2-ERR: " + e); }
+
+# S4-T3: super.m() 调父类版本, self.m() 调子类版本 (混合)
+try {
+    class S4A3 {
+        fn m() { return "A"; }
+        fn show() { return "super=" + super.m() + "; self=" + self.m(); }
+    }
+    class S4B3 extends S4A3 {
+        fn m() { return "B"; }
+    }
+    # 注意: show 继承自 A, super.m() 在 A.show 中应到 A 的父类(无), 报错?
+    # 但 A 无父类, super.m() 在 A.show 中 -> "Method 'm' not found in any base"
+    try {
+        print("S4-T3: " + (new S4B3()).show());
+    } catch (e) { print("S4-T3-OK-EXC: " + e); }
+} catch (e) { print("S4-T3-SETUP-ERR: " + e); }
+
+# S4-T4: 多层覆盖, 每层 super.m() + self.m()
+try {
+    class S4A4 { fn m() { return "A"; } }
+    class S4B4 extends S4A4 {
+        fn m() { return "B[" + super.m() + "]"; }
+        fn show() { return self.m(); }
+    }
+    class S4C4 extends S4B4 {
+        fn m() { return "C[" + super.m() + "]"; }
+    }
+    let c = new S4C4();
+    print("S4-T4: " + c.show());   # 预期: C[B[A]]
+} catch (e) { print("S4-T4-ERR: " + e); }
+
+# S4-T5: 子类不覆盖 show, 但覆盖 m; 父类 show 调 self.m
+try {
+    class S4A5 {
+        fn m() { return "A.m"; }
+        fn show() { return "show:" + self.m(); }
+    }
+    class S4B5 extends S4A5 { fn m() { return "B.m"; } }
+    class S4C5 extends S4B5 { }   # 不覆盖 m, 不覆盖 show
+    print("S4-T5: " + (new S4C5()).show());   # 预期: show:B.m (继承 B.m)
+} catch (e) { print("S4-T5-ERR: " + e); }
+
+# ============================================================
+# S5: 字段继承 + 同名字段遮蔽
+# ============================================================
+print("=== S5: field inheritance + shadowing ===");
+
+# S5-T1: 父类字段在子类可见
+try {
+    class S5A1 { let x = 10; }
+    class S5B1 extends S5A1 { let y = 20; }
+    class S5C1 extends S5B1 { fn sum() { return self.x + self.y; } }
+    print("S5-T1: " + (new S5C1()).sum());   # 预期: 30
+} catch (e) { print("S5-T1-ERR: " + e); }
+
+# S5-T2: 同名字段遮蔽 (子类覆盖父类字段默认值)
+try {
+    class S5A2 { let x = 1; }
+    class S5B2 extends S5A2 { let x = 2; }
+    print("S5-T2: " + (new S5B2()).x);   # 预期: 2 (子类遮蔽)
+} catch (e) { print("S5-T2-ERR: " + e); }
+
+# S5-T3: 5层同名字段遮蔽
+try {
+    class S5A3 { let x = 1; }
+    class S5B3 extends S5A3 { let x = 2; }
+    class S5C3 extends S5B3 { let x = 3; }
+    class S5D3 extends S5C3 { let x = 4; }
+    class S5E3 extends S5D3 { let x = 5; }
+    print("S5-T3: " + (new S5E3()).x);   # 预期: 5
+} catch (e) { print("S5-T3-ERR: " + e); }
+
+# S5-T4: 父类方法读 self.x, 子类遮蔽 x
+try {
+    class S5A4 { let x = 1; fn get() { return self.x; } }
+    class S5B4 extends S5A4 { let x = 2; }
+    print("S5-T4: " + (new S5B4()).get());   # 预期: 2 (读子类遮蔽值)
+} catch (e) { print("S5-T4-ERR: " + e); }
+
+# S5-T5: 父类方法读裸 x (无 self), 子类遮蔽 x
+try {
+    class S5A5 { let x = 1; fn get() { return x; } }
+    class S5B5 extends S5A5 { let x = 2; }
+    print("S5-T5: " + (new S5B5()).get());   # 预期: 2 (裸名读字段)
+} catch (e) { print("S5-T5-ERR: " + e); }
+
+# S5-T6: 修改子类实例的父类字段
+try {
+    class S5A6 { let x = 10; }
+    class S5B6 extends S5A6 { let y = 20; }
+    let b = new S5B6();
+    b.x = 99;
+    print("S5-T6: " + b.x);   # 预期: 99
+} catch (e) { print("S5-T6-ERR: " + e); }
+
+# ============================================================
+# S6: 多重继承 extends A, B (语法限制 — 见探针文件)
+# parser.py:413-416 只接受单个 base, 逗号会导致 SyntaxError。
+# 见 _probe145_s6_multiextends.hto 验证。
+# ============================================================
+print("=== S6: multiple inheritance (see probe) ===");
+print("S6-DOC: `class C extends A, B` -> SyntaxError; tested in _probe145_s6_multiextends.hto");
+
+# S6-T1: 对照 - 单继承正常工作
+try {
+    class S6A1 { fn m() { return "A"; } }
+    class S6B1 extends S6A1 { fn n() { return "B"; } }
+    let o = new S6B1();
+    print("S6-T1: " + o.m() + o.n());   # 预期: AB
+} catch (e) { print("S6-T1-ERR: " + e); }
+
+# ============================================================
+# S7: 接口实现 — class C implements I, J
+# ============================================================
+print("=== S7: interface implementation ===");
+
+# S7-T1: 多接口实现
+try {
+    interface S7I1 { fn aM(); }
+    interface S7J1 { fn bM(); }
+    class S7C1 implements S7I1, S7J1 {
+        fn aM() { return "a"; }
+        fn bM() { return "b"; }
+    }
+    let o = new S7C1();
+    print("S7-T1: " + o.aM() + o.bM());   # 预期: ab
+} catch (e) { print("S7-T1-ERR: " + e); }
+
+# S7-T2: is 检查多接口
+try {
+    interface S7I2 { fn m(); }
+    interface S7J2 { fn n(); }
+    class S7C2 implements S7I2, S7J2 {
+        fn m() { return "m"; }
+        fn n() { return "n"; }
+    }
+    let o = new S7C2();
+    print("S7-T2a: " + (o is S7I2));   # 预期: true
+    print("S7-T2b: " + (o is S7J2));   # 预期: true
+} catch (e) { print("S7-T2-ERR: " + e); }
+
+# S7-T3: 接口方法互调
+try {
+    interface S7I3 { fn m(); fn n(); }
+    class S7C3 implements S7I3 {
+        fn m() { return "m"; }
+        fn n() { return self.m() + "+n"; }
+    }
+    print("S7-T3: " + (new S7C3()).n());   # 预期: m+n
+} catch (e) { print("S7-T3-ERR: " + e); }
+
+# S7-T4: extends + implements 组合
+try {
+    class S7Base4 { fn base() { return "base"; } }
+    interface S7I4 { fn iface(); }
+    class S7C4 extends S7Base4 implements S7I4 {
+        fn iface() { return "iface"; }
+    }
+    let o = new S7C4();
+    print("S7-T4: " + o.base() + "|" + o.iface());   # 预期: base|iface
+} catch (e) { print("S7-T4-ERR: " + e); }
+
+# S7-T5: 接口作为参数 (鸭子类型)
+try {
+    interface S7I5 { fn speak(); }
+    class S7Dog5 implements S7I5 { fn speak() { return "woof"; } }
+    class S7Cat5 implements S7I5 { fn speak() { return "meow"; } }
+    fn speakTwice(x) { return x.speak() + x.speak(); }
+    print("S7-T5: " + speakTwice(new S7Dog5()) + "|" + speakTwice(new S7Cat5()));
+    # 预期: woofwoof|meowmeow
+} catch (e) { print("S7-T5-ERR: " + e); }
+
+# ============================================================
+# S8: 接口继承 — interface IB extends IA, is IA 检查 (刚修复)
+# ============================================================
+print("=== S8: interface inheritance (is check) ===");
+
+# S8-T1: interface IB extends IA, 类 implements IB, is IA 检查
+try {
+    interface S8IA1 { fn aM(); }
+    interface S8IB1 extends S8IA1 { fn bM(); }
+    class S8C1 implements S8IB1 {
+        fn aM() { return "a"; }
+        fn bM() { return "b"; }
+    }
+    let o = new S8C1();
+    print("S8-T1a: " + (o is S8IB1));   # 预期: true
+    print("S8-T1b: " + (o is S8IA1));   # 预期: true (接口继承, 刚修复)
+} catch (e) { print("S8-T1-ERR: " + e); }
+
+# S8-T2: 3层接口继承 IC extends IB extends IA
+try {
+    interface S8IA2 { fn aM(); }
+    interface S8IB2 extends S8IA2 { fn bM(); }
+    interface S8IC2 extends S8IB2 { fn cM(); }
+    class S8C2 implements S8IC2 {
+        fn aM() { return "a"; }
+        fn bM() { return "b"; }
+        fn cM() { return "c"; }
+    }
+    let o = new S8C2();
+    print("S8-T2a: " + (o is S8IC2));   # 预期: true
+    print("S8-T2b: " + (o is S8IB2));   # 预期: true
+    print("S8-T2c: " + (o is S8IA2));   # 预期: true (3层接口继承)
+} catch (e) { print("S8-T2-ERR: " + e); }
+
+# S8-T3: 接口继承 + 类不实现父接口方法 (依赖继承)
+try {
+    interface S8IA3 { fn aM(); }
+    interface S8IB3 extends S8IA3 { fn bM(); }
+    class S8C3 implements S8IB3 {
+        fn aM() { return "a"; }
+        fn bM() { return "b"; }
+    }
+    let o = new S8C3();
+    print("S8-T3: " + o.aM() + o.bM());   # 预期: ab
+} catch (e) { print("S8-T3-ERR: " + e); }
+
+# S8-T4: 接口多继承 interface IC extends IA, IB
+try {
+    interface S8IA4 { fn aM(); }
+    interface S8IB4 { fn bM(); }
+    interface S8IC4 extends S8IA4, S8IB4 { fn cM(); }
+    class S8C4 implements S8IC4 {
+        fn aM() { return "a"; }
+        fn bM() { return "b"; }
+        fn cM() { return "c"; }
+    }
+    let o = new S8C4();
+    print("S8-T4a: " + (o is S8IC4));   # 预期: true
+    print("S8-T4b: " + (o is S8IA4));   # 预期: true
+    print("S8-T4c: " + (o is S8IB4));   # 预期: true
+} catch (e) { print("S8-T4-ERR: " + e); }
+
+# S8-T5: match 模式匹配接口继承
+try {
+    interface S8IA5 { fn aM(); }
+    interface S8IB5 extends S8IA5 { fn bM(); }
+    class S8C5 implements S8IB5 {
+        fn aM() { return "a"; }
+        fn bM() { return "b"; }
+    }
+    let o = new S8C5();
+    let r = match o {
+        is S8IA5 => "is-IA",
+        _ => "not-IA",
+    };
+    print("S8-T5: " + r);   # 预期: is-IA (match 中 is 父接口)
+} catch (e) { print("S8-T5-ERR: " + e); }
+
+# ============================================================
+# S9: 菱形继承 (单继承下不存在; 测试接口菱形)
+# ============================================================
+print("=== S9: diamond inheritance (interface) ===");
+
+# S9-T1: 接口菱形 IA -> IB, IA -> IC, ID implements IB, IC
+try {
+    interface S9IA { fn aM(); }
+    interface S9IB extends S9IA { fn bM(); }
+    interface S9IC extends S9IA { fn cM(); }
+    class S9D implements S9IB, S9IC {
+        fn aM() { return "a"; }
+        fn bM() { return "b"; }
+        fn cM() { return "c"; }
+    }
+    let o = new S9D();
+    print("S9-T1a: " + o.aM());   # 预期: a
+    print("S9-T1b: " + (o is S9IA));   # 预期: true (菱形顶部接口)
+} catch (e) { print("S9-T1-ERR: " + e); }
+
+# S9-T2: 类菱形 (单继承, A->B->C, 无菱形问题)
+try {
+    class S9A2 { fn m() { return "A"; } }
+    class S9B2 extends S9A2 { fn m() { return "B"; } }
+    class S9C2 extends S9B2 { fn m() { return "C"; } }
+    print("S9-T2: " + (new S9C2()).m());   # 预期: C
+} catch (e) { print("S9-T2-ERR: " + e); }
+
+# S9-T3: 接口菱形 + 默认方法冲突
+try {
+    interface S9IA3 { fn m() { return "IA.m"; } }
+    interface S9IB3 extends S9IA3 { }
+    interface S9IC3 extends S9IA3 { }
+    class S9D3 implements S9IB3, S9IC3 { }
+    print("S9-T3: " + (new S9D3()).m());   # 预期: IA.m (继承默认)
+} catch (e) { print("S9-T3-ERR: " + e); }
+
+# ============================================================
+# S10: is 检查深层 — 5层继承的 is 检查
+# ============================================================
+print("=== S10: deep is check ===");
+
+# S10-T1: 5层继承, 子类 is 链上每个类
+try {
+    class S10A { }
+    class S10B extends S10A { }
+    class S10C extends S10B { }
+    class S10D extends S10C { }
+    class S10E extends S10D { }
+    let e = new S10E();
+    print("S10-T1a: " + (e is S10A));   # 预期: true
+    print("S10-T1b: " + (e is S10B));   # 预期: true
+    print("S10-T1c: " + (e is S10C));   # 预期: true
+    print("S10-T1d: " + (e is S10D));   # 预期: true
+    print("S10-T1e: " + (e is S10E));   # 预期: true
+} catch (e) { print("S10-T1-ERR: " + e); }
+
+# S10-T2: 父类实例 is NOT 子类
+try {
+    class S10A2 { }
+    class S10B2 extends S10A2 { }
+    let a = new S10A2();
+    print("S10-T2a: " + (a is S10A2));   # 预期: true
+    print("S10-T2b: " + (a is S10B2));   # 预期: false (父不是子)
+} catch (e) { print("S10-T2-ERR: " + e); }
+
+# S10-T3: 兄弟类 is 检查
+try {
+    class S10A3 { }
+    class S10B3 extends S10A3 { }
+    class S10C3 extends S10A3 { }
+    let b = new S10B3();
+    print("S10-T3a: " + (b is S10A3));   # 预期: true
+    print("S10-T3b: " + (b is S10B3));   # 预期: true
+    print("S10-T3c: " + (b is S10C3));   # 预期: false (兄弟)
+} catch (e) { print("S10-T3-ERR: " + e); }
+
+# S10-T4: 5层 + 接口 is 检查
+try {
+    interface S10I { fn m(); }
+    class S10A4 { }
+    class S10B4 extends S10A4 { }
+    class S10C4 extends S10B4 implements S10I { fn m() { return "m"; } }
+    class S10D4 extends S10C4 { }
+    class S10E4 extends S10D4 { }
+    let e = new S10E4();
+    print("S10-T4a: " + (e is S10A4));   # 预期: true
+    print("S10-T4b: " + (e is S10C4));   # 预期: true
+    print("S10-T4c: " + (e is S10I));    # 预期: true (中间层实现接口)
+} catch (e) { print("S10-T4-ERR: " + e); }
+
+# S10-T5: is 检查不存在的类名
+try {
+    class S10A5 { }
+    let a = new S10A5();
+    print("S10-T5: " + (a is NonExistentClass));   # 预期: false (不报错)
+} catch (e) { print("S10-T5-ERR: " + e); }
+
+# ============================================================
+# S11: super 在不同上下文
+# ============================================================
+print("=== S11: super in different contexts ===");
+
+# S11-T1: super 在 init 中
+try {
+    class S11A1 {
+        let v = 0;
+        fn init() { self.v = self.v + 1; }
+    }
+    class S11B1 extends S11A1 {
+        fn init() { super.init(); self.v = self.v + 10; }
+    }
+    let o = new S11B1();
+    print("S11-T1: " + o.v);   # 预期: 11
+} catch (e) { print("S11-T1-ERR: " + e); }
+
+# S11-T2: super 在普通方法中
+try {
+    class S11A2 { fn m() { return 1; } }
+    class S11B2 extends S11A2 { fn m() { return super.m() + 10; } }
+    print("S11-T2: " + (new S11B2()).m());   # 预期: 11
+} catch (e) { print("S11-T2-ERR: " + e); }
+
+# S11-T3: super 在 static 方法中 — 预期失败 (无 self/instance)
+try {
+    class S11A3 { fn m() { return "A.m"; } }
+    class S11B3 extends S11A3 {
+        static fn sm() { return super.m(); }
+    }
+    print("S11-T3: " + S11B3.sm());   # 预期: 异常
+} catch (e) { print("S11-T3-OK-EXC: " + e); }
+
+# S11-T4: super 在 lambda 中 (捕获 self 上下文?)
+try {
+    class S11A4 { fn m() { return "A"; } }
+    class S11B4 extends S11A4 {
+        fn m() { return "B"; }
+        fn makeLambda() {
+            let f = fn() { return super.m(); };
+            return f;
+        }
+    }
+    try {
+        let f = (new S11B4()).makeLambda();
+        print("S11-T4: " + f());   # 预期: A 或异常 (super 在 lambda 中)
+    } catch (e) { print("S11-T4-OK-EXC: " + e); }
+} catch (e) { print("S11-T4-SETUP-ERR: " + e); }
+
+# S11-T5: super 在嵌套函数中
+try {
+    class S11A5 { fn m() { return "A"; } }
+    class S11B5 extends S11A5 {
+        fn m() { return "B"; }
+        fn outer() {
+            fn inner() { return super.m(); }
+            return inner();
+        }
+    }
+    try {
+        print("S11-T5: " + (new S11B5()).outer());   # 预期: A 或异常
+    } catch (e) { print("S11-T5-OK-EXC: " + e); }
+} catch (e) { print("S11-T5-SETUP-ERR: " + e); }
+
+# ============================================================
+# S12: 父类构造 — new 子类时父类 init 是否自动调用
+# ============================================================
+print("=== S12: parent constructor ===");
+
+# S12-T1: 子类无 init, 父类 init 自动调用
+try {
+    class S12A1 {
+        let v = 0;
+        fn init(x) { self.v = x; }
+    }
+    class S12B1 extends S12A1 { }
+    let o = new S12B1(99);
+    print("S12-T1: " + o.v);   # 预期: 99 (父 init 继承)
+} catch (e) { print("S12-T1-ERR: " + e); }
+
+# S12-T2: 子类有 init 但不调 super.init() — 父类 init 不执行
+try {
+    class S12A2 {
+        let v = 0;
+        fn init() { self.v = 100; }
+    }
+    class S12B2 extends S12A2 {
+        fn init() { self.v = 200; }   # 不调 super.init()
+    }
+    let o = new S12B2();
+    print("S12-T2: " + o.v);   # 预期: 200 (子类 init 覆盖)
+} catch (e) { print("S12-T2-ERR: " + e); }
+
+# S12-T3: 5层 init 链, 子类调 super.init
+try {
+    class S12A3 {
+        let log = "";
+        fn init() { self.log = self.log + "A"; }
+    }
+    class S12B3 extends S12A3 {
+        fn init() { super.init(); self.log = self.log + "B"; }
+    }
+    class S12C3 extends S12B3 {
+        fn init() { super.init(); self.log = self.log + "C"; }
+    }
+    class S12D3 extends S12C3 {
+        fn init() { super.init(); self.log = self.log + "D"; }
+    }
+    class S12E3 extends S12D3 {
+        fn init() { super.init(); self.log = self.log + "E"; }
+    }
+    let o = new S12E3();
+    print("S12-T3: " + o.log);   # 预期: ABCDE
+} catch (e) { print("S12-T3-ERR: " + e); }
+
+# S12-T4: 父类 init 带参数, 子类 init 传参
+try {
+    class S12A4 {
+        let x = 0;
+        fn init(x) { self.x = x; }
+    }
+    class S12B4 extends S12A4 {
+        let y = 0;
+        fn init(x, y) { super.init(x); self.y = y; }
+    }
+    let o = new S12B4(5, 7);
+    print("S12-T4: " + o.x + "," + o.y);   # 预期: 5,7
+} catch (e) { print("S12-T4-ERR: " + e); }
+
+# S12-T5: new 无参数, 父类 init 无参数自动调用
+try {
+    class S12A5 {
+        let v = 0;
+        fn init() { self.v = 42; }
+    }
+    class S12B5 extends S12A5 { }
+    let o = new S12B5();
+    print("S12-T5: " + o.v);   # 预期: 42
+} catch (e) { print("S12-T5-ERR: " + e); }
+
+# ============================================================
+# S13: 方法解析顺序 — 多接口默认方法冲突
+# ============================================================
+print("=== S13: method resolution order ===");
+
+# S13-T1: 两接口同签名默认方法, 类不覆盖 — 第一个接口胜出?
+try {
+    interface S13I1 { fn m() { return "I1"; } }
+    interface S13I2 { fn m() { return "I2"; } }
+    class S13C1 implements S13I1, S13I2 { }   # 不覆盖 m
+    print("S13-T1: " + (new S13C1()).m());   # 预期: I1 (第一个接口, 编译器顺序)
+} catch (e) { print("S13-T1-ERR: " + e); }
+
+# S13-T2: 两接口同签名默认方法, 顺序交换
+try {
+    interface S13I3 { fn m() { return "I3"; } }
+    interface S13I4 { fn m() { return "I4"; } }
+    class S13C2 implements S13I4, S13I3 { }   # 顺序交换
+    print("S13-T2: " + (new S13C2()).m());   # 预期: I4 (第一个接口)
+} catch (e) { print("S13-T2-ERR: " + e); }
+
+# S13-T3: 接口默认方法 + 类覆盖, 类方法胜出
+try {
+    interface S13I5 { fn m() { return "I5"; } }
+    class S13C3 implements S13I5 {
+        fn m() { return "C3"; }   # 覆盖
+    }
+    print("S13-T3: " + (new S13C3()).m());   # 预期: C3
+} catch (e) { print("S13-T3-ERR: " + e); }
+
+# S13-T4: 父类方法 + 接口默认方法同名, 子类不覆盖
+try {
+    class S13Base4 { fn m() { return "Base"; } }
+    interface S13I6 { fn m() { return "I6"; } }
+    class S13C4 extends S13Base4 implements S13I6 { }   # 不覆盖 m
+    print("S13-T4: " + (new S13C4()).m());   # 预期: Base (类方法优先于接口默认)
+} catch (e) { print("S13-T4-ERR: " + e); }
+
+# S13-T5: 接口继承链默认方法, 子接口覆盖父接口默认
+try {
+    interface S13IA { fn m() { return "IA"; } }
+    interface S13IB extends S13IA { fn m() { return "IB"; } }
+    class S13C5 implements S13IB { }
+    print("S13-T5: " + (new S13C5()).m());   # 预期: IB (子接口覆盖)
+} catch (e) { print("S13-T5-ERR: " + e); }
+
+# ============================================================
+# S14: 接口默认方法 — 类不实现时的分派
+# ============================================================
+print("=== S14: interface default method ===");
+
+# S14-T1: 接口默认方法, 类不覆盖
+try {
+    interface S14I1 {
+        fn tag();
+        fn log(msg) { return "[" + self.tag() + "] " + msg; }
+    }
+    class S14C1 implements S14I1 {
+        fn tag() { return "C1"; }
+    }
+    print("S14-T1: " + (new S14C1()).log("hello"));   # 预期: [C1] hello
+} catch (e) { print("S14-T1-ERR: " + e); }
+
+# S14-T2: 接口默认方法调用另一个接口方法
+try {
+    interface S14I2 {
+        fn base();
+        fn inc();
+        fn describe() { return self.base() + "+" + self.inc(); }
+    }
+    class S14C2 implements S14I2 {
+        fn base() { return 10; }
+        fn inc() { return 5; }
+    }
+    print("S14-T2: " + (new S14C2()).describe());   # 预期: 10+5
+} catch (e) { print("S14-T2-ERR: " + e); }
+
+# S14-T3: 类覆盖接口默认方法
+try {
+    interface S14I3 {
+        fn m() { return "default"; }
+    }
+    class S14C3 implements S14I3 {
+        fn m() { return "override"; }
+    }
+    print("S14-T3: " + (new S14C3()).m());   # 预期: override
+} catch (e) { print("S14-T3-ERR: " + e); }
+
+# S14-T4: 接口默认方法中 self 指向实例
+try {
+    interface S14I4 {
+        fn name();
+        fn greet() { return "hi " + self.name(); }
+    }
+    class S14C4 implements S14I4 {
+        fn name() { return "Bob"; }
+    }
+    print("S14-T4: " + (new S14C4()).greet());   # 预期: hi Bob
+} catch (e) { print("S14-T4-ERR: " + e); }
+
+# S14-T5: 多个默认方法, 互相调用
+try {
+    interface S14I5 {
+        fn a();
+        fn b() { return self.a() + "-b"; }
+        fn c() { return self.b() + "-c"; }
+    }
+    class S14C5 implements S14I5 {
+        fn a() { return "a"; }
+    }
+    print("S14-T5: " + (new S14C5()).c());   # 预期: a-b-c
+} catch (e) { print("S14-T5-ERR: " + e); }
+
+print("=== round5_145 done ===");

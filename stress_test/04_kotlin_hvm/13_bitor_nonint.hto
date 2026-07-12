@@ -1,0 +1,20 @@
+# 13_bitor_nonint.hto — BINARY_BITOR 非 int (Kotlin 预期 RuntimeException 崩溃)
+try {
+    let z = "a" | 1;
+    print("no crash: " + str(z));
+} catch (e) {
+    print("caught: " + str(e));
+}
+try {
+    let z = [] | 1;
+    print("no crash2: " + str(z));
+} catch (e) {
+    print("caught2: " + str(e));
+}
+try {
+    let z = 1 & "x";
+    print("no crash3: " + str(z));
+} catch (e) {
+    print("caught3: " + str(e));
+}
+print("after");

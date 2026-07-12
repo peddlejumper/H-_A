@@ -1,0 +1,11 @@
+# H# Benchmark 3: String Concatenation
+# Build a long string by concatenation
+
+let n = 50000;
+let s = "";
+let i = 0;
+while (i < n) {
+    s = s + "abcdef";
+    i = i + 1;
+}
+print("len=" + str(len(s)));

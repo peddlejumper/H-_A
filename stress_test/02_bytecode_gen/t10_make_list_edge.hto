@@ -1,0 +1,18 @@
+# t10_make_list_edge.hto - MAKE_LIST 边界（空列表/嵌套）
+let empty = [];
+print(len(empty));
+print(empty);
+
+let nested = [[1, 2], [3, 4], [5, 6]];
+print(len(nested));
+print(nested[0][0]);
+print(nested[2][1]);
+print(nested[1][0] + nested[1][1]);
+
+let deep = [[[1, 2]], [[3, 4]]];
+print(deep[0][0][1]);
+print(deep[1][0][0]);
+
+let mixed = [1, "a", true, nullptr, [10, 20]];
+print(mixed[0]);
+print(mixed[4][1]);

@@ -1,0 +1,605 @@
+# round4_139_realistic.hto — 测试智能体 Round 4 #139
+# 领域: 真实程序 (realistic programs)
+# H# v0.4.1
+#
+# 每个 S 是一个完整的小型真实程序, 测试多种特性组合。
+# 预期输出在注释中标注。
+
+# ============================================================
+# S1: 计算器 — 递归下降解析器
+# parse "1+2*3" = 7 (乘法优先于加法)
+# 用列表模拟 token, class Parser 做递归下降
+# ============================================================
+print("=== S1 Calculator ===");
+
+fn toInt(s) {
+    let result = 0;
+    let i = 0;
+    while (i < len(s)) {
+        result = result * 10 + (ord(s[i]) - 48);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn tokenize(s) {
+    let tokens = [];
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let c = s[i];
+        if (c == " ") {
+            i = i + 1;
+        } else if (c == "+" or c == "-" or c == "*" or c == "/") {
+            push(tokens, c);
+            i = i + 1;
+        } else if (ord(c) >= 48 and ord(c) <= 57) {
+            let num = "";
+            while (i < n) {
+                let d = s[i];
+                if (ord(d) >= 48 and ord(d) <= 57) {
+                    num = num + d;
+                    i = i + 1;
+                } else {
+                    break;
+                }
+            }
+            push(tokens, num);
+        } else {
+            i = i + 1;
+        }
+    }
+    return tokens;
+}
+
+class Parser {
+    let tokens = [];
+    let pos = 0;
+    fn init(toks) {
+        self.tokens = toks;
+        self.pos = 0;
+    }
+    fn peek() {
+        if (self.pos < len(self.tokens)) {
+            return self.tokens[self.pos];
+        }
+        return "";
+    }
+    fn advance() {
+        let t = self.tokens[self.pos];
+        self.pos = self.pos + 1;
+        return t;
+    }
+    fn parseExpr() {
+        let left = self.parseTerm();
+        while (self.peek() == "+" or self.peek() == "-") {
+            let op = self.advance();
+            let right = self.parseTerm();
+            if (op == "+") {
+                left = left + right;
+            } else {
+                left = left - right;
+            }
+        }
+        return left;
+    }
+    fn parseTerm() {
+        let left = self.parseFactor();
+        while (self.peek() == "*" or self.peek() == "/") {
+            let op = self.advance();
+            let right = self.parseFactor();
+            if (op == "*") {
+                left = left * right;
+            } else {
+                left = left / right;
+            }
+        }
+        return left;
+    }
+    fn parseFactor() {
+        let t = self.advance();
+        return toInt(t);
+    }
+}
+
+try {
+    let toks = tokenize("1+2*3");
+    print("S1.1 tokens=" + str(toks));  # ["1", "+", "2", "*", "3"]
+    let p = new Parser(toks);
+    print("S1.1 1+2*3=" + str(p.parseExpr()));  # 7
+
+    let p2 = new Parser(tokenize("2*3+4"));
+    print("S1.2 2*3+4=" + str(p2.parseExpr()));  # 10
+
+    let p3 = new Parser(tokenize("10-2-3"));
+    print("S1.3 10-2-3=" + str(p3.parseExpr()));  # 5
+
+    let p4 = new Parser(tokenize("2+3*4-1"));
+    print("S1.4 2+3*4-1=" + str(p4.parseExpr()));  # 13
+
+    let p5 = new Parser(tokenize("  7  "));
+    print("S1.5 7=" + str(p5.parseExpr()));  # 7
+} catch (e) {
+    print("S1-ERR: " + e);
+}
+
+# ============================================================
+# S2: 链表 — singly linked list
+# class Node + class LinkedList: prepend/find/length/toStr
+# ============================================================
+print("=== S2 LinkedList ===");
+
+class Node {
+    let value = 0;
+    let next = null;
+    fn init(v) {
+        self.value = v;
+        self.next = null;
+    }
+}
+
+class LinkedList {
+    let head = null;
+    fn init() {
+        self.head = null;
+    }
+    fn prepend(v) {
+        let node = new Node(v);
+        node.next = self.head;
+        self.head = node;
+    }
+    fn length() {
+        let count = 0;
+        let current = self.head;
+        while (current != null) {
+            count = count + 1;
+            current = current.next;
+        }
+        return count;
+    }
+    fn find(v) {
+        let current = self.head;
+        while (current != null) {
+            if (current.value == v) {
+                return true;
+            }
+            current = current.next;
+        }
+        return false;
+    }
+    fn toStr() {
+        let result = "";
+        let current = self.head;
+        while (current != null) {
+            result = result + str(current.value);
+            if (current.next != null) {
+                result = result + " -> ";
+            }
+            current = current.next;
+        }
+        return result;
+    }
+}
+
+try {
+    let list = new LinkedList();
+    list.prepend(1);
+    list.prepend(2);
+    list.prepend(3);
+    list.prepend(4);
+    list.prepend(5);
+    print("S2.1 list=" + list.toStr());  # 5 -> 4 -> 3 -> 2 -> 1
+    print("S2.2 length=" + str(list.length()));  # 5
+    print("S2.3 find(3)=" + str(list.find(3)));  # true
+    print("S2.4 find(99)=" + str(list.find(99)));  # false
+    print("S2.5 find(1)=" + str(list.find(1)));  # true
+    print("S2.6 find(5)=" + str(list.find(5)));  # true
+} catch (e) {
+    print("S2-ERR: " + e);
+}
+
+# ============================================================
+# S3: 银行账户 — deposit/withdraw with exception
+# class BankAccount { balance; deposit; withdraw { throw } }
+# ============================================================
+print("=== S3 BankAccount ===");
+
+class BankAccount {
+    let balance = 0;
+    fn init(initial) {
+        self.balance = initial;
+    }
+    fn deposit(n) {
+        self.balance = self.balance + n;
+        return self.balance;
+    }
+    fn withdraw(n) {
+        if (n > self.balance) {
+            throw "insufficient";
+        }
+        self.balance = self.balance - n;
+        return self.balance;
+    }
+}
+
+try {
+    let acct = new BankAccount(50);
+    print("S3.1 init=" + str(acct.balance));  # 50
+    print("S3.2 deposit(100)=" + str(acct.deposit(100)));  # 150
+    print("S3.3 withdraw(30)=" + str(acct.withdraw(30)));  # 120
+    try {
+        acct.withdraw(200);
+        print("S3.4 withdraw(200)=ERROR");
+    } catch (e) {
+        print("S3.4 withdraw(200) caught: " + e);  # insufficient
+    }
+    print("S3.5 final=" + str(acct.balance));  # 120
+    print("S3.6 deposit(0)=" + str(acct.deposit(0)));  # 120
+} catch (e) {
+    print("S3-ERR: " + e);
+}
+
+# ============================================================
+# S4: 状态机 — 红绿灯 RED->GREEN->YELLOW->RED
+# 用 match 实现, 循环 10 步
+# ============================================================
+print("=== S4 TrafficLight ===");
+
+fn nextState(s) {
+    return match s {
+        "RED" => "GREEN",
+        "GREEN" => "YELLOW",
+        "YELLOW" => "RED",
+        _ => "RED"
+    };
+}
+
+try {
+    let state = "RED";
+    let i = 0;
+    while (i < 10) {
+        print("S4." + str(i) + " " + state);
+        state = nextState(state);
+        i = i + 1;
+    }
+    # Expected: RED, GREEN, YELLOW, RED, GREEN, YELLOW, RED, GREEN, YELLOW, RED
+} catch (e) {
+    print("S4-ERR: " + e);
+}
+
+# ============================================================
+# S5: 事件系统 — dict 存储事件名到回调列表
+# register/trigger, 用闭包作为回调
+# ============================================================
+print("=== S5 EventSystem ===");
+
+let events = {};
+let eventLog = [];
+
+fn register(name, cb) {
+    if (not events.has_key(name)) {
+        events[name] = [];
+    }
+    push(events[name], cb);
+}
+
+fn trigger(name, data) {
+    if (events.has_key(name)) {
+        for cb in events[name] {
+            cb(data);
+        }
+    }
+}
+
+try {
+    register("click", fn(x) { push(eventLog, "click1:" + x); });
+    register("click", fn(x) { push(eventLog, "click2:" + x); });
+    register("hover", fn(x) { push(eventLog, "hover:" + x); });
+
+    trigger("click", "btn1");
+    trigger("hover", "btn2");
+    trigger("missing", "x");
+
+    print("S5.1 log=" + str(eventLog));
+    # ["click1:btn1", "click2:btn1", "hover:btn2"]
+    print("S5.2 click-count=" + str(len(events["click"])));  # 2
+    print("S5.3 hover-count=" + str(len(events["hover"])));  # 1
+} catch (e) {
+    print("S5-ERR: " + e);
+}
+
+# ============================================================
+# S6: 字符串分词 — tokenize("hello, world! foo")
+# -> ["hello", "world", "foo"], 用循环+条件
+# ============================================================
+print("=== S6 Tokenizer ===");
+
+fn tokenizeWords(s) {
+    let tokens = [];
+    let i = 0;
+    let n = len(s);
+    let current = "";
+    while (i < n) {
+        let c = s[i];
+        if (c == " " or c == "," or c == "!" or c == ".") {
+            if (len(current) > 0) {
+                push(tokens, current);
+                current = "";
+            }
+        } else {
+            current = current + c;
+        }
+        i = i + 1;
+    }
+    if (len(current) > 0) {
+        push(tokens, current);
+    }
+    return tokens;
+}
+
+try {
+    print("S6.1 " + str(tokenizeWords("hello, world! foo")));  # ["hello", "world", "foo"]
+    print("S6.2 " + str(tokenizeWords("a,b,c")));  # ["a", "b", "c"]
+    print("S6.3 " + str(tokenizeWords("  one  two  ")));  # ["one", "two"]
+    print("S6.4 " + str(tokenizeWords("")));  # []
+    print("S6.5 " + str(tokenizeWords("single")));  # ["single"]
+    print("S6.6 " + str(tokenizeWords("a.b.c")));  # ["a", "b", "c"]
+} catch (e) {
+    print("S6-ERR: " + e);
+}
+
+# ============================================================
+# S7: 图遍历 BFS — dict 表示图, 列表作为队列
+# ============================================================
+print("=== S7 BFS ===");
+
+fn bfs(graph, start) {
+    let visited = {};
+    let queue = [start];
+    let head = 0;
+    let order = [];
+    visited[start] = true;
+    while (head < len(queue)) {
+        let node = queue[head];
+        head = head + 1;
+        push(order, node);
+        let neighbors = [];
+        if (graph.has_key(node)) {
+            neighbors = graph[node];
+        }
+        for n in neighbors {
+            if (not visited.has_key(n)) {
+                visited[n] = true;
+                push(queue, n);
+            }
+        }
+    }
+    return order;
+}
+
+try {
+    let graph = {
+        "A": ["B", "C"],
+        "B": ["D"],
+        "C": ["D"],
+        "D": ["E"],
+        "E": []
+    };
+    let order = bfs(graph, "A");
+    print("S7.1 BFS=" + str(order));  # ["A", "B", "C", "D", "E"]
+    print("S7.2 visited-count=" + str(len(order)));  # 5
+
+    let graph2 = {
+        "1": ["2", "3"],
+        "2": ["4"],
+        "3": ["4", "5"],
+        "4": ["6"],
+        "5": ["6"],
+        "6": []
+    };
+    let order2 = bfs(graph2, "1");
+    print("S7.3 BFS2=" + str(order2));  # ["1", "2", "3", "4", "5", "6"]
+} catch (e) {
+    print("S7-ERR: " + e);
+}
+
+# ============================================================
+# S8: 记忆化 — fib 函数 + dict 缓存
+# 测试 memoized fib(30) 比 naive fib(20) 调用次数少
+# ============================================================
+print("=== S8 Memoization ===");
+
+let callCount = {"naive": 0, "memo": 0};
+
+fn naiveFib(n) {
+    callCount["naive"] = callCount["naive"] + 1;
+    if (n < 2) { return n; }
+    return naiveFib(n - 1) + naiveFib(n - 2);
+}
+
+let fibCache = {};
+fn memoFib(n) {
+    callCount["memo"] = callCount["memo"] + 1;
+    if (fibCache.has_key(n)) { return fibCache[n]; }
+    let r = 0;
+    if (n < 2) {
+        r = n;
+    } else {
+        r = memoFib(n - 1) + memoFib(n - 2);
+    }
+    fibCache[n] = r;
+    return r;
+}
+
+try {
+    let naiveResult = naiveFib(20);
+    let naiveCalls = callCount["naive"];
+    print("S8.1 naive fib(20)=" + str(naiveResult) + " calls=" + str(naiveCalls));
+    # fib(20)=6765, calls=21891
+
+    let memoResult = memoFib(30);
+    let memoCalls = callCount["memo"];
+    print("S8.2 memo fib(30)=" + str(memoResult) + " calls=" + str(memoCalls));
+    # fib(30)=832040, calls=59
+
+    print("S8.3 memo-calls < naive-calls: " + str(memoCalls < naiveCalls));  # true
+} catch (e) {
+    print("S8-ERR: " + e);
+}
+
+# ============================================================
+# S9: JSON 序列化 — toJson(value)
+# int->"42", str->"\"hi\"", list->"[1,2,3]", dict->"{\"k\":\"v\"}"
+# ============================================================
+print("=== S9 JSON ===");
+
+fn jsonEscape(s) {
+    let result = "\"";
+    let i = 0;
+    while (i < len(s)) {
+        let c = s[i];
+        if (c == "\"") {
+            result = result + "\\\"";
+        } else if (c == "\\") {
+            result = result + "\\\\";
+        } else if (c == "\n") {
+            result = result + "\\n";
+        } else {
+            result = result + c;
+        }
+        i = i + 1;
+    }
+    return result + "\"";
+}
+
+fn typeOf(v) {
+    return match v {
+        is null => "null",
+        is bool => "bool",
+        is int => "int",
+        is float => "float",
+        is str => "str",
+        is list => "list",
+        is dict => "dict",
+        _ => "unknown"
+    };
+}
+
+fn toJson(v) {
+    let t = typeOf(v);
+    if (t == "null") { return "null"; }
+    if (t == "bool") {
+        if (v == true) { return "true"; }
+        return "false";
+    }
+    if (t == "str") { return jsonEscape(v); }
+    if (t == "list") {
+        let parts = [];
+        for x in v {
+            push(parts, toJson(x));
+        }
+        return "[" + ", ".join(parts) + "]";
+    }
+    if (t == "dict") {
+        let parts = [];
+        for k, vv in v {
+            push(parts, "\"" + k + "\": " + toJson(vv));
+        }
+        return "{" + ", ".join(parts) + "}";
+    }
+    return str(v);
+}
+
+try {
+    print("S9.1 int: " + toJson(42));  # 42
+    print("S9.2 str: " + toJson("hi"));  # "hi"
+    print("S9.3 list: " + toJson([1, 2, 3]));  # [1, 2, 3]
+    print("S9.4 dict: " + toJson({"k": "v"}));  # {"k": "v"}
+    print("S9.5 nested: " + toJson({"a": [1, 2], "b": "x"}));  # {"a": [1, 2], "b": "x"}
+    print("S9.6 null: " + toJson(null));  # null
+    print("S9.7 bool: " + toJson(true));  # true
+    print("S9.8 empty-list: " + toJson([]));  # []
+    print("S9.9 empty-dict: " + toJson({}));  # {}
+    print("S9.10 str-with-quotes: " + toJson("a\"b"));  # "a\"b"
+} catch (e) {
+    print("S9-ERR: " + e);
+}
+
+# ============================================================
+# S10: 迷你解释器 — 栈式 bytecode 解释器
+# PUSH 1, PUSH 2, ADD, PRINT。用列表存指令
+# ============================================================
+print("=== S10 BytecodeInterpreter ===");
+
+fn interpret(instructions) {
+    let stack = [];
+    let i = 0;
+    while (i < len(instructions)) {
+        let instr = instructions[i];
+        let op = instr[0];
+        if (op == "PUSH") {
+            push(stack, instr[1]);
+        } else if (op == "ADD") {
+            let b = stack.pop();
+            let a = stack.pop();
+            push(stack, a + b);
+        } else if (op == "SUB") {
+            let b = stack.pop();
+            let a = stack.pop();
+            push(stack, a - b);
+        } else if (op == "MUL") {
+            let b = stack.pop();
+            let a = stack.pop();
+            push(stack, a * b);
+        } else if (op == "DIV") {
+            let b = stack.pop();
+            let a = stack.pop();
+            push(stack, a / b);
+        } else if (op == "PRINT") {
+            print("S10> " + str(stack.pop()));
+        }
+        i = i + 1;
+    }
+    return stack;
+}
+
+try {
+    let prog1 = [
+        ["PUSH", 1],
+        ["PUSH", 2],
+        ["ADD"],
+        ["PRINT"]
+    ];
+    let s1 = interpret(prog1);
+    print("S10.1 stack=" + str(s1));  # [3], prints S10> 3
+
+    let prog2 = [
+        ["PUSH", 10],
+        ["PUSH", 3],
+        ["SUB"],
+        ["PRINT"]
+    ];
+    interpret(prog2);  # prints S10> 7
+
+    let prog3 = [
+        ["PUSH", 4],
+        ["PUSH", 5],
+        ["MUL"],
+        ["PRINT"]
+    ];
+    interpret(prog3);  # prints S10> 20
+
+    let prog4 = [
+        ["PUSH", 1],
+        ["PUSH", 2],
+        ["PUSH", 3],
+        ["ADD"],
+        ["MUL"],
+        ["PRINT"]
+    ];
+    interpret(prog4);  # 1 * (2+3) = 5, prints S10> 5
+} catch (e) {
+    print("S10-ERR: " + e);
+}
+
+print("=== ALL DONE ===");

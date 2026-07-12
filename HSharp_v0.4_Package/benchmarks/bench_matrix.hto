@@ -1,0 +1,21 @@
+# H# Benchmark 6: Nested Loop (Matrix Multiplication)
+# 100x100 matrix multiplication
+
+let n = 100;
+let total = 0;
+let i = 0;
+while (i < n) {
+    let j = 0;
+    while (j < n) {
+        let s = 0;
+        let k = 0;
+        while (k < n) {
+            s = s + (i + k) * (k * j + 1);
+            k = k + 1;
+        }
+        total = total + s;
+        j = j + 1;
+    }
+    i = i + 1;
+}
+print("total=" + str(total));

@@ -1,0 +1,28 @@
+# t07_trycatch_nested.hto - try/catch 嵌套
+fn safe_div(a, b) {
+    try {
+        try {
+            return a / b;
+        } catch (e1) {
+            return -1;
+        }
+    } catch (e2) {
+        return -2;
+    }
+}
+print(safe_div(10, 2));
+print(safe_div(10, 0));
+# 嵌套 try，内层捕获除零
+fn outer() {
+    try {
+        try {
+            throw "inner-error";
+        } catch (e) {
+            print("caught inner: " + str(e));
+            throw "rethrown";
+        }
+    } catch (e2) {
+        print("caught outer: " + str(e2));
+    }
+}
+outer();

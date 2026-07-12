@@ -1,0 +1,93 @@
+# H# standard library helpers - implement missing builtins in H#
+
+# abs - absolute value
+fn abs(x) {
+    if (x < 0) {
+        return 0 - x;
+    }
+    return x;
+}
+
+# min - find minimum in list
+fn min(lst) {
+    let m = lst[0];
+    let i = 1;
+    while (i < len(lst)) {
+        if (lst[i] < m) {
+            m = lst[i];
+        }
+        i = i + 1;
+    }
+    return m;
+}
+
+# max - find maximum in list
+fn max(lst) {
+    let m = lst[0];
+    let i = 1;
+    while (i < len(lst)) {
+        if (lst[i] > m) {
+            m = lst[i];
+        }
+        i = i + 1;
+    }
+    return m;
+}
+
+# range - generate list of integers
+fn range(n) {
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        push(result, i);
+        i = i + 1;
+    }
+    return result;
+}
+
+# has_key - check if dict contains key
+fn has_key(d, k) {
+    let keys = dict_keys(d);
+    let i = 0;
+    while (i < len(keys)) {
+        if (keys[i] == k) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+# type - return type name as string
+fn type(x) {
+    let t = x;
+    # detect by behavior
+    if (t == true or t == false) {
+        return "bool";
+    }
+    # check if it's a number
+    let s = str(t);
+    # try numeric checks
+    if (t + 0 == t) {
+        # it's a number - check int vs float
+        if (t == int(t)) {
+            return "int";
+        }
+        return "float";
+    }
+    return "string";
+}
+
+# Test
+print(abs(-5));
+print(abs(7));
+print(min([3, 1, 2]));
+print(max([3, 1, 2]));
+print(range(5));
+let d = {"a": 1, "b": 2};
+print(has_key(d, "a"));
+print(has_key(d, "c"));
+print(type(123));
+print(type("hello"));
+print(type(true));
+print(type(3.14));

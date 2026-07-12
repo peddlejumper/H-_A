@@ -1,0 +1,9 @@
+# t8
+let _ai_cfg = {"a": 1};
+fn f(cfg) {
+    if (cfg == nullptr) {
+        return;
+    }
+    if ("a" in cfg) { _ai_cfg["a"] = cfg["a"]; }
+}
+print("ok");

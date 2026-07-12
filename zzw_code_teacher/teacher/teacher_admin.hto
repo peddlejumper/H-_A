@@ -1,0 +1,655 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# teacher/teacher_admin.hto — 教师端管理后台（现代化重设计）
+# 设计：与学生端统一视觉语言，表格精致、卡片现代、图表清晰
+# 布局：极简顶栏 / 顶部 Tab / 左侧二级导航 / 主工作区 / 底部状态
+# ═══════════════════════════════════════════════════════════════════════════
+import "bootstrap/zzw_native.hto";
+import "zzw_code_teacher/common/theme.hto";
+import "zzw_code_teacher/common/widgets.hto";
+import "zzw_code_teacher/common/data_store.hto";
+
+# ───────────────────────── 应用状态 ─────────────────────────
+let _t = {
+    "win_id": 0,
+    "win_w": 1240,
+    "win_h": 780,
+    "running": true,
+    "current_tab": 0,        # 0=题目 1=用户 2=审阅 3=统计
+    "nav_w": 200,
+    "problems": [],
+    "sel_problem": 0,
+    "users": [],
+    "sel_user": 0,
+    "submissions": [],
+    "sel_sub": 0,
+    "stats": nullptr,
+    "mx": 0,
+    "my": 0,
+    "hover_problem": -1,
+    "hover_user": -1,
+    "hover_sub": -1,
+    "hover_tab": -1
+};
+
+fn t_init() {
+    _t["problems"] = problems_all();
+    _t["users"] = users_all();
+    _t["submissions"] = submissions_all();
+    _t["stats"] = stats_overview();
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 顶部导航栏（与学生端统一）
+# ═══════════════════════════════════════════════════════════════════════════
+fn t_render_topbar(win_id) {
+    let w = _t["win_w"];
+    native_draw_rect(win_id, 0, 0, w, 48, "#0a0a0a", true);
+    native_draw_line(win_id, 0, 48, w, 48, "#1f1f1f", 1);
+
+    # Logo
+    native_draw_text(win_id, 20, 15, "Code Teacher", "#ededed", 14, true, "PingFang SC");
+    native_draw_text(win_id, 124, 17, "Admin", "#a78bfa", 11, false, "Menlo");
+
+    # Tab 导航
+    let tabs = ["题目管理", "用户管理", "提交审阅", "评测统计"];
+    let tab_w = 110;
+    let tab_x = 200;
+    let i = 0;
+    while (i < len(tabs)) {
+        let tx = tab_x + i * tab_w;
+        let active = (i == _t["current_tab"]);
+        let fg = active ? "#ededed" : "#71717a";
+        native_draw_text_centered(win_id, tx + tab_w / 2, 24, tabs[i], fg, 13, active);
+        if (active) {
+            native_draw_rect(win_id, tx + 20, 44, tab_w - 40, 2, "#ededed", true);
+        }
+        i = i + 1;
+    }
+
+    # 右侧
+    native_draw_text(win_id, w - 88, 17, "管理员", "#a1a1aa", 12, false, "PingFang SC");
+    native_draw_rounded_rect(win_id, w - 56, 12, 24, 24, 12, "#3d1515", true);
+    native_draw_text_centered(win_id, w - 44, 24, "A", "#f48771", 12, true);
+    return 0;
+}
+
+# ───────────────────────── 左侧二级导航 ─────────────────────────
+fn t_render_nav(win_id) {
+    let nw = _t["nav_w"];
+    let y = 48;
+    let h = _t["win_h"] - y;
+    native_draw_rect(win_id, 0, y, nw, h, "#0a0a0a", true);
+    native_draw_line(win_id, nw, y, nw, y + h, "#1f1f1f", 1);
+
+    # 导航标题
+    native_draw_text(win_id, 20, y + 20, "导航", "#52525b", 11, true, "PingFang SC");
+
+    let items = [];
+    if (_t["current_tab"] == 0) { items = [{"label": "全部题目", "icon": "L"}, {"label": "新增题目", "icon": "+"}, {"label": "难度分布", "icon": "#"}]; }
+    if (_t["current_tab"] == 1) { items = [{"label": "全部用户", "icon": "U"}, {"label": "新增用户", "icon": "+"}, {"label": "角色管理", "icon": "R"}]; }
+    if (_t["current_tab"] == 2) { items = [{"label": "待审阅", "icon": "!"}, {"label": "已通过", "icon": "v"}, {"label": "未通过", "icon": "x"}, {"label": "全部记录", "icon": "L"}]; }
+    if (_t["current_tab"] == 3) { items = [{"label": "总览看板", "icon": "D"}, {"label": "题目分析", "icon": "P"}, {"label": "学生分析", "icon": "S"}]; }
+
+    let iy = y + 48;
+    let i = 0;
+    while (i < len(items)) {
+        let it = items[i];
+        let py = iy + i * 36;
+        let is_first = (i == 0);
+        let bg = "#0a0a0a";
+        let fg = "#a1a1aa";
+        if (is_first) {
+            bg = "#1c1c1c";
+            fg = "#ededed";
+            native_draw_rect(win_id, 0, py + 6, 2, 24, "#ededed", true);
+        }
+        native_draw_rounded_rect(win_id, 12, py, nw - 24, 30, 4, bg, true);
+        native_draw_text(win_id, 24, py + 8, it["icon"], fg, 12, true, "Menlo");
+        native_draw_text(win_id, 44, py + 8, it["label"], fg, 13, false, "PingFang SC");
+        i = i + 1;
+    }
+
+    # 底部信息
+    let info_y = y + h - 60;
+    native_draw_line(win_id, 16, info_y, nw - 16, info_y, "#1f1f1f", 1);
+    native_draw_text(win_id, 20, info_y + 12, "教学数据", "#52525b", 10, false, "PingFang SC");
+    native_draw_text(win_id, 20, info_y + 28, "实时同步", "#71717a", 11, false, "PingFang SC");
+    native_draw_circle(win_id, nw - 24, info_y + 34, 3, "#10b981", true);
+    return 0;
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 主工作区
+# ═══════════════════════════════════════════════════════════════════════════
+fn t_render_workspace(win_id) {
+    let nw = _t["nav_w"];
+    let y = 48;
+    let w = _t["win_w"] - nw;
+    let h = _t["win_h"] - y - 24;
+    native_draw_rect(win_id, nw, y, w, h, "#0a0a0a", true);
+
+    if (_t["current_tab"] == 0) { t_render_problems(win_id, nw, y, w, h); }
+    if (_t["current_tab"] == 1) { t_render_users(win_id, nw, y, w, h); }
+    if (_t["current_tab"] == 2) { t_render_review(win_id, nw, y, w, h); }
+    if (_t["current_tab"] == 3) { t_render_stats(win_id, nw, y, w, h); }
+    return 0;
+}
+
+# ───────────────────────── 面板：题目管理 ─────────────────────────
+fn t_render_problems(win_id, x, y, w, h) {
+    # 页面标题 + 操作
+    native_draw_text(win_id, x + 24, y + 24, "题目管理", "#ededed", 18, true, "PingFang SC");
+    native_draw_text(win_id, x + 24, y + 48, "共 " + str(len(_t["problems"])) + " 道题目", "#71717a", 12, false, "PingFang SC");
+
+    # 右上角"新增题目"按钮
+    let btn_x = x + w - 124;
+    native_draw_rounded_rect(win_id, btn_x, y + 20, 100, 30, 6, "#ffffff", true);
+    native_draw_text_centered(win_id, btn_x + 50, y + 35, "+ 新增题目", "#0a0a0a", 12, true);
+
+    # 左侧题目列表卡片
+    let list_w = 340;
+    let list_y = y + 72;
+    let list_h = h - 80;
+    native_draw_rounded_rect(win_id, x + 24, list_y, list_w, list_h, 8, "#161616", true);
+    native_draw_rounded_rect(win_id, x + 24, list_y, list_w, list_h, 8, "#262626", false);
+
+    # 列表内标题
+    native_draw_text(win_id, x + 40, list_y + 16, "题目列表", "#ededed", 13, true, "PingFang SC");
+
+    # 题目项
+    let i = 0;
+    let iy = list_y + 44;
+    while (i < len(_t["problems"])) {
+        let p = _t["problems"][i];
+        let py = iy + i * 52;
+        if (py + 52 > list_y + list_h - 8) { i = len(_t["problems"]); }
+        else {
+            let is_sel = (i == _t["sel_problem"]);
+            let is_hover = (i == _t["hover_problem"]);
+            let bg = "#161616";
+            if (is_hover) { bg = "#1c1c1c"; }
+            if (is_sel) { bg = "#222222"; }
+            native_draw_rounded_rect(win_id, x + 32, py, list_w - 16, 48, 4, bg, true);
+            if (is_sel) {
+                native_draw_rect(win_id, x + 32, py + 6, 2, 36, "#ededed", true);
+            }
+            # 题号
+            native_draw_text(win_id, x + 44, py + 8, p["id"], "#52525b", 11, false, "Menlo");
+            # 标题
+            native_draw_text(win_id, x + 44, py + 26, p["title"],
+                             is_sel ? "#ededed" : "#e4e4e7", 13, false, "PingFang SC");
+            # 难度 badge
+            let dc = "#10b981"; let dbg = "#0d3d2e";
+            if (p["difficulty"] == "中等") { dc = "#f59e0b"; dbg = "#3d2e0d"; }
+            if (p["difficulty"] == "困难") { dc = "#ef4444"; dbg = "#3d1515"; }
+            let dm = native_measure_text(p["difficulty"], 10, false);
+            native_draw_rounded_rect(win_id, x + 32 + list_w - 16 - dm[0] - 20, py + 8, dm[0] + 10, 16, 3, dbg, true);
+            native_draw_text(win_id, x + 32 + list_w - 16 - dm[0] - 15, py + 10, p["difficulty"], dc, 10, false, "PingFang SC");
+            # 通过率
+            let rate = str(p["passed"]) + "/" + str(p["submitted"]);
+            native_draw_text(win_id, x + 32 + list_w - 16 - 40, py + 28, rate, "#52525b", 10, false, "Menlo");
+        }
+        i = i + 1;
+    }
+
+    # 右侧详情卡片
+    let dx = x + 24 + list_w + 16;
+    let dw = w - list_w - 64;
+    native_draw_rounded_rect(win_id, dx, list_y, dw, list_h, 8, "#161616", true);
+    native_draw_rounded_rect(win_id, dx, list_y, dw, list_h, 8, "#262626", false);
+
+    let p = _t["problems"][_t["sel_problem"]];
+    native_draw_text(win_id, dx + 20, list_y + 20, "题目详情", "#ededed", 14, true, "PingFang SC");
+    native_draw_line(win_id, dx + 20, list_y + 44, dx + dw - 20, list_y + 44, "#1f1f1f", 1);
+
+    # 字段（label + value 两列布局）
+    let fields = [
+        {"label": "题号", "value": p["id"]},
+        {"label": "标题", "value": p["title"]},
+        {"label": "难度", "value": p["difficulty"]},
+        {"label": "通过", "value": str(p["passed"]) + " / " + str(p["submitted"])}
+    ];
+    let fi = 0;
+    let fy = list_y + 60;
+    while (fi < len(fields)) {
+        native_draw_text(win_id, dx + 20, fy + fi * 32, fields[fi]["label"], "#71717a", 12, false, "PingFang SC");
+        let val_color = "#ededed";
+        if (fields[fi]["label"] == "难度") {
+            val_color = "#10b981";
+            if (p["difficulty"] == "中等") { val_color = "#f59e0b"; }
+            if (p["difficulty"] == "困难") { val_color = "#ef4444"; }
+        }
+        native_draw_text(win_id, dx + 100, fy + fi * 32, fields[fi]["value"], val_color, 13, false, "Menlo");
+        fi = fi + 1;
+    }
+
+    # 描述区
+    native_draw_text(win_id, dx + 20, list_y + 200, "题目描述", "#71717a", 12, false, "PingFang SC");
+    native_draw_rounded_rect(win_id, dx + 20, list_y + 220, dw - 40, list_h - 280, 6, "#0d0d0d", true);
+    native_draw_rounded_rect(win_id, dx + 20, list_y + 220, dw - 40, list_h - 280, 6, "#1f1f1f", false);
+    let desc_lines = t_split_lines(p["desc"]);
+    let di = 0;
+    while (di < len(desc_lines) and di * 17 < list_h - 300) {
+        native_draw_text(win_id, dx + 32, list_y + 232 + di * 17, desc_lines[di], "#e4e4e7", 12, false, "PingFang SC");
+        di = di + 1;
+    }
+
+    # 底部按钮组
+    let by = list_y + list_h - 44;
+    native_draw_rounded_rect(win_id, dx + 20, by, 72, 30, 6, "#ffffff", true);
+    native_draw_text_centered(win_id, dx + 56, by + 15, "保存", "#0a0a0a", 12, true);
+    native_draw_rounded_rect(win_id, dx + 100, by, 72, 30, 6, "#161616", true);
+    native_draw_rounded_rect(win_id, dx + 100, by, 72, 30, 6, "#333333", false);
+    native_draw_text_centered(win_id, dx + 136, by + 15, "删除", "#ef4444", 12, false);
+    return 0;
+}
+
+# ───────────────────────── 面板：用户管理 ─────────────────────────
+fn t_render_users(win_id, x, y, w, h) {
+    # 标题
+    native_draw_text(win_id, x + 24, y + 24, "用户管理", "#ededed", 18, true, "PingFang SC");
+    native_draw_text(win_id, x + 24, y + 48, "共 " + str(len(_t["users"])) + " 位用户", "#71717a", 12, false, "PingFang SC");
+
+    # 新增按钮
+    let btn_x = x + w - 108;
+    native_draw_rounded_rect(win_id, btn_x, y + 20, 84, 30, 6, "#ffffff", true);
+    native_draw_text_centered(win_id, btn_x + 42, y + 35, "+ 新增", "#0a0a0a", 12, true);
+
+    # 表格卡片
+    let table_y = y + 72;
+    let table_h = h - 80;
+    native_draw_rounded_rect(win_id, x + 24, table_y, w - 48, table_h, 8, "#161616", true);
+    native_draw_rounded_rect(win_id, x + 24, table_y, w - 48, table_h, 8, "#262626", false);
+
+    # 表头
+    let cols = [{"label": "用户ID", "w": 100}, {"label": "用户名", "w": 160},
+                {"label": "角色", "w": 100}, {"label": "已解决", "w": 100},
+                {"label": "提交数", "w": 100}, {"label": "通过率", "w": 100}];
+    let cx = x + 40;
+    native_draw_line(win_id, x + 24, table_y + 40, x + w - 24, table_y + 40, "#262626", 1);
+    let ci = 0;
+    while (ci < len(cols)) {
+        native_draw_text(win_id, cx, table_y + 14, cols[ci]["label"], "#71717a", 11, true, "PingFang SC");
+        cx = cx + cols[ci]["w"];
+        ci = ci + 1;
+    }
+
+    # 行
+    let users = _t["users"];
+    let ri = 0;
+    let row_h = 40;
+    while (ri < len(users)) {
+        let u = users[ri];
+        let ry = table_y + 48 + ri * row_h;
+        if (ry + row_h > table_y + table_h - 8) { ri = len(users); }
+        else {
+            let is_sel = (ri == _t["sel_user"]);
+            let is_hover = (ri == _t["hover_user"]);
+            let bg = "#161616";
+            if (is_hover) { bg = "#1c1c1c"; }
+            if (is_sel) { bg = "#222222"; }
+            native_draw_rect(win_id, x + 24, ry, w - 48, row_h, bg, true);
+            if (is_sel) {
+                native_draw_rect(win_id, x + 24, ry + 4, 2, row_h - 8, "#ededed", true);
+            }
+
+            let cx = x + 40;
+            native_draw_text(win_id, cx, ry + 12, u["id"], "#a1a1aa", 12, false, "Menlo"); cx = cx + 100;
+            # 用户名 + 头像
+            native_draw_rounded_rect(win_id, cx, ry + 8, 24, 24, 12, "#262626", true);
+            native_draw_text_centered(win_id, cx + 12, ry + 20, substring(u["name"], 0, 1), "#ededed", 11, true);
+            native_draw_text(win_id, cx + 32, ry + 12, u["name"], "#ededed", 12, false, "PingFang SC"); cx = cx + 160;
+            # 角色
+            let role_color = (u["role"] == "teacher") ? "#a78bfa" : "#10b981";
+            let role_bg = (u["role"] == "teacher") ? "#221a3d" : "#0d3d2e";
+            let role_text = (u["role"] == "teacher") ? "教师" : "学生";
+            let rm = native_measure_text(role_text, 10, false);
+            native_draw_rounded_rect(win_id, cx, ry + 10, rm[0] + 12, 18, 3, role_bg, true);
+            native_draw_text(win_id, cx + 6, ry + 12, role_text, role_color, 10, false, "PingFang SC"); cx = cx + 100;
+            native_draw_text(win_id, cx, ry + 12, str(u["solved"]), "#e4e4e7", 12, false, "Menlo"); cx = cx + 100;
+            native_draw_text(win_id, cx, ry + 12, str(u["submitted"]), "#e4e4e7", 12, false, "Menlo"); cx = cx + 100;
+            # 通过率（带进度条）
+            let rate = 0;
+            if (u["submitted"] > 0) { rate = u["solved"] * 100 / u["submitted"]; }
+            native_draw_text(win_id, cx, ry + 12, str(rate) + "%", "#10b981", 12, false, "Menlo");
+            # 迷你进度条
+            let bar_w = 60;
+            native_draw_rounded_rect(win_id, cx, ry + 26, bar_w, 4, 2, "#262626", true);
+            native_draw_rounded_rect(win_id, cx, ry + 26, bar_w * rate / 100, 4, 2, "#10b981", true);
+        }
+        ri = ri + 1;
+    }
+    return 0;
+}
+
+# ───────────────────────── 面板：提交审阅 ─────────────────────────
+fn t_render_review(win_id, x, y, w, h) {
+    native_draw_text(win_id, x + 24, y + 24, "提交审阅", "#ededed", 18, true, "PingFang SC");
+    let st = _t["stats"];
+    native_draw_text(win_id, x + 24, y + 48, "共 " + str(len(_t["submissions"])) + " 条记录", "#71717a", 12, false, "PingFang SC");
+
+    # 左侧记录列表
+    let list_w = 380;
+    let list_y = y + 72;
+    let list_h = h - 80;
+    native_draw_rounded_rect(win_id, x + 24, list_y, list_w, list_h, 8, "#161616", true);
+    native_draw_rounded_rect(win_id, x + 24, list_y, list_w, list_h, 8, "#262626", false);
+    native_draw_text(win_id, x + 40, list_y + 16, "提交记录", "#ededed", 13, true, "PingFang SC");
+
+    let subs = _t["submissions"];
+    if (len(subs) == 0) {
+        native_draw_text(win_id, x + 40, list_y + 52, "暂无提交记录", "#52525b", 12, false, "PingFang SC");
+        native_draw_text(win_id, x + 40, list_y + 72, "学生提交后将显示在此", "#3f3f46", 11, false, "PingFang SC");
+    }
+    let i = 0;
+    while (i < len(subs)) {
+        let s = subs[i];
+        let py = list_y + 44 + i * 52;
+        if (py + 52 > list_y + list_h - 8) { i = len(subs); }
+        else {
+            let is_sel = (i == _t["sel_sub"]);
+            let bg = "#161616";
+            if (i == _t["hover_sub"]) { bg = "#1c1c1c"; }
+            if (is_sel) { bg = "#222222"; }
+            native_draw_rounded_rect(win_id, x + 32, py, list_w - 16, 48, 4, bg, true);
+            if (is_sel) { native_draw_rect(win_id, x + 32, py + 6, 2, 36, "#ededed", true); }
+
+            # 结果 badge
+            let rc = "#10b981"; let rbg = "#0d3d2e"; let rtext = "通过";
+            if (s["result"] != "通过") { rc = "#ef4444"; rbg = "#3d1515"; rtext = "未过"; }
+            native_draw_rounded_rect(win_id, x + 44, py + 8, 36, 16, 3, rbg, true);
+            native_draw_text(win_id, x + 50, py + 10, rtext, rc, 10, false, "PingFang SC");
+
+            native_draw_text(win_id, x + 88, py + 8, s["user"], "#e4e4e7", 12, false, "Menlo");
+            native_draw_text(win_id, x + 88, py + 26, s["problem"], "#71717a", 11, false, "Menlo");
+            native_draw_text(win_id, x + 32 + list_w - 16 - 80, py + 8, s["time"], "#52525b", 10, false, "Menlo");
+        }
+        i = i + 1;
+    }
+
+    # 右侧代码查看
+    let dx = x + 24 + list_w + 16;
+    let dw = w - list_w - 64;
+    native_draw_rounded_rect(win_id, dx, list_y, dw, list_h, 8, "#161616", true);
+    native_draw_rounded_rect(win_id, dx, list_y, dw, list_h, 8, "#262626", false);
+    native_draw_text(win_id, dx + 20, list_y + 20, "提交代码", "#ededed", 14, true, "PingFang SC");
+    native_draw_line(win_id, dx + 20, list_y + 44, dx + dw - 20, list_y + 44, "#1f1f1f", 1);
+
+    if (len(subs) == 0) {
+        native_draw_text(win_id, dx + 20, list_y + 64, "选择左侧记录查看代码", "#52525b", 12, false, "PingFang SC");
+    } else {
+        let s = subs[_t["sel_sub"]];
+        # 代码区
+        let code_y = list_y + 56;
+        let code_h = list_h - 120;
+        native_draw_rounded_rect(win_id, dx + 20, code_y, dw - 40, code_h, 6, "#0d0d0d", true);
+        native_draw_rounded_rect(win_id, dx + 20, code_y, dw - 40, code_h, 6, "#1f1f1f", false);
+
+        let code_lines = t_split_lines(s["code"]);
+        let ci = 0;
+        while (ci < len(code_lines) and ci * 18 < code_h - 16) {
+            let ly = code_y + 10 + ci * 18;
+            native_draw_text(win_id, dx + 32, ly, str(ci + 1), "#3f3f46", 11, false, "Menlo");
+            native_draw_text(win_id, dx + 64, ly, code_lines[ci], "#e4e4e7", 12, false, "Menlo");
+            ci = ci + 1;
+        }
+
+        # 审阅操作
+        let by = list_y + list_h - 44;
+        native_draw_rounded_rect(win_id, dx + 20, by, 72, 30, 6, "#ffffff", true);
+        native_draw_text_centered(win_id, dx + 56, by + 15, "通过", "#0a0a0a", 12, true);
+        native_draw_rounded_rect(win_id, dx + 100, by, 72, 30, 6, "#161616", true);
+        native_draw_rounded_rect(win_id, dx + 100, by, 72, 30, 6, "#333333", false);
+        native_draw_text_centered(win_id, dx + 136, by + 15, "驳回", "#ef4444", 12, false);
+    }
+    return 0;
+}
+
+# ───────────────────────── 面板：评测统计 ─────────────────────────
+fn t_render_stats(win_id, x, y, w, h) {
+    let st = _t["stats"];
+
+    native_draw_text(win_id, x + 24, y + 24, "评测统计", "#ededed", 18, true, "PingFang SC");
+    native_draw_text(win_id, x + 24, y + 48, "实时教学数据看板", "#71717a", 12, false, "PingFang SC");
+
+    # 四个统计卡片
+    let cards = [
+        {"label": "总提交数", "value": str(st["total_submissions"]), "color": "#e4e4e7", "sub": "累计所有提交"},
+        {"label": "通过数", "value": str(st["total_passed"]), "color": "#10b981", "sub": "通过评测的提交"},
+        {"label": "通过率", "value": str(st["pass_rate"]) + "%", "color": "#a78bfa", "sub": "通过 / 总提交"},
+        {"label": "学生数", "value": str(st["total_users"]), "color": "#f59e0b", "sub": "注册学生总数"}
+    ];
+    let card_w = (w - 96) / 4;
+    let card_y = y + 72;
+    let i = 0;
+    while (i < len(cards)) {
+        let cx = x + 24 + i * (card_w + 16);
+        # 卡片
+        native_draw_rounded_rect(win_id, cx, card_y, card_w, 96, 8, "#161616", true);
+        native_draw_rounded_rect(win_id, cx, card_y, card_w, 96, 8, "#262626", false);
+        # 标签
+        native_draw_text(win_id, cx + 16, card_y + 16, cards[i]["label"], "#71717a", 11, false, "PingFang SC");
+        # 数值
+        native_draw_text(win_id, cx + 16, card_y + 38, cards[i]["value"], cards[i]["color"], 26, true, "Menlo");
+        # 副文字
+        native_draw_text(win_id, cx + 16, card_y + 74, cards[i]["sub"], "#52525b", 11, false, "PingFang SC");
+        i = i + 1;
+    }
+
+    # 图表区
+    let chart_y = card_y + 112;
+    let chart_h = h - chart_y - 32;
+    native_draw_rounded_rect(win_id, x + 24, chart_y, w - 48, chart_h, 8, "#161616", true);
+    native_draw_rounded_rect(win_id, x + 24, chart_y, w - 48, chart_h, 8, "#262626", false);
+    native_draw_text(win_id, x + 40, chart_y + 20, "各题目通过情况", "#ededed", 14, true, "PingFang SC");
+    native_draw_text(win_id, x + 40, chart_y + 40, "提交数 vs 通过数", "#52525b", 11, false, "PingFang SC");
+
+    # 柱状图
+    let problems = _t["problems"];
+    let bar_count = len(problems);
+    if (bar_count > 0) {
+        let chart_x = x + 64;
+        let chart_y2 = chart_y + 72;
+        let chart_w = w - 128;
+        let chart_h2 = chart_h - 120;
+        let bar_total_w = chart_w / bar_count;
+        let bar_w = bar_total_w * 0.5;
+        let gap = bar_total_w * 0.5;
+
+        # 找最大值
+        let max_val = 1;
+        let bi = 0;
+        while (bi < bar_count) {
+            if (problems[bi]["submitted"] > max_val) { max_val = problems[bi]["submitted"]; }
+            bi = bi + 1;
+        }
+
+        # 坐标轴
+        native_draw_line(win_id, chart_x, chart_y2 + chart_h2, chart_x + chart_w, chart_y2 + chart_h2, "#262626", 1);
+        native_draw_line(win_id, chart_x, chart_y2, chart_x, chart_y2 + chart_h2, "#262626", 1);
+
+        # 柱子
+        let bi = 0;
+        while (bi < bar_count) {
+            let p = problems[bi];
+            let bx = chart_x + bi * bar_total_w + gap / 2;
+            # 提交数（灰）
+            let sub_h = (p["submitted"] * chart_h2 / max_val);
+            if (sub_h > 0) {
+                native_draw_rounded_rect(win_id, bx, chart_y2 + chart_h2 - sub_h, bar_w / 2 - 1, sub_h, 2, "#3f3f46", true);
+            }
+            # 通过数（绿）
+            let pass_h = (p["passed"] * chart_h2 / max_val);
+            if (pass_h > 0) {
+                native_draw_rounded_rect(win_id, bx + bar_w / 2 + 1, chart_y2 + chart_h2 - pass_h, bar_w / 2 - 1, pass_h, 2, "#10b981", true);
+            }
+            # 标签
+            native_draw_text(win_id, bx, chart_y2 + chart_h2 + 8, p["id"], "#71717a", 10, false, "Menlo");
+            bi = bi + 1;
+        }
+
+        # 图例
+        let leg_x = x + w - 160;
+        let leg_y = chart_y + 20;
+        native_draw_rounded_rect(win_id, leg_x, leg_y, 10, 10, 2, "#3f3f46", true);
+        native_draw_text(win_id, leg_x + 16, leg_y, "提交数", "#a1a1aa", 11, false, "PingFang SC");
+        native_draw_rounded_rect(win_id, leg_x + 80, leg_y, 10, 10, 2, "#10b981", true);
+        native_draw_text(win_id, leg_x + 96, leg_y, "通过数", "#a1a1aa", 11, false, "PingFang SC");
+    }
+    return 0;
+}
+
+# ───────────────────────── 底部状态栏 ─────────────────────────
+fn t_render_statusbar(win_id) {
+    let y = _t["win_h"] - 24;
+    let w = _t["win_w"];
+    native_draw_rect(win_id, 0, y, w, 24, "#0a0a0a", true);
+    native_draw_line(win_id, 0, y, w, y, "#1f1f1f", 1);
+
+    let st = _t["stats"];
+    native_draw_circle(win_id, 16, y + 11, 3, "#10b981", true);
+    native_draw_text(win_id, 26, y + 5, "已连接", "#71717a", 11, false, "PingFang SC");
+    native_draw_text(win_id, 72, y + 5, "·  学生 " + str(st["total_users"]) + "  ·  题目 " + str(st["total_problems"]), "#52525b", 11, false, "PingFang SC");
+
+    let right = "今日提交 " + str(st["total_submissions"]) + "  ·  通过率 " + str(st["pass_rate"]) + "%";
+    let m = native_measure_text(right, 11, false);
+    native_draw_text(win_id, w - m[0] - 16, y + 5, right, "#71717a", 11, false, "PingFang SC");
+    return 0;
+}
+
+# ───────────────────────── 主渲染 ─────────────────────────
+fn t_render_all(win_id) {
+    native_clear(win_id, "#0a0a0a");
+    t_render_topbar(win_id);
+    t_render_nav(win_id);
+    t_render_workspace(win_id);
+    t_render_statusbar(win_id);
+    native_update(win_id);
+    return 0;
+}
+
+# ───────────────────────── 事件处理 ─────────────────────────
+fn t_handle_events(win_id) {
+    let events = native_get_events(win_id);
+    let i = 0;
+    while (i < len(events)) {
+        let evt = events[i];
+        if (evt["type"] == "close") { _t["running"] = false; }
+        if (evt["type"] == "resize") {
+            _t["win_w"] = evt["x"];
+            _t["win_h"] = evt["y"];
+        }
+        if (evt["type"] == "mouse_down") { t_handle_click(evt["x"], evt["y"]); }
+        if (evt["type"] == "mouse_move") {
+            _t["mx"] = evt["x"];
+            _t["my"] = evt["y"];
+            t_update_hover(evt["x"], evt["y"]);
+        }
+        i = i + 1;
+    }
+    return 0;
+}
+
+fn t_update_hover(px, py) {
+    # Tab hover
+    _t["hover_tab"] = -1;
+    if (py >= 0 and py < 48) {
+        let tab_w = 110;
+        let tab_x = 200;
+        let idx = (px - tab_x) / tab_w;
+        if (idx >= 0 and idx < 4) { _t["hover_tab"] = idx; }
+    }
+    # 题目列表 hover
+    _t["hover_problem"] = -1;
+    if (_t["current_tab"] == 0 and px < 340 + 24) {
+        let list_y = 48 + 72;
+        if (py >= list_y + 44) {
+            let idx = (py - list_y - 44) / 52;
+            if (idx >= 0 and idx < len(_t["problems"])) { _t["hover_problem"] = idx; }
+        }
+    }
+    return 0;
+}
+
+fn t_handle_click(px, py) {
+    # 顶部 Tab
+    if (py >= 0 and py < 48) {
+        let tab_w = 110;
+        let tab_x = 200;
+        let idx = (px - tab_x) / tab_w;
+        if (idx >= 0 and idx < 4) { _t["current_tab"] = idx; }
+        return 0;
+    }
+    # 题目列表
+    if (_t["current_tab"] == 0 and px < 364) {
+        let list_y = 48 + 72;
+        if (py >= list_y + 44) {
+            let idx = (py - list_y - 44) / 52;
+            if (idx >= 0 and idx < len(_t["problems"])) { _t["sel_problem"] = idx; }
+        }
+    }
+    # 用户列表
+    if (_t["current_tab"] == 1) {
+        let table_y = 48 + 72;
+        if (py >= table_y + 48) {
+            let idx = (py - table_y - 48) / 40;
+            if (idx >= 0 and idx < len(_t["users"])) { _t["sel_user"] = idx; }
+        }
+    }
+    # 提交列表
+    if (_t["current_tab"] == 2 and px < 404) {
+        let list_y = 48 + 72;
+        if (py >= list_y + 44) {
+            let idx = (py - list_y - 44) / 52;
+            if (idx >= 0 and idx < len(_t["submissions"])) { _t["sel_sub"] = idx; }
+        }
+    }
+    return 0;
+}
+
+# ───────────────────────── 工具 ─────────────────────────
+fn t_split_lines(text) {
+    let lines = [""];
+    let idx = 0;
+    let cur = "";
+    let n = len(text);
+    while (idx < n) {
+        let ch = substring(text, idx, 1);
+        if (ch == "\n") {
+            push(lines, cur);
+            cur = "";
+        } else {
+            cur = cur + ch;
+        }
+        idx = idx + 1;
+    }
+    push(lines, cur);
+    return lines;
+}
+
+# ───────────────────────── 入口 ─────────────────────────
+fn teacher_main() {
+    t_init();
+    let wid = native_create_window("Code Teacher — Admin", _t["win_w"], _t["win_h"], "#0a0a0a");
+    if (wid <= 0) {
+        print("ERROR: 教师端窗口创建失败");
+        return 0;
+    }
+    _t["win_id"] = wid;
+    print("[teacher] 教师端窗口已创建，进入事件循环...");
+
+    while (_t["running"]) {
+        t_handle_events(wid);
+        t_render_all(wid);
+        native_poll_events();
+    }
+
+    native_destroy_window(wid);
+    print("[teacher] 教师端已关闭。");
+    return 0;
+}
+
+fn run_teacher() {
+    return teacher_main();
+}
