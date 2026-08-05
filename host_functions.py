@@ -6,6 +6,9 @@ These functions provide system-level capabilities needed by H# standard librarie
 import time
 import os
 import sys
+import shutil
+import tempfile
+import calendar
 from datetime import datetime
 
 def builtin_time_now(args=None):
@@ -1323,6 +1326,369 @@ def builtin_new_widget(args):
     cname = args[0]
     remaining = list(args[1:])
     return _get_hwd_ui().make_widget(cname, remaining)
+
+
+# ============================================================================
+# Standard-library functions expected by test_standard_libs.hto
+# (datetime_*, fs_*, io_* and str_contains). These mirror the richer API of
+# the Kotlin/.NET backends so the documented stdlib works on the Python VM too.
+# ============================================================================
+
+# ---- Date / Time ----------------------------------------------------------
+
+def builtin_datetime_now(args=None):
+    """Current local date/time as 'YYYY-MM-DD HH:MM:SS'."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def builtin_datetime_timestamp(args=None):
+    """Current Unix timestamp in seconds."""
+    return int(time.time())
+
+
+def builtin_datetime_format(args):
+    """Format a timestamp (seconds) with a strftime format string."""
+    if len(args) < 2:
+        raise Exception("datetime_format requires 2 arguments (timestamp, format)")
+    ts = float(args[0])
+    fmt = str(args[1])
+    return datetime.fromtimestamp(ts).strftime(fmt)
+
+
+def builtin_datetime_parse(args):
+    """Parse a date string into an internal timestamp (seconds) or nullptr on failure."""
+    if len(args) < 1:
+        raise Exception("datetime_parse requires 1 argument (date_string)")
+    s = str(args[0]).strip()
+    formats = [
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d",
+        "%Y/%m/%d %H:%M:%S", "%Y/%m/%d", "%d-%m-%Y",
+        "%Y-%m-%dT%H:%M:%S", "%H:%M:%S",
+    ]
+    for fmt in formats:
+        try:
+            return int(time.mktime(datetime.strptime(s, fmt).timetuple()))
+        except Exception:
+            continue
+    return None
+
+
+def builtin_datetime_get_year(args):
+    """Year component of a parsed timestamp."""
+    if len(args) < 1:
+        raise Exception("datetime_get_year requires 1 argument")
+    ts = float(args[0])
+    return datetime.fromtimestamp(ts).year
+
+
+def builtin_datetime_is_leap_year(args):
+    """True if the given year is a leap year."""
+    if len(args) < 1:
+        raise Exception("datetime_is_leap_year requires 1 argument (year)")
+    year = int(args[0])
+    return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
+
+
+def builtin_datetime_days_in_month(args):
+    """Number of days in the given month of the given year."""
+    if len(args) < 2:
+        raise Exception("datetime_days_in_month requires 2 arguments (year, month)")
+    year = int(args[0])
+    month = int(args[1])
+    return calendar.monthrange(year, month)[1]
+
+
+def builtin_datetime_format_duration(args):
+    """Format a duration in seconds as 'Nh Nm Ns'."""
+    if len(args) < 1:
+        raise Exception("datetime_format_duration requires 1 argument (seconds)")
+    secs = int(float(args[0]))
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    s = secs % 60
+    parts = []
+    if h:
+        parts.append(f"{h}h")
+    if m or h:
+        parts.append(f"{m}m")
+    parts.append(f"{s}s")
+    return " ".join(parts)
+
+
+def builtin_datetime_today(args=None):
+    """Today's date as 'YYYY-MM-DD'."""
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def builtin_datetime_timer_start(args=None):
+    """Return a timer handle (perf_counter)."""
+    return time.perf_counter()
+
+
+def builtin_datetime_timer_elapsed(args):
+    """Elapsed seconds since a timer handle was started."""
+    if len(args) < 1:
+        raise Exception("datetime_timer_elapsed requires 1 argument (timer)")
+    return time.perf_counter() - float(args[0])
+
+
+# ---- File System ----------------------------------------------------------
+
+def builtin_fs_dir_current(args=None):
+    """Current working directory."""
+    return os.getcwd()
+
+
+def builtin_fs_path_join(args):
+    """Join path components."""
+    if len(args) < 2:
+        raise Exception("fs_path_join requires at least 2 arguments")
+    return os.path.join(str(args[0]), str(args[1]))
+
+
+def builtin_fs_path_filename(args):
+    """Basename of a path."""
+    if len(args) < 1:
+        raise Exception("fs_path_filename requires 1 argument")
+    return os.path.basename(str(args[0]))
+
+
+def builtin_fs_path_extension(args):
+    """Extension of a path (includes the leading dot)."""
+    if len(args) < 1:
+        raise Exception("fs_path_extension requires 1 argument")
+    return os.path.splitext(str(args[0]))[1]
+
+
+def builtin_fs_path_is_absolute(args):
+    """True if the path is absolute."""
+    if len(args) < 1:
+        raise Exception("fs_path_is_absolute requires 1 argument")
+    return os.path.isabs(str(args[0]))
+
+
+def builtin_fs_temp_dir(args):
+    """Create a temp directory with the given prefix; return its path."""
+    prefix = str(args[0]) if args else "hsharp"
+    return tempfile.mkdtemp(prefix=prefix + "_")
+
+
+def builtin_fs_cleanup_temp(args):
+    """Remove a temporary directory created by fs_temp_dir."""
+    if len(args) < 1:
+        raise Exception("fs_cleanup_temp requires 1 argument")
+    p = str(args[0])
+    if os.path.isdir(p):
+        shutil.rmtree(p, ignore_errors=True)
+    return None
+
+
+def builtin_fs_format_size(args):
+    """Human-readable file size from a byte count."""
+    if len(args) < 1:
+        raise Exception("fs_format_size requires 1 argument (bytes)")
+    size = float(args[0])
+    for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
+        if size < 1024.0 or unit == "PB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024.0
+    return f"{size:.1f} PB"
+
+
+def builtin_fs_validate_path(args):
+    """Validate a path string (reject control/invalid filename chars)."""
+    if len(args) < 1:
+        raise Exception("fs_validate_path requires 1 argument")
+    p = str(args[0])
+    invalid = set('<>"|?*')
+    if any(c in invalid for c in p):
+        return False
+    if "\x00" in p:
+        return False
+    return True
+
+
+def builtin_fs_change_extension(args):
+    """Replace a path's extension. ext may include or omit the leading dot."""
+    if len(args) < 2:
+        raise Exception("fs_change_extension requires 2 arguments (path, ext)")
+    p = str(args[0])
+    ext = str(args[1])
+    if not ext.startswith("."):
+        ext = "." + ext
+    base, _ = os.path.splitext(p)
+    return base + ext
+
+
+def builtin_fs_path_parent(args):
+    """Parent directory of a path."""
+    if len(args) < 1:
+        raise Exception("fs_path_parent requires 1 argument")
+    return os.path.dirname(str(args[0]))
+
+
+def builtin_fs_file_delete(args):
+    """Delete a file."""
+    if len(args) < 1:
+        raise Exception("fs_file_delete requires 1 argument")
+    p = str(args[0])
+    if os.path.exists(p):
+        os.remove(p)
+    return None
+
+
+def builtin_fs_file_exists(args):
+    """True if the path exists."""
+    if len(args) < 1:
+        raise Exception("fs_file_exists requires 1 argument")
+    return os.path.exists(str(args[0]))
+
+
+def builtin_fs_dir_exists(args):
+    """True if the path exists and is a directory."""
+    if len(args) < 1:
+        raise Exception("fs_dir_exists requires 1 argument")
+    return os.path.isdir(str(args[0]))
+
+
+# ---- I/O helpers ----------------------------------------------------------
+
+def builtin_io_pad_right(args):
+    """Right-pad a string to a given width."""
+    if len(args) < 2:
+        raise Exception("io_pad_right requires 2 arguments (string, width)")
+    return str(args[0]).ljust(int(args[1]))
+
+
+def builtin_io_csv_parse_line(args):
+    """Split a CSV line by a separator into a list of fields."""
+    if len(args) < 2:
+        raise Exception("io_csv_parse_line requires 2 arguments (line, sep)")
+    return str(args[0]).split(str(args[1]))
+
+
+def builtin_io_progress_bar(args):
+    """Print a simple progress bar. No return value."""
+    if len(args) < 3:
+        raise Exception("io_progress_bar requires 3 arguments (current, total, width)")
+    cur = int(args[0])
+    total = max(int(args[1]), 1)
+    width = int(args[2])
+    frac = cur / total
+    filled = int(width * frac)
+    bar = "#" * filled + "-" * (width - filled)
+    print(f"[{bar}] {cur}/{total} ({int(frac * 100)}%)")
+    return None
+
+
+def builtin_io_display_table(args):
+    """Print a simple ASCII table. No return value."""
+    if len(args) < 2:
+        raise Exception("io_display_table requires at least 2 arguments (headers, rows)")
+    headers = args[0]
+    rows = args[1]
+    cols = list(headers)
+    widths = [len(str(c)) for c in cols]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(str(cell)))
+    line = "-+-".join("-" * (w + 2) for w in widths)
+    print("  " + "  |  ".join(str(c).ljust(widths[i]) for i, c in enumerate(cols)))
+    print(line)
+    for row in rows:
+        print("  " + "  |  ".join(str(cell).ljust(widths[i]) for i, cell in enumerate(row)))
+    return None
+
+
+def builtin_io_file_write(args):
+    """Write content to a file (overwrite)."""
+    if len(args) < 2:
+        raise Exception("io_file_write requires 2 arguments (path, content)")
+    with open(str(args[0]), "w", encoding="utf-8") as f:
+        f.write(str(args[1]))
+    return None
+
+
+def builtin_io_file_read(args):
+    """Read a file's full content as a string."""
+    if len(args) < 1:
+        raise Exception("io_file_read requires 1 argument (path)")
+    with open(str(args[0]), "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def builtin_io_file_append(args):
+    """Append content to a file."""
+    if len(args) < 2:
+        raise Exception("io_file_append requires 2 arguments (path, content)")
+    with open(str(args[0]), "a", encoding="utf-8") as f:
+        f.write(str(args[1]))
+    return None
+
+
+def builtin_io_file_write_lines(args):
+    """Write a list of lines to a file (one per line)."""
+    if len(args) < 2:
+        raise Exception("io_file_write_lines requires 2 arguments (path, lines)")
+    with open(str(args[0]), "w", encoding="utf-8") as f:
+        for line in args[1]:
+            f.write(str(line) + "\n")
+    return None
+
+
+def builtin_io_file_read_lines(args):
+    """Read a file into a list of lines (newlines stripped)."""
+    if len(args) < 1:
+        raise Exception("io_file_read_lines requires 1 argument (path)")
+    with open(str(args[0]), "r", encoding="utf-8") as f:
+        return [line.rstrip("\n") for line in f]
+
+
+def builtin_io_kv_write(args):
+    """Write key/value pairs to a file as `key=value` lines."""
+    if len(args) < 3:
+        raise Exception("io_kv_write requires 3 arguments (path, keys, values)")
+    keys = args[1]
+    values = args[2]
+    with open(str(args[0]), "w", encoding="utf-8") as f:
+        for k, v in zip(keys, values):
+            f.write(f"{k}={v}\n")
+    return None
+
+
+def builtin_io_kv_read(args):
+    """Read a `key=value` file; returns [keys_list, values_list]."""
+    if len(args) < 1:
+        raise Exception("io_kv_read requires 1 argument (path)")
+    keys = []
+    values = []
+    if os.path.exists(str(args[0])):
+        with open(str(args[0]), "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                keys.append(k)
+                values.append(v)
+    return [keys, values]
+
+
+def builtin_io_log_info(args):
+    """Append a timestamped INFO log entry to a file."""
+    if len(args) < 2:
+        raise Exception("io_log_info requires 2 arguments (path, message)")
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(str(args[0]), "a", encoding="utf-8") as f:
+        f.write(f"[{ts}] INFO {args[1]}\n")
+    return None
+
+
+def builtin_str_contains(args):
+    """True if `haystack` contains `needle`."""
+    if len(args) < 2:
+        raise Exception("str_contains requires 2 arguments (haystack, needle)")
+    return str(args[0]) != "" and str(args[1]) in str(args[0])
 
 
 

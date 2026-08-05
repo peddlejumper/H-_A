@@ -30,6 +30,45 @@ from host_functions import (
     builtin_io_append_file,
     builtin_io_read_lines,
     builtin_io_write_lines,
+    # Standard-library functions (datetime_*/fs_*/io_*/str_contains)
+    builtin_datetime_now,
+    builtin_datetime_timestamp,
+    builtin_datetime_format,
+    builtin_datetime_parse,
+    builtin_datetime_get_year,
+    builtin_datetime_is_leap_year,
+    builtin_datetime_days_in_month,
+    builtin_datetime_format_duration,
+    builtin_datetime_today,
+    builtin_datetime_timer_start,
+    builtin_datetime_timer_elapsed,
+    builtin_fs_dir_current,
+    builtin_fs_path_join,
+    builtin_fs_path_filename,
+    builtin_fs_path_extension,
+    builtin_fs_path_is_absolute,
+    builtin_fs_temp_dir,
+    builtin_fs_cleanup_temp,
+    builtin_fs_format_size,
+    builtin_fs_validate_path,
+    builtin_fs_change_extension,
+    builtin_fs_path_parent,
+    builtin_fs_file_delete,
+    builtin_fs_file_exists,
+    builtin_fs_dir_exists,
+    builtin_io_pad_right,
+    builtin_io_csv_parse_line,
+    builtin_io_progress_bar,
+    builtin_io_display_table,
+    builtin_io_file_write,
+    builtin_io_file_read,
+    builtin_io_file_append,
+    builtin_io_file_write_lines,
+    builtin_io_file_read_lines,
+    builtin_io_kv_write,
+    builtin_io_kv_read,
+    builtin_io_log_info,
+    builtin_str_contains,
     # Network functions
     builtin_net_http_get,
     builtin_net_http_post,
@@ -741,6 +780,11 @@ class Interpreter:
         # Populated lazily by _hwdui_register_widget or auto-loaded on first use.
         self._host_widgets = {}
         self._hwdui_loaded = False
+        # Entry script path (set by __main__ / run) used to resolve relative
+        # `import` paths robustly regardless of the current working directory.
+        self.entry_file = None
+        # Stack of directories currently being imported, for nested resolution.
+        self._import_dirs = []
         self.builtins = {
             'len': builtin_len,
             '_tag': builtin_tag,
@@ -758,6 +802,7 @@ class Interpreter:
             'coro_signal': self._builtin_coro_signal,
             'coro_signal_io': self._builtin_coro_signal_io,
             'scheduler_run': self._builtin_scheduler_run,
+            'eval_node': self._builtin_eval_node,
             # New host functions for bootstrap modules
             'time_now': builtin_time_now,
             'substring': builtin_substring,
@@ -771,6 +816,17 @@ class Interpreter:
             'date_timestamp': builtin_date_timestamp,
             'date_format': builtin_date_format,
             'date_parse': builtin_date_parse,
+            'datetime_now': builtin_datetime_now,
+            'datetime_timestamp': builtin_datetime_timestamp,
+            'datetime_format': builtin_datetime_format,
+            'datetime_parse': builtin_datetime_parse,
+            'datetime_get_year': builtin_datetime_get_year,
+            'datetime_is_leap_year': builtin_datetime_is_leap_year,
+            'datetime_days_in_month': builtin_datetime_days_in_month,
+            'datetime_format_duration': builtin_datetime_format_duration,
+            'datetime_today': builtin_datetime_today,
+            'datetime_timer_start': builtin_datetime_timer_start,
+            'datetime_timer_elapsed': builtin_datetime_timer_elapsed,
             # File system functions
             'fs_exists': builtin_fs_exists,
             'fs_is_file': builtin_fs_is_file,
@@ -784,10 +840,37 @@ class Interpreter:
             'fs_get_ext': builtin_fs_get_ext,
             'fs_get_basename': builtin_fs_get_basename,
             'fs_get_dirname': builtin_fs_get_dirname,
+            'fs_dir_current': builtin_fs_dir_current,
+            'fs_path_join': builtin_fs_path_join,
+            'fs_path_filename': builtin_fs_path_filename,
+            'fs_path_extension': builtin_fs_path_extension,
+            'fs_path_is_absolute': builtin_fs_path_is_absolute,
+            'fs_temp_dir': builtin_fs_temp_dir,
+            'fs_cleanup_temp': builtin_fs_cleanup_temp,
+            'fs_format_size': builtin_fs_format_size,
+            'fs_validate_path': builtin_fs_validate_path,
+            'fs_change_extension': builtin_fs_change_extension,
+            'fs_path_parent': builtin_fs_path_parent,
+            'fs_file_delete': builtin_fs_file_delete,
+            'fs_file_exists': builtin_fs_file_exists,
+            'fs_dir_exists': builtin_fs_dir_exists,
             # IO helper functions
             'io_append_file': builtin_io_append_file,
             'io_read_lines': builtin_io_read_lines,
             'io_write_lines': builtin_io_write_lines,
+            'io_pad_right': builtin_io_pad_right,
+            'io_csv_parse_line': builtin_io_csv_parse_line,
+            'io_progress_bar': builtin_io_progress_bar,
+            'io_display_table': builtin_io_display_table,
+            'io_file_write': builtin_io_file_write,
+            'io_file_read': builtin_io_file_read,
+            'io_file_append': builtin_io_file_append,
+            'io_file_write_lines': builtin_io_file_write_lines,
+            'io_file_read_lines': builtin_io_file_read_lines,
+            'io_kv_write': builtin_io_kv_write,
+            'io_kv_read': builtin_io_kv_read,
+            'io_log_info': builtin_io_log_info,
+            'str_contains': builtin_str_contains,
             # Network functions
             'http_get': builtin_net_http_get,
             'http_post': builtin_net_http_post,
@@ -1319,6 +1402,41 @@ class Interpreter:
         value = self.eval_expr(stmt.expr, env)
         print(value)
 
+    def _resolve_module_path(self, rel):
+        """Resolve a relative module path against several candidate roots.
+
+        Search order:
+          1. the current working directory
+          2. the entry script's directory and all of its ancestor directories
+          3. directories of modules currently being imported (nested imports)
+          4. every directory listed in the HSHARP_PATH environment variable
+        Returns the absolute path of the first existing match, else None.
+        """
+        candidates = [os.getcwd()]
+        if self.entry_file:
+            d = os.path.dirname(os.path.abspath(self.entry_file))
+            while True:
+                candidates.append(d)
+                parent = os.path.dirname(d)
+                if parent == d:
+                    break
+                d = parent
+        for d in self._import_dirs:
+            while True:
+                candidates.append(d)
+                parent = os.path.dirname(d)
+                if parent == d:
+                    break
+                d = parent
+        for p in os.environ.get('HSHARP_PATH', '').split(os.pathsep):
+            if p:
+                candidates.append(p)
+        for base in candidates:
+            cand = os.path.join(base, rel)
+            if os.path.exists(cand):
+                return os.path.abspath(cand)
+        return None
+
     def visit_ImportStatement(self, stmt, env):
         # stmt.path may be a string ("file.hto") or an Identifier (module name)
         path = stmt.path
@@ -1326,9 +1444,10 @@ class Interpreter:
         if isinstance(path, str):
             if not path.endswith('.hto'):
                 path += '.hto'
-            if not os.path.exists(path):
+            resolved = self._resolve_module_path(path)
+            if resolved is None:
                 raise HSharpError(f"Module not found: {path}")
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(resolved, 'r', encoding='utf-8') as f:
                 code = f.read()
             # If an H# tokenizer `tokenize` is available in this interpreter (self.functions),
             # prefer to use it to produce tokens. If an H# `parse` is also available,
@@ -1381,7 +1500,12 @@ class Interpreter:
                 program = parser.parse()
             # run in the current env (imported names populate current env)
             sub_interpreter = Interpreter(global_env=env, functions=self.functions)
-            sub_interpreter.interpret(program, env)
+            sub_interpreter.entry_file = resolved
+            self._import_dirs.append(os.path.dirname(resolved))
+            try:
+                sub_interpreter.interpret(program, env)
+            finally:
+                self._import_dirs.pop()
             # ensure any functions registered by the imported module are available
             try:
                 self.functions.update(sub_interpreter.functions)
@@ -1629,6 +1753,219 @@ class Interpreter:
                 if not still:
                     break
         return None
+
+    # Expression node type names handled by eval_expr (vs. statement visitors).
+    _EXPR_TYPES = {
+        'BinaryOp', 'UnaryOp', 'CallExpression', 'Identifier', 'NumberLiteral',
+        'StringLiteral', 'BooleanLiteral', 'NullLiteral', 'MemberExpression',
+        'ListLiteral', 'DictLiteral', 'AssignmentExpression', 'TernaryExpression',
+        'LambdaExpression', 'IndexExpression', 'SuperExpression', 'IsExpression',
+        'AsExpression',
+    }
+
+    def _builtin_eval_node(self, args):
+        """Evaluate a serialized AST node (from the H# `parse`) inside an env.
+
+        `eval_node(ast, env)` is the core of the interpreter chain:
+          * `ast` is the nested-dict AST produced by `parse` (a program is a
+            list of statement dicts; a single node is one dict).
+          * `env` is the caller's mutable environment container (a list of
+            [name, value] pairs, or a dict). Top-level definitions are mirrored
+            back into it so callers can read them via `_env_get`.
+        Returns a list with one entry per evaluated top-level node.
+        """
+        if len(args) < 1:
+            raise HSharpError("eval_node requires at least 1 argument (ast)")
+        node = args[0]
+        ext_env = args[1] if len(args) >= 2 else None
+        env = Environment()
+
+        def to_statements(n):
+            if isinstance(n, dict) and n.get('type') == 'Program':
+                return [self._dict_to_ast(x) for x in n.get('statements', [])]
+            if isinstance(n, list):
+                if len(n) > 0 and isinstance(n[0], str):
+                    # tagged node: a Program wrapper or a single statement/expression
+                    if n[0] == 'Program':
+                        prog = self._list_to_ast(n)
+                        return list(prog.statements)
+                    return [self._list_to_ast(n)]
+                # a bare list of statement nodes
+                return [self._list_to_ast(x) for x in n]
+            an = self._list_to_ast(n)
+            if getattr(an, '__class__', None) and an.__class__.__name__ in self._EXPR_TYPES:
+                return [an]
+            return [an]
+
+        stmts = to_statements(node)
+        results = []
+        for s in stmts:
+            try:
+                if s.__class__.__name__ in self._EXPR_TYPES:
+                    results.append(self.eval_expr(s, env))
+                else:
+                    r = self.execute(s, env)
+                    results.append(r.value if isinstance(r, ReturnException) else r)
+            except Exception:
+                results.append(None)
+            self._mirror_env(env, ext_env)
+        return results
+
+    def _mirror_env(self, env, ext_env):
+        """Copy top-level definitions from an Environment into the caller's env container."""
+        if ext_env is None:
+            return
+        names = getattr(env, 'vars', None)
+        if not isinstance(names, dict):
+            return
+        if isinstance(ext_env, list):
+            for k, v in names.items():
+                replaced = False
+                for pair in ext_env:
+                    if isinstance(pair, list) and len(pair) >= 1 and pair[0] == k:
+                        pair[1] = v
+                        replaced = True
+                        break
+                if not replaced:
+                    ext_env.append([k, v])
+        elif isinstance(ext_env, dict):
+            ext_env.update(names)
+
+    @staticmethod
+    def _extract_path(pathnode):
+        """Extract a module path string from an import path node
+        (["StringLiteral", "x"] or ["Identifier", "x"])."""
+        if isinstance(pathnode, list) and len(pathnode) >= 2:
+            return pathnode[1]
+        if isinstance(pathnode, str):
+            return pathnode
+        return pathnode
+
+    def _list_to_ast(self, node):
+        """Convert the H#-parser list-format AST (["TypeName", a, b, ...]) to h_ast nodes.
+
+        The bootstrap H# parser (bootstrap/parser.hto) emits nested *lists*, not the
+        dicts consumed by `_dict_to_ast`. This is the converter used by `eval_node`.
+        """
+        if not isinstance(node, list) or len(node) == 0:
+            raise HSharpError(f"Invalid AST node from H# parser: {node!r}")
+        t = node[0]
+        a = node[1:]
+
+        def stmt_list(block):
+            if isinstance(block, list) and len(block) > 0 and block[0] == 'BlockStatement':
+                return [self._list_to_ast(s) for s in block[1]]
+            if isinstance(block, list):
+                return [self._list_to_ast(s) for s in block]
+            return []
+
+        # ---- statements ----
+        if t == 'Program':
+            return Program([self._list_to_ast(s) for s in a[0]])
+        if t == 'BlockStatement':
+            return BlockStatement([self._list_to_ast(s) for s in a[0]])
+        if t == 'LetStatement':
+            return LetStatement(a[0], self._list_to_ast(a[1]))
+        if t == 'PrintStatement':
+            return PrintStatement(self._list_to_ast(a[0]))
+        if t == 'ReturnStatement':
+            return ReturnStatement(self._list_to_ast(a[0]) if a else None)
+        if t == 'IfStatement':
+            alt = self._list_to_ast(a[2]) if len(a) > 2 and a[2] is not None else None
+            return IfStatement(self._list_to_ast(a[0]), self._list_to_ast(a[1]), alt)
+        if t == 'WhileStatement':
+            return WhileStatement(self._list_to_ast(a[0]), self._list_to_ast(a[1]))
+        if t == 'ForStatement':
+            return ForStatement(a[0], a[1], self._list_to_ast(a[2]), self._list_to_ast(a[3]))
+        if t == 'Function':
+            return Function(a[0], a[1], self._list_to_ast(a[2]))
+        if t == 'AsyncFunction':
+            return Function(a[0], a[1], self._list_to_ast(a[2]))
+        if t == 'CoroFunction':
+            return CoroFunction(a[0], a[1], self._list_to_ast(a[2]))
+        if t == 'Lambda':
+            return Lambda(a[0], self._list_to_ast(a[1]))
+        if t == 'BreakStatement':
+            return BreakStatement()
+        if t == 'ContinueStatement':
+            return ContinueStatement()
+        if t == 'ThrowStatement':
+            return ThrowStatement(self._list_to_ast(a[0]))
+        if t == 'TryStatement':
+            handler = self._list_to_ast(a[2]) if len(a) > 2 and a[2] is not None else None
+            return TryStatement(self._list_to_ast(a[0]), a[1], handler)
+        if t == 'ImportStatement':
+            return ImportStatement(self._extract_path(a[0]))
+        if t == 'ClassDeclaration':
+            return ClassDeclaration(a[0], BlockStatement(stmt_list(a[1])), a[2], a[3])
+        if t == 'InterfaceDeclaration':
+            return InterfaceDeclaration(a[0], BlockStatement(stmt_list(a[1])), a[2])
+        if t == 'UnionDeclaration':
+            return UnionDeclaration(a[0], a[1])
+        if t == 'ModuleDeclaration':
+            return ModuleDeclaration(a[0], self._list_to_ast(a[1]) if len(a) > 1 and a[1] is not None else None)
+        if t == 'ConceptDeclaration':
+            return ConceptDeclaration(a[0], self._list_to_ast(a[1]) if len(a) > 1 and a[1] is not None else None)
+        if t == 'ConcurrentStatement':
+            return BlockStatement(stmt_list(a[0]))
+
+        # ---- expressions ----
+        if t == 'NumberLiteral':
+            v = a[0]
+            if isinstance(v, str):
+                try:
+                    v = int(v)
+                except Exception:
+                    try:
+                        v = float(v)
+                    except Exception:
+                        pass
+            return NumberLiteral(v)
+        if t == 'StringLiteral':
+            return StringLiteral(a[0])
+        if t == 'BooleanLiteral':
+            return BooleanLiteral(bool(a[0]))
+        if t == 'NullLiteral':
+            return NullLiteral()
+        if t == 'Identifier':
+            return Identifier(a[0])
+        if t == 'BinaryOp':
+            op = a[1]
+            if isinstance(op, str):
+                op = getattr(TokenType, op, op)
+            return BinaryOp(self._list_to_ast(a[0]), op, self._list_to_ast(a[2]))
+        if t == 'UnaryOp':
+            op = a[0]
+            if isinstance(op, str):
+                op = getattr(TokenType, op, op)
+            return UnaryOp(op, self._list_to_ast(a[1]))
+        if t == 'CallExpression':
+            return CallExpression(self._list_to_ast(a[0]), [self._list_to_ast(x) for x in a[1]])
+        if t == 'IndexExpression':
+            return IndexExpression(self._list_to_ast(a[0]), self._list_to_ast(a[1]))
+        if t == 'MemberExpression':
+            return MemberExpression(self._list_to_ast(a[0]), a[1])
+        if t == 'NewExpression':
+            cname = a[0][1] if isinstance(a[0], list) and len(a[0]) > 1 else a[0]
+            return NewExpression(cname, [self._list_to_ast(x) for x in a[1]])
+        if t == 'SuperExpression':
+            return SuperExpression(a[0], [self._list_to_ast(x) for x in a[1]])
+        if t == 'ArrayLiteral':
+            return ArrayLiteral([self._list_to_ast(e) for e in a[0]])
+        if t == 'DictLiteral':
+            return DictLiteral([[self._list_to_ast(k), self._list_to_ast(v)] for k, v in a[0]])
+        if t == 'AssignmentIdentifier':
+            return AssignmentIdentifier(a[0], self._list_to_ast(a[1]))
+        if t == 'AssignmentIndex':
+            return AssignmentIndex(self._list_to_ast(a[0]), self._list_to_ast(a[1]), self._list_to_ast(a[2]))
+        if t == 'AssignmentMember':
+            return AssignmentMember(self._list_to_ast(a[0]), a[1], self._list_to_ast(a[2]))
+        if t == 'PointerDereference':
+            return PointerDereference(self._list_to_ast(a[0]))
+        if t == 'AsmBlock':
+            return AsmBlock(a[0])
+
+        raise HSharpError(f"Unsupported list AST node type from H# parser: {t}")
 
     def visit_WhileStatement(self, stmt, env):
         while True:
@@ -3262,4 +3599,5 @@ if __name__ == '__main__':
     parser = Parser(lexer)
     program = parser.parse()
     interp = Interpreter()
+    interp.entry_file = os.path.abspath(file_path)
     interp.interpret(program)
