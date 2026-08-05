@@ -268,16 +268,20 @@ class Parser:
                 self.eat(TokenType.LET)
                 var_name = self.current_token[1]
                 self.eat(TokenType.IDENTIFIER)
-                self.eat(TokenType.EQ)
-                value = self.expression()
+                value = None
+                if self.current_token[0] == TokenType.EQ:
+                    self.eat(TokenType.EQ)
+                    value = self.expression()
                 self.eat(TokenType.SEMI)
                 members.append(FieldDeclaration(var_name, value, is_private=True))
             elif self.current_token[0] == TokenType.LET:
                 self.eat(TokenType.LET)
                 var_name = self.current_token[1]
                 self.eat(TokenType.IDENTIFIER)
-                self.eat(TokenType.EQ)
-                value = self.expression()
+                value = None
+                if self.current_token[0] == TokenType.EQ:
+                    self.eat(TokenType.EQ)
+                    value = self.expression()
                 self.eat(TokenType.SEMI)
                 members.append(FieldDeclaration(var_name, value, is_private=False))
             elif self.current_token[0] == TokenType.FN:
@@ -752,6 +756,10 @@ class Parser:
             token = self.current_token
             self.eat(TokenType.MINUS)
             return BinaryOp(NumberLiteral(0), TokenType.MINUS, self.unary())
+        if self.current_token[0] == TokenType.PLUS:
+            token = self.current_token
+            self.eat(TokenType.PLUS)
+            return BinaryOp(NumberLiteral(0), TokenType.PLUS, self.unary())
         if self.current_token[0] == TokenType.NOT:
             self.eat(TokenType.NOT)
             return UnaryOp(TokenType.NOT, self.unary())

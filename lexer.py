@@ -35,7 +35,9 @@ class Lexer:
             result += self.current_char
             self.advance()
         # handle fractional part
+        is_float = False
         if self.current_char == '.':
+            is_float = True
             result += '.'
             self.advance()
             frac = ''
@@ -44,7 +46,27 @@ class Lexer:
                 self.advance()
             if frac == '':
                 raise SyntaxError('Invalid number literal')
-            return float(result + frac)
+            result += frac
+        # handle scientific notation (e.g. 1e308, 1.5e-10, 2E+20)
+        if self.current_char in ('e', 'E'):
+            is_float = True
+            result += self.current_char
+            self.advance()
+            if self.current_char in ('+', '-'):
+                result += self.current_char
+                self.advance()
+            exp = ''
+            while self.current_char and self.current_char.isdigit():
+                exp += self.current_char
+                self.advance()
+            if exp == '':
+                raise SyntaxError('Invalid number literal: missing exponent')
+            result += exp
+        if is_float:
+            try:
+                return float(result)
+            except ValueError:
+                raise SyntaxError('Invalid number literal: %s' % result)
         return int(result)
 
     def identifier(self):

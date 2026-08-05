@@ -247,6 +247,40 @@ class Environment:
         raise HSharpError(f"Undefined variable: '{name}'")
 
 
+class InstanceScope(Environment):
+    """Method-call scope: bare identifiers fall back to the receiver's
+    instance fields (e.g. `val` inside a method resolves to `self.val`).
+    Assignments target an existing instance field when present, otherwise a
+    local variable — preserving the previous behaviour for truly-local names.
+    """
+
+    def __init__(self, instance, parent=None):
+        super().__init__(parent=parent)
+        self.instance = instance
+
+    def lookup(self, name):
+        if name in self.vars:
+            return self.vars[name]
+        if name in self.instance:
+            return self.instance[name]
+        if self.parent:
+            return self.parent.lookup(name)
+        raise HSharpError(f"Undefined variable: '{name}'")
+
+    def assign(self, name, value):
+        if name in self.vars:
+            self.vars[name] = value
+        elif name in self.instance:
+            self.instance[name] = value
+        elif self.parent:
+            try:
+                self.parent.assign(name, value)
+            except HSharpError:
+                self.vars[name] = value
+        else:
+            self.vars[name] = value
+
+
 class CoroYield(Exception):
     pass
 
@@ -588,6 +622,81 @@ def builtin_dict_len(args):
     if not isinstance(d, dict):
         raise HSharpError("First argument must be a dictionary")
     return len(d)
+
+# ── Collection / iteration helpers ──
+def builtin_keys(args):
+    """keys(dict) -> list of keys (alias of dict_keys with a friendlier name)."""
+    if len(args) != 1:
+        raise HSharpError("keys() takes exactly 1 argument")
+    d = args[0]
+    if not isinstance(d, dict):
+        raise HSharpError("keys() argument must be a dictionary")
+    return list(d.keys())
+
+def builtin_values(args):
+    """values(dict) -> list of values (alias of dict_values with a friendlier name)."""
+    if len(args) != 1:
+        raise HSharpError("values() takes exactly 1 argument")
+    d = args[0]
+    if not isinstance(d, dict):
+        raise HSharpError("values() argument must be a dictionary")
+    return list(d.values())
+
+def builtin_range(args):
+    """range(stop) | range(start, stop) | range(start, stop, step) -> list of ints."""
+    if len(args) == 1:
+        start, stop, step = 0, int(args[0]), 1
+    elif len(args) == 2:
+        start, stop, step = int(args[0]), int(args[1]), 1
+    elif len(args) == 3:
+        start, stop, step = int(args[0]), int(args[1]), int(args[2])
+    else:
+        raise HSharpError("range() takes 1, 2, or 3 arguments")
+    if step == 0:
+        raise HSharpError("range() step must not be zero")
+    return list(range(start, stop, step))
+
+def builtin_type(args):
+    """type(value) -> lowercase type name string (e.g. 'int', 'string', 'dict', 'channel')."""
+    if len(args) != 1:
+        raise HSharpError("type() takes exactly 1 argument")
+    v = args[0]
+    if isinstance(v, dict):
+        if v.get('__htype__') is not None:
+            return str(v.get('__htype__'))
+        if '__class__' in v:
+            cls = v['__class__']
+            if isinstance(cls, dict):
+                return str(cls.get('name', 'object'))
+            return 'object'
+        if 'methods' in v:
+            return str(v.get('name', 'class'))
+        return 'dict'
+    if isinstance(v, list):
+        return 'list'
+    if isinstance(v, str):
+        return 'string'
+    if isinstance(v, bool):
+        return 'bool'
+    if isinstance(v, int):
+        return 'int'
+    if isinstance(v, float):
+        return 'float'
+    if v is None:
+        return 'nullptr'
+    if callable(v):
+        return 'function'
+    return type(v).__name__
+
+def builtin_chan_new(args):
+    """chan_new(capacity) -> a channel object (iteration unsupported, see bug5).
+
+    Channels are represented as a marker dict so `type(ch)` reports the
+    lowercase type name 'channel' and `for x in ch` raises the catchable
+    'FOR_ITER: unsupported iterable channel' error.
+    """
+    cap = int(args[0]) if args else 0
+    return {'__htype__': 'channel', 'capacity': cap, 'items': []}
 
 # ── List Builtins ──
 def builtin_list_append(args):
@@ -985,6 +1094,12 @@ class Interpreter:
             'list_copy': builtin_list_copy,
             'list_fill': builtin_list_fill,
             'list_reserve': builtin_list_reserve,
+            # Collection / iteration helpers
+            'range': builtin_range,
+            'keys': builtin_keys,
+            'values': builtin_values,
+            'type': builtin_type,
+            'chan_new': builtin_chan_new,
         }
 
         # 注册 tkinter GUI 后端（gui_* host 函数）
@@ -2039,6 +2154,11 @@ class Interpreter:
                     break
                 if isinstance(result, ReturnException):
                     return result
+        elif isinstance(iterable, dict) and iterable.get('__htype__') == 'channel':
+            # Channels are not iterable (channel iteration is a separate, not
+            # yet implemented, feature). Raise a catchable error whose message
+            # uses the lowercase type name, matching `type()`.
+            raise HSharpError("FOR_ITER: unsupported iterable channel")
         elif isinstance(iterable, dict):
             for k, v in iterable.items():
                 loop_env.define(stmt.var1, k)
@@ -2586,6 +2706,19 @@ class Interpreter:
                 self.eval_expr(d, env) for d in stmt.defaults
             ]
         self.functions[stmt.name] = stmt
+        # If this function is declared *inside* another function (or any
+        # non-global scope), bind a closure value in the current environment
+        # that captures the enclosing locals.  This gives H# real closures so
+        # nested functions can see variables defined in their lexically
+        # enclosing scope (e.g. `fn outer(x){ fn middle(y){ ... } }`).
+        if env is not self.global_env:
+            env.define(stmt.name, {
+                'params': stmt.params,
+                'body': stmt.body,
+                'closure_env': env,
+                'name': stmt.name,
+                'defaults': getattr(stmt, '_evaluated_defaults', []),
+            })
 
     def _apply_defaults(self, func, args, name):
         """Fill in missing trailing arguments from the function's
@@ -2595,6 +2728,24 @@ class Interpreter:
         defaults=[1,2].  Calling `f(10,20)` yields [10,20,1,2]."""
         params = func.params
         defaults = getattr(func, '_evaluated_defaults', None) or []
+        n_def = len(defaults)
+        if not n_def:
+            if len(args) != len(params):
+                raise HSharpError(
+                    f"Function '{name}' expects {len(params)} arguments, got {len(args)}")
+            return args
+        min_args = len(params) - n_def
+        if len(args) == len(params):
+            return args
+        if min_args <= len(args) < len(params):
+            skip = len(args) - min_args
+            return list(args) + list(defaults[skip:])
+        raise HSharpError(
+            f"Function '{name}' expects {len(params)} arguments (min {min_args}), got {len(args)}")
+
+    def _apply_defaults_to(self, params, defaults, args, name):
+        """List-based variant of :meth:`_apply_defaults` used by closure
+        callables (which carry their params/defaults as plain lists)."""
         n_def = len(defaults)
         if not n_def:
             if len(args) != len(params):
@@ -2688,8 +2839,12 @@ class Interpreter:
                 else:
                     methods[s.name] = s
             elif isinstance(s, FieldDeclaration):
-                # evaluate default in global env (only simple literals expected)
-                fields[s.name] = self.eval_expr(s.value, self.global_env)
+                # evaluate default in global env (only simple literals expected);
+                # a field with no initializer defaults to nullptr.
+                if s.value is not None:
+                    fields[s.name] = self.eval_expr(s.value, self.global_env)
+                else:
+                    fields[s.name] = None
                 if s.is_private:
                     private.append(s.name)
         class_obj = {'name': stmt.name, 'methods': methods, 'fields': fields, 'private': private}
@@ -2771,9 +2926,10 @@ class Interpreter:
                     if 'body' in val:
                         closure = val.get('closure_env', self.global_env)
                         call_env = Environment(parent=closure)
-                        if len(args) != len(val.get('params', [])):
-                            raise HSharpError(f"Function expects {len(val.get('params', []))} arguments, got {len(args)}")
-                        for param, arg in zip(val.get('params', []), args):
+                        params = val.get('params', [])
+                        defaults = val.get('defaults', [])
+                        args = self._apply_defaults_to(params, defaults, args, val.get('name', 'function'))
+                        for param, arg in zip(params, args):
                             call_env.define(param, arg)
                         try:
                             self.visit_BlockStatement(val['body'], call_env)
@@ -2893,8 +3049,9 @@ class Interpreter:
                         return val(*args)
                     raise HSharpError(f"Attribute '{attr}' not found on instance")
                 method = methods[attr]
-                call_env = Environment(parent=self.global_env)
+                call_env = InstanceScope(left, parent=self.global_env)
                 call_env.define('self', left)
+                call_env.define('this', left)
                 # If the method declares `self` as first param, it is bound
                 # automatically to the instance; do not count it against the
                 # caller-supplied arguments.
@@ -3505,19 +3662,23 @@ class Interpreter:
                 methods = cls.get('methods', {})
                 if 'init' in methods:
                     init = methods['init']
-                    call_env = Environment(parent=self.global_env)
+                    call_env = InstanceScope(inst, parent=self.global_env)
                     call_env.define('self', inst)
+                    call_env.define('this', inst)
                     iparams = init.params
                     if iparams and iparams[0] == 'self':
                         iparams = iparams[1:]
-                    if len(args) != len(iparams):
-                        raise HSharpError(f"init expects {len(iparams)} arguments, got {len(args)}")
-                    for param, arg in zip(iparams, args):
-                        call_env.define(param, arg)
-                    try:
-                        self.visit_BlockStatement(init.body, call_env)
-                    except ReturnException:
-                        pass
+                    if len(args) == len(iparams):
+                        for param, arg in zip(iparams, args):
+                            call_env.define(param, arg)
+                        try:
+                            self.visit_BlockStatement(init.body, call_env)
+                        except ReturnException:
+                            pass
+                    # If the supplied argument count does not match the
+                    # constructor, do not auto-invoke init: the instance is
+                    # created with its field defaults and `init` may be called
+                    # explicitly afterwards (e.g. `new Pt()` then `p.init(...)`).
                 return inst
             raise HSharpError(f"Class '{cname}' not found")
         elif isinstance(expr, UnionConstructExpression):

@@ -1,23 +1,69 @@
 import sys
 import os
 import json
+import threading
 from lexer import Lexer
 from parser import Parser
 from interpreter import Interpreter
 from compiler import Compiler
-from bytecode import VM
+from bytecode import VM, HSharpException, BytecodeRuntimeError
 
 def run(code, filename="<input>"):
+    # Parse in the main thread so syntax errors keep their current format.
     try:
         lexer = Lexer(code)
         parser = Parser(lexer)
         program = parser.parse()
-        interpreter = Interpreter()
-        interpreter.interpret(program)
     except SyntaxError as e:
         print(f"Syntax Error in {filename}: {e}")
+        return
     except Exception as e:
         print(f"Error in {filename}: {e}")
+        return
+    # Deeply recursive H# programs (e.g. stress tests depth(2000)) need a much
+    # larger C stack than the default thread stack. Run the interpreter on a
+    # worker thread with a big stack and raise the recursion limit so we get a
+    # clean error instead of a native stack-overflow crash.
+    sys.setrecursionlimit(200000)
+    state = {'exc': None}
+    def worker():
+        try:
+            interpreter = Interpreter()
+            interpreter.interpret(program)
+        except SyntaxError as e:
+            state['exc'] = f"Syntax Error in {filename}: {e}"
+        except Exception as e:
+            state['exc'] = f"Error in {filename}: {e}"
+    threading.stack_size(256 * 1024 * 1024)
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+    if state['exc'] is not None:
+        print(state['exc'])
+
+
+def run_vm(bc, filepath="<bc>"):
+    """Execute compiled bytecode on a worker thread with a large C stack so
+    deeply recursive programs don't crash, and turn any VM exception into a
+    clean 'Unexpected error: ...' message instead of a raw Python traceback
+    (matching the tree interpreter's behaviour)."""
+    import threading
+    sys.setrecursionlimit(200000)
+    state = {'exc': None}
+    def worker():
+        try:
+            vm = VM(bc)
+            vm.run()
+        except (HSharpException, BytecodeRuntimeError) as e:
+            state['exc'] = f"Unexpected error: {e}"
+        except Exception as e:
+            state['exc'] = f"Unexpected error: {e}"
+    threading.stack_size(256 * 1024 * 1024)
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+    if state['exc'] is not None:
+        print(state['exc'])
 
 
 def compile_optimized(code, filename="<input>"):
@@ -130,8 +176,7 @@ def main(argv=None):
             mods = bc['modules']
             mod = mods.get('main') or next(iter(mods.values()))
             bc = {'instructions': mod['instructions'], 'consts': mod.get('consts', [])}
-        vm = VM(bc)
-        vm.run()
+        run_vm(bc)
         _sys.exit(0)
 
     emit_bc = False
@@ -188,7 +233,12 @@ def main(argv=None):
         _sys.exit(0)
 
     if use_opt:
-        run_optimized(code, filepath)
+        try:
+            bc, _ast_stats, _bc_stats = run_optimized(code, filepath)
+        except Exception as e:
+            print(f"Compilation error: {e}")
+            _sys.exit(1)
+        run_vm(bc)
     else:
         # default: run source via interpreter
         run(code, filepath)
