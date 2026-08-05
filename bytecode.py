@@ -19,6 +19,9 @@ class VM:
         self.pc = 0
         self.parent = None
         self._exception_handlers = []
+        # Names captured from an enclosing lexical scope (closure cells).
+        # Populated by CALL_FUNCTION/CALL_VALUE from the callee's func_obj.
+        self.freevars = set()
         # Fast locals：由 LOAD_FAST/STORE_FAST 使用，按索引访问的列表，比 dict env 更快
         # fast_names 由编译器在 bytecode 中通过 'FAST_NAMES' 元信息提供
         self.fast_slots = []
@@ -109,7 +112,40 @@ class VM:
                     self.stack.append(val)
                 elif opname == 'STORE_NAME':
                     val = self.stack.pop()
-                    self.env[arg] = val
+                    name = arg
+                    if self.freevars and name in self.freevars:
+                        # Captured (closure) variable: write through to the
+                        # defining environment so all closures share one cell
+                        # (e.g. inc/dec/get sharing the same `count`).  The
+                        # defining frame may keep the var in a fast slot
+                        # (register-allocated), so check both env and slots.
+                        node = self.parent
+                        while node is not None:
+                            if name in node.env:
+                                node.env[name] = val
+                                break
+                            idx = node._fast_name_to_idx.get(name)
+                            if idx is not None and 0 <= idx < len(node.fast_slots):
+                                node.fast_slots[idx] = val
+                                break
+                            node = node.parent
+                        else:
+                            if self.parent is not None:
+                                self.parent.env[name] = val
+                            else:
+                                self.env[name] = val
+                    else:
+                        self.env[name] = val
+                elif opname == 'MAKE_CLOSURE':
+                    # Materialise a closure object that captures the *current*
+                    # VM as its defining environment.  A fresh shallow copy is
+                    # made per definition site so two calls to the same
+                    # enclosing fn keep separate cells (no aliasing of the
+                    # shared func_obj const).
+                    func_obj = self.consts[arg]
+                    closure = dict(func_obj)
+                    closure['__closure__'] = self
+                    self.stack.append(closure)
                 elif opname == 'LOAD_FAST':
                     # arg 为槽位索引；越界时回退到 env 查找（兼容未分配槽位的变量）
                     if 0 <= arg < len(self.fast_slots):
@@ -262,10 +298,10 @@ class VM:
                         if idx < len(iter_list):
                             if v2 is not None and '__dict' in it:
                                 key = iter_list[idx]
-                                self.env[v1] = key
-                                self.env[v2] = it['__dict'][key]
+                                self._set_local(v1, key)
+                                self._set_local(v2, it['__dict'][key])
                             else:
-                                self.env[v1] = iter_list[idx]
+                                self._set_local(v1, iter_list[idx])
                             it['__iter_idx'] = idx + 1
                         else:
                             self.stack.pop()
@@ -348,12 +384,8 @@ class VM:
                                 args = self._apply_defaults(func, args, name)
                             bc = {'instructions': func['bytecode'], 'consts': func.get('consts', [])}
                             vm2 = VM(bc)
-                            vm2.parent = self
-                            for fv in func.get('freevars', []):
-                                try:
-                                    vm2.env[fv] = self._lookup_name(fv)
-                                except Exception:
-                                    vm2.env[fv] = None
+                            vm2.parent = func.get('__closure__') or self
+                            vm2.freevars = set(func.get('freevars', []))
                             if is_variadic:
                                 for i in range(nfixed):
                                     vm2.env[fargs[i]] = args[i]
@@ -536,12 +568,8 @@ class VM:
                             raise BytecodeRuntimeError(f"Function expects {len(fargs)} args")
                         bc = {'instructions': func['bytecode'], 'consts': func.get('consts', [])}
                         vm2 = VM(bc)
-                        # populate freevars into function env from current VM
-                        for fv in func.get('freevars', []):
-                            try:
-                                vm2.env[fv] = self._lookup_name(fv)
-                            except Exception:
-                                vm2.env[fv] = None
+                        vm2.parent = func.get('__closure__') or self
+                        vm2.freevars = set(func.get('freevars', []))
                         for pname, pval in zip(fargs, args):
                             vm2.env[pname] = pval
                         vm2.functions = self.functions
@@ -796,7 +824,7 @@ class VM:
             it = {'__iter_idx': 0, '__iterable': iterable, '__var1': var1, '__var2': var2, '__is_iter': True}
             self.stack.append(it)
             if 0 < len(iterable):
-                self.env[var1] = iterable[0]
+                self._set_local(var1, iterable[0])
                 it['__iter_idx'] = 1
             else:
                 self.stack.pop()
@@ -807,8 +835,8 @@ class VM:
                 it = {'__iter_idx': 0, '__iterable': keys, '__var1': var1, '__var2': var2, '__dict': iterable, '__is_iter': True}
                 self.stack.append(it)
                 if 0 < len(keys):
-                    self.env[var1] = keys[0]
-                    self.env[var2] = iterable[keys[0]]
+                    self._set_local(var1, keys[0])
+                    self._set_local(var2, iterable[keys[0]])
                     it['__iter_idx'] = 1
                 else:
                     self.stack.pop()
@@ -817,7 +845,7 @@ class VM:
                 it = {'__iter_idx': 0, '__iterable': keys, '__var1': var1, '__var2': var2, '__is_iter': True}
                 self.stack.append(it)
                 if 0 < len(keys):
-                    self.env[var1] = keys[0]
+                    self._set_local(var1, keys[0])
                     it['__iter_idx'] = 1
                 else:
                     self.stack.pop()
@@ -825,12 +853,34 @@ class VM:
         else:
             raise BytecodeRuntimeError(f"Cannot iterate over {type(iterable).__name__}")
 
+    def _set_local(self, name, val):
+        """Write a named local, respecting fast-slot allocation.
+
+        The register allocator rewrites LOAD_NAME/STORE_NAME for fast-eligible
+        locals into LOAD_FAST/STORE_FAST (indexed slots), but opcodes that bind
+        a name by string — chiefly FOR_ITER for loop variables — must still
+        honour that allocation, otherwise a later LOAD_FAST reads a stale None.
+        """
+        idx = self._fast_name_to_idx.get(name)
+        if idx is not None and 0 <= idx < len(self.fast_slots):
+            self.fast_slots[idx] = val
+        else:
+            self.env[name] = val
+
     def _lookup_name(self, name):
-        # search local env, then functions, then parent chain, then builtins
+        # search local env, then fast slots, then functions, then parent
+        # chain, then builtins.  Fast slots are populated by the register
+        # allocator (FastLocalAllocator) for the *current* frame's locals,
+        # so name resolution must consult them too: a CALL_FUNCTION whose
+        # callee is a fast-allocated top-level function, or a closure
+        # capturing a fast-allocated variable from an enclosing frame.
         node = self
         while node is not None:
             if name in node.env:
                 return node.env[name]
+            idx = node._fast_name_to_idx.get(name)
+            if idx is not None and 0 <= idx < len(node.fast_slots):
+                return node.fast_slots[idx]
             if name in node.functions:
                 return node.functions[name]
             node = node.parent

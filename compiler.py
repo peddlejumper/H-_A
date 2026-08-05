@@ -86,7 +86,13 @@ class Compiler:
                     if nm is not None:
                         local_bound.add(nm)
             elif isinstance(n, Function):
-                return
+                # Recurse into the function body so free variables used
+                # directly inside it (but defined in an enclosing scope)
+                # are captured.  Nested Function/Lambda nodes are NOT
+                # recursed into (their own free vars belong to them).
+                b = set(local_bound) | set(n.params)
+                for s in n.body.statements:
+                    visit(s, b)
             elif isinstance(n, Lambda):
                 b = set(local_bound)|set(n.params)
                 for s in n.body.statements:
@@ -164,8 +170,13 @@ class Compiler:
                 func_obj['defaults'] = defaults_json
             if getattr(stmt, 'is_variadic', False):
                 func_obj['is_variadic'] = True
+            # Capture free variables so nested functions close over the
+            # lexical environment in which they are *defined* (not called).
+            freevars = self._find_free_vars_in_stmt(stmt, stmt.params)
+            if freevars:
+                func_obj['freevars'] = freevars
             idx = self.add_const(func_obj)
-            self.emit('LOAD_CONST', idx)
+            self.emit('MAKE_CLOSURE', idx)
             self.emit('STORE_NAME', stmt.name)
         elif isinstance(stmt, ReturnStatement):
             self.compile_expr(stmt.expr)
@@ -570,7 +581,7 @@ class Compiler:
             if getattr(expr, 'is_variadic', False):
                 func_obj['is_variadic'] = True
             idx = self.add_const(func_obj)
-            self.emit('LOAD_CONST', idx)
+            self.emit('MAKE_CLOSURE', idx)
         elif isinstance(expr, ArrayLiteral):
             for e in expr.elements:
                 self.compile_expr(e)

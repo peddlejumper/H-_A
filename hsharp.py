@@ -234,7 +234,7 @@ def main(argv=None):
 
     if use_opt:
         try:
-            bc, _ast_stats, _bc_stats = run_optimized(code, filepath)
+            bc, _ast_stats, _bc_stats = compile_optimized(code, filepath)
         except Exception as e:
             print(f"Compilation error: {e}")
             _sys.exit(1)
