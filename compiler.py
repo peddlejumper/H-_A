@@ -69,52 +69,136 @@ class Compiler:
         return {'instructions': self.instructions, 'consts': self.consts}
 
     def _find_free_vars_in_stmt(self, node, bound):
+        """Compute the free variables of a function/lambda node.
+
+        A name is *free* when it is referenced but neither defined in this
+        function's own scope (via `let`/assignment targets) nor a parameter.
+        Names defined inside a nested function belong to that nested function;
+        they are not free for the enclosing function even if the enclosing
+        function references them.
+
+        The bound set is threaded *sequentially* through a block so that a
+        `let x = ...` makes `x` bound for every later statement in the same
+        scope (including loop bodies).  Without this, locally-defined loop
+        counters / accumulators get mis-classified as free variables, which
+        then makes the VM route their STORE_NAME to the parent frame and
+        corrupts in-function accumulation (e.g. `while (i < n) { s = s + x }`).
+        """
         free = set()
-        from h_ast import Identifier, LetStatement, Function, Lambda, BlockStatement, CallExpression, MemberExpression, DestructureLet
-        def visit(n, local_bound):
-            if isinstance(n, Identifier):
-                if n.name not in local_bound:
-                    free.add(n.name)
-            elif isinstance(n, LetStatement):
-                visit(n.value, local_bound)
-                local_bound = set(local_bound)
-                local_bound.add(n.name)
-            elif isinstance(n, DestructureLet):
-                visit(n.value, local_bound)
-                local_bound = set(local_bound)
-                for nm in n.names:
+        from h_ast import (Identifier, LetStatement, Function, Lambda, BlockStatement,
+                           CallExpression, MemberExpression, DestructureLet, AssignmentIdentifier,
+                           IfStatement, WhileStatement, ForStatement, ReturnStatement, PrintStatement)
+
+        def visit_expr(e, b):
+            if isinstance(e, Identifier):
+                if e.name not in b:
+                    free.add(e.name)
+            elif isinstance(e, LetStatement):
+                visit_expr(e.value, b)
+                b.add(e.name)
+            elif isinstance(e, DestructureLet):
+                visit_expr(e.value, b)
+                for nm in e.names:
                     if nm is not None:
-                        local_bound.add(nm)
-            elif isinstance(n, Function):
-                # Recurse into the function body so free variables used
-                # directly inside it (but defined in an enclosing scope)
-                # are captured.  Nested Function/Lambda nodes are NOT
-                # recursed into (their own free vars belong to them).
-                b = set(local_bound) | set(n.params)
-                for s in n.body.statements:
-                    visit(s, b)
-            elif isinstance(n, Lambda):
-                b = set(local_bound)|set(n.params)
-                for s in n.body.statements:
-                    visit(s, b)
-            elif isinstance(n, BlockStatement):
-                for s in n.statements:
-                    visit(s, local_bound)
-            elif isinstance(n, CallExpression):
-                visit(n.func, local_bound)
-                for a in n.args:
-                    visit(a, local_bound)
-            elif isinstance(n, MemberExpression):
-                visit(n.left, local_bound)
-            elif isinstance(n, AST):
-                for attr, v in vars(n).items():
+                        b.add(nm)
+            elif isinstance(e, AssignmentIdentifier):
+                visit_expr(e.value, b)
+            elif isinstance(e, Function):
+                b2 = set(b) | set(e.params)
+                for ss in e.body.statements:
+                    visit_stmt(ss, b2)
+            elif isinstance(e, Lambda):
+                b2 = set(b) | set(e.params)
+                for ss in e.body.statements:
+                    visit_stmt(ss, b2)
+            elif isinstance(e, IfStatement):
+                visit_expr(e.condition, b)
+                visit_stmt(e.consequence, b)
+                if e.alternative:
+                    visit_stmt(e.alternative, b)
+            elif isinstance(e, WhileStatement):
+                visit_expr(e.condition, b)
+                visit_stmt(e.body, b)
+            elif isinstance(e, ForStatement):
+                visit_expr(e.iterable, b)
+                visit_stmt(e.body, b)
+            elif isinstance(e, BlockStatement):
+                visit_block(e, b)
+            elif isinstance(e, CallExpression):
+                visit_expr(e.func, b)
+                for a in e.args:
+                    visit_expr(a, b)
+            elif isinstance(e, MemberExpression):
+                visit_expr(e.left, b)
+            elif isinstance(e, AST):
+                for attr, v in vars(e).items():
                     if isinstance(v, list):
                         for item in v:
                             if isinstance(item, AST):
-                                visit(item, local_bound)
+                                visit_expr(item, b)
                     elif isinstance(v, AST):
-                        visit(v, local_bound)
-        visit(node, set(bound))
+                        visit_expr(v, b)
+
+        def visit_stmt(s, b):
+            if isinstance(s, LetStatement):
+                visit_expr(s.value, b)
+                b.add(s.name)
+            elif isinstance(s, DestructureLet):
+                visit_expr(s.value, b)
+                for nm in s.names:
+                    if nm is not None:
+                        b.add(nm)
+            elif isinstance(s, AssignmentIdentifier):
+                visit_expr(s.value, b)
+            elif isinstance(s, Function):
+                b2 = set(b) | set(s.params)
+                for ss in s.body.statements:
+                    visit_stmt(ss, b2)
+            elif isinstance(s, Lambda):
+                b2 = set(b) | set(s.params)
+                for ss in s.body.statements:
+                    visit_stmt(ss, b2)
+            elif isinstance(s, IfStatement):
+                visit_expr(s.condition, b)
+                visit_stmt(s.consequence, b)
+                if s.alternative:
+                    visit_stmt(s.alternative, b)
+            elif isinstance(s, WhileStatement):
+                visit_expr(s.condition, b)
+                visit_stmt(s.body, b)
+            elif isinstance(s, ForStatement):
+                visit_expr(s.iterable, b)
+                visit_stmt(s.body, b)
+            elif isinstance(s, BlockStatement):
+                visit_block(s, b)
+            elif isinstance(s, ReturnStatement):
+                if s.expr is not None:
+                    visit_expr(s.expr, b)
+            elif isinstance(s, PrintStatement):
+                if s.expr is not None:
+                    visit_expr(s.expr, b)
+            elif isinstance(s, AST):
+                for attr, v in vars(s).items():
+                    if isinstance(v, list):
+                        for item in v:
+                            if isinstance(item, AST):
+                                visit_expr(item, b)
+                    elif isinstance(v, AST):
+                        visit_expr(v, b)
+
+        def visit_block(block, b):
+            # sequential: each definition is visible to later statements
+            for s in block.statements:
+                visit_stmt(s, b)
+
+        if isinstance(node, BlockStatement):
+            visit_block(node, set(bound))
+        elif isinstance(node, (Function, Lambda)):
+            b = set(bound) | set(node.params)
+            for s in node.body.statements:
+                visit_stmt(s, b)
+        else:
+            visit_stmt(node, set(bound))
         return list(free)
 
     def compile_stmt(self, stmt):

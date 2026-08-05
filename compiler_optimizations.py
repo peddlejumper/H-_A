@@ -267,6 +267,38 @@ class ConstantPropagation:
         # 单独的语句/块
         return self._visit_stmt(node, env)
 
+    def _assigned_in(self, node):
+        """收集 stmt 树中所有被赋值（AssignmentIdentifier / LetStatement / ForStatement）的变量名集合，
+        用于 while 循环的安全处理——不跨 Function 作用域下钻。"""
+        names = set()
+        if node is None:
+            return names
+        if isinstance(node, Function):
+            return names
+        if isinstance(node, AssignmentIdentifier):
+            names.add(node.name)
+        elif isinstance(node, LetStatement):
+            names.add(node.name)
+        elif isinstance(node, ForStatement):
+            names.add(node.var1)
+            if getattr(node, 'var2', None):
+                names.add(node.var2)
+        elif isinstance(node, list):
+            for x in node:
+                names |= self._assigned_in(x)
+            return names
+        if hasattr(node, '__dict__'):
+            for attr, v in vars(node).items():
+                if isinstance(v, Function):
+                    continue
+                if isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, AST) and not isinstance(item, Function):
+                            names |= self._assigned_in(item)
+                elif isinstance(v, AST) and not isinstance(v, Function):
+                    names |= self._assigned_in(v)
+        return names
+
     def _visit_stmt(self, stmt, env):
         if stmt is None:
             return None
@@ -311,20 +343,40 @@ class ConstantPropagation:
             return stmt
 
         if isinstance(stmt, WhileStatement):
-            stmt.condition = self._visit_expr(stmt.condition, env)
-            # 循环体可能多次执行，保守清除绑定（避免把循环内重新赋值的变量当常量）
+            # 循环体可能多次执行并改写 loop 变量，因此在条件与循环体里把被赋值的变量
+            # 从常量环境中剔除，避免把 `i` 折叠成初值后 `while (i < N)` 变成 `while True` 死循环。
+            # 循环结束后，这些变量已不再是编译期常量，必须从外层 env 剔除，否则后续
+            # `return s` / `print(s)` 会被替换成循环前的初值字面量（如 `return ""`）。
+            assigned = self._assigned_in(stmt.body)
+            cond_env = dict(env)
+            for a in assigned:
+                cond_env.pop(a, None)
+            stmt.condition = self._visit_expr(stmt.condition, cond_env)
             body_env = dict(env)
+            for a in assigned:
+                body_env.pop(a, None)
             self._visit(stmt.body, body_env)
             for k in list(body_env.keys()):
                 env.pop(k, None)
+            for a in assigned:
+                env.pop(a, None)
             return stmt
 
         if isinstance(stmt, ForStatement):
-            self._visit_expr(stmt.iterable, env)
-            env.pop(stmt.var1, None)
+            # 循环体可能多次执行并改写内部变量，因此在条件与循环体里把被赋值的变量
+            # 从常量环境中剔除，避免把循环外初值（如 `let sum = 0`）当常量代入循环体，
+            # 否则 `sum = sum + d[k]` 会被折叠成 `sum = d[k]`（丢失累加）。
+            assigned = self._assigned_in(stmt.body)
+            iter_env = dict(env)
+            for a in assigned:
+                iter_env.pop(a, None)
+            self._visit_expr(stmt.iterable, iter_env)
+            iter_env.pop(stmt.var1, None)
             if getattr(stmt, 'var2', None):
-                env.pop(stmt.var2, None)
-            self._visit(stmt.body, dict(env))
+                iter_env.pop(stmt.var2, None)
+            self._visit(stmt.body, iter_env)
+            for a in assigned:
+                env.pop(a, None)
             env.pop(stmt.var1, None)
             if getattr(stmt, 'var2', None):
                 env.pop(stmt.var2, None)
@@ -420,6 +472,37 @@ class RangeAnalysis:
     def __init__(self):
         self.folded_count = 0
 
+    def _assigned_in(self, node):
+        """收集 stmt 树中被赋值的变量名集合（不跨 Function 作用域下钻）。"""
+        names = set()
+        if node is None:
+            return names
+        if isinstance(node, Function):
+            return names
+        if isinstance(node, AssignmentIdentifier):
+            names.add(node.name)
+        elif isinstance(node, LetStatement):
+            names.add(node.name)
+        elif isinstance(node, ForStatement):
+            names.add(node.var1)
+            if getattr(node, 'var2', None):
+                names.add(node.var2)
+        elif isinstance(node, list):
+            for x in node:
+                names |= self._assigned_in(x)
+            return names
+        if hasattr(node, '__dict__'):
+            for attr, v in vars(node).items():
+                if isinstance(v, Function):
+                    continue
+                if isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, AST) and not isinstance(item, Function):
+                            names |= self._assigned_in(item)
+                elif isinstance(v, AST) and not isinstance(v, Function):
+                    names |= self._assigned_in(v)
+        return names
+
     def run(self, program):
         if not isinstance(program, Program):
             return program
@@ -457,8 +540,17 @@ class RangeAnalysis:
             return
 
         if isinstance(stmt, WhileStatement):
-            stmt.condition = self._simplify(stmt.condition, ranges)
-            self._visit_stmt(stmt.body, dict(ranges))
+            # 循环体会改写 loop 变量，条件里的比较不能用「进入循环前的范围」折叠
+            # （否则 `i < 500` 在 i 初值 0 时会被折叠成 true → 死循环）。
+            # 把循环体内被赋值的变量从范围表中剔除，条件与循环体按无界处理。
+            assigned = self._assigned_in(stmt.body)
+            loop_ranges = dict(ranges)
+            for a in assigned:
+                loop_ranges.pop(a, None)
+            stmt.condition = self._simplify(stmt.condition, loop_ranges)
+            self._visit_stmt(stmt.body, loop_ranges)
+            for a in assigned:
+                ranges.pop(a, None)
             return
 
         if isinstance(stmt, ForStatement):
