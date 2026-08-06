@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os, sys; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
 """
 Test script to verify idle compile and run functionality
 """

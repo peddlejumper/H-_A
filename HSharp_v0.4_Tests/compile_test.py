@@ -1,3 +1,4 @@
+import os, sys; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
 """Compile an H# .hto file to a .hbc file.
 
 Used to round-trip test the Kotlin runtime against the Python VM.
