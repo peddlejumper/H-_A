@@ -658,7 +658,11 @@ def builtin_range(args):
     return list(range(start, stop, step))
 
 def builtin_type(args):
-    """type(value) -> lowercase type name string (e.g. 'int', 'string', 'dict', 'channel')."""
+    """type(value) -> lowercase type name string (e.g. 'number', 'string', 'dict', 'channel').
+
+    数值（int/float）统一返回 'number'，与 Kotlin 后端 HType.NUMBER 对齐；
+    类实例返回类名，channel/future 返回对应标记名。
+    """
     if len(args) != 1:
         raise HSharpError("type() takes exactly 1 argument")
     v = args[0]
@@ -680,9 +684,9 @@ def builtin_type(args):
     if isinstance(v, bool):
         return 'bool'
     if isinstance(v, int):
-        return 'int'
+        return 'number'
     if isinstance(v, float):
-        return 'float'
+        return 'number'
     if v is None:
         return 'nullptr'
     if callable(v):

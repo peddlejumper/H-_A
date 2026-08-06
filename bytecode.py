@@ -850,9 +850,9 @@ class VM:
         if isinstance(v, bool):
             return 'bool'
         if isinstance(v, int):
-            return 'int'
+            return 'number'
         if isinstance(v, float):
-            return 'float'
+            return 'number'
         if v is None:
             return 'nullptr'
         if callable(v):

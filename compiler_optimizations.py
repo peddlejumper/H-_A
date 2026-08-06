@@ -273,7 +273,7 @@ class ConstantPropagation:
         names = set()
         if node is None:
             return names
-        if isinstance(node, Function):
+        if isinstance(node, (Function, CoroFunction)):
             return names
         if isinstance(node, AssignmentIdentifier):
             names.add(node.name)
@@ -409,6 +409,31 @@ class ConstantPropagation:
             self._visit(stmt.body, {})
             return stmt
 
+        if isinstance(stmt, CoroFunction):
+            # 协程函数体是独立作用域
+            self._visit(stmt.body, {})
+            return stmt
+
+        if isinstance(stmt, ClassDeclaration):
+            # 类体独立作用域；类名是运行期绑定，从常量环境剔除
+            self._visit(stmt.body, {})
+            env.pop(getattr(stmt, 'name', None), None)
+            return stmt
+
+        if isinstance(stmt, ConcurrentStatement):
+            # 并发块内的赋值（如 f = parallel_fn()）在块结束后不是编译期常量，
+            # 与 try/for 同理需从常量环境剔除，避免后续 await f 被常量折叠（v0.4.9）。
+            assigned = self._assigned_in(stmt.body)
+            self._visit(stmt.body, dict(env))
+            for a in assigned:
+                env.pop(a, None)
+            return stmt
+
+        if isinstance(stmt, ImportStatement):
+            # import 有副作用，保守清除所有常量绑定
+            env.clear()
+            return stmt
+
         if isinstance(stmt, (BreakStatement, ContinueStatement, DeleteStatement)):
             return stmt
 
@@ -473,6 +498,12 @@ class ConstantPropagation:
             expr.pairs = [(self._visit_expr(k, env), self._visit_expr(v, env)) for k, v in expr.pairs]
             return expr
 
+        if isinstance(expr, AwaitExpression):
+            # await 会 join 线程、有副作用，保守清除常量绑定（不常量折叠）
+            expr.expr = self._visit_expr(expr.expr, env)
+            env.clear()
+            return expr
+
         return expr
 
 
@@ -493,7 +524,7 @@ class RangeAnalysis:
         names = set()
         if node is None:
             return names
-        if isinstance(node, Function):
+        if isinstance(node, (Function, CoroFunction)):
             return names
         if isinstance(node, AssignmentIdentifier):
             names.add(node.name)
@@ -603,6 +634,29 @@ class RangeAnalysis:
             self._visit_stmt(stmt.body, {})
             return
 
+        if isinstance(stmt, CoroFunction):
+            self._visit_stmt(stmt.body, {})
+            return
+
+        if isinstance(stmt, ClassDeclaration):
+            # 类体独立作用域；类名是运行期绑定，从范围表剔除
+            self._visit_stmt(stmt.body, {})
+            ranges.pop(getattr(stmt, 'name', None), None)
+            return
+
+        if isinstance(stmt, ConcurrentStatement):
+            # 并发块内被赋值变量在块结束后不再有确定范围，从范围表剔除（v0.4.9）
+            assigned = self._assigned_in(stmt.body)
+            self._visit_stmt(stmt.body, dict(ranges))
+            for a in assigned:
+                ranges.pop(a, None)
+            return
+
+        if isinstance(stmt, ImportStatement):
+            # import 有副作用，保守清除范围表
+            ranges.clear()
+            return
+
         if isinstance(stmt, (ReturnStatement, PrintStatement)):
             if hasattr(stmt, 'expr') and stmt.expr is not None:
                 stmt.expr = self._simplify(stmt.expr, ranges)
@@ -641,6 +695,8 @@ class RangeAnalysis:
             for k, v in expr.pairs:
                 self._visit_expr(k, ranges)
                 self._visit_expr(v, ranges)
+        elif isinstance(expr, AwaitExpression):
+            self._visit_expr(expr.expr, ranges)
 
     def _expr_range(self, expr, ranges):
         """返回 (lo, hi) 或 None；lo/hi 为 None 表示无界。"""
