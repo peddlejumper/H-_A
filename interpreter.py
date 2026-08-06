@@ -776,6 +776,20 @@ def builtin_time_ms(args):
     import time
     return int(time.time() * 1000)
 
+def builtin_parallelism(args):
+    """parallelism() -> number of worker threads in the DZZW pool.
+    Mirrors the Kotlin backend's WorkerPool.defaultPool().parallelism
+    (host CPU core count)."""
+    import os
+    return int(os.cpu_count() or 4)
+
+def builtin_dzzw_worker_count(args):
+    """dzzw_worker_count() -> number of DZZW worker threads.
+    On the Python backend this equals parallelism() (host core count),
+    matching the Kotlin backend's HNativeBridge mapping."""
+    import os
+    return int(os.cpu_count() or 4)
+
 # ── List Builtins ──
 def builtin_list_append(args):
     if len(args) != 2:
@@ -974,8 +988,11 @@ class Interpreter:
         self._import_dirs = []
         # Futures spawned by `parallel`/`async` calls; joined at program end
         # (and at the end of each `concurrent` block) so no task outlives
-        # its scope.
+        # its scope.  Guarded by a lock: worker threads append while the
+        # main thread (or another worker) iterates the list inside a
+        # `concurrent` block's join — unsynchronized access races.
         self._outstanding_futures = []
+        self._futures_lock = threading.Lock()
         self.builtins = {
             'len': builtin_len,
             '_tag': builtin_tag,
@@ -1189,6 +1206,8 @@ class Interpreter:
             'chan_try_send': builtin_chan_try_send,
             'chan_try_recv': builtin_chan_try_recv,
             'time_ms': builtin_time_ms,
+            'parallelism': builtin_parallelism,
+            'dzzw_worker_count': builtin_dzzw_worker_count,
         }
 
         # 注册 tkinter GUI 后端（gui_* host 函数）
@@ -2877,7 +2896,8 @@ class Interpreter:
         t = threading.Thread(target=worker, daemon=True)
         fut['thread'] = t
         t.start()
-        self._outstanding_futures.append(fut)
+        with self._futures_lock:
+            self._outstanding_futures.append(fut)
         return fut
 
     def _join_future(self, fut, timeout=60.0):
@@ -2900,21 +2920,40 @@ class Interpreter:
         raise HSharpError(f"await requires a future, got {type(val).__name__}")
 
     def visit_ConcurrentStatement(self, stmt, env):
-        before = len(self._outstanding_futures)
+        # Structured-concurrency join: a `concurrent { }` block must join
+        # ONLY the futures it creates during its own execution, never futures
+        # that were already outstanding when it entered (which includes the
+        # calling worker thread's OWN future when this block runs inside a
+        # `parallel`/`async` worker — joining that would self-deadlock).
+        # Track by identity via a snapshot taken at entry. We JOIN only and do
+        # NOT mutate the shared global list here: removing entries from a list
+        # that sibling blocks/threads also read/write would race. Leftover
+        # futures are re-joined harmlessly by `_join_outstanding_futures` at
+        # program end.
+        with self._futures_lock:
+            before_ids = {id(f) for f in self._outstanding_futures}
         try:
             self.visit_BlockStatement(stmt.body, env)
         finally:
-            for fut in self._outstanding_futures[before:]:
+            # Snapshot under the lock, then join only the futures created
+            # during this block (not enclosing-scope ones, which would
+            # include the current worker thread's own future -> self-deadlock).
+            with self._futures_lock:
+                new_futs = [f for f in self._outstanding_futures
+                            if id(f) not in before_ids]
+            for fut in new_futs:
                 self._join_future(fut)
-            del self._outstanding_futures[before:]
         return None
 
     def _join_outstanding_futures(self):
         """Join every future still outstanding (called at program end so no
         parallel/async task is abandoned)."""
-        for fut in list(self._outstanding_futures):
+        with self._futures_lock:
+            pending = list(self._outstanding_futures)
+        for fut in pending:
             self._join_future(fut)
-        self._outstanding_futures.clear()
+        with self._futures_lock:
+            self._outstanding_futures.clear()
 
     def _apply_defaults(self, func, args, name):
         """Fill in missing trailing arguments from the function's

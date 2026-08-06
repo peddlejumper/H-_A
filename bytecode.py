@@ -59,6 +59,8 @@ class VM:
             'chan_try_send': self._b_chan_try_send,
             'chan_try_recv': self._b_chan_try_recv,
             'time_ms': self._b_time_ms,
+            'parallelism': self._b_parallelism,
+            'dzzw_worker_count': self._b_dzzw_worker_count,
             'abs': lambda args: abs(args[0]),
             'min': lambda args: min(args[0]),
             'max': lambda args: max(args[0]),
@@ -934,6 +936,14 @@ class VM:
     def _b_time_ms(self, args):
         import time
         return int(time.time() * 1000)
+
+    def _b_parallelism(self, args):
+        import os
+        return int(os.cpu_count() or 4)
+
+    def _b_dzzw_worker_count(self, args):
+        import os
+        return int(os.cpu_count() or 4)
 
     def _for_iter_first(self, iterable, var1, var2, jump_target):
         """Handle the first iteration of a for-in loop."""
