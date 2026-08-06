@@ -30,6 +30,9 @@ def run(code, filename="<input>"):
         try:
             interpreter = Interpreter()
             interpreter.interpret(program)
+            # Join any parallel/async tasks still outstanding so no task is
+            # abandoned when the main program finishes.
+            interpreter._join_outstanding_futures()
         except SyntaxError as e:
             state['exc'] = f"Syntax Error in {filename}: {e}"
         except Exception as e:

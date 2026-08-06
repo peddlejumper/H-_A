@@ -1,6 +1,7 @@
 import os
 import sys
 import math as _math
+import threading
 from h_ast import *
 from tokens import TokenType
 from bytecode import VM
@@ -967,6 +968,10 @@ class Interpreter:
         self.entry_file = None
         # Stack of directories currently being imported, for nested resolution.
         self._import_dirs = []
+        # Futures spawned by `parallel`/`async` calls; joined at program end
+        # (and at the end of each `concurrent` block) so no task outlives
+        # its scope.
+        self._outstanding_futures = []
         self.builtins = {
             'len': builtin_len,
             '_tag': builtin_tag,
@@ -2798,7 +2803,114 @@ class Interpreter:
                 'closure_env': env,
                 'name': stmt.name,
                 'defaults': getattr(stmt, '_evaluated_defaults', []),
+                'is_parallel': getattr(stmt, 'is_parallel', False),
+                'is_async': getattr(stmt, 'is_async', False),
+                'decorators': getattr(stmt, 'decorators', []),
             })
+
+    # ------------------------------------------------------------------
+    # Concurrency: parallel / async / await / concurrent
+    # ------------------------------------------------------------------
+    def _conc_flags(self, target):
+        """Return (is_concurrent, is_async) for a callable target which may
+        be a Function AST node or a closure dict."""
+        if isinstance(target, dict):
+            return (bool(target.get('is_parallel')) or bool(target.get('is_async')),
+                    bool(target.get('is_async')))
+        return (bool(getattr(target, 'is_parallel', False)) or
+                bool(getattr(target, 'is_async', False)),
+                bool(getattr(target, 'is_async', False)))
+
+    def _spawn_future(self, target, args, env, is_async):
+        """Run `target` in a worker thread and return a future (HFuture-like
+        dict).  `await` blocks on the future; `type(future) == 'future'`."""
+        if isinstance(target, dict):
+            params = target.get('params', [])
+            body = target.get('body')
+            closure_env = target.get('closure_env', self.global_env)
+            defaults = target.get('defaults', [])
+            name = target.get('name', 'function')
+        else:
+            params = target.params
+            body = target.body
+            closure_env = self.global_env
+            defaults = getattr(target, '_evaluated_defaults', [])
+            name = getattr(target, 'name', 'function')
+        fut = {
+            '__htype__': 'future',
+            'resolved': False,
+            'value': None,
+            'error': None,
+            'event': threading.Event(),
+            'thread': None,
+        }
+
+        def worker():
+            call_env = Environment(parent=closure_env)
+            try:
+                if isinstance(target, dict):
+                    bound = self._apply_defaults_to(params, defaults, args, name)
+                else:
+                    bound = self._apply_defaults(target, args, name)
+                for p, a in zip(params, bound):
+                    call_env.define(p, a)
+            except HSharpError as e:
+                fut['error'] = e
+                fut['resolved'] = True
+                fut['event'].set()
+                return
+            try:
+                self.visit_BlockStatement(body, call_env)
+            except ReturnException as e:
+                fut['value'] = e.value
+            except HSharpError as e:
+                fut['error'] = e
+            except Exception as e:  # never let a worker thread die silently
+                fut['error'] = HSharpError(str(e))
+            fut['resolved'] = True
+            fut['event'].set()
+
+        t = threading.Thread(target=worker, daemon=True)
+        fut['thread'] = t
+        t.start()
+        self._outstanding_futures.append(fut)
+        return fut
+
+    def _join_future(self, fut, timeout=60.0):
+        if fut.get('resolved'):
+            return
+        if not fut['event'].wait(timeout=timeout):
+            raise HSharpError("await timed out (possible deadlock in parallel task)")
+
+    def visit_AwaitExpression(self, stmt, env):
+        val = self.eval_expr(stmt.expr, env)
+        if isinstance(val, dict) and val.get('__htype__') == 'future':
+            self._join_future(val)
+            if val.get('error') is not None:
+                raise val['error']
+            return val.get('value')
+        # HVM semantics: `await` requires an HFuture; awaiting a non-future
+        # value (or null) is an error.
+        if val is None:
+            raise HSharpError("await on null is not allowed")
+        raise HSharpError(f"await requires a future, got {type(val).__name__}")
+
+    def visit_ConcurrentStatement(self, stmt, env):
+        before = len(self._outstanding_futures)
+        try:
+            self.visit_BlockStatement(stmt.body, env)
+        finally:
+            for fut in self._outstanding_futures[before:]:
+                self._join_future(fut)
+            del self._outstanding_futures[before:]
+        return None
+
+    def _join_outstanding_futures(self):
+        """Join every future still outstanding (called at program end so no
+        parallel/async task is abandoned)."""
+        for fut in list(self._outstanding_futures):
+            self._join_future(fut)
+        self._outstanding_futures.clear()
 
     def _apply_defaults(self, func, args, name):
         """Fill in missing trailing arguments from the function's
@@ -3004,6 +3116,8 @@ class Interpreter:
                 if isinstance(val, dict):
                     # interpreter lambda/closure representation
                     if 'body' in val:
+                        if val.get('is_parallel') or val.get('is_async'):
+                            return self._spawn_future(val, args, env, bool(val.get('is_async')))
                         closure = val.get('closure_env', self.global_env)
                         call_env = Environment(parent=closure)
                         params = val.get('params', [])
@@ -3027,6 +3141,8 @@ class Interpreter:
                     if getattr(val, 'is_coro', False):
                         coro = Coroutine(val, self, args)
                         return coro
+                    if getattr(val, 'is_parallel', False) or getattr(val, 'is_async', False):
+                        return self._spawn_future(val, args, env, bool(getattr(val, 'is_async', False)))
                     call_env = self._bind_call_args(val, args, name)
                     try:
                         self.visit_BlockStatement(val.body, call_env)
@@ -3044,6 +3160,8 @@ class Interpreter:
             if (isinstance(func, Function) or isinstance(func, CoroFunction)) and getattr(func, 'is_coro', False):
                 coro = Coroutine(func, self, args)
                 return coro
+            if getattr(func, 'is_parallel', False) or getattr(func, 'is_async', False):
+                return self._spawn_future(func, args, env, bool(getattr(func, 'is_async', False)))
             call_env = self._bind_call_args(func, args, name)
             try:
                 self.visit_BlockStatement(func.body, call_env)
@@ -3103,6 +3221,13 @@ class Interpreter:
                         except ReturnException as e:
                             return e.value
                         return None
+                # Attribute access on a Function/CoroFunction AST node
+                # (e.g. `fn.is_parallel`, `fn.decorators`).  Return the
+                # attribute value directly without invoking a call.
+                if isinstance(left, (Function, CoroFunction)):
+                    if hasattr(left, attr):
+                        return getattr(left, attr)
+                    raise HSharpError(f"Attribute '{attr}' not found on function '{getattr(left, 'name', '?')}'")
                 # If left is a real Python object (module or other), try getattr
                 try:
                     if not isinstance(left, dict) and hasattr(left, attr):
@@ -3158,6 +3283,8 @@ class Interpreter:
                     raise HSharpError(f'Error calling external function: {e}')
             # interpreter lambda/closure representation
             if isinstance(func_val, dict) and 'body' in func_val:
+                if func_val.get('is_parallel') or func_val.get('is_async'):
+                    return self._spawn_future(func_val, args, env, bool(func_val.get('is_async')))
                 closure = func_val.get('closure_env', self.global_env)
                 call_env = Environment(parent=closure)
                 if len(args) != len(func_val.get('params', [])):
@@ -3171,6 +3298,8 @@ class Interpreter:
                 return None
             # H# Function object (from self.functions)
             if isinstance(func_val, Function):
+                if getattr(func_val, 'is_parallel', False) or getattr(func_val, 'is_async', False):
+                    return self._spawn_future(func_val, args, env, bool(getattr(func_val, 'is_async', False)))
                 call_env = Environment(parent=self.global_env)
                 if len(args) != len(func_val.params):
                     raise HSharpError(f'Function expects {len(func_val.params)} arguments, got {len(args)}')
@@ -3807,7 +3936,15 @@ class Interpreter:
             if isinstance(left, dict):
                 if expr.name in left:
                     return left[expr.name]
+            # attribute access on a Function/CoroFunction AST node
+            # (e.g. `fn.is_parallel`, `fn.decorators`)
+            if isinstance(left, (Function, CoroFunction)):
+                if hasattr(left, expr.name):
+                    return getattr(left, expr.name)
+                raise HSharpError(f"Attribute '{expr.name}' not found on function")
             raise HSharpError(f"Cannot access attribute '{expr.name}' on non-object")
+        elif isinstance(expr, AwaitExpression):
+            return self.visit_AwaitExpression(expr, env)
         else:
             raise HSharpError(f"Unknown expression: {expr}")
 

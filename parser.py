@@ -20,7 +20,44 @@ class Parser:
         return Program(statements)
 
     def statement(self):
-        # module / concept / asm / coro support
+        # module / concept / asm / coro / concurrency / decorator support
+        if self.current_token[0] == TokenType.AT:
+            # decorator list: @name [@name ...] preceding fn/class/parallel/async
+            decorators = []
+            while self.current_token[0] == TokenType.AT:
+                self.eat(TokenType.AT)
+                tok = self.current_token[0]
+                # The decorator name is the identifier's value, or — when a
+                # keyword is used as a marker (e.g. `@parallel`) — the lowercased
+                # token-type name.  Keyword tokens carry `None` as their value,
+                # so we must derive the name from the token type itself.
+                if tok == TokenType.IDENTIFIER:
+                    dname = self.current_token[1]
+                else:
+                    dname = tok.name.lower()
+                self.eat(tok)
+                decorators.append(dname)
+            if self.current_token[0] == TokenType.FN:
+                return self.function_declaration(decorators=decorators)
+            if self.current_token[0] == TokenType.PARALLEL:
+                self.eat(TokenType.PARALLEL)
+                return self.function_declaration(is_parallel=True, decorators=decorators)
+            if self.current_token[0] == TokenType.ASYNC:
+                self.eat(TokenType.ASYNC)
+                return self.function_declaration(is_async=True, decorators=decorators)
+            if self.current_token[0] == TokenType.CLASS:
+                return self.class_declaration(decorators=decorators)
+            raise SyntaxError("decorator must precede fn/class/parallel/async")
+        if self.current_token[0] == TokenType.PARALLEL:
+            self.eat(TokenType.PARALLEL)
+            return self.function_declaration(is_parallel=True)
+        if self.current_token[0] == TokenType.ASYNC:
+            self.eat(TokenType.ASYNC)
+            return self.function_declaration(is_async=True)
+        if self.current_token[0] == TokenType.CONCURRENT:
+            self.eat(TokenType.CONCURRENT)
+            body = self.block()
+            return ConcurrentStatement(body)
         if self.current_token[0] == TokenType.MODULE:
             return self.module_declaration()
         if self.current_token[0] == TokenType.CONCEPT:
@@ -161,7 +198,8 @@ class Parser:
         self.eat(TokenType.SEMI)
         return ImportStatement(path)
 
-    def function_declaration(self, is_coro=False):
+    def function_declaration(self, is_coro=False, is_parallel=False,
+                              is_async=False, decorators=None):
         self.eat(TokenType.FN)
         func_name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
@@ -177,7 +215,11 @@ class Parser:
         self.eat(TokenType.RPAREN)
         body = self.block()
         fn = Function(func_name, params, body, defaults=defaults,
-                      is_variadic=(self._variadic_param is not None))
+                      is_variadic=(self._variadic_param is not None),
+                      is_parallel=is_parallel, is_async=is_async,
+                      decorators=decorators or [])
+        if 'parallel' in (decorators or []):
+            fn.is_parallel = True
         if is_coro:
             fn.is_coro = True
         return fn
@@ -242,7 +284,7 @@ class Parser:
         self.eat(TokenType.SEMI)
         return AsmBlock(code)
 
-    def class_declaration(self):
+    def class_declaration(self, decorators=None):
         self.eat(TokenType.CLASS)
         class_name = self.current_token[1]
         self.eat(TokenType.IDENTIFIER)
@@ -298,7 +340,9 @@ class Parser:
             else:
                 members.append(self.statement())
         self.eat(TokenType.RBRACE)
-        return ClassDeclaration(class_name, BlockStatement(members), base, implements)
+        cls = ClassDeclaration(class_name, BlockStatement(members), base, implements)
+        cls.decorators = decorators or []
+        return cls
 
     def interface_declaration(self):
         self.eat(TokenType.INTERFACE)
@@ -774,6 +818,13 @@ class Parser:
 
     def primary(self):
         token = self.current_token
+        if token[0] == TokenType.AWAIT:
+            self.eat(TokenType.AWAIT)
+            # Bind tightly to a single operand (identifier / unary / primary),
+            # NOT the whole expression, so that `await x == y` parses as
+            # `(await x) == y` rather than `await (x == y)`.
+            inner = self.unary()
+            return AwaitExpression(inner)
         if token[0] == TokenType.FN:
             # lambda expression: fn(params) { body }
             # Reuse _parse_param so lambdas support `= default` and

@@ -85,6 +85,10 @@ class Lexer:
             'in': TokenType.IN,
             'print': TokenType.PRINT,
             'import': TokenType.IMPORT,
+            'parallel': TokenType.PARALLEL,
+            'concurrent': TokenType.CONCURRENT,
+            'await': TokenType.AWAIT,
+            'async': TokenType.ASYNC,
             'class': TokenType.CLASS,
             'new': TokenType.NEW,
             'extends': TokenType.EXTENDS,
@@ -236,6 +240,9 @@ class Lexer:
                     self.advance()
                     return (TokenType.QMARK_CARET, '?^')
                 return (TokenType.QMARK, '?')
+            if self.current_char == '@':
+                self.advance()
+                return (TokenType.AT, '@')
 
             # 单字符
             if self.current_char == '+':

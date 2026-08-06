@@ -30,7 +30,8 @@ class ImportStatement(AST):
 
 class Function(AST):
     def __init__(self, name, params, body, is_static=False, defaults=None,
-                 is_variadic=False):
+                 is_variadic=False, is_parallel=False, is_async=False,
+                 decorators=None):
         self.name = name
         self.params = params
         self.body = body
@@ -44,6 +45,14 @@ class Function(AST):
         # trailing positional args into a list.  Mutually exclusive with
         # `defaults` (enforced by the parser).
         self.is_variadic = is_variadic
+        # Concurrency flags.  A `parallel fn`/`@parallel fn` returns a
+        # future (HFuture) whose value is produced by a worker thread.
+        # An `async fn` likewise returns a (resolved) future.  `coro fn`
+        # is handled separately via `is_coro` and runs synchronously.
+        self.is_parallel = is_parallel
+        self.is_async = is_async
+        # List of decorator names attached via `@name` syntax.
+        self.decorators = decorators or []
 
 class CallExpression(AST):
     def __init__(self, func, args):
@@ -260,6 +269,20 @@ class ContinueStatement(AST):
 class BreakStatement(AST):
     def __init__(self):
         pass
+
+class ConcurrentStatement(AST):
+    """`concurrent { ... }` — establish a concurrency scope.  Statements
+    run in the current thread; `parallel`/`@parallel` tasks spawned inside
+    are joined at block exit so no task outlives the block."""
+    def __init__(self, body):
+        self.body = body
+
+class AwaitExpression(AST):
+    """`await expr` — block until `expr` resolves.  If `expr` is a future
+    (HFuture) wait for its result (or re-raise its error); otherwise
+    return `expr` unchanged."""
+    def __init__(self, expr):
+        self.expr = expr
 
 class CoroFunction(AST):
     def __init__(self, name, params, body):
