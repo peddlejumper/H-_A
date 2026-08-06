@@ -382,6 +382,22 @@ class ConstantPropagation:
                 env.pop(stmt.var2, None)
             return stmt
 
+        if isinstance(stmt, TryStatement):
+            # try/catch 区块内对变量的赋值（含 catch 处理器把 caught 改写为 true）
+            # 必须让 try 之后的同名变量不再是编译期常量，否则后续 `if (caught)`
+            # 会被折叠成 `if (false)` 而跳过本应在 catch 命中时执行的代码（v0.4.6）。
+            assigned = self._assigned_in(stmt.body) | self._assigned_in(stmt.handler)
+            if stmt.exception_name:
+                assigned.add(stmt.exception_name)
+            self._visit(stmt.body, dict(env))
+            handler_env = dict(env)
+            if stmt.exception_name:
+                handler_env.pop(stmt.exception_name, None)
+            self._visit(stmt.handler, handler_env)
+            for a in assigned:
+                env.pop(a, None)
+            return stmt
+
         if isinstance(stmt, BlockStatement):
             local = dict(env)
             for s in stmt.statements:
@@ -560,6 +576,21 @@ class RangeAnalysis:
             if getattr(stmt, 'var2', None):
                 ranges.pop(stmt.var2, None)
             self._visit_stmt(stmt.body, dict(ranges))
+            return
+
+        if isinstance(stmt, TryStatement):
+            # 与 ConstantPropagation 同理：try/catch 内被赋值的变量在 try 之后
+            # 不再是编译期常量，从范围表中剔除（避免范围分析错误折叠）。
+            assigned = self._assigned_in(stmt.body) | self._assigned_in(stmt.handler)
+            if stmt.exception_name:
+                assigned.add(stmt.exception_name)
+            self._visit_stmt(stmt.body, dict(ranges))
+            handler_ranges = dict(ranges)
+            if stmt.exception_name:
+                handler_ranges.pop(stmt.exception_name, None)
+            self._visit_stmt(stmt.handler, handler_ranges)
+            for a in assigned:
+                ranges.pop(a, None)
             return
 
         if isinstance(stmt, BlockStatement):

@@ -696,7 +696,80 @@ def builtin_chan_new(args):
     'FOR_ITER: unsupported iterable channel' error.
     """
     cap = int(args[0]) if args else 0
-    return {'__htype__': 'channel', 'capacity': cap, 'items': []}
+    return {'__htype__': 'channel', 'capacity': cap, 'items': [], 'closed': False}
+
+def builtin_chan_send(args):
+    if len(args) != 2:
+        raise HSharpError("chan_send(ch, value) takes exactly 2 arguments")
+    ch, v = args[0], args[1]
+    if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+        raise HSharpError("chan_send: first argument must be a channel")
+    if ch.get('closed'):
+        raise HSharpError("chan_send on closed channel")
+    cap = ch.get('capacity', 0)
+    if cap and len(ch['items']) >= cap:
+        raise HSharpError("chan_send on full bounded channel (would block)")
+    ch['items'].append(v)
+    return None
+
+def builtin_chan_recv(args):
+    if len(args) != 1:
+        raise HSharpError("chan_recv(ch) takes exactly 1 argument")
+    ch = args[0]
+    if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+        raise HSharpError("chan_recv: argument must be a channel")
+    if len(ch['items']) > 0:
+        return ch['items'].pop(0)
+    if ch.get('closed'):
+        raise HSharpError("chan_recv on closed and empty channel")
+    raise HSharpError("chan_recv on empty channel (would block)")
+
+def builtin_chan_close(args):
+    if len(args) != 1:
+        raise HSharpError("chan_close(ch) takes exactly 1 argument")
+    ch = args[0]
+    if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+        raise HSharpError("chan_close: argument must be a channel")
+    # Idempotent: closing an already-closed channel is a no-op (does not raise).
+    ch['closed'] = True
+    return None
+
+def builtin_chan_size(args):
+    if len(args) != 1:
+        raise HSharpError("chan_size(ch) takes exactly 1 argument")
+    ch = args[0]
+    if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+        raise HSharpError("chan_size: argument must be a channel")
+    return len(ch['items'])
+
+def builtin_chan_try_send(args):
+    if len(args) != 2:
+        raise HSharpError("chan_try_send(ch, value) takes exactly 2 arguments")
+    ch, v = args[0], args[1]
+    if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+        raise HSharpError("chan_try_send: first argument must be a channel")
+    if ch.get('closed'):
+        raise HSharpError("chan_try_send on closed channel")
+    cap = ch.get('capacity', 0)
+    if cap and len(ch['items']) >= cap:
+        return False
+    ch['items'].append(v)
+    return True
+
+def builtin_chan_try_recv(args):
+    if len(args) != 1:
+        raise HSharpError("chan_try_recv(ch) takes exactly 1 argument")
+    ch = args[0]
+    if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+        raise HSharpError("chan_try_recv: argument must be a channel")
+    if len(ch['items']) > 0:
+        return ch['items'].pop(0)
+    return None
+
+def builtin_time_ms(args):
+    """time_ms() -> current wall-clock time in milliseconds (int)."""
+    import time
+    return int(time.time() * 1000)
 
 # ── List Builtins ──
 def builtin_list_append(args):
@@ -1100,6 +1173,13 @@ class Interpreter:
             'values': builtin_values,
             'type': builtin_type,
             'chan_new': builtin_chan_new,
+            'chan_send': builtin_chan_send,
+            'chan_recv': builtin_chan_recv,
+            'chan_close': builtin_chan_close,
+            'chan_size': builtin_chan_size,
+            'chan_try_send': builtin_chan_try_send,
+            'chan_try_recv': builtin_chan_try_recv,
+            'time_ms': builtin_time_ms,
         }
 
         # 注册 tkinter GUI 后端（gui_* host 函数）

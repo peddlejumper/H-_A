@@ -50,7 +50,15 @@ class VM:
             'str': lambda args: str(args[0]),
             'int': lambda args: int(args[0]),
             'float': lambda args: float(args[0]),
-            'type': lambda args: type(args[0]).__name__,
+            'type': self._b_type,
+            'chan_new': self._b_chan_new,
+            'chan_send': self._b_chan_send,
+            'chan_recv': self._b_chan_recv,
+            'chan_close': self._b_chan_close,
+            'chan_size': self._b_chan_size,
+            'chan_try_send': self._b_chan_try_send,
+            'chan_try_recv': self._b_chan_try_recv,
+            'time_ms': self._b_time_ms,
             'abs': lambda args: abs(args[0]),
             'min': lambda args: min(args[0]),
             'max': lambda args: max(args[0]),
@@ -817,6 +825,115 @@ class VM:
             return None
         except Exception as e:
             raise BytecodeRuntimeError(f'Error joining thread: {e}')
+
+    # ── Channel builtins (mirror interpreter.builtin_chan_*; raise
+    #    BytecodeRuntimeError so user `try/catch` in --opt mode can catch) ──
+    def _b_type(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("type() takes exactly 1 argument")
+        v = args[0]
+        if isinstance(v, dict):
+            if v.get('__htype__') is not None:
+                return str(v.get('__htype__'))
+            if '__class__' in v:
+                cls = v['__class__']
+                if isinstance(cls, dict):
+                    return str(cls.get('name', 'object'))
+                return 'object'
+            if 'methods' in v:
+                return str(v.get('name', 'class'))
+            return 'dict'
+        if isinstance(v, list):
+            return 'list'
+        if isinstance(v, str):
+            return 'string'
+        if isinstance(v, bool):
+            return 'bool'
+        if isinstance(v, int):
+            return 'int'
+        if isinstance(v, float):
+            return 'float'
+        if v is None:
+            return 'nullptr'
+        if callable(v):
+            return 'function'
+        return type(v).__name__
+
+    def _b_chan_new(self, args):
+        cap = int(args[0]) if args else 0
+        return {'__htype__': 'channel', 'capacity': cap, 'items': [], 'closed': False}
+
+    def _b_chan_send(self, args):
+        if len(args) != 2:
+            raise BytecodeRuntimeError("chan_send(ch, value) takes exactly 2 arguments")
+        ch, v = args[0], args[1]
+        if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+            raise BytecodeRuntimeError("chan_send: first argument must be a channel")
+        if ch.get('closed'):
+            raise BytecodeRuntimeError("chan_send on closed channel")
+        cap = ch.get('capacity', 0)
+        if cap and len(ch['items']) >= cap:
+            raise BytecodeRuntimeError("chan_send on full bounded channel (would block)")
+        ch['items'].append(v)
+        return None
+
+    def _b_chan_recv(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("chan_recv(ch) takes exactly 1 argument")
+        ch = args[0]
+        if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+            raise BytecodeRuntimeError("chan_recv: argument must be a channel")
+        if len(ch['items']) > 0:
+            return ch['items'].pop(0)
+        if ch.get('closed'):
+            raise BytecodeRuntimeError("chan_recv on closed and empty channel")
+        raise BytecodeRuntimeError("chan_recv on empty channel (would block)")
+
+    def _b_chan_close(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("chan_close(ch) takes exactly 1 argument")
+        ch = args[0]
+        if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+            raise BytecodeRuntimeError("chan_close: argument must be a channel")
+        # Idempotent: closing an already-closed channel is a no-op (does not raise).
+        ch['closed'] = True
+        return None
+
+    def _b_chan_size(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("chan_size(ch) takes exactly 1 argument")
+        ch = args[0]
+        if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+            raise BytecodeRuntimeError("chan_size: argument must be a channel")
+        return len(ch['items'])
+
+    def _b_chan_try_send(self, args):
+        if len(args) != 2:
+            raise BytecodeRuntimeError("chan_try_send(ch, value) takes exactly 2 arguments")
+        ch, v = args[0], args[1]
+        if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+            raise BytecodeRuntimeError("chan_try_send: first argument must be a channel")
+        if ch.get('closed'):
+            raise BytecodeRuntimeError("chan_try_send on closed channel")
+        cap = ch.get('capacity', 0)
+        if cap and len(ch['items']) >= cap:
+            return False
+        ch['items'].append(v)
+        return True
+
+    def _b_chan_try_recv(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("chan_try_recv(ch) takes exactly 1 argument")
+        ch = args[0]
+        if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
+            raise BytecodeRuntimeError("chan_try_recv: argument must be a channel")
+        if len(ch['items']) > 0:
+            return ch['items'].pop(0)
+        return None
+
+    def _b_time_ms(self, args):
+        import time
+        return int(time.time() * 1000)
 
     def _for_iter_first(self, iterable, var1, var2, jump_target):
         """Handle the first iteration of a for-in loop."""
