@@ -693,15 +693,23 @@ def builtin_type(args):
         return 'function'
     return type(v).__name__
 
+# Blocking-channel operations wait at most this long before raising a clear
+# "timed out" error (instead of hanging forever if a sender/receiver never
+# shows up). 30s is far longer than any legitimate rendezvous needs.
+CHAN_OP_TIMEOUT = 30.0
+
+
 def builtin_chan_new(args):
     """chan_new(capacity) -> a channel object (iteration unsupported, see bug5).
 
     Channels are represented as a marker dict so `type(ch)` reports the
     lowercase type name 'channel' and `for x in ch` raises the catchable
-    'FOR_ITER: unsupported iterable channel' error.
+    'FOR_ITER: unsupported iterable channel' error.  A `threading.Condition`
+    backs the blocking send/recv rendezvous.
     """
     cap = int(args[0]) if args else 0
-    return {'__htype__': 'channel', 'capacity': cap, 'items': [], 'closed': False}
+    return {'__htype__': 'channel', 'capacity': cap, 'items': [],
+            'closed': False, 'cond': threading.Condition()}
 
 def builtin_chan_send(args):
     if len(args) != 2:
@@ -709,12 +717,26 @@ def builtin_chan_send(args):
     ch, v = args[0], args[1]
     if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
         raise HSharpError("chan_send: first argument must be a channel")
-    if ch.get('closed'):
-        raise HSharpError("chan_send on closed channel")
+    import time
+    cond = ch['cond']
     cap = ch.get('capacity', 0)
-    if cap and len(ch['items']) >= cap:
-        raise HSharpError("chan_send on full bounded channel (would block)")
-    ch['items'].append(v)
+    with cond:
+        if cap:
+            deadline = time.time() + CHAN_OP_TIMEOUT
+            # Block while the channel is full *and still open*.  If it gets
+            # closed while we wait, raise (a closed channel can't be sent to).
+            while len(ch['items']) >= cap:
+                if ch.get('closed'):
+                    raise HSharpError("chan_send on closed channel")
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    raise HSharpError(
+                        "chan_send timed out (channel full, no receiver)")
+                cond.wait(remaining)
+        if ch.get('closed'):
+            raise HSharpError("chan_send on closed channel")
+        ch['items'].append(v)
+        cond.notify_all()
     return None
 
 def builtin_chan_recv(args):
@@ -723,11 +745,23 @@ def builtin_chan_recv(args):
     ch = args[0]
     if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
         raise HSharpError("chan_recv: argument must be a channel")
-    if len(ch['items']) > 0:
-        return ch['items'].pop(0)
-    if ch.get('closed'):
-        raise HSharpError("chan_recv on closed and empty channel")
-    raise HSharpError("chan_recv on empty channel (would block)")
+    import time
+    cond = ch['cond']
+    with cond:
+        # Block while empty.  If the channel is closed, there will be no more
+        # items ever, so raise immediately (Go-style "recv on closed channel").
+        deadline = time.time() + CHAN_OP_TIMEOUT
+        while len(ch['items']) == 0:
+            if ch.get('closed'):
+                raise HSharpError("chan_recv on closed and empty channel")
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise HSharpError(
+                    "chan_recv timed out (channel empty, no sender)")
+            cond.wait(remaining)
+        v = ch['items'].pop(0)
+        cond.notify_all()
+        return v
 
 def builtin_chan_close(args):
     if len(args) != 1:
@@ -737,6 +771,10 @@ def builtin_chan_close(args):
         raise HSharpError("chan_close: argument must be a channel")
     # Idempotent: closing an already-closed channel is a no-op (does not raise).
     ch['closed'] = True
+    # Wake any sender/recv blocked on this channel so they raise the proper
+    # "closed" error immediately instead of waiting out the timeout.
+    with ch['cond']:
+        ch['cond'].notify_all()
     return None
 
 def builtin_chan_size(args):
@@ -986,13 +1024,20 @@ class Interpreter:
         self.entry_file = None
         # Stack of directories currently being imported, for nested resolution.
         self._import_dirs = []
-        # Futures spawned by `parallel`/`async` calls; joined at program end
-        # (and at the end of each `concurrent` block) so no task outlives
-        # its scope.  Guarded by a lock: worker threads append while the
-        # main thread (or another worker) iterates the list inside a
-        # `concurrent` block's join — unsynchronized access races.
-        self._outstanding_futures = []
-        self._futures_lock = threading.Lock()
+        # Structured concurrency: each `concurrent { }` block owns a
+        # *thread-local* scope (a stack, so they can nest) of the futures it
+        # spawns. A `concurrent` block joins ONLY the futures in its own
+        # scope, so a `concurrent` block running inside a worker thread never
+        # sees (and never joins) futures that sibling/parallel blocks on
+        # *other* threads created during its window. The previous design used
+        # one shared global list + an id-snapshot at entry, which entangled
+        # cross-thread join sets and produced logic deadlocks in nested
+        # cross-thread `concurrent` scenarios (see test 16). Futures created
+        # outside any `concurrent` block (top-level fire-and-forget) go to
+        # `_orphan_futures` and are joined at program end.
+        self._scope_local = threading.local()
+        self._orphan_futures = []
+        self._orphan_lock = threading.Lock()
         self.builtins = {
             'len': builtin_len,
             '_tag': builtin_tag,
@@ -2928,9 +2973,30 @@ class Interpreter:
         t = threading.Thread(target=worker, daemon=True)
         fut['thread'] = t
         t.start()
-        with self._futures_lock:
-            self._outstanding_futures.append(fut)
+        self._register_future(fut)
         return fut
+
+    # -- concurrent-scope helpers ------------------------------------------
+    def _scope_stack(self):
+        """Return THIS thread's concurrent-scope stack (creating it on first
+        use).  Each entry is a dict {'futures': [...]}."""
+        st = getattr(self._scope_local, 'stack', None)
+        if st is None:
+            st = []
+            self._scope_local.stack = st
+        return st
+
+    def _register_future(self, fut):
+        """Register a freshly-spawned future into the current thread's
+        innermost concurrent scope, or the orphan list if no scope is active
+        on this thread (i.e. the future was spawned outside any
+        `concurrent` block)."""
+        st = getattr(self._scope_local, 'stack', None)
+        if st:
+            st[-1]['futures'].append(fut)
+        else:
+            with self._orphan_lock:
+                self._orphan_futures.append(fut)
 
     def _join_future(self, fut, timeout=60.0):
         if fut.get('resolved'):
@@ -2952,40 +3018,40 @@ class Interpreter:
         raise HSharpError(f"await requires a future, got {type(val).__name__}")
 
     def visit_ConcurrentStatement(self, stmt, env):
-        # Structured-concurrency join: a `concurrent { }` block must join
-        # ONLY the futures it creates during its own execution, never futures
-        # that were already outstanding when it entered (which includes the
-        # calling worker thread's OWN future when this block runs inside a
-        # `parallel`/`async` worker — joining that would self-deadlock).
-        # Track by identity via a snapshot taken at entry. We JOIN only and do
-        # NOT mutate the shared global list here: removing entries from a list
-        # that sibling blocks/threads also read/write would race. Leftover
-        # futures are re-joined harmlessly by `_join_outstanding_futures` at
-        # program end.
-        with self._futures_lock:
-            before_ids = {id(f) for f in self._outstanding_futures}
+        # Structured concurrency: push a fresh scope onto THIS thread's
+        # scope stack. Every future spawned while this block runs (on this
+        # thread) is registered into this scope, and we join exactly those at
+        # block exit. Because the scope is thread-local, a `concurrent` block
+        # running inside a worker thread does NOT see (and does not join)
+        # futures created by sibling/parallel blocks on other threads — which
+        # is what previously produced cross-thread deadlocks (test 16). This
+        # also inherently avoids self-deadlock: a worker thread's OWN future
+        # was registered on the *calling* thread's scope (the call that
+        # spawned it), never on the worker's own scope.
+        scope = {'futures': []}
+        stack = self._scope_stack()
+        stack.append(scope)
         try:
             self.visit_BlockStatement(stmt.body, env)
         finally:
-            # Snapshot under the lock, then join only the futures created
-            # during this block (not enclosing-scope ones, which would
-            # include the current worker thread's own future -> self-deadlock).
-            with self._futures_lock:
-                new_futs = [f for f in self._outstanding_futures
-                            if id(f) not in before_ids]
-            for fut in new_futs:
+            # Pop this scope *before* joining, so any future spawned by the
+            # join logic itself (shouldn't happen) lands in the parent scope.
+            if stack and stack[-1] is scope:
+                stack.pop()
+            for fut in scope['futures']:
                 self._join_future(fut)
         return None
 
     def _join_outstanding_futures(self):
-        """Join every future still outstanding (called at program end so no
-        parallel/async task is abandoned)."""
-        with self._futures_lock:
-            pending = list(self._outstanding_futures)
+        """Join every orphan future still outstanding (called at program end
+        so no top-level fire-and-forget task is abandoned). Futures created
+        inside a `concurrent` block are already joined by that block."""
+        with self._orphan_lock:
+            pending = list(self._orphan_futures)
         for fut in pending:
             self._join_future(fut)
-        with self._futures_lock:
-            self._outstanding_futures.clear()
+        with self._orphan_lock:
+            self._orphan_futures.clear()
 
     def _apply_defaults(self, func, args, name):
         """Fill in missing trailing arguments from the function's

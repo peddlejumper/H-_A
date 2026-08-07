@@ -862,34 +862,58 @@ class VM:
         return type(v).__name__
 
     def _b_chan_new(self, args):
+        import threading
         cap = int(args[0]) if args else 0
-        return {'__htype__': 'channel', 'capacity': cap, 'items': [], 'closed': False}
+        return {'__htype__': 'channel', 'capacity': cap, 'items': [],
+                'closed': False, 'cond': threading.Condition()}
 
     def _b_chan_send(self, args):
+        import threading, time
         if len(args) != 2:
             raise BytecodeRuntimeError("chan_send(ch, value) takes exactly 2 arguments")
         ch, v = args[0], args[1]
         if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
             raise BytecodeRuntimeError("chan_send: first argument must be a channel")
-        if ch.get('closed'):
-            raise BytecodeRuntimeError("chan_send on closed channel")
+        cond = ch['cond']
         cap = ch.get('capacity', 0)
-        if cap and len(ch['items']) >= cap:
-            raise BytecodeRuntimeError("chan_send on full bounded channel (would block)")
-        ch['items'].append(v)
+        with cond:
+            if cap:
+                deadline = time.time() + 30.0
+                while len(ch['items']) >= cap:
+                    if ch.get('closed'):
+                        raise BytecodeRuntimeError("chan_send on closed channel")
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        raise BytecodeRuntimeError(
+                            "chan_send timed out (channel full, no receiver)")
+                    cond.wait(remaining)
+            if ch.get('closed'):
+                raise BytecodeRuntimeError("chan_send on closed channel")
+            ch['items'].append(v)
+            cond.notify_all()
         return None
 
     def _b_chan_recv(self, args):
+        import threading, time
         if len(args) != 1:
             raise BytecodeRuntimeError("chan_recv(ch) takes exactly 1 argument")
         ch = args[0]
         if not isinstance(ch, dict) or ch.get('__htype__') != 'channel':
             raise BytecodeRuntimeError("chan_recv: argument must be a channel")
-        if len(ch['items']) > 0:
-            return ch['items'].pop(0)
-        if ch.get('closed'):
-            raise BytecodeRuntimeError("chan_recv on closed and empty channel")
-        raise BytecodeRuntimeError("chan_recv on empty channel (would block)")
+        cond = ch['cond']
+        with cond:
+            deadline = time.time() + 30.0
+            while len(ch['items']) == 0:
+                if ch.get('closed'):
+                    raise BytecodeRuntimeError("chan_recv on closed and empty channel")
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    raise BytecodeRuntimeError(
+                        "chan_recv timed out (channel empty, no sender)")
+                cond.wait(remaining)
+            v = ch['items'].pop(0)
+            cond.notify_all()
+            return v
 
     def _b_chan_close(self, args):
         if len(args) != 1:
@@ -899,6 +923,10 @@ class VM:
             raise BytecodeRuntimeError("chan_close: argument must be a channel")
         # Idempotent: closing an already-closed channel is a no-op (does not raise).
         ch['closed'] = True
+        # Wake any sender/recv blocked on this channel so they raise the proper
+        # "closed" error immediately instead of waiting out the timeout.
+        with ch['cond']:
+            ch['cond'].notify_all()
         return None
 
     def _b_chan_size(self, args):
