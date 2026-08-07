@@ -439,24 +439,19 @@ def builtin_write_file(args):
 def builtin_input(args):
     if len(args) > 1:
         raise HSharpError("input() takes at most 1 argument")
-    if args:
-        prompt = args[0]
-        if not isinstance(prompt, str):
-            raise HSharpError("input() argument must be a string")
-        return input(prompt)
-    else:
-        return input()
-
-def builtin_input(args):
-    if len(args) > 1:
-        raise HSharpError("input() takes at most 1 argument")
-    if args:
-        prompt = args[0]
-        if not isinstance(prompt, str):
-            raise HSharpError("input() argument must be a string")
-        return input(prompt)
-    else:
-        return input()
+    try:
+        if args:
+            prompt = args[0]
+            if not isinstance(prompt, str):
+                raise HSharpError("input() argument must be a string")
+            return input(prompt)
+        else:
+            return input()
+    except EOFError:
+        # End of the input stream (e.g. piped/empty stdin or Ctrl-D): H#
+        # models this as `nullptr` so read-until-EOF loops terminate cleanly
+        # instead of crashing. See t14.hto: `if (line == nullptr) { break; }`.
+        return None
 
 # ── Math Builtins ──
 def _math_arg1(args, fn, name):

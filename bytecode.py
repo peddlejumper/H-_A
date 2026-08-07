@@ -69,6 +69,7 @@ class VM:
             'values': lambda args: list(args[0].values()),
             'items': lambda args: list(args[0].items()),
             'has_key': lambda args: args[0] in args[1] if len(args)==2 else False,
+            'input': self._b_input,
         }
         # 小对象分配优化：实例 dict 对象池
         # CALL_NEW 创建实例时优先从池中取已清空的 dict，减少 malloc 次数
@@ -830,6 +831,22 @@ class VM:
 
     # ── Channel builtins (mirror interpreter.builtin_chan_*; raise
     #    BytecodeRuntimeError so user `try/catch` in --opt mode can catch) ──
+    def _b_input(self, args):
+        if len(args) > 1:
+            raise BytecodeRuntimeError("input() takes at most 1 argument")
+        try:
+            if args:
+                prompt = args[0]
+                if not isinstance(prompt, str):
+                    raise BytecodeRuntimeError("input() argument must be a string")
+                return input(prompt)
+            else:
+                return input()
+        except EOFError:
+            # Mirror the tree interpreter: EOF on the input stream yields
+            # H#'s `nullptr` (Python None) so read-until-EOF loops terminate.
+            return None
+
     def _b_type(self, args):
         if len(args) != 1:
             raise BytecodeRuntimeError("type() takes exactly 1 argument")
