@@ -47,7 +47,7 @@ class VM:
             'write_file': lambda args: (open(args[0], 'w', encoding='utf-8').write(args[1]) or None),
             'thread_spawn': self._builtin_thread_spawn,
             'thread_join': self._builtin_thread_join,
-            'str': lambda args: str(args[0]),
+            'str': lambda args: ("true" if args[0] is True else "false" if args[0] is False else str(args[0])),
             'int': lambda args: int(args[0]),
             'float': lambda args: float(args[0]),
             'type': self._b_type,

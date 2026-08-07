@@ -50,7 +50,12 @@ def builtin_str(args):
     """Convert to string"""
     if len(args) < 1:
         raise Exception("str requires 1 argument")
-    return str(args[0])
+    v = args[0]
+    # Booleans render as the language's own literals (`true`/`false`),
+    # not Python's `True`/`False`, so str(true) == "true" round-trips.
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
 
 # Date and Time functions
 def builtin_date_now(args=None):

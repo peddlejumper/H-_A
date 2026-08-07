@@ -2488,9 +2488,33 @@ class Interpreter:
                 cls = self.functions[cname]
                 # naive instantiation
                 inst = {'__class__': cls}
-                # initialize fields
+                # initialize default fields
                 for k, v in cls.get('fields', {}).items():
                     inst[k] = v
+                # Auto-invoke the constructor if one is declared. `self`/`this`
+                # bind to the fresh instance, mirroring method invocation
+                # (see the MemberExpression call path). Without this, fields
+                # set in `__init__` were never applied, so member access on
+                # instances (created on any thread) raised "Attribute not found".
+                init = cls.get('methods', {}).get('__init__') or cls.get('methods', {}).get('init')
+                if init is not None:
+                    call_env = InstanceScope(inst, parent=self.global_env)
+                    call_env.define('self', inst)
+                    call_env.define('this', inst)
+                    mparams = init.params
+                    if mparams and mparams[0] == 'self':
+                        mparams = mparams[1:]
+                    # Lenient like the main-thread `eval_expr` new path: only
+                    # auto-invoke the constructor when arg counts line up;
+                    # otherwise leave the instance with its field defaults
+                    # (the constructor may be called explicitly afterwards).
+                    if len(args) == len(mparams):
+                        for param, arg in zip(mparams, args):
+                            call_env.define(param, arg)
+                        try:
+                            self.visit_BlockStatement(init.body, call_env)
+                        except ReturnException:
+                            pass  # constructors don't return a value
                 return inst
             raise HSharpError(f"Class '{cname}' not found")
         # Union construction
@@ -2886,6 +2910,14 @@ class Interpreter:
                 self.visit_BlockStatement(body, call_env)
             except ReturnException as e:
                 fut['value'] = e.value
+            except ThrowException as e:
+                # Preserve the raw thrown payload (string / number / list /
+                # dict) — `await` re-raises it and the main-thread try/catch
+                # stores `te.value`. Without this, the payload fell into the
+                # `except Exception` branch below and was stringified via
+                # HSharpError(str(e)), corrupting list/dict payloads (and the
+                # list/dict rethrow tests).
+                fut['error'] = e
             except HSharpError as e:
                 fut['error'] = e
             except Exception as e:  # never let a worker thread die silently
@@ -3910,10 +3942,12 @@ class Interpreter:
                 inst = {'__class__': cls}
                 for k, v in cls.get('fields', {}).items():
                     inst[k] = v
-                # call init (constructor) if defined
+                # call init (constructor) if defined. Support both the
+                # underscore convention (`__init__`) and the bare `init`
+                # (preferring `__init__` when both are present).
                 methods = cls.get('methods', {})
-                if 'init' in methods:
-                    init = methods['init']
+                init = methods.get('__init__') or methods.get('init')
+                if init is not None:
                     call_env = InstanceScope(inst, parent=self.global_env)
                     call_env.define('self', inst)
                     call_env.define('this', inst)
