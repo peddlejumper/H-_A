@@ -1,5 +1,7 @@
 import sys
 import copy
+import time
+import datetime
 from collections import deque
 
 class BytecodeRuntimeError(Exception):
@@ -62,13 +64,23 @@ class VM:
             'parallelism': self._b_parallelism,
             'dzzw_worker_count': self._b_dzzw_worker_count,
             'abs': lambda args: abs(args[0]),
-            'min': lambda args: min(args[0]),
-            'max': lambda args: max(args[0]),
+            'min': lambda args: min(args),
+            'max': lambda args: max(args),
             'range': lambda args: list(range(args[0])) if len(args) == 1 else list(range(args[0], args[1])),
             'keys': lambda args: list(args[0].keys()),
             'values': lambda args: list(args[0].values()),
             'items': lambda args: list(args[0].items()),
             'has_key': lambda args: args[0] in args[1] if len(args)==2 else False,
+            'dict_has': self._b_dict_has,
+            'dict_get': self._b_dict_get,
+            'dict_keys': self._b_dict_keys,
+            'dict_values': self._b_dict_values,
+            'dict_items': self._b_dict_items,
+            'substring': self._b_substring,
+            'ord': self._b_ord,
+            'chr': self._b_chr,
+            'time_now': self._b_time_now,
+            'datetime_now': self._b_datetime_now,
             'input': self._b_input,
         }
         # 小对象分配优化：实例 dict 对象池
@@ -285,6 +297,31 @@ class VM:
                     if b == 0:
                         raise BytecodeRuntimeError('modulo by zero')
                     self.stack.append(a % b)
+                elif opname == 'BINARY_BITAND':
+                    b = self.stack.pop(); a = self.stack.pop()
+                    if not isinstance(a, int) or not isinstance(b, int):
+                        raise BytecodeRuntimeError('Bitwise operations require integer operands')
+                    self.stack.append(a & b)
+                elif opname == 'BINARY_BITOR':
+                    b = self.stack.pop(); a = self.stack.pop()
+                    if not isinstance(a, int) or not isinstance(b, int):
+                        raise BytecodeRuntimeError('Bitwise operations require integer operands')
+                    self.stack.append(a | b)
+                elif opname == 'BINARY_BITXOR':
+                    b = self.stack.pop(); a = self.stack.pop()
+                    if not isinstance(a, int) or not isinstance(b, int):
+                        raise BytecodeRuntimeError('Bitwise operations require integer operands')
+                    self.stack.append(a ^ b)
+                elif opname == 'BINARY_LSHIFT':
+                    b = self.stack.pop(); a = self.stack.pop()
+                    if not isinstance(a, int) or not isinstance(b, int):
+                        raise BytecodeRuntimeError('Shift operations require integer operands')
+                    self.stack.append(a << b)
+                elif opname == 'BINARY_RSHIFT':
+                    b = self.stack.pop(); a = self.stack.pop()
+                    if not isinstance(a, int) or not isinstance(b, int):
+                        raise BytecodeRuntimeError('Shift operations require integer operands')
+                    self.stack.append(a >> b)
                 elif opname == 'FOR_ITER':
                     # Two possible stack patterns:
                     # Pattern A (new): [..., iterable, ('__ITER__', var1, var2)]
@@ -355,6 +392,19 @@ class VM:
                         self.stack.append(a >= b)
                     elif op == 'LTE':
                         self.stack.append(a <= b)
+                    elif op == 'IN':
+                        # `a in b`: membership (list/dict) or substring (str).
+                        # Mirrors the tree interpreter's visit_BinaryOp IN handling.
+                        if isinstance(b, (list, dict)):
+                            self.stack.append(a in b)
+                        elif isinstance(b, str):
+                            if not isinstance(a, str):
+                                raise BytecodeRuntimeError(
+                                    "'in' operator with string requires string left operand")
+                            self.stack.append(a in b)
+                        else:
+                            raise BytecodeRuntimeError(
+                                "'in' operator requires list, dict, or string on right side")
                     else:
                         raise BytecodeRuntimeError(f'Unknown compare op {op}')
                 elif opname == 'JUMP_IF_FALSE':
@@ -847,6 +897,77 @@ class VM:
             # H#'s `nullptr` (Python None) so read-until-EOF loops terminate.
             return None
 
+    def _b_dict_has(self, args):
+        if len(args) != 2:
+            raise BytecodeRuntimeError("dict_has(dict, key) takes exactly 2 arguments")
+        d = args[0]
+        if not isinstance(d, dict):
+            raise BytecodeRuntimeError("First argument must be a dictionary")
+        return args[1] in d
+
+    def _b_dict_get(self, args):
+        if len(args) < 2:
+            raise BytecodeRuntimeError("dict_get(dict, key[, default]) requires at least 2 arguments")
+        d = args[0]
+        if not isinstance(d, dict):
+            raise BytecodeRuntimeError("First argument must be a dictionary")
+        key = args[1]
+        if key in d:
+            return d[key]
+        if len(args) >= 3:
+            return args[2]
+        return None
+
+    def _b_dict_keys(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("dict_keys(dict) takes 1 argument")
+        d = args[0]
+        if not isinstance(d, dict):
+            raise BytecodeRuntimeError("First argument must be a dictionary")
+        return list(d.keys())
+
+    def _b_dict_values(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("dict_values(dict) takes 1 argument")
+        d = args[0]
+        if not isinstance(d, dict):
+            raise BytecodeRuntimeError("First argument must be a dictionary")
+        return list(d.values())
+
+    def _b_dict_items(self, args):
+        if len(args) != 1:
+            raise BytecodeRuntimeError("dict_items(dict) takes 1 argument")
+        d = args[0]
+        if not isinstance(d, dict):
+            raise BytecodeRuntimeError("First argument must be a dictionary")
+        return list(d.items())
+
+    def _b_substring(self, args):
+        # substring(string, start, length) — mirrors host_functions.builtin_substring
+        if len(args) < 3:
+            raise BytecodeRuntimeError("substring requires 3 arguments")
+        s = str(args[0])
+        start = int(args[1])
+        length = int(args[2])
+        return s[start:start + length]
+
+    def _b_ord(self, args):
+        if len(args) < 1:
+            raise BytecodeRuntimeError("ord requires 1 argument")
+        ch = str(args[0])
+        return ord(ch[0]) if len(ch) > 0 else 0
+
+    def _b_chr(self, args):
+        if len(args) < 1:
+            raise BytecodeRuntimeError("chr requires 1 argument")
+        return chr(int(args[0]))
+
+    def _b_time_now(self, args):
+        return int(time.time() * 1000)
+
+    def _b_datetime_now(self, args):
+        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     def _b_type(self, args):
         if len(args) != 1:
             raise BytecodeRuntimeError("type() takes exactly 1 argument")
@@ -1022,6 +1143,19 @@ class VM:
                 else:
                     self.stack.pop()
                     self.pc = jump_target
+        elif isinstance(iterable, str):
+            # Iterate a string character by character (matches the tree
+            # interpreter's `for c in "abc"` semantics).
+            chars = list(iterable)
+            it = {'__iter_idx': 0, '__iterable': chars, '__var1': var1,
+                  '__var2': var2, '__is_iter': True}
+            self.stack.append(it)
+            if 0 < len(chars):
+                self._set_local(var1, chars[0])
+                it['__iter_idx'] = 1
+            else:
+                self.stack.pop()
+                self.pc = jump_target
         else:
             raise BytecodeRuntimeError(f"Cannot iterate over {type(iterable).__name__}")
 
