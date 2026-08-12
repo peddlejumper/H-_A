@@ -2,6 +2,7 @@ import sys
 import copy
 import time
 import datetime
+import host_functions as _hf
 from collections import deque
 
 class BytecodeRuntimeError(Exception):
@@ -24,6 +25,11 @@ class VM:
         # Names captured from an enclosing lexical scope (closure cells).
         # Populated by CALL_FUNCTION/CALL_VALUE from the callee's func_obj.
         self.freevars = set()
+        # Names declared as locals (`let`/params) in the current callable.
+        # Used to tell instance-field bare names apart from true locals
+        # (mirrors the tree interpreter's InstanceScope).  Populated by the
+        # call handlers from the callee's func_obj['local_names'].
+        self.local_names = set()
         # Fast locals：由 LOAD_FAST/STORE_FAST 使用，按索引访问的列表，比 dict env 更快
         # fast_names 由编译器在 bytecode 中通过 'FAST_NAMES' 元信息提供
         self.fast_slots = []
@@ -41,6 +47,11 @@ class VM:
         self._method_cache = {}
         self._cache_hits = 0
         self._cache_misses = 0
+        # The class whose method is *currently executing* in this frame.  Used
+        # by CALL_SUPER to resolve `super` relative to the active method rather
+        # than the (always-leaf) instance class, so a multi-level chain
+        # (C extends B extends A) advances C -> B -> A instead of looping.
+        self._method_owner = None
         self.builtins = {
             'len': lambda args: len(args[0]) if len(args)==1 else (_ for _ in ()).throw(BytecodeRuntimeError('len() takes 1 arg')),
             'push': lambda args: (args[0].append(args[1]) or None),
@@ -83,6 +94,60 @@ class VM:
             'datetime_now': self._b_datetime_now,
             'input': self._b_input,
         }
+        # Host functions (fs_*/io_*/json_*) reused from host_functions.py to
+        # narrow the gap with the tree interpreter's backend.  These are pure
+        # arg-in/arg-out wrappers over os/json, so registering them directly
+        # preserves identical semantics.  Network http_* is intentionally
+        # excluded from this stability pass.
+        _HOST_FUNC_MAP = {
+            'json_parse': 'builtin_net_json_parse',
+            'json_stringify': 'builtin_net_json_stringify',
+            'fs_exists': 'builtin_fs_exists',
+            'fs_is_file': 'builtin_fs_is_file',
+            'fs_is_dir': 'builtin_fs_is_dir',
+            'fs_mkdir': 'builtin_fs_mkdir',
+            'fs_remove': 'builtin_fs_remove',
+            'fs_list_dir': 'builtin_fs_list_dir',
+            'fs_get_cwd': 'builtin_fs_get_cwd',
+            'fs_chdir': 'builtin_fs_chdir',
+            'fs_join_path': 'builtin_fs_join_path',
+            'fs_get_ext': 'builtin_fs_get_ext',
+            'fs_get_basename': 'builtin_fs_get_basename',
+            'fs_get_dirname': 'builtin_fs_get_dirname',
+            'fs_dir_current': 'builtin_fs_dir_current',
+            'fs_path_join': 'builtin_fs_path_join',
+            'fs_path_filename': 'builtin_fs_path_filename',
+            'fs_path_extension': 'builtin_fs_path_extension',
+            'fs_path_is_absolute': 'builtin_fs_path_is_absolute',
+            'fs_path_parent': 'builtin_fs_path_parent',
+            'fs_temp_dir': 'builtin_fs_temp_dir',
+            'fs_cleanup_temp': 'builtin_fs_cleanup_temp',
+            'fs_format_size': 'builtin_fs_format_size',
+            'fs_validate_path': 'builtin_fs_validate_path',
+            'fs_change_extension': 'builtin_fs_change_extension',
+            'fs_file_delete': 'builtin_fs_file_delete',
+            'fs_file_exists': 'builtin_fs_file_exists',
+            'fs_dir_exists': 'builtin_fs_dir_exists',
+            'io_append_file': 'builtin_io_append_file',
+            'io_read_lines': 'builtin_io_read_lines',
+            'io_write_lines': 'builtin_io_write_lines',
+            'io_pad_right': 'builtin_io_pad_right',
+            'io_csv_parse_line': 'builtin_io_csv_parse_line',
+            'io_progress_bar': 'builtin_io_progress_bar',
+            'io_display_table': 'builtin_io_display_table',
+            'io_file_write': 'builtin_io_file_write',
+            'io_file_read': 'builtin_io_file_read',
+            'io_file_append': 'builtin_io_file_append',
+            'io_file_write_lines': 'builtin_io_file_write_lines',
+            'io_file_read_lines': 'builtin_io_file_read_lines',
+            'io_kv_write': 'builtin_io_kv_write',
+            'io_kv_read': 'builtin_io_kv_read',
+            'io_log_info': 'builtin_io_log_info',
+        }
+        for _hname, _fname in _HOST_FUNC_MAP.items():
+            _fn = getattr(_hf, _fname, None)
+            if _fn is not None:
+                self.builtins[_hname] = _fn
         # 小对象分配优化：实例 dict 对象池
         # CALL_NEW 创建实例时优先从池中取已清空的 dict，减少 malloc 次数
         self._dict_pool = []
@@ -158,6 +223,18 @@ class VM:
                             else:
                                 self.env[name] = val
                     else:
+                        # Instance-field bare-name assignment (mirrors the tree
+                        # interpreter's InstanceScope): inside a method, a bare
+                        # assignment to a name that is a field of `self` and was
+                        # NOT declared as a local `let`/param writes through to
+                        # the instance rather than shadowing it with a frame
+                        # local.  `name not in self.env` is a cheap fast path:
+                        # true locals land in env on their first store.
+                        if name not in self.env and name not in self.local_names:
+                            _self = self.env.get('self')
+                            if isinstance(_self, dict) and name in _self:
+                                _self[name] = val
+                                continue
                         self.env[name] = val
                 elif opname == 'MAKE_CLOSURE':
                     # Materialise a closure object that captures the *current*
@@ -168,6 +245,24 @@ class VM:
                     func_obj = self.consts[arg]
                     closure = dict(func_obj)
                     closure['__closure__'] = self
+                    # Evaluate compiled default-argument expressions once, in
+                    # the defining environment (mirrors the tree interpreter's
+                    # behaviour of evaluating defaults at function-definition
+                    # time).  Literal defaults are already plain values and
+                    # pass through unchanged.
+                    _raw_defaults = closure.get('defaults')
+                    if _raw_defaults:
+                        _evaluated = []
+                        for _d in _raw_defaults:
+                            if isinstance(_d, dict) and 'bytecode' in _d:
+                                _bc = {'instructions': _d['bytecode'], 'consts': _d.get('consts', [])}
+                                _vm_def = VM(_bc)
+                                _vm_def.parent = self
+                                _vm_def.functions = self.functions
+                                _evaluated.append(_vm_def.run())
+                            else:
+                                _evaluated.append(_d)
+                        closure['defaults'] = _evaluated
                     self.stack.append(closure)
                 elif opname == 'LOAD_FAST':
                     # arg 为槽位索引；越界时回退到 env 查找（兼容未分配槽位的变量）
@@ -445,6 +540,7 @@ class VM:
                                 args = self._apply_defaults(func, args, name)
                             bc = {'instructions': func['bytecode'], 'consts': func.get('consts', [])}
                             vm2 = VM(bc)
+                            vm2.local_names = set(func.get('local_names', []))
                             vm2.parent = func.get('__closure__') or self
                             vm2.freevars = set(func.get('freevars', []))
                             if is_variadic:
@@ -478,8 +574,10 @@ class VM:
                                 if len(fargs) == len(args):
                                     bc = {'instructions': method['bytecode'], 'consts': method.get('consts', [])}
                                     vm2 = VM(bc)
+                                    vm2.local_names = set(method.get('local_names', []))
                                     vm2.env['self'] = inst
                                     vm2.parent = self
+                                    vm2._method_owner = inst['__class__']
                                     for pname, pval in zip(fargs, args):
                                         vm2.env[pname] = pval
                                     vm2.functions = self.functions
@@ -509,6 +607,7 @@ class VM:
                                     raise BytecodeRuntimeError(f"Method {name} expects {len(fargs)} args")
                                 bc = {'instructions': func['bytecode'], 'consts': func.get('consts', [])}
                                 vm2 = VM(bc)
+                                vm2.local_names = set(func.get('local_names', []))
                                 for pname, pval in zip(fargs, args):
                                     vm2.env[pname] = pval
                                 vm2.functions = self.functions
@@ -526,6 +625,7 @@ class VM:
                                 raise BytecodeRuntimeError(f"Method {name} expects {len(fargs)} args")
                             bc = {'instructions': func['bytecode'], 'consts': func.get('consts', [])}
                             vm2 = VM(bc)
+                            vm2.local_names = set(func.get('local_names', []))
                             for pname, pval in zip(fargs, args):
                                 vm2.env[pname] = pval
                             vm2.functions = self.functions
@@ -559,9 +659,11 @@ class VM:
                         raise BytecodeRuntimeError(f"Method {name} expects {len(args)} args")
                     bc = {'instructions': method['bytecode'], 'consts': method.get('consts', [])}
                     vm2 = VM(bc)
+                    vm2.local_names = set(method.get('local_names', []))
                     # set parameters and self
                     vm2.env['self'] = inst
                     vm2.parent = self
+                    vm2._method_owner = class_obj
                     for pname, pval in zip(fargs, args):
                         vm2.env[pname] = pval
                     vm2.functions = self.functions
@@ -579,32 +681,58 @@ class VM:
                         raise BytecodeRuntimeError("super() can only be called within a class method")
                     
                     class_obj = inst['__class__']
-                    base_name = class_obj.get('base')
-                    if not base_name:
-                        raise BytecodeRuntimeError(f"Class '{class_obj.get('name', 'Unknown')}' has no parent class")
-                    
-                    # Get base class
-                    base = self.env.get(base_name) or self.functions.get(base_name)
-                    if not base:
-                        raise BytecodeRuntimeError(f"Base class '{base_name}' not found")
-                    
-                    if not isinstance(base, dict) or 'methods' not in base:
-                        raise BytecodeRuntimeError(f"'{base_name}' is not a valid class")
-                    
-                    # Get method from base class
-                    methods = base.get('methods', {})
-                    if name not in methods:
-                        raise BytecodeRuntimeError(f"Method '{name}' not found in base class '{base_name}'")
-                    
-                    method = methods[name]
+                    # The *active* method's owning class.  For a normal method
+                    # call this is the leaf instance class; for a `super` call
+                    # it is the parent class whose method we just entered.  Using
+                    # the instance's (always-leaf) class as the caller would make
+                    # a 3-level chain (C extends B extends A) loop C -> B -> C ...
+                    caller_class = self._method_owner if self._method_owner is not None else class_obj
+                    # Build the linearised MRO (child -> ... -> root) by
+                    # following `base` pointers.  The merged class only stores
+                    # the *immediate* parent, so we walk up the chain.
+                    mro = []
+                    cur = class_obj
+                    seen = set()
+                    while isinstance(cur, dict):
+                        nm = cur.get('name')
+                        if nm in seen:
+                            break
+                        seen.add(nm)
+                        mro.append(cur)
+                        bn = cur.get('base')
+                        if not bn:
+                            break
+                        nxt = self._lookup_class(bn)
+                        if not isinstance(nxt, dict):
+                            break
+                        cur = nxt
+
+                    # Resolve `super` relative to the *active* method's owning
+                    # class, advancing to the next ancestor in the MRO.
+                    caller_name = caller_class.get('name')
+                    idx = mro_names(mro).index(caller_name) if caller_name in mro_names(mro) else 0
+                    # Skip the caller and resolve to the class *after* it in
+                    # the MRO (the immediate parent's method, or the nearest
+                    # ancestor that defines `name`).
+                    target = None
+                    for j in range(idx + 1, len(mro)):
+                        if name in mro[j].get('methods', {}):
+                            target = mro[j]
+                            break
+                    if target is None:
+                        raise BytecodeRuntimeError(f"Method '{name}' not found in any base class of '{caller_name}'")
+
+                    method = target['methods'][name]
                     fargs = method.get('args', [])
                     if len(fargs) != len(args):
                         raise BytecodeRuntimeError(f"Method {name} expects {len(args)} args")
-                    
+
                     bc = {'instructions': method['bytecode'], 'consts': method.get('consts', [])}
                     vm2 = VM(bc)
+                    vm2.local_names = set(method.get('local_names', []))
                     vm2.env['self'] = inst
                     vm2.parent = self
+                    vm2._method_owner = target
                     for pname, pval in zip(fargs, args):
                         vm2.env[pname] = pval
                     vm2.functions = self.functions
@@ -629,6 +757,7 @@ class VM:
                             raise BytecodeRuntimeError(f"Function expects {len(fargs)} args")
                         bc = {'instructions': func['bytecode'], 'consts': func.get('consts', [])}
                         vm2 = VM(bc)
+                        vm2.local_names = set(func.get('local_names', []))
                         vm2.parent = func.get('__closure__') or self
                         vm2.freevars = set(func.get('freevars', []))
                         for pname, pval in zip(fargs, args):
@@ -674,14 +803,24 @@ class VM:
                     def resolve_class(cobj):
                         if not isinstance(cobj, dict):
                             return cobj
+                        if cobj.get('_is_merged'):
+                            # Already-resolved composite: its `base` points at
+                            # the *original* ancestor, so re-resolving would
+                            # skip an intermediate class and can cycle.  Use it
+                            # as-is; its `methods`/`fields` already encode the
+                            # full linearised MRO (child overlaid on parent).
+                            return cobj
                         base_name = cobj.get('base')
                         if not base_name:
                             return cobj
-                        base = self.env.get(base_name) or self.functions.get(base_name)
+                        base = self._lookup_class(base_name)
                         if not base:
                             raise BytecodeRuntimeError(f'Base class {base_name} not found')
                         base_resolved = resolve_class(base)
-                        merged = {'name': cobj.get('name'), 'methods': {}, 'fields': {}, 'private': []}
+                        merged = {'name': cobj.get('name'), 'base': cobj.get('base'),
+                                  'implements': cobj.get('implements', []),
+                                  '_is_merged': True,
+                                  'methods': {}, 'fields': {}, 'private': []}
                         merged['methods'].update(base_resolved.get('methods', {}))
                         merged['fields'].update(base_resolved.get('fields', {}))
                         merged['private'].extend(base_resolved.get('private', []))
@@ -722,6 +861,7 @@ class VM:
                         if len(eff_args) == len(args):
                             bc = {'instructions': method['bytecode'], 'consts': method.get('consts', [])}
                             vm2 = VM(bc)
+                            vm2.local_names = set(method.get('local_names', []))
                             vm2.parent = self
                             vm2.env['self'] = inst
                             for pname, pval in zip(eff_args, args):
@@ -1171,7 +1311,39 @@ class VM:
         if idx is not None and 0 <= idx < len(self.fast_slots):
             self.fast_slots[idx] = val
         else:
+            # Instance-field bare-name assignment (mirrors the tree
+            # interpreter's InstanceScope): a bare assignment to a name that
+            # is a field of `self` (and was NOT declared as a local `let` in
+            # this method) writes to the instance, not a method-local.
+            if name not in self.local_names:
+                _self = self.env.get('self')
+                if isinstance(_self, dict) and name in _self:
+                    _self[name] = val
+                    return
             self.env[name] = val
+
+    def _lookup_class(self, name):
+        """Resolve a class name for inheritance (`extends` / `super`).
+
+        Class objects bound at top level are register-allocated into fast
+        slots by FastLocalAllocator, so a plain `env.get(name)` misses them.
+        Walk the same chain as `_lookup_name` (env -> fast slots -> functions
+        -> parent), but return None instead of raising so callers can emit a
+        precise "Base class '<x>' not found" diagnostic.
+        """
+        node = self
+        while node is not None:
+            if name in node.env:
+                return node.env[name]
+            idx = node._fast_name_to_idx.get(name)
+            if idx is not None and 0 <= idx < len(node.fast_slots):
+                val = node.fast_slots[idx]
+                if val is not None:
+                    return val
+            if name in node.functions:
+                return node.functions[name]
+            node = node.parent
+        return None
 
     def _lookup_name(self, name):
         # search local env, then fast slots, then functions, then parent
@@ -1190,6 +1362,14 @@ class VM:
             if name in node.functions:
                 return node.functions[name]
             node = node.parent
+        # Instance-field bare-name resolution (mirrors InstanceScope): inside
+        # a method, an unresolved bare name that is a field of `self` resolves
+        # to `self.<name>` — unless it was declared as a local `let` (tracked
+        # via func['local_names']).
+        if name not in self.local_names:
+            _self = self.env.get('self')
+            if isinstance(_self, dict) and name in _self:
+                return _self[name]
         if name in self.builtins:
             return self.builtins[name]
         raise BytecodeRuntimeError(f"Undefined name: {name}")
@@ -1215,3 +1395,8 @@ class VM:
             return list(args) + list(defaults[skip:])
         raise BytecodeRuntimeError(
             f"Function {name} expects {len(fargs)} args (min {min_args}), got {len(args)}")
+
+
+def mro_names(mro):
+    """Class-name list for an MRO (list of class dicts), in chain order."""
+    return [c.get('name') for c in mro if isinstance(c, dict)]

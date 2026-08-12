@@ -61,6 +61,71 @@ class Compiler:
         Compiler._destructure_counter += 1
         return f"__destr_{n}__"
 
+    def _compile_default_expr(self, node):
+        """Compile a default-argument expression into a standalone bytecode
+        object that the VM evaluates once at MAKE_CLOSURE (function-definition
+        time), mirroring the tree interpreter.  Literals stay as plain values
+        so the fast _apply_defaults path is unchanged."""
+        comp = Compiler()
+        comp.compile_expr(node)
+        comp.emit('RETURN_VALUE')
+        return {'bytecode': comp.instructions, 'consts': comp.consts}
+
+    def _collect_defaults(self, defaults, name):
+        """Build the `defaults` list for a callable.  Literal defaults
+        (number/string/bool/null) are stored as plain values; any other
+        expression is compiled so the VM can evaluate it at definition time
+        (previously only literals were accepted, raising on Identifier/
+        BinaryOp/ArrayLiteral default arguments)."""
+        out = []
+        for d in defaults:
+            if isinstance(d, BooleanLiteral):
+                out.append(bool(d.value))
+            elif isinstance(d, NumberLiteral):
+                out.append(d.value)
+            elif isinstance(d, StringLiteral):
+                out.append(d.value)
+            elif isinstance(d, NullLiteral):
+                out.append(None)
+            else:
+                out.append(self._compile_default_expr(d))
+        return out
+
+    def _collect_local_names(self, body_block, params):
+        """Collect the names that are local to a callable frame: its params
+        plus every `let` declaration anywhere in the (non-nested-callable)
+        body.  The VM uses this to tell instance-field bare names apart from
+        true locals, so a bare `count` resolves to `self.count` only when
+        `count` was NOT declared as a local `let` in the method.  Nested
+        Function/Lambda/Class bodies are NOT descended into — they have their
+        own frames and locals."""
+        locals_set = set(params)
+        def walk(node):
+            if isinstance(node, (Function, Lambda, ClassDeclaration)):
+                return
+            if isinstance(node, LetStatement):
+                locals_set.add(node.name)
+            elif isinstance(node, DestructureLet):
+                for n in node.names:
+                    if n is not None:
+                        locals_set.add(n)
+            elif isinstance(node, BlockStatement):
+                for s in node.statements:
+                    walk(s)
+            elif isinstance(node, IfStatement):
+                walk(node.consequence)
+                if node.alternative:
+                    walk(node.alternative)
+            elif isinstance(node, WhileStatement):
+                walk(node.body)
+            elif isinstance(node, ForStatement):
+                walk(node.body)
+            elif isinstance(node, TryStatement):
+                walk(node.body)
+                walk(node.handler)
+        walk(body_block)
+        return locals_set
+
     def compile(self, program):
         # program: Program AST
         for stmt in program.statements:
@@ -234,24 +299,10 @@ class Compiler:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
             func_obj = {'args': stmt.params, 'bytecode': comp.instructions, 'consts': comp.consts}
+            func_obj['local_names'] = list(self._collect_local_names(stmt.body, stmt.params))
             # Default values for trailing parameters (literal-only).
             if getattr(stmt, 'defaults', None):
-                defaults_json = []
-                for d in stmt.defaults:
-                    if isinstance(d, BooleanLiteral):
-                        defaults_json.append(bool(d.value))
-                    elif isinstance(d, NumberLiteral):
-                        defaults_json.append(d.value)
-                    elif isinstance(d, StringLiteral):
-                        defaults_json.append(d.value)
-                    elif isinstance(d, NullLiteral):
-                        defaults_json.append(None)
-                    else:
-                        raise Exception(
-                            f"Default argument for '{stmt.name}' must be a "
-                            f"literal (number/string/bool/null); got "
-                            f"{type(d).__name__}")
-                func_obj['defaults'] = defaults_json
+                func_obj['defaults'] = self._collect_defaults(stmt.defaults, stmt.name)
             if getattr(stmt, 'is_variadic', False):
                 func_obj['is_variadic'] = True
             # Capture free variables so nested functions close over the
@@ -328,24 +379,10 @@ class Compiler:
                         comp.compile_stmt(sub)
                     comp.emit('RETURN_VALUE')
                     func_obj = {'args': s.params, 'bytecode': comp.instructions, 'consts': comp.consts, 'name': s.name}
+                    func_obj['local_names'] = list(self._collect_local_names(s.body, s.params))
                     # Default values for trailing parameters (literal-only).
                     if getattr(s, 'defaults', None):
-                        defaults_json = []
-                        for d in s.defaults:
-                            if isinstance(d, BooleanLiteral):
-                                defaults_json.append(bool(d.value))
-                            elif isinstance(d, NumberLiteral):
-                                defaults_json.append(d.value)
-                            elif isinstance(d, StringLiteral):
-                                defaults_json.append(d.value)
-                            elif isinstance(d, NullLiteral):
-                                defaults_json.append(None)
-                            else:
-                                raise Exception(
-                                    f"Default argument for '{s.name}' must be a "
-                                    f"literal (number/string/bool/null); got "
-                                    f"{type(d).__name__}")
-                        func_obj['defaults'] = defaults_json
+                        func_obj['defaults'] = self._collect_defaults(s.defaults, s.name)
                     if getattr(s, 'is_variadic', False):
                         func_obj['is_variadic'] = True
                     if getattr(s, 'is_static', False):
@@ -556,6 +593,7 @@ class Compiler:
                 comp.compile_stmt(s)
             comp.emit('RETURN_VALUE')
             func_obj = {'args': stmt.params, 'bytecode': comp.instructions, 'consts': comp.consts, 'is_coro': True}
+            func_obj['local_names'] = list(self._collect_local_names(stmt.body, stmt.params))
             idx = self.add_const(func_obj)
             self.emit('LOAD_CONST', idx)
             self.emit('STORE_NAME', stmt.name)
@@ -643,25 +681,11 @@ class Compiler:
             # capture free vars from current compilation scope
             freevars = self._find_free_vars_in_stmt(expr, expr.params)
             func_obj = {'args': expr.params, 'bytecode': comp.instructions, 'consts': comp.consts, 'freevars': freevars}
+            func_obj['local_names'] = list(self._collect_local_names(expr.body, expr.params))
             # Default values for trailing parameters (literal-only),
             # mirroring the Function-statement handling above.
             if getattr(expr, 'defaults', None):
-                defaults_json = []
-                for d in expr.defaults:
-                    if isinstance(d, BooleanLiteral):
-                        defaults_json.append(bool(d.value))
-                    elif isinstance(d, NumberLiteral):
-                        defaults_json.append(d.value)
-                    elif isinstance(d, StringLiteral):
-                        defaults_json.append(d.value)
-                    elif isinstance(d, NullLiteral):
-                        defaults_json.append(None)
-                    else:
-                        raise Exception(
-                            f"Default argument for lambda must be a "
-                            f"literal (number/string/bool/null); got "
-                            f"{type(d).__name__}")
-                func_obj['defaults'] = defaults_json
+                func_obj['defaults'] = self._collect_defaults(expr.defaults, '<lambda>')
             if getattr(expr, 'is_variadic', False):
                 func_obj['is_variadic'] = True
             idx = self.add_const(func_obj)
