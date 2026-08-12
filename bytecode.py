@@ -81,7 +81,7 @@ class VM:
             'keys': lambda args: list(args[0].keys()),
             'values': lambda args: list(args[0].values()),
             'items': lambda args: list(args[0].items()),
-            'has_key': lambda args: args[0] in args[1] if len(args)==2 else False,
+            'has_key': lambda args: (args[1] in args[0]) if (len(args) == 2 and isinstance(args[0], dict)) else False,
             'dict_has': self._b_dict_has,
             'dict_get': self._b_dict_get,
             'dict_keys': self._b_dict_keys,
