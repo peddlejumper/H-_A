@@ -143,6 +143,38 @@ class VM:
             'io_kv_write': 'builtin_io_kv_write',
             'io_kv_read': 'builtin_io_kv_read',
             'io_log_info': 'builtin_io_log_info',
+            # Date / datetime (pure, parity with tree interpreter)
+            'date_now': 'builtin_date_now',
+            'date_timestamp': 'builtin_date_timestamp',
+            'date_format': 'builtin_date_format',
+            'date_parse': 'builtin_date_parse',
+            'datetime_timestamp': 'builtin_datetime_timestamp',
+            'datetime_format': 'builtin_datetime_format',
+            'datetime_parse': 'builtin_datetime_parse',
+            'datetime_get_year': 'builtin_datetime_get_year',
+            'datetime_is_leap_year': 'builtin_datetime_is_leap_year',
+            'datetime_days_in_month': 'builtin_datetime_days_in_month',
+            'datetime_format_duration': 'builtin_datetime_format_duration',
+            'datetime_today': 'builtin_datetime_today',
+            'datetime_timer_start': 'builtin_datetime_timer_start',
+            'datetime_timer_elapsed': 'builtin_datetime_timer_elapsed',
+            # String / encoding / url (pure)
+            'str_contains': 'builtin_str_contains',
+            'url_parse': 'builtin_net_url_parse',
+            'url_build': 'builtin_net_url_build',
+            'base64_encode': 'builtin_net_base64_encode',
+            'base64_decode': 'builtin_net_base64_decode',
+            # In-memory hash table (pure)
+            'htable_create': 'builtin_htable_create',
+            'htable_set': 'builtin_htable_set',
+            'htable_get': 'builtin_htable_get',
+            'htable_has': 'builtin_htable_has',
+            'htable_delete': 'builtin_htable_delete',
+            'htable_size': 'builtin_htable_size',
+            'htable_keys': 'builtin_htable_keys',
+            'htable_values': 'builtin_htable_values',
+            # Random (pure)
+            'rand_int': 'builtin_rand_int',
         }
         for _hname, _fname in _HOST_FUNC_MAP.items():
             _fn = getattr(_hf, _fname, None)
@@ -576,6 +608,7 @@ class VM:
                                     vm2 = VM(bc)
                                     vm2.local_names = set(method.get('local_names', []))
                                     vm2.env['self'] = inst
+                                    vm2.env['this'] = inst
                                     vm2.parent = self
                                     vm2._method_owner = inst['__class__']
                                     for pname, pval in zip(fargs, args):
@@ -662,6 +695,7 @@ class VM:
                     vm2.local_names = set(method.get('local_names', []))
                     # set parameters and self
                     vm2.env['self'] = inst
+                    vm2.env['this'] = inst
                     vm2.parent = self
                     vm2._method_owner = class_obj
                     for pname, pval in zip(fargs, args):
@@ -731,6 +765,7 @@ class VM:
                     vm2 = VM(bc)
                     vm2.local_names = set(method.get('local_names', []))
                     vm2.env['self'] = inst
+                    vm2.env['this'] = inst
                     vm2.parent = self
                     vm2._method_owner = target
                     for pname, pval in zip(fargs, args):
@@ -864,6 +899,7 @@ class VM:
                             vm2.local_names = set(method.get('local_names', []))
                             vm2.parent = self
                             vm2.env['self'] = inst
+                            vm2.env['this'] = inst
                             for pname, pval in zip(eff_args, args):
                                 vm2.env[pname] = pval
                             vm2.functions = self.functions
