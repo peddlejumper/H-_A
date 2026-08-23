@@ -180,6 +180,55 @@ class VM:
             _fn = getattr(_hf, _fname, None)
             if _fn is not None:
                 self.builtins[_hname] = _fn
+        # Math builtins — parity with the tree interpreter's builtin_math_* set
+        # (interpreter.py).  Faithful port including domain guards (return None
+        # for out-of-domain inputs) so opt matches tree's edge-case behaviour.
+        import math as _math
+        def _m1(fn, name):
+            def impl(args):
+                if len(args) != 1:
+                    raise BytecodeRuntimeError(f"{name}() takes exactly 1 argument")
+                return fn(float(args[0]))
+            return impl
+        def _m2(fn, name):
+            def impl(args):
+                if len(args) != 2:
+                    raise BytecodeRuntimeError(f"{name}() takes exactly 2 arguments")
+                return fn(float(args[0]), float(args[1]))
+            return impl
+        for _n, _f in (('math_sin', _math.sin), ('math_cos', _math.cos), ('math_tan', _math.tan),
+                       ('math_atan', _math.atan), ('math_sinh', _math.sinh), ('math_cosh', _math.cosh),
+                       ('math_tanh', _math.tanh), ('math_exp', _math.exp), ('math_floor', _math.floor),
+                       ('math_ceil', _math.ceil), ('math_fabs', _math.fabs), ('math_erf', _math.erf),
+                       ('math_erfc', _math.erfc), ('math_tgamma', _math.gamma), ('math_lgamma', _math.lgamma)):
+            self.builtins[_n] = _m1(_f, _n)
+        for _n, _f in (('math_atan2', _math.atan2), ('math_pow', _math.pow), ('math_hypot', _math.hypot)):
+            self.builtins[_n] = _m2(_f, _n)
+        def _g1(name, fn, dom_ok):
+            def impl(args):
+                if len(args) != 1:
+                    raise BytecodeRuntimeError(f"{name}() takes exactly 1 argument")
+                x = float(args[0])
+                return fn(x) if dom_ok(x) else None
+            return impl
+        self.builtins['math_asin'] = _g1('math_asin', _math.asin, lambda x: -1 <= x <= 1)
+        self.builtins['math_acos'] = _g1('math_acos', _math.acos, lambda x: -1 <= x <= 1)
+        self.builtins['math_log'] = _g1('math_log', _math.log, lambda x: x > 0)
+        self.builtins['math_log10'] = _g1('math_log10', _math.log10, lambda x: x > 0)
+        self.builtins['math_log2'] = _g1('math_log2', _math.log2, lambda x: x > 0)
+        self.builtins['math_sqrt'] = _g1('math_sqrt', _math.sqrt, lambda x: x >= 0)
+        def _math_cbrt(args):
+            x = float(args[0])
+            return x ** (1.0 / 3.0) if x >= 0 else -((-x) ** (1.0 / 3.0))
+        self.builtins['math_cbrt'] = _math_cbrt
+        def _math_fmod(args):
+            if len(args) != 2:
+                raise BytecodeRuntimeError("math_fmod() takes exactly 2 arguments")
+            y = float(args[1])
+            if y == 0:
+                return None
+            return _math.fmod(float(args[0]), y)
+        self.builtins['math_fmod'] = _math_fmod
         # 小对象分配优化：实例 dict 对象池
         # CALL_NEW 创建实例时优先从池中取已清空的 dict，减少 malloc 次数
         self._dict_pool = []
@@ -418,7 +467,13 @@ class VM:
                     b = self.stack.pop(); a = self.stack.pop();
                     if b == 0:
                         raise BytecodeRuntimeError('division by zero')
-                    self.stack.append(a // b)
+                    # Match the tree interpreter: `/` is integer division for
+                    # int/int, but true (float) division as soon as either side
+                    # is a float (e.g. `5 / 2.0` == 2.5, not 2).
+                    if isinstance(a, float) or isinstance(b, float):
+                        self.stack.append(a / b)
+                    else:
+                        self.stack.append(a // b)
                 elif opname == 'BINARY_MOD':
                     b = self.stack.pop(); a = self.stack.pop();
                     if b == 0:
@@ -948,27 +1003,50 @@ class VM:
                         proxy[attr] = val
                     self.env[modname] = proxy
                 elif opname == 'IMPORT_FILE':
-                    # import a local H# file at runtime: parse and interpret in the current environment
+                    # Import a local H# file at runtime by compiling it to
+                    # bytecode and running it in a sub-VM that *shares this
+                    # frame's env*, so the module's top-level fn/class/let
+                    # bindings (compiled to MAKE_CLOSURE/STORE_NAME) land in the
+                    # importer's env — the same visibility the tree interpreter
+                    # gives `import "file.hto"`.  The previous implementation
+                    # used a throwaway tree Interpreter with a fresh env and a
+                    # fresh functions dict, so imported names never reached the
+                    # VM (e.g. `tokenize` after `import "bootstrap/tokenize.hto"`).
                     path = arg
+                    # mirror the tree interpreter: a bare module path gets a
+                    # `.hto` suffix appended (e.g. import "bootstrap/math_extended")
+                    if not path.endswith('.hto'):
+                        path += '.hto'
                     try:
                         with open(path, 'r', encoding='utf-8') as f:
                             code = f.read()
-                    except Exception as e:
-                        raise BytecodeRuntimeError(f"Failed to read import file '{path}': {e}")
+                    except Exception:
+                        # fall back to resolving against HSHARP_PATH entries
+                        import os as _os
+                        _resolved = None
+                        for _p in _os.environ.get('HSHARP_PATH', '').split(_os.pathsep):
+                            if _p and _os.path.exists(_os.path.join(_p, path)):
+                                _resolved = _os.path.join(_p, path)
+                                break
+                        if _resolved is None:
+                            raise BytecodeRuntimeError(f"Failed to read import file '{path}'")
+                        with open(_resolved, 'r', encoding='utf-8') as f:
+                            code = f.read()
                     try:
                         from lexer import Lexer
                         from parser import Parser
-                        from interpreter import Interpreter
+                        from compiler import Compiler
                         lexer = Lexer(code)
                         parser = Parser(lexer)
                         program = parser.parse()
-                        interp = Interpreter(global_env=None, functions=self.functions)
-                        # interpret into a fresh interpreter but share top-level env with this VM
-                        interp.interpret(program, env=None)
-                        # merge interfaces if present
-                        if hasattr(interp, 'interfaces'):
-                            # store into this VM as needed (not used heavily in bytecode VM)
-                            pass
+                        comp = Compiler(use_hcompiler=True)
+                        bc = comp.compile(program)
+                        vm2 = VM(bc)
+                        vm2.env = self.env
+                        vm2.functions = self.functions
+                        vm2.builtins = self.builtins
+                        vm2.parent = self
+                        vm2.run()
                     except Exception as e:
                         raise BytecodeRuntimeError(f"Error importing H# file '{path}': {e}")
                 else:

@@ -116,7 +116,11 @@ class ConstantFolder:
             elif op_name == 'SLASH':
                 if right == 0:
                     return None  # Division by zero
-                return left / right
+                # Match the tree interpreter's `/` semantics: integer division
+                # for int/int, true division once a float is involved.
+                if isinstance(left, float) or isinstance(right, float):
+                    return left / right
+                return left // right
             elif op_name == 'EQEQ':
                 return left == right
             elif op_name == 'BANGEQ':

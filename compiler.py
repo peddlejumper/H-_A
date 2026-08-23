@@ -43,7 +43,10 @@ class Compiler:
                     return i
         else:
             for i, v in enumerate(self.consts):
-                if type(v) is not bool and v == value:
+                # type-aware dedup: `2 == 2.0` is True in Python, but H#
+                # distinguishes int literals from float literals, so `2` and
+                # `2.0` must stay separate constants (else `/` semantics drift).
+                if type(v) is type(value) and v == value:
                     return i
         idx = len(self.consts)
         self.consts.append(value)
